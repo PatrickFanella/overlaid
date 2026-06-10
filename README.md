@@ -1,6 +1,6 @@
-# Go + Vite React TypeScript + Postgres + Docker Template
+# over-laid
 
-Full-stack template with Go backend, Vite React TypeScript Tailwind frontend, Postgres, Docker Compose, and Open Pilot conventions.
+Full-stack app with a Go backend, Vite React TypeScript Tailwind frontend, Postgres, Docker Compose, and Open Pilot conventions.
 
 Created from `subculture-collective/project-template`.
 
@@ -13,10 +13,10 @@ make verify
 ## Open Pilot
 
 This repository keeps the base Open Pilot issue template and PR template.
-Bootstrap labels after creating a repo from this template:
+Bootstrap labels for this repo with:
 
 ```bash
-open-pilot labels bootstrap subculture-collective/project-template-go-vite-react-ts-postgres-docker
+open-pilot labels bootstrap PatrickFanella/over-laid
 ```
 
 ## License

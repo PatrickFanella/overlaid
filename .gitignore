@@ -58,6 +58,7 @@ htmlcov/
 
 # Go
 bin/
+backend/app
 cover.out
 coverage.out
 

@@ -4,7 +4,7 @@ Use this runbook when turning this base into a Go, Node/TypeScript, Python, Rust
 
 ## Steps
 
-1. Create a new repository from `subculture-collective/project-template`.
+1. Create a new repository from the source template.
 2. Rename the project in `README.md`, `.env.example`, and docs.
 3. Add the stack scaffold and dependency files.
 4. Update `Makefile` so `make verify` runs the stack's real checks.

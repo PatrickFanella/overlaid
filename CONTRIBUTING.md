@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is a base template for derived SUBCULT projects. Keep changes small, reviewable, and useful across stacks.
+This repository is the `over-laid` application. Keep changes small, reviewable, and useful to this stack.
 
 ## Development flow
 
@@ -56,7 +56,7 @@ Default full check:
 make verify
 ```
 
-Examples for derived templates:
+Examples:
 
 ```bash
 go test ./...
@@ -66,8 +66,8 @@ cargo test --all
 docker compose config --quiet
 ```
 
-## Template boundaries
+## Project boundaries
 
-This base template should stay stack-neutral. Do not add application scaffolding here unless the issue explicitly changes the role of this repository.
+Keep this app focused and minimal. Do not add unrelated scaffolding unless the issue explicitly changes the role of this repository.
 
-Stack-specific scaffolds should live in derived template repositories.
+Stack-specific reference docs should stay under `docs/`.

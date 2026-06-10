@@ -1,8 +1,8 @@
 # Stack Reference
 
-Template: `project-template-go-vite-react-ts-postgres-docker`
+Project: `over-laid`
 
-Full-stack template with Go backend, Vite React TypeScript Tailwind frontend, Postgres, Docker Compose, and Open Pilot conventions.
+Full-stack app with Go backend, Vite React TypeScript Tailwind frontend, Postgres, Docker Compose, and Open Pilot conventions.
 
 The canonical verification command is:
 

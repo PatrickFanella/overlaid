@@ -24,7 +24,8 @@ test:
 	pnpm --dir web run test
 
 build:
-	cd backend && go build ./cmd/app
+	mkdir -p bin
+	cd backend && go build -o ../bin/over-laid-api ./cmd/app
 	pnpm --dir web run build
 
 compose-config:
