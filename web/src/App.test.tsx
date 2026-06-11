@@ -25,8 +25,11 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/dashboard" />);
 
     expect(html).toContain('over-laid command center');
+    expect(html).toContain('System status');
     expect(html).toContain('Send test alert');
     expect(html).toContain('Operator secret');
+    expect(html).toContain('Confirm clear');
+    expect(html).toContain('Overlay monitor');
     expect(html).toContain('Scene controls');
     expect(html).toContain('BRB overlay');
   });
