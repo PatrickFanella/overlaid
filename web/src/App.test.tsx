@@ -17,7 +17,7 @@ describe('App routing', () => {
   it('renders the alerts overlay route', () => {
     const html = renderToString(<App pathname="/overlay/alerts" />);
 
-    expect(html).toContain('Alerts');
+    expect(html).toContain('Alert feed');
     expect(html).toContain('Waiting for alert events');
   });
 
