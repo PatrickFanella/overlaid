@@ -1,0 +1,58 @@
+import { getOverlayApiBaseUrl } from './eventStream';
+
+export type TwitchStatus = {
+  configured: boolean;
+  authenticated: boolean;
+  channelTarget: string;
+  loginUrl: string;
+  scopes: string[];
+  streamerLogin?: string;
+  streamerUserId?: string;
+  tokenExpiresAt?: string;
+  authError?: string;
+  lastAuthError?: string;
+};
+
+export type AlertPayload = {
+  title: string;
+  message: string;
+  severity: 'info' | 'success' | 'warning' | 'error';
+};
+
+export function apiUrl(path: string, explicitBaseUrl?: string) {
+  return new URL(path, getOverlayApiBaseUrl(explicitBaseUrl)).toString();
+}
+
+export async function fetchTwitchStatus(explicitBaseUrl?: string) {
+  const response = await fetch(apiUrl('/api/auth/twitch/status', explicitBaseUrl), { headers: { Accept: 'application/json' } });
+  if (!response.ok) {
+    throw new Error(`Twitch status failed: ${response.status}`);
+  }
+  return (await response.json()) as TwitchStatus;
+}
+
+export async function sendTestAlert(payload: AlertPayload, explicitBaseUrl?: string) {
+  await postJSON('/api/events/test-alert', payload, explicitBaseUrl);
+}
+
+export async function clearOverlays(explicitBaseUrl?: string) {
+  const response = await fetch(apiUrl('/api/events/clear', explicitBaseUrl), { method: 'POST' });
+  if (!response.ok) {
+    throw new Error(`Clear overlays failed: ${response.status}`);
+  }
+}
+
+export async function sendWebhook(source: string, payload: AlertPayload, explicitBaseUrl?: string) {
+  await postJSON(`/api/integrations/webhook/${encodeURIComponent(source)}`, payload, explicitBaseUrl);
+}
+
+async function postJSON(path: string, payload: AlertPayload, explicitBaseUrl?: string) {
+  const response = await fetch(apiUrl(path, explicitBaseUrl), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(`${path} failed: ${response.status}`);
+  }
+}

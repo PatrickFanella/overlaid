@@ -61,6 +61,7 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 
 ### Routes
 
+- `/dashboard`
 - `/overlay/alerts`
 - `/overlay/chat`
 - `/overlay/goals`
@@ -70,6 +71,14 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 - `/overlay/debug`
 
 ### OBS browser source
+
+Open the operator dashboard at:
+
+```text
+http://<homelab-host>:5173/dashboard
+```
+
+The dashboard can check Twitch auth status, open the Twitch login flow, send test alerts, clear overlays, and send generic webhook test events.
 
 Use this for the main alert source:
 

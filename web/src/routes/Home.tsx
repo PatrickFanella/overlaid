@@ -1,8 +1,9 @@
 import { getOverlayApiBaseUrl } from '../lib/eventStream';
 
 const routes = [
+  ['/dashboard', 'Command center', 'Dashboard for Twitch auth, test alerts, clear events, and webhook checks.'],
   ['/overlay/alerts', 'Live alert overlay', 'Fully functional SSE-driven alert browser source.'],
-  ['/overlay/chat', 'Chat overlay', 'Placeholder browser source for chat rendering later.'],
+  ['/overlay/chat', 'Chat overlay', 'Live Twitch chat browser source.'],
   ['/overlay/goals', 'Goals overlay', 'Placeholder route for progress widgets.'],
   ['/overlay/now-playing', 'Now playing', 'Placeholder route for music/media status.'],
   ['/overlay/ticker', 'Ticker overlay', 'Placeholder route for rotating status cards.'],

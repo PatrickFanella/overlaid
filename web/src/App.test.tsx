@@ -21,6 +21,13 @@ describe('App routing', () => {
     expect(html).toContain('Waiting for alert events');
   });
 
+  it('renders the dashboard route', () => {
+    const html = renderToString(<App pathname="/dashboard" />);
+
+    expect(html).toContain('over-laid command center');
+    expect(html).toContain('Send test alert');
+  });
+
   it('renders placeholder overlay routes', () => {
     const html = renderToString(<App pathname="/overlay/goals" />);
 

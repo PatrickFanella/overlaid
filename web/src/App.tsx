@@ -1,3 +1,4 @@
+import { DashboardPage } from './routes/Dashboard';
 import { HomePage } from './routes/Home';
 import { OverlayAlertsPage } from './routes/OverlayAlerts';
 import { OverlayChatPage } from './routes/OverlayChat';
@@ -44,6 +45,10 @@ export function getAppRoute(pathname: string) {
 
   if (route === '/') {
     return <HomePage />;
+  }
+
+  if (route === '/dashboard') {
+    return <DashboardPage />;
   }
 
   if (route === '/overlay/alerts') {
