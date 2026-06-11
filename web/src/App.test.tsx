@@ -26,10 +26,14 @@ describe('App routing', () => {
 
     expect(html).toContain('over-laid command center');
     expect(html).toContain('System status');
+    expect(html).toContain('OBS setup workflow');
+    expect(html).toContain('Overlay source URLs');
+    expect(html).toContain('Stream presets');
+    expect(html).toContain('Sample alert');
+    expect(html).toContain('Copy source URL');
     expect(html).toContain('Send test alert');
     expect(html).toContain('Operator secret');
     expect(html).toContain('Confirm clear');
-    expect(html).toContain('Overlay monitor');
     expect(html).toContain('Scene controls');
     expect(html).toContain('Input name');
     expect(html).toContain('Scene item ID');

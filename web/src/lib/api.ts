@@ -17,6 +17,7 @@ export type AlertPayload = {
   title: string;
   message: string;
   severity: 'info' | 'success' | 'warning' | 'error';
+  data?: Record<string, unknown>;
 };
 
 export type BRBPayload = {
@@ -25,6 +26,7 @@ export type BRBPayload = {
   message: string;
   eta: string;
   items: string[];
+  data?: Record<string, unknown>;
 };
 
 export type OBSStatus = {

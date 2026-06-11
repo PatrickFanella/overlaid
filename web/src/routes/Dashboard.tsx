@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   apiUrl,
   clearOverlays,
@@ -22,30 +22,81 @@ import {
   type OBSStatus,
   type TwitchStatus,
 } from '../lib/api';
-import { getOverlayApiBaseUrl } from '../lib/eventStream';
+import { getDefaultApiBaseUrl, getOverlayApiBaseUrl } from '../lib/eventStream';
 
 const overlayRoutes = [
-  ['/overlay/alerts', 'Alert feed', 'Live alert browser source'],
-  ['/overlay/chat', 'Twitch chat', 'Live chat browser source'],
-  ['/overlay/goals', 'Goal rail', 'Progress widget browser source'],
-  ['/overlay/now-playing', 'Now playing', 'Music and media browser source'],
-  ['/overlay/ticker', 'Ticker rail', 'Lower-third event ticker'],
-  ['/overlay/brb', 'BRB overlay', 'Intermission scene control'],
-  ['/overlay/debug', 'Event inspector', 'SSE event stream debugger'],
+  { path: '/overlay/alerts', title: 'Alert feed', description: 'Live alert browser source' },
+  { path: '/overlay/chat', title: 'Twitch chat', description: 'Live chat browser source' },
+  { path: '/overlay/goals', title: 'Goal rail', description: 'Progress widget browser source' },
+  { path: '/overlay/now-playing', title: 'Now playing', description: 'Music and media browser source' },
+  { path: '/overlay/ticker', title: 'Ticker rail', description: 'Lower-third event ticker' },
+  { path: '/overlay/brb', title: 'BRB overlay', description: 'Intermission scene control' },
+  { path: '/overlay/debug', title: 'Event inspector', description: 'SSE event stream debugger' },
 ] as const;
 
-const defaultAlert: AlertPayload = {
-  title: 'Dashboard test',
-  message: 'Overlay command center is live',
+const setupChecklist = [
+  ['Browser sources added', 'Add every route once, then verify each source loads cleanly in OBS.'],
+  ['Live event smoke', 'Fire the sample buttons and confirm alerts, ticker, goals, and BRB states appear.'],
+  ['MPRIS decision', 'Decide whether now-playing should read from local MPRIS or stay disabled for this setup.'],
+  ['Stream presets', 'Pick scene-specific source sets so switching scenes is a single click.'],
+  ['Dashboard controls checked', 'Verify operator secret, OBS controls, and clear/reset behavior before going live.'],
+] as const;
+
+const streamPresets = [
+  { title: 'Main scene', accent: 'hud-accent-emerald', sources: ['alerts', 'chat', 'goals', 'now-playing', 'ticker'] },
+  { title: 'BRB scene', accent: 'hud-accent-rose', sources: ['brb', 'ticker', 'now-playing'] },
+  { title: 'Debug scene', accent: 'hud-accent-cyan', sources: ['debug', 'alerts', 'ticker'] },
+] as const;
+
+const sampleAlert: AlertPayload = {
+  title: 'Sample alert',
+  message: 'Overlay command center smoke test passed',
   severity: 'success',
 };
 
-const defaultBRB: BRBPayload = {
+const sampleTicker: AlertPayload = {
+  title: 'Sample ticker',
+  message: 'Lower-third ticker is live',
+  severity: 'info',
+  data: {
+    ticker: {
+      id: 'sample-ticker',
+      label: 'Ticker sample',
+      message: 'Lower-third ticker is live',
+    },
+  },
+};
+
+const sampleGoals: AlertPayload = {
+  title: 'Sample goals',
+  message: 'Goal rail accepted a live update',
+  severity: 'success',
+  data: {
+    goal: {
+      id: 'followers',
+      label: 'Follower goal',
+      current: 430,
+      target: 620,
+      unit: 'followers',
+      note: 'Sample goal update',
+      accent: 'var(--hud-emerald)',
+    },
+  },
+};
+
+const sampleBRBShow: BRBPayload = {
   active: true,
   title: 'Be right back',
   message: 'Short intermission. Stream resumes soon.',
   eta: '5 min',
   items: ['Hydrate', 'Stretch', 'Chat stays live'],
+  data: { preset: 'sample-show' },
+};
+
+const sampleBRBHide: BRBPayload = {
+  ...sampleBRBShow,
+  active: false,
+  data: { preset: 'sample-hide' },
 };
 
 type ActionState = 'idle' | 'running' | 'success' | 'error';
@@ -61,9 +112,9 @@ export function DashboardPage() {
   const [obsError, setOBSError] = useState('');
   const [actionState, setActionState] = useState<ActionState>('idle');
   const [actionMessage, setActionMessage] = useState('');
-  const [alert, setAlert] = useState(defaultAlert);
-  const [brb, setBRB] = useState(defaultBRB);
-  const [brbItemsText, setBRBItemsText] = useState(defaultBRB.items.join('\n'));
+  const [alert, setAlert] = useState(sampleAlert);
+  const [brb, setBRB] = useState(sampleBRBShow);
+  const [brbItemsText, setBRBItemsText] = useState(sampleBRBShow.items.join('\n'));
   const [operatorSecret, setOperatorSecret] = useState('');
   const [webhookSource, setWebhookSource] = useState('n8n');
   const [webhookSecret, setWebhookSecret] = useState('');
@@ -71,12 +122,18 @@ export function DashboardPage() {
   const [inputName, setInputName] = useState('Mic/Aux');
   const [sceneItemID, setSceneItemID] = useState('1');
   const [clearArmed, setClearArmed] = useState(false);
+  const [copyStatus, setCopyStatus] = useState('');
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runningRef = useRef(false);
 
   const isRunning = actionState === 'running';
   const twitchSummary = status?.authenticated ? `connected · ${status.streamerLogin || status.channelTarget || 'ready'}` : status?.authError ? 'auth error' : status?.configured === false ? 'not configured' : 'offline';
   const obsSummary = obsStatus?.authenticated ? `connected · ${obsScenes?.currentProgramSceneName || obsStatus.obsStudioVersion || 'ready'}` : obsStatus?.error ? 'auth error' : obsStatus?.configured === false ? 'not configured' : 'offline';
   const apiSummary = apiBaseUrl;
   const actionSummary = clearArmed ? 'confirm clear armed' : actionState === 'running' ? actionMessage || 'running' : actionState === 'success' ? actionMessage || 'idle' : actionState === 'error' ? actionMessage || 'error' : 'idle';
+  const overlaySourceCards = useMemo(() => overlayRoutes.map((route) => ({ ...route, url: buildOverlaySourceUrl(route.path, apiBaseUrl) })), [apiBaseUrl]);
+  const obsIssue = obsStatus?.error || obsError;
+  const obsDiagnostics = getObsDiagnostics(obsIssue, obsStatus?.url || apiBaseUrl);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,7 +224,19 @@ export function DashboardPage() {
     };
   }, [apiBaseUrl, selectedScene]);
 
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current) {
+        clearTimeout(copyTimer.current);
+      }
+    };
+  }, []);
+
   async function runAction(label: string, action: () => Promise<void>) {
+    if (runningRef.current) {
+      return;
+    }
+    runningRef.current = true;
     setClearArmed(false);
     setActionState('running');
     setActionMessage(label);
@@ -178,6 +247,8 @@ export function DashboardPage() {
     } catch (error) {
       setActionState('error');
       setActionMessage(error instanceof Error ? error.message : `${label} failed`);
+    } finally {
+      runningRef.current = false;
     }
   }
 
@@ -239,6 +310,51 @@ export function DashboardPage() {
     void runAction('Clear overlays', () => clearOverlays(apiBaseUrl, operatorSecret));
   }
 
+  async function copyValue(label: string, value: string) {
+    try {
+      await copyText(value);
+      setCopyStatus(`${label} copied`);
+    } catch {
+      setCopyStatus(`Unable to copy ${label}`);
+    }
+
+    if (copyTimer.current) {
+      clearTimeout(copyTimer.current);
+    }
+    copyTimer.current = setTimeout(() => setCopyStatus(''), 1800);
+  }
+
+  function runSampleAlert() {
+    if (isRunning) {
+      return;
+    }
+    void runAction('Send sample alert', () => sendTestAlert(sampleAlert, apiBaseUrl, operatorSecret));
+  }
+
+  function runSampleTicker() {
+    if (isRunning) {
+      return;
+    }
+    void runAction('Send sample ticker', () => sendTestAlert(sampleTicker, apiBaseUrl, operatorSecret));
+  }
+
+  function runSampleGoals() {
+    if (isRunning) {
+      return;
+    }
+    void runAction('Send sample goals', () => sendTestAlert(sampleGoals, apiBaseUrl, operatorSecret));
+  }
+
+  function runSampleBRB(active: boolean) {
+    if (isRunning) {
+      return;
+    }
+    const payload = active ? sampleBRBShow : sampleBRBHide;
+    setBRB(payload);
+    setBRBItemsText(payload.items.join('\n'));
+    void runAction(active ? 'Show sample BRB' : 'Hide sample BRB', () => setBRBStatus(payload, apiBaseUrl, operatorSecret));
+  }
+
   return (
     <main className="hud-shell hud-scanlines min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(103,232,249,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(244,114,182,0.12),transparent_34%),linear-gradient(135deg,#020617,#0b1020_54%,#020305)] px-6 py-8 text-zinc-100">
       <section className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -268,7 +384,58 @@ export function DashboardPage() {
           </div>
         </header>
 
-        <section className="hud-panel hud-corners hud-accent-cyan rounded-[1.6rem] p-5">
+        <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="hud-label">OBS setup workflow</p>
+              <p className="hud-copy mt-2 text-sm">A quick checklist for wiring the browser sources, testing events, and locking down the scene preset path.</p>
+            </div>
+            <span className="hud-chip" aria-live="polite">{copyStatus || 'copy ready'}</span>
+          </div>
+
+          <div className="mt-5 grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="grid gap-3">
+              {setupChecklist.map(([title, description]) => (
+                <article key={title} className="hud-panel hud-corners rounded-[1.2rem] p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-1 h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,0.8)]" />
+                    <div>
+                      <p className="text-base font-semibold text-white">{title}</p>
+                      <p className="mt-2 text-sm leading-6 text-zinc-300">{description}</p>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="hud-panel hud-corners hud-accent-amber rounded-[1.2rem] p-4">
+              <p className="hud-label">OBS diagnostics</p>
+              <p className="mt-3 text-lg font-semibold text-white">{obsIssue || 'No OBS issues reported'}</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-300">{obsDiagnostics.summary}</p>
+
+              {obsDiagnostics.hints.length ? (
+                <ul className="mt-4 space-y-2 text-sm leading-6 text-zinc-200">
+                  {obsDiagnostics.hints.map((hint) => (
+                    <li key={hint} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">{hint}</li>
+                  ))}
+                </ul>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={!obsStatus?.url} onClick={() => obsStatus?.url && void copyValue('OBS URL', obsStatus.url)}>
+                  Copy OBS URL
+                </button>
+                {obsIssue ? (
+                  <button className="rounded-full border border-amber-200/40 bg-amber-200/10 px-4 py-2 text-sm text-amber-100 transition hover:bg-amber-200/20" type="button" onClick={() => void copyValue('OBS error', obsIssue)}>
+                    Copy error
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="hud-label">System status</p>
@@ -289,7 +456,7 @@ export function DashboardPage() {
             <div className="hud-panel hud-corners hud-accent-emerald rounded-[1.25rem] p-4">
               <p className="hud-label">OBS</p>
               <p className="mt-3 text-lg font-semibold text-white">{obsSummary}</p>
-              <p className="mt-2 text-sm text-zinc-300">{obsError || obsStatus?.obsWebSocketVersion || 'awaiting connection'}</p>
+              <p className="mt-2 text-sm text-zinc-300">{obsIssue || obsStatus?.obsWebSocketVersion || 'awaiting connection'}</p>
             </div>
             <div className="hud-panel hud-corners hud-accent-cyan rounded-[1.25rem] p-4">
               <p className="hud-label">API</p>
@@ -307,24 +474,56 @@ export function DashboardPage() {
         <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="hud-label">Overlay monitor</p>
-              <p className="hud-copy mt-2 text-sm">Text-only route cards for every overlay browser source.</p>
+              <p className="hud-label">Overlay source URLs</p>
+              <p className="hud-copy mt-2 text-sm">Text-only route cards for every browser source, with a copy button for OBS setup.</p>
             </div>
-            <span className="hud-chip">open routes</span>
+            <span className="hud-chip">browser origin: {getBrowserOrigin()}</span>
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {overlayRoutes.map(([href, title, description]) => (
-              <article key={href} className="hud-panel hud-corners hud-dashboard-card rounded-[1.35rem] p-4">
-                <p className="hud-kicker">{href}</p>
-                <h2 className="mt-2 text-lg font-semibold text-white">{title}</h2>
-                <p className="mt-2 text-sm leading-6 text-zinc-300">{description}</p>
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <span className="hud-badge">browser source</span>
-                  <a className="hud-chip" href={href}>
-                    Open link
-                  </a>
+            {overlaySourceCards.map((route) => (
+              <article key={route.path} className="hud-panel hud-corners hud-dashboard-card rounded-[1.35rem] p-4">
+                <p className="hud-kicker">{route.path}</p>
+                <h2 className="mt-2 text-lg font-semibold text-white">{route.title}</h2>
+                <p className="mt-2 text-sm leading-6 text-zinc-300">{route.description}</p>
+                <p className="mt-3 break-all rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-xs text-zinc-200">{route.url}</p>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <span className="hud-badge">{route.url.includes('apiBaseUrl=') ? 'custom apiBaseUrl' : 'browser source'}</span>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void copyValue(route.title, route.url)}>
+                      Copy source URL
+                    </button>
+                    <a className="hud-chip" href={route.url} target="_blank" rel="noreferrer">
+                      Open
+                    </a>
+                  </div>
                 </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="hud-label">Stream presets</p>
+              <p className="hud-copy mt-2 text-sm">Scene-specific source bundles for quicker OBS scene setup.</p>
+            </div>
+            <span className="hud-chip">presets</span>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            {streamPresets.map((preset) => (
+              <article key={preset.title} className={`hud-panel hud-corners rounded-[1.35rem] p-4 ${preset.accent}`}>
+                <p className="hud-kicker">{preset.title}</p>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-zinc-200">
+                  {preset.sources.map((source) => (
+                    <li key={source} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                      <span className="capitalize text-white">{source.replace('-', ' ')}</span>
+                      <span className="hud-badge">source</span>
+                    </li>
+                  ))}
+                </ul>
               </article>
             ))}
           </div>
@@ -364,6 +563,30 @@ export function DashboardPage() {
           <section className="hud-panel hud-corners rounded-[1.6rem] p-6">
             <p className="hud-label">Overlay controls</p>
             <h2 className="mt-2 text-2xl font-semibold text-white">Fire events</h2>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <button className="rounded-2xl border border-fuchsia-300/30 bg-fuchsia-300/10 px-4 py-3 text-left text-sm font-medium text-fuchsia-100 transition hover:bg-fuchsia-300/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-400" type="button" disabled={isRunning} onClick={runSampleAlert}>
+                <span className="block text-xs uppercase tracking-[0.25em] text-fuchsia-200/80">Sample alert</span>
+                <span className="mt-2 block text-sm text-zinc-100">Fire a basic success alert.</span>
+              </button>
+              <button className="rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-left text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-400" type="button" disabled={isRunning} onClick={runSampleTicker}>
+                <span className="block text-xs uppercase tracking-[0.25em] text-cyan-100/80">Sample ticker</span>
+                <span className="mt-2 block text-sm text-zinc-100">Push a ticker rail update.</span>
+              </button>
+              <button className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-3 text-left text-sm font-medium text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-400" type="button" disabled={isRunning} onClick={runSampleGoals}>
+                <span className="block text-xs uppercase tracking-[0.25em] text-emerald-100/80">Sample goals</span>
+                <span className="mt-2 block text-sm text-zinc-100">Seed the goal rail with data.</span>
+              </button>
+              <button className="rounded-2xl border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-left text-sm font-medium text-rose-100 transition hover:bg-rose-300/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-400" type="button" disabled={isRunning} onClick={() => runSampleBRB(true)}>
+                <span className="block text-xs uppercase tracking-[0.25em] text-rose-100/80">Show BRB</span>
+                <span className="mt-2 block text-sm text-zinc-100">Arm the intermission state.</span>
+              </button>
+              <button className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-left text-sm font-medium text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-400" type="button" disabled={isRunning} onClick={() => runSampleBRB(false)}>
+                <span className="block text-xs uppercase tracking-[0.25em] text-zinc-300">Hide BRB</span>
+                <span className="mt-2 block text-sm text-zinc-100">Return the scene to standby.</span>
+              </button>
+            </div>
+
             <form className="mt-5 grid gap-4" onSubmit={submitTestAlert}>
               <TextInput label="Title" value={alert.title} onChange={(title) => setAlert((current) => ({ ...current, title }))} />
               <TextInput label="Message" value={alert.message} onChange={(message) => setAlert((current) => ({ ...current, message }))} />
@@ -415,7 +638,20 @@ export function DashboardPage() {
             <StatusPill active={Boolean(obsStatus?.authenticated)} label={obsStatus?.authenticated ? 'connected' : 'offline'} />
           </div>
 
-          {obsError ? <p className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{obsError}</p> : null}
+          {obsStatus?.error || obsError ? <p className="mt-4 rounded-2xl border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-100">{obsStatus?.error || obsError}</p> : null}
+
+          {obsDiagnostics.focus ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <article className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-200">
+                <p className="hud-kicker">Direct check</p>
+                <p className="mt-2 leading-6">{obsDiagnostics.focus}</p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-200">
+                <p className="hud-kicker">Copy hint</p>
+                <p className="mt-2 leading-6">Use the OBS URL and error copy buttons above when asking for help or comparing settings.</p>
+              </article>
+            </div>
+          ) : null}
 
           <dl className="mt-5 grid gap-3 text-sm md:grid-cols-3">
             <StatusField label="URL" value={obsStatus?.url || 'not configured'} />
@@ -578,4 +814,96 @@ function splitLines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 5);
+}
+
+function buildOverlaySourceUrl(path: string, apiBaseUrl: string) {
+  const origin = getBrowserOrigin();
+  const url = new URL(path, origin);
+  const defaultApiBaseUrl = getDefaultApiBaseUrl(origin);
+  if (apiBaseUrl && apiBaseUrl !== defaultApiBaseUrl) {
+    url.searchParams.set('apiBaseUrl', apiBaseUrl);
+  }
+  return url.toString();
+}
+
+function getBrowserOrigin() {
+  if (typeof window !== 'undefined' && window.location.origin) {
+    return window.location.origin;
+  }
+  return 'http://localhost:5173';
+}
+
+function getObsDiagnostics(issue: string | undefined, url: string) {
+  const normalized = issue?.toLowerCase() || '';
+
+  if (!issue) {
+    return {
+      summary: 'OBS looks healthy. Use the source cards and sample buttons to validate the scene setup.',
+      focus: '',
+      hints: [] as string[],
+    };
+  }
+
+  if (normalized.includes('4009') || normalized.includes('authentication failed')) {
+    return {
+      summary: 'OBS reached the WebSocket server, but authentication failed.',
+      focus: `Re-copy the OBS WebSocket password, then confirm the host and port in ${url}.`,
+      hints: [
+        'Check OBS Tools → WebSocket Server Settings and refresh the password if it changed.',
+        'Confirm the dashboard URL matches the OBS WebSocket host and port you expect.',
+      ],
+    };
+  }
+
+  if (normalized.includes('connection refused')) {
+    return {
+      summary: 'OBS WebSocket could not be reached.',
+      focus: `Make sure OBS is open, WebSocket is enabled, and ${url} points at the live server.`,
+      hints: [
+        'Verify OBS is running and the websocket server is listening on the configured port.',
+        'If the port changed, copy the current OBS URL and update the dashboard or browser source URL.',
+      ],
+    };
+  }
+
+  if (normalized.includes('timeout')) {
+    return {
+      summary: 'OBS took too long to respond.',
+      focus: 'Check VPN, firewall, and host reachability; then retry the status check.',
+      hints: [
+        'Make sure the host is reachable from the dashboard machine and OBS WebSocket is not blocked.',
+        'Copy the OBS URL and error text if you need to compare settings on another machine.',
+      ],
+    };
+  }
+
+  return {
+    summary: issue,
+    focus: 'Use the OBS URL and error copy buttons above to compare settings or share the failure.',
+    hints: ['Verify the websocket host, port, and password are all current.'],
+  };
+}
+
+async function copyText(value: string) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === 'undefined') {
+    throw new Error('Clipboard unavailable');
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', 'true');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const ok = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  if (!ok) {
+    throw new Error('Clipboard unavailable');
+  }
 }

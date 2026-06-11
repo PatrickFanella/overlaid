@@ -83,7 +83,7 @@ Open the operator dashboard at:
 http://<homelab-host>:5173/dashboard
 ```
 
-The dashboard can check Twitch auth status, open the Twitch login flow, discover OBS inputs and scene items, send test alerts, clear overlays, control the BRB/intermission screen, and send generic webhook test events.
+The dashboard can check Twitch auth status, open the Twitch login flow, discover OBS inputs and scene items, send test alerts, clear overlays, control the BRB/intermission screen, and send generic webhook test events. It also includes an OBS setup workflow with copyable browser-source URLs, stream preset guidance, one-click sample events for alert/ticker/goals/BRB, and OBS diagnostics hints.
 If `OPERATOR_SECRET` is configured, enter it in the dashboard before using mutating controls such as test alerts, clear, BRB, or OBS commands.
 The same secret is required to start Twitch OAuth; the dashboard sends it as a header to request a one-time Twitch authorize URL.
 It can also connect to OBS WebSocket to list scenes, switch the current program scene, mute/unmute an input, and show/hide scene items by ID.
