@@ -24,7 +24,7 @@ docker compose up --build
 - `OVERLAY_STATE_FILE` — retained overlay state snapshot path. Defaults to `/data/overlay-state.json` in Docker.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
 - `VITE_API_BASE_URL` — optional build-time API base URL for local Vite builds. If unset, overlays derive the API URL from the browser host on port `8080`.
-- `OBS_WEBSOCKET_URL` — OBS WebSocket v5 endpoint. Defaults to `ws://localhost:4455`.
+- `OBS_WEBSOCKET_URL` — OBS WebSocket v5 endpoint. Docker defaults to `ws://host.docker.internal:4455` to reach OBS on the host desktop; native API runs can use `ws://localhost:4455`.
 - `OBS_WEBSOCKET_PASSWORD` — optional OBS WebSocket password when auth is enabled in OBS.
 - `TWITCH_CHANNEL` — default Twitch channel: `patrick__eff`.
 - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_REDIRECT_URL` — Twitch OAuth Code flow settings.
@@ -85,13 +85,14 @@ http://<homelab-host>:5173/dashboard
 
 The dashboard can check Twitch auth status, open the Twitch login flow, discover OBS inputs and scene items, send test alerts, clear overlays, control the BRB/intermission screen, and send generic webhook test events.
 If `OPERATOR_SECRET` is configured, enter it in the dashboard before using mutating controls such as test alerts, clear, BRB, or OBS commands.
-The same secret is required to start Twitch OAuth; the dashboard appends it to the login URL for the one-time auth redirect.
+The same secret is required to start Twitch OAuth; the dashboard sends it as a header to request a one-time Twitch authorize URL.
 It can also connect to OBS WebSocket to list scenes, switch the current program scene, mute/unmute an input, and show/hide scene items by ID.
 
 OBS WebSocket notes:
 
 - Enable OBS WebSocket in OBS: `Tools → WebSocket Server Settings`.
-- Default OBS WebSocket v5 URL is `ws://localhost:4455`.
+- Docker default OBS WebSocket v5 URL is `ws://host.docker.internal:4455`, with a Compose `host-gateway` mapping for Linux.
+- Native API runs can use `ws://localhost:4455`.
 - If OBS runs on another machine, set `OBS_WEBSOCKET_URL=ws://<obs-host>:4455` for the API container/host.
 - If OBS WebSocket auth is enabled, set `OBS_WEBSOCKET_PASSWORD` in `.env`.
 

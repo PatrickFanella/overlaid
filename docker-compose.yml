@@ -26,7 +26,7 @@ services:
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
       OVERLAY_STATE_FILE: ${OVERLAY_STATE_FILE:-/data/overlay-state.json}
       DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable
-      OBS_WEBSOCKET_URL: ${OBS_WEBSOCKET_URL:-ws://localhost:4455}
+      OBS_WEBSOCKET_URL: ${OBS_WEBSOCKET_URL:-ws://host.docker.internal:4455}
       OBS_WEBSOCKET_PASSWORD: ${OBS_WEBSOCKET_PASSWORD:-}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:5173}
       TWITCH_CHANNEL: ${TWITCH_CHANNEL:-patrick__eff}
@@ -43,6 +43,8 @@ services:
       DBUS_SESSION_BUS_ADDRESS: ${DBUS_SESSION_BUS_ADDRESS:-}
     volumes:
       - api-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
