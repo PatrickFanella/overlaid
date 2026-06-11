@@ -2,19 +2,34 @@
 
 :root {
   color-scheme: dark;
-  --hud-bg: #05070d;
-  --hud-panel: #0b1020;
-  --hud-panel-strong: #10172a;
-  --hud-line: rgba(255, 255, 255, 0.24);
-  --hud-line-soft: rgba(255, 255, 255, 0.12);
-  --hud-text: #f8fafc;
-  --hud-muted: #a1a1aa;
-  --hud-cyan: #67e8f9;
-  --hud-fuchsia: #f472b6;
-  --hud-emerald: #86efac;
-  --hud-amber: #fbbf24;
-  --hud-rose: #fb7185;
-  --hud-shadow: 6px 6px 0 rgba(0, 0, 0, 0.78);
+  /* Dracula Classic: https://spec.draculatheme.com/ */
+  --dracula-background: #282a36;
+  --dracula-current-line: #44475a;
+  --dracula-comment: #6272a4;
+  --dracula-foreground: #f8f8f2;
+  --dracula-red: #ff5555;
+  --dracula-orange: #ffb86c;
+  --dracula-yellow: #f1fa8c;
+  --dracula-green: #50fa7b;
+  --dracula-cyan: #8be9fd;
+  --dracula-purple: #bd93f9;
+  --dracula-pink: #ff79c6;
+
+  --hud-bg: var(--dracula-background);
+  --hud-panel: #282a36;
+  --hud-panel-strong: #343746;
+  --hud-line: color-mix(in oklab, var(--dracula-comment) 72%, white 8%);
+  --hud-line-soft: color-mix(in oklab, var(--dracula-comment) 38%, transparent);
+  --hud-text: var(--dracula-foreground);
+  --hud-muted: color-mix(in oklab, var(--dracula-comment) 82%, var(--dracula-foreground));
+  --hud-cyan: var(--dracula-cyan);
+  --hud-fuchsia: var(--dracula-pink);
+  --hud-purple: var(--dracula-purple);
+  --hud-emerald: var(--dracula-green);
+  --hud-amber: var(--dracula-yellow);
+  --hud-orange: var(--dracula-orange);
+  --hud-rose: var(--dracula-red);
+  --hud-shadow: 6px 6px 0 color-mix(in oklab, black 72%, var(--dracula-background));
   font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   background: transparent;
 }
@@ -51,7 +66,7 @@ body {
 
 .hud-shell--dashboard {
   padding: 12px;
-  background: #05070d;
+  background: var(--dracula-background);
 }
 
 .hud-shell--compact {
@@ -100,7 +115,7 @@ body {
 .hud-panel--flat {
   border: 2px solid var(--hud-line);
   background: var(--hud-panel);
-  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.9);
+  box-shadow: 4px 4px 0 color-mix(in oklab, black 74%, var(--dracula-background));
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -141,6 +156,10 @@ body {
 
 .hud-accent-fuchsia {
   --hud-accent: var(--hud-fuchsia);
+}
+
+.hud-accent-purple {
+  --hud-accent: var(--hud-purple);
 }
 
 .hud-accent-emerald {
@@ -229,7 +248,7 @@ body {
   width: 100%;
   border: 2px solid var(--hud-line);
   border-radius: 0.2rem;
-  background: #05070d;
+  background: color-mix(in oklab, var(--dracula-background) 86%, black);
   padding: 0.55rem 0.65rem;
   color: var(--hud-text);
   outline: none;
