@@ -57,6 +57,38 @@ func TestTwitchLoginRedirectsToAuthorize(t *testing.T) {
 	}
 }
 
+func TestTwitchLoginRequiresOperatorSecretWhenConfigured(t *testing.T) {
+	server := newTwitchServer(t)
+	server.config.OperatorSecret = "operator-secret"
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/twitch/login", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTwitchLoginURLAcceptsOperatorSecretHeader(t *testing.T) {
+	server := newTwitchServer(t)
+	server.config.OperatorSecret = "operator-secret"
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/twitch/login-url", nil)
+	req.Header.Set("X-Overlay-Operator-Secret", "operator-secret")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), twitchAuthorizeEndpoint) {
+		t.Fatalf("expected authorize URL response, got %s", rec.Body.String())
+	}
+}
+
 func TestTwitchTokenSaveAndLoad(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "twitch-token.json")
 	store := newTwitchAuthStore(path)

@@ -284,23 +284,46 @@ func (info *twitchTokenInfo) needsRefresh(now time.Time) bool {
 }
 
 func (s *Server) twitchLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeOperator(r) {
+		http.Error(w, "operator authorization required", http.StatusUnauthorized)
+		return
+	}
+
+	authorizeURL, ok := s.createTwitchAuthorizeURL(w)
+	if !ok {
+		return
+	}
+
+	log.Printf("Twitch OAuth login redirect started")
+	http.Redirect(w, r, authorizeURL, http.StatusFound)
+}
+
+func (s *Server) twitchLoginURL(w http.ResponseWriter, _ *http.Request) {
+	authorizeURL, ok := s.createTwitchAuthorizeURL(w)
+	if !ok {
+		return
+	}
+	log.Printf("Twitch OAuth login URL issued")
+	writeJSON(w, map[string]string{"authorizeUrl": authorizeURL})
+}
+
+func (s *Server) createTwitchAuthorizeURL(w http.ResponseWriter) (string, bool) {
+
 	if !s.twitchConfigured() {
 		http.Error(w, "twitch oauth is not configured", http.StatusServiceUnavailable)
-		return
+		return "", false
 	}
 
 	state := s.twitch.createState(twitchStateTTL)
 	if state == "" {
 		http.Error(w, "unable to create oauth state", http.StatusInternalServerError)
-		return
+		return "", false
 	}
-
-	log.Printf("Twitch OAuth login redirect started")
 
 	redirectURL, err := url.Parse(twitchAuthorizeEndpoint)
 	if err != nil {
 		http.Error(w, "unable to build twitch authorization url", http.StatusInternalServerError)
-		return
+		return "", false
 	}
 
 	query := redirectURL.Query()
@@ -313,7 +336,7 @@ func (s *Server) twitchLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	redirectURL.RawQuery = query.Encode()
 
-	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
+	return redirectURL.String(), true
 }
 
 func (s *Server) twitchCallback(w http.ResponseWriter, r *http.Request) {

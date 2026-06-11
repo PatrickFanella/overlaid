@@ -36,6 +36,94 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+func TestOperatorSecretProtectsTestAlert(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", OperatorSecret: "operator-secret"}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodPost, "/api/events/test-alert", bytes.NewBufferString(`{"title":"Nope","message":"Blocked"}`))
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOperatorSecretProtectsMutatingRoutes(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", OperatorSecret: "operator-secret"}, events.NewBus(4))
+	tests := []struct {
+		name string
+		path string
+		body string
+	}{
+		{name: "clear", path: "/api/events/clear"},
+		{name: "brb", path: "/api/events/brb", body: `{"active":true,"title":"BRB","message":"Break"}`},
+		{name: "obs scene", path: "/api/obs/scene", body: `{"sceneName":"Scene"}`},
+		{name: "obs mute", path: "/api/obs/input/mute", body: `{"inputName":"Mic/Aux","muted":true}`},
+		{name: "obs item", path: "/api/obs/scene-item/enabled", body: `{"sceneName":"Scene","sceneItemId":1,"enabled":true}`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, test.path, bytes.NewBufferString(test.body))
+			rec := httptest.NewRecorder()
+
+			server.Handler().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestOperatorSecretAllowsBearerToken(t *testing.T) {
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*", OperatorSecret: "operator-secret"}, bus)
+	req := httptest.NewRequest(http.MethodPost, "/api/events/test-alert", bytes.NewBufferString(`{"title":"Allowed","message":"OK"}`))
+	req.Header.Set("Authorization", "Bearer operator-secret")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+	select {
+	case got := <-client.Events:
+		if got.Title != "Allowed" {
+			t.Fatalf("unexpected event: %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for event")
+	}
+}
+
+func TestOperatorSecretAllowsHeader(t *testing.T) {
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*", OperatorSecret: "operator-secret"}, bus)
+	req := httptest.NewRequest(http.MethodPost, "/api/events/brb", bytes.NewBufferString(`{"active":true,"title":"Allowed","message":"OK"}`))
+	req.Header.Set("X-Overlay-Operator-Secret", "operator-secret")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+	select {
+	case got := <-client.Events:
+		if got.Type != events.EventTypeBRB {
+			t.Fatalf("unexpected event: %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for event")
+	}
+}
+
 func TestTestAlertPublishesEvent(t *testing.T) {
 	bus := events.NewBus(4)
 	client := bus.Subscribe()

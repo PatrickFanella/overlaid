@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import {
   apiUrl,
   clearOverlays,
+  fetchTwitchLoginURL,
   fetchOBSScenes,
   fetchOBSStatus,
   fetchTwitchStatus,
@@ -49,6 +50,7 @@ export function DashboardPage() {
   const [alert, setAlert] = useState(defaultAlert);
   const [brb, setBRB] = useState(defaultBRB);
   const [brbItemsText, setBRBItemsText] = useState(defaultBRB.items.join('\n'));
+  const [operatorSecret, setOperatorSecret] = useState('');
   const [webhookSource, setWebhookSource] = useState('n8n');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [selectedScene, setSelectedScene] = useState('');
@@ -97,8 +99,6 @@ export function DashboardPage() {
     };
   }, [apiBaseUrl]);
 
-  const twitchLoginUrl = useMemo(() => apiUrl(status?.loginUrl || '/api/auth/twitch/login', apiBaseUrl), [apiBaseUrl, status?.loginUrl]);
-
   async function runAction(label: string, action: () => Promise<void>) {
     setActionState('running');
     setActionMessage(label);
@@ -114,7 +114,7 @@ export function DashboardPage() {
 
   function submitTestAlert(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void runAction('Send test alert', () => sendTestAlert(alert, apiBaseUrl));
+    void runAction('Send test alert', () => sendTestAlert(alert, apiBaseUrl, operatorSecret));
   }
 
   function submitWebhook(event: FormEvent<HTMLFormElement>) {
@@ -122,17 +122,22 @@ export function DashboardPage() {
     void runAction(`Send ${webhookSource} webhook`, () => sendWebhook(webhookSource, alert, apiBaseUrl, webhookSecret));
   }
 
+  async function startTwitchLogin() {
+    const { authorizeUrl } = await fetchTwitchLoginURL(apiBaseUrl, operatorSecret);
+    window.location.href = authorizeUrl;
+  }
+
   function submitBRB(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextBRB = { ...brb, active: true, items: splitLines(brbItemsText) };
     setBRB(nextBRB);
-    void runAction('Update BRB overlay', () => setBRBStatus(nextBRB, apiBaseUrl));
+    void runAction('Update BRB overlay', () => setBRBStatus(nextBRB, apiBaseUrl, operatorSecret));
   }
 
   function hideBRB() {
     const nextBRB = { ...brb, active: false, items: splitLines(brbItemsText) };
     setBRB(nextBRB);
-    void runAction('Hide BRB overlay', () => setBRBStatus(nextBRB, apiBaseUrl));
+    void runAction('Hide BRB overlay', () => setBRBStatus(nextBRB, apiBaseUrl, operatorSecret));
   }
 
   return (
@@ -147,6 +152,10 @@ export function DashboardPage() {
           <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-300">
             <span className="block text-xs uppercase tracking-[0.25em] text-zinc-500">API</span>
             <span className="font-mono text-zinc-100">{apiBaseUrl}</span>
+            <label className="mt-3 grid gap-2 text-xs text-zinc-300">
+              Operator secret
+              <input className="rounded-xl border border-white/10 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none ring-fuchsia-300/30 focus:ring-4" type="password" value={operatorSecret} onChange={(event) => setOperatorSecret(event.target.value)} placeholder="optional unless API requires it" />
+            </label>
           </div>
         </header>
 
@@ -172,9 +181,9 @@ export function DashboardPage() {
             {status?.authError ? <p className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{status.authError}</p> : null}
 
             <div className="mt-5 flex flex-wrap gap-3">
-              <a className="rounded-full border border-fuchsia-300/40 bg-fuchsia-300/10 px-4 py-2 text-sm font-medium text-fuchsia-100 transition hover:bg-fuchsia-300/20" href={twitchLoginUrl}>
+              <button className="rounded-full border border-fuchsia-300/40 bg-fuchsia-300/10 px-4 py-2 text-sm font-medium text-fuchsia-100 transition hover:bg-fuchsia-300/20" type="button" onClick={() => void runAction('Start Twitch login', startTwitchLogin)}>
                 Twitch login
-              </a>
+              </button>
               <a className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" href={apiUrl('/api/auth/twitch/status', apiBaseUrl)}>
                 Status JSON
               </a>
@@ -200,7 +209,7 @@ export function DashboardPage() {
                 <button className="rounded-full bg-fuchsia-300 px-5 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-fuchsia-200" type="submit">
                   Send test alert
                 </button>
-                <button className="rounded-full border border-white/15 bg-white/5 px-5 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Clear overlays', () => clearOverlays(apiBaseUrl))}>
+                <button className="rounded-full border border-white/15 bg-white/5 px-5 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Clear overlays', () => clearOverlays(apiBaseUrl, operatorSecret))}>
                   Clear overlays
                 </button>
               </div>
@@ -252,7 +261,7 @@ export function DashboardPage() {
                   </option>
                 ))}
               </select>
-              <button className="rounded-full bg-emerald-300 px-5 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-200" type="button" onClick={() => void runAction('Switch OBS scene', () => setOBSScene(selectedScene, apiBaseUrl))}>
+              <button className="rounded-full bg-emerald-300 px-5 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-200" type="button" onClick={() => void runAction('Switch OBS scene', () => setOBSScene(selectedScene, apiBaseUrl, operatorSecret))}>
                 Switch scene
               </button>
             </label>
@@ -261,10 +270,10 @@ export function DashboardPage() {
               Input name
               <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" value={inputName} onChange={(event) => setInputName(event.target.value)} />
               <div className="flex gap-2">
-                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Mute OBS input', () => setOBSInputMute(inputName, true, apiBaseUrl))}>
+                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Mute OBS input', () => setOBSInputMute(inputName, true, apiBaseUrl, operatorSecret))}>
                   Mute
                 </button>
-                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Unmute OBS input', () => setOBSInputMute(inputName, false, apiBaseUrl))}>
+                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Unmute OBS input', () => setOBSInputMute(inputName, false, apiBaseUrl, operatorSecret))}>
                   Unmute
                 </button>
               </div>
@@ -274,10 +283,10 @@ export function DashboardPage() {
               Scene item ID
               <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" inputMode="numeric" value={sceneItemID} onChange={(event) => setSceneItemID(event.target.value)} />
               <div className="flex gap-2">
-                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Show OBS scene item', () => setOBSSceneItemEnabled(selectedScene, Number(sceneItemID), true, apiBaseUrl))}>
+                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Show OBS scene item', () => setOBSSceneItemEnabled(selectedScene, Number(sceneItemID), true, apiBaseUrl, operatorSecret))}>
                   Show
                 </button>
-                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Hide OBS scene item', () => setOBSSceneItemEnabled(selectedScene, Number(sceneItemID), false, apiBaseUrl))}>
+                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Hide OBS scene item', () => setOBSSceneItemEnabled(selectedScene, Number(sceneItemID), false, apiBaseUrl, operatorSecret))}>
                   Hide
                 </button>
               </div>

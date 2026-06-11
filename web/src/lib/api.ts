@@ -61,6 +61,11 @@ export async function fetchTwitchStatus(explicitBaseUrl?: string) {
   return (await response.json()) as TwitchStatus;
 }
 
+export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/auth/twitch/login-url', {}, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as { authorizeUrl: string };
+}
+
 export async function fetchOBSStatus(explicitBaseUrl?: string) {
   const response = await fetch(apiUrl('/api/obs/status', explicitBaseUrl), { headers: { Accept: 'application/json' } });
   if (!response.ok) {
@@ -77,42 +82,54 @@ export async function fetchOBSScenes(explicitBaseUrl?: string) {
   return (await response.json()) as OBSSceneList;
 }
 
-export async function setOBSScene(sceneName: string, explicitBaseUrl?: string) {
-  await postJSON('/api/obs/scene', { sceneName }, explicitBaseUrl);
+export async function setOBSScene(sceneName: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  await postJSON('/api/obs/scene', { sceneName }, explicitBaseUrl, { operatorSecret });
 }
 
-export async function setOBSInputMute(inputName: string, muted: boolean, explicitBaseUrl?: string) {
-  await postJSON('/api/obs/input/mute', { inputName, muted }, explicitBaseUrl);
+export async function setOBSInputMute(inputName: string, muted: boolean, explicitBaseUrl?: string, operatorSecret?: string) {
+  await postJSON('/api/obs/input/mute', { inputName, muted }, explicitBaseUrl, { operatorSecret });
 }
 
-export async function setOBSSceneItemEnabled(sceneName: string, sceneItemId: number, enabled: boolean, explicitBaseUrl?: string) {
-  await postJSON('/api/obs/scene-item/enabled', { sceneName, sceneItemId, enabled }, explicitBaseUrl);
+export async function setOBSSceneItemEnabled(sceneName: string, sceneItemId: number, enabled: boolean, explicitBaseUrl?: string, operatorSecret?: string) {
+  await postJSON('/api/obs/scene-item/enabled', { sceneName, sceneItemId, enabled }, explicitBaseUrl, { operatorSecret });
 }
 
-export async function sendTestAlert(payload: AlertPayload, explicitBaseUrl?: string) {
-  await postJSON('/api/events/test-alert', payload, explicitBaseUrl);
+export async function sendTestAlert(payload: AlertPayload, explicitBaseUrl?: string, operatorSecret?: string) {
+  await postJSON('/api/events/test-alert', payload, explicitBaseUrl, { operatorSecret });
 }
 
-export async function clearOverlays(explicitBaseUrl?: string) {
-  const response = await fetch(apiUrl('/api/events/clear', explicitBaseUrl), { method: 'POST' });
+export async function clearOverlays(explicitBaseUrl?: string, operatorSecret?: string) {
+  const headers: Record<string, string> = {};
+  if (operatorSecret?.trim()) {
+    headers['X-Overlay-Operator-Secret'] = operatorSecret.trim();
+  }
+  const response = await fetch(apiUrl('/api/events/clear', explicitBaseUrl), { method: 'POST', headers });
   if (!response.ok) {
     throw new Error(`Clear overlays failed: ${response.status}`);
   }
 }
 
-export async function setBRBStatus(payload: BRBPayload, explicitBaseUrl?: string) {
-  await postJSON('/api/events/brb', payload, explicitBaseUrl);
+export async function setBRBStatus(payload: BRBPayload, explicitBaseUrl?: string, operatorSecret?: string) {
+  await postJSON('/api/events/brb', payload, explicitBaseUrl, { operatorSecret });
 }
 
 export async function sendWebhook(source: string, payload: AlertPayload, explicitBaseUrl?: string, webhookSecret?: string) {
-  await postJSON(`/api/integrations/webhook/${encodeURIComponent(source)}`, payload, explicitBaseUrl, webhookSecret);
+  await postJSON(`/api/integrations/webhook/${encodeURIComponent(source)}`, payload, explicitBaseUrl, { webhookSecret });
 }
 
-async function postJSON(path: string, payload: Record<string, unknown>, explicitBaseUrl?: string, webhookSecret?: string) {
-	const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
-	if (webhookSecret?.trim()) {
-		headers['X-Overlay-Webhook-Secret'] = webhookSecret.trim();
-	}
+type PostJSONOptions = {
+  operatorSecret?: string;
+  webhookSecret?: string;
+};
+
+async function postJSON(path: string, payload: Record<string, unknown>, explicitBaseUrl?: string, options: PostJSONOptions = {}) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  if (options.operatorSecret?.trim()) {
+    headers['X-Overlay-Operator-Secret'] = options.operatorSecret.trim();
+  }
+  if (options.webhookSecret?.trim()) {
+    headers['X-Overlay-Webhook-Secret'] = options.webhookSecret.trim();
+  }
 
   const response = await fetch(apiUrl(path, explicitBaseUrl), {
     method: 'POST',
@@ -122,4 +139,5 @@ async function postJSON(path: string, payload: Record<string, unknown>, explicit
   if (!response.ok) {
     throw new Error(`${path} failed: ${response.status}`);
   }
+  return response;
 }

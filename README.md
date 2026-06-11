@@ -19,6 +19,7 @@ docker compose up --build
 - `API_ADDR` / `API_PORT` — backend listen address and host port.
 - `POSTGRES_PORT` — host Postgres port. Defaults to `55432` to avoid clashing with a local Postgres on `5432`.
 - `CORS_ALLOWED_ORIGIN` — browser origin allowed to call the API.
+- `OPERATOR_SECRET` — optional shared secret for dashboard/operator mutating routes. Send as `X-Overlay-Operator-Secret` or `Authorization: Bearer <secret>`.
 - `WEBHOOK_SECRET` — optional shared secret for `POST /api/integrations/webhook/{source}`. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
 - `VITE_API_BASE_URL` — optional build-time API base URL for local Vite builds. If unset, overlays derive the API URL from the browser host on port `8080`.
@@ -33,6 +34,7 @@ docker compose up --build
 Twitch auth routes:
 
 - `GET /api/auth/twitch/login` — start OAuth.
+- `POST /api/auth/twitch/login-url` — start OAuth from the dashboard with `OPERATOR_SECRET` as a header and return a Twitch authorize URL.
 - `GET /api/auth/twitch/callback` — exchange the code and redirect back to `PUBLIC_WEB_URL`.
 - `GET /api/auth/twitch/status` — JSON summary of config/auth state and safe diagnostics.
 
@@ -42,7 +44,7 @@ If you run the API in Docker, the Twitch token persists in the `api-data` volume
 
 OAuth callback test flow:
 
-1. Open `http://localhost:8080/api/auth/twitch/login`.
+1. Open `http://localhost:5173/dashboard`, enter `OPERATOR_SECRET` if configured, and click Twitch login. If `OPERATOR_SECRET` is empty, direct `http://localhost:8080/api/auth/twitch/login` also works.
 2. Complete Twitch authorization.
 3. Twitch redirects to `/api/auth/twitch/callback`, which stores the token and sends you back to `PUBLIC_WEB_URL`.
 4. Check `GET /api/auth/twitch/status` for `authenticated`, `streamerLogin`, and `tokenExpiresAt`.
@@ -81,6 +83,8 @@ http://<homelab-host>:5173/dashboard
 ```
 
 The dashboard can check Twitch auth status, open the Twitch login flow, send test alerts, clear overlays, control the BRB/intermission screen, and send generic webhook test events.
+If `OPERATOR_SECRET` is configured, enter it in the dashboard before using mutating controls such as test alerts, clear, BRB, or OBS commands.
+The same secret is required to start Twitch OAuth; the dashboard appends it to the login URL for the one-time auth redirect.
 It can also connect to OBS WebSocket to list scenes, switch the current program scene, mute/unmute an input, and show/hide scene items by ID.
 
 OBS WebSocket notes:
@@ -158,6 +162,7 @@ services:
 ```bash
 curl -X POST http://localhost:8080/api/events/brb \
   -H 'Content-Type: application/json' \
+  -H 'X-Overlay-Operator-Secret: <OPERATOR_SECRET if configured>' \
   -d '{"active":true,"title":"Be right back","message":"Short intermission. Stream resumes soon.","eta":"5 min","items":["Hydrate","Stretch","Chat stays live"]}'
 ```
 
@@ -166,6 +171,7 @@ Hide the BRB screen without clearing every overlay:
 ```bash
 curl -X POST http://localhost:8080/api/events/brb \
   -H 'Content-Type: application/json' \
+  -H 'X-Overlay-Operator-Secret: <OPERATOR_SECRET if configured>' \
   -d '{"active":false,"title":"BRB overlay","message":"Waiting for intermission command"}'
 ```
 
@@ -176,13 +182,15 @@ Send a test alert:
 ```bash
 curl -X POST http://localhost:8080/api/events/test-alert \
   -H 'Content-Type: application/json' \
+  -H 'X-Overlay-Operator-Secret: <OPERATOR_SECRET if configured>' \
   -d '{"title":"Test alert","message":"Overlay pipeline is live","severity":"success"}'
 ```
 
 Clear the overlay:
 
 ```bash
-curl -X POST http://localhost:8080/api/events/clear
+curl -X POST http://localhost:8080/api/events/clear \
+  -H 'X-Overlay-Operator-Secret: <OPERATOR_SECRET if configured>'
 ```
 
 Send a generic webhook event:
