@@ -55,9 +55,9 @@ After OAuth succeeds, the API starts a background EventSub WebSocket worker. It 
 
 Current mappings:
 
-- Twitch chat messages → `chat_message` events for `/overlay/chat`.
-- Channel point redemptions → alert events for `/overlay/alerts`.
-- Subscriptions, resubs, gift subs, bits, follows, and chat notifications → alert events for `/overlay/alerts`.
+- Twitch chat messages → `chat_message` events for `/overlay/chat` and `/overlay/ticker`.
+- Channel point redemptions → alert events for `/overlay/alerts` and `/overlay/ticker`.
+- Subscriptions, resubs, gift subs, bits, follows, and chat notifications → alert events for `/overlay/alerts` and `/overlay/ticker`.
 
 If you added `moderator:read:followers` after an earlier login, re-run `/api/auth/twitch/login` so the saved token includes the new follow scope.
 
@@ -116,6 +116,18 @@ Use this for chat:
 
 ```text
 http://<homelab-host>:5173/overlay/chat
+```
+
+`/overlay/ticker` listens to the full SSE stream and turns recent alerts, chat, service status, and custom commands into a lower-third ticker. To control ticker copy explicitly, include `data.ticker` in a webhook payload:
+
+```json
+{"title":"Schedule","message":"Stream starts at 19:00","data":{"ticker":{"label":"schedule","message":"Stream starts at 19:00"}}}
+```
+
+`/overlay/goals` listens for explicit `data.goal` or `data.goals` payloads. Example goal update:
+
+```json
+{"title":"Follower goal","message":"next unlock at 700","data":{"goal":{"id":"followers","label":"Follower goal","current":430,"target":620,"unit":"followers","note":"next unlock at 700"}}}
 ```
 
 ### Test commands

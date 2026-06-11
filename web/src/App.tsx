@@ -3,7 +3,9 @@ import { HomePage } from './routes/Home';
 import { OverlayAlertsPage } from './routes/OverlayAlerts';
 import { OverlayChatPage } from './routes/OverlayChat';
 import { OverlayDebugPage } from './routes/OverlayDebug';
+import { OverlayGoalsPage } from './routes/OverlayGoals';
 import { OverlayPlaceholderPage } from './routes/OverlayPlaceholder';
+import { OverlayTickerPage } from './routes/OverlayTicker';
 
 type AppProps = {
   pathname?: string;
@@ -57,6 +59,14 @@ export function getAppRoute(pathname: string) {
 
   if (route === '/overlay/chat') {
     return <OverlayChatPage />;
+  }
+
+  if (route === '/overlay/goals') {
+    return <OverlayGoalsPage />;
+  }
+
+  if (route === '/overlay/ticker') {
+    return <OverlayTickerPage />;
   }
 
   if (route === '/overlay/debug') {

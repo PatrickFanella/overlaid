@@ -14,6 +14,7 @@ type alertRequest struct {
 	Title    string          `json:"title"`
 	Message  string          `json:"message"`
 	Severity events.Severity `json:"severity"`
+	Data     map[string]any  `json:"data"`
 }
 
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
@@ -63,7 +64,9 @@ func (s *Server) testAlert(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.bus.Publish(events.NewAlert("manual", request.Title, request.Message, normalizeSeverity(request.Severity)))
+	event := events.NewAlert("manual", request.Title, request.Message, normalizeSeverity(request.Severity))
+	event.Data = request.Data
+	s.bus.Publish(event)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -87,7 +90,9 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.bus.Publish(events.NewAlert(source, request.Title, request.Message, normalizeSeverity(request.Severity)))
+	event := events.NewAlert(source, request.Title, request.Message, normalizeSeverity(request.Severity))
+	event.Data = request.Data
+	s.bus.Publish(event)
 	w.WriteHeader(http.StatusAccepted)
 }
 

@@ -29,10 +29,24 @@ describe('App routing', () => {
     expect(html).toContain('Scene controls');
   });
 
-  it('renders placeholder overlay routes', () => {
+  it('renders the goals overlay route', () => {
     const html = renderToString(<App pathname="/overlay/goals" />);
 
-    expect(html).toContain('Goals overlay');
+    expect(html).toContain('Goal rail');
+    expect(html).toContain('Waiting for goal events');
+  });
+
+  it('renders the ticker overlay route', () => {
+    const html = renderToString(<App pathname="/overlay/ticker" />);
+
+    expect(html).toContain('Ticker rail');
+    expect(html).toContain('Stream systems nominal');
+  });
+
+  it('renders remaining placeholder overlay routes', () => {
+    const html = renderToString(<App pathname="/overlay/now-playing" />);
+
+    expect(html).toContain('Now playing');
     expect(html).toContain('OBS browser-source ready');
   });
 

@@ -155,6 +155,36 @@ func TestWebhookAcceptsSharedSecretHeader(t *testing.T) {
 	}
 }
 
+func TestWebhookPreservesDataPayload(t *testing.T) {
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+
+	body := bytes.NewBufferString(`{"title":"Goal update","message":"Followers moved","severity":"success","data":{"goal":{"id":"followers","label":"Follower goal","current":430,"target":620,"unit":"followers"}}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/integrations/webhook/n8n", body)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	select {
+	case got := <-client.Events:
+		goal, ok := got.Data["goal"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected goal data, got %#v", got.Data)
+		}
+		if goal["id"] != "followers" || goal["unit"] != "followers" {
+			t.Fatalf("unexpected goal data: %#v", goal)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for webhook event")
+	}
+}
+
 func TestWebhookAcceptsBearerSecret(t *testing.T) {
 	bus := events.NewBus(4)
 	server := NewServer(config.Config{AllowedOrigin: "*", WebhookSecret: "super-secret"}, bus)

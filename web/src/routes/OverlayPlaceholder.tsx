@@ -5,21 +5,9 @@ type OverlayPlaceholderPageProps = {
 };
 
 const copy: Record<string, { title: string; description: string }> = {
-  '/overlay/chat': {
-    title: 'Chat overlay',
-    description: 'Placeholder route ready for Twitch chat rendering once the chat adapter lands.',
-  },
-  '/overlay/goals': {
-    title: 'Goals overlay',
-    description: 'Placeholder route for follower, sub, and channel-point goals.',
-  },
   '/overlay/now-playing': {
     title: 'Now playing',
     description: 'Placeholder route for media and status widgets from self-hosted services.',
-  },
-  '/overlay/ticker': {
-    title: 'Ticker overlay',
-    description: 'Placeholder route for rotating event and status cards.',
   },
   '/overlay/brb': {
     title: 'BRB overlay',
@@ -58,51 +46,13 @@ export function OverlayPlaceholderPage({ pathname }: OverlayPlaceholderPageProps
 
 function renderOverlayPreview(pathname: string) {
   switch (pathname) {
-    case '/overlay/goals':
-      return <GoalsPreview />;
     case '/overlay/now-playing':
       return <NowPlayingPreview />;
-    case '/overlay/ticker':
-      return <TickerPreview />;
     case '/overlay/brb':
       return <BrbPreview />;
     default:
       return <GenericPreview />;
   }
-}
-
-function GoalsPreview() {
-  return (
-    <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-      <section className="hud-panel hud-corners hud-accent-emerald rounded-[1.4rem] p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="hud-label">Goal rail</p>
-            <p className="mt-2 text-xl font-semibold text-white">Community push</p>
-          </div>
-          <span className="hud-badge">68%</span>
-        </div>
-        <div className="mt-5">
-          <div className="hud-progress" style={{ '--hud-progress': '68%' } as CSSProperties}>
-            <div className="hud-progress__fill" />
-          </div>
-          <div className="mt-3 flex items-center justify-between text-xs uppercase tracking-[0.24em] text-zinc-400">
-            <span>420 / 620 followers</span>
-            <span>next unlock at 700</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-3">
-        {['Latest follower', 'Top tip', 'Sub count'].map((label, index) => (
-          <div key={label} className="hud-panel hud-corners rounded-[1.25rem] p-4" style={{ '--hud-accent': ['var(--hud-cyan)', 'var(--hud-fuchsia)', 'var(--hud-amber)'][index] } as CSSProperties}>
-            <p className="hud-kicker">{label}</p>
-            <p className="mt-2 text-lg font-semibold text-white">Live placeholder</p>
-          </div>
-        ))}
-      </section>
-    </div>
-  );
 }
 
 function NowPlayingPreview() {
@@ -127,24 +77,6 @@ function NowPlayingPreview() {
             <span>04:01 total</span>
           </div>
         </div>
-      </div>
-    </section>
-  );
-}
-
-function TickerPreview() {
-  return (
-    <section className="hud-panel hud-corners hud-accent-fuchsia rounded-[1.4rem] p-4">
-      <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-100">
-        {['LIVE', 'NEW FOLLOWER', 'DISCORD OPEN', 'STREAM STARTS 19:00'].map((item, index) => (
-          <span key={item} className={`hud-chip ${index === 0 ? 'hud-accent-rose' : index === 1 ? 'hud-accent-emerald' : index === 2 ? 'hud-accent-cyan' : 'hud-accent-amber'}`}>
-            {item}
-          </span>
-        ))}
-      </div>
-      <div className="mt-4 rounded-[1.1rem] border border-white/10 bg-black/35 px-4 py-3">
-        <p className="hud-kicker">Ticker rail</p>
-        <p className="mt-2 text-lg font-semibold text-white">Rotating updates can scroll through here as a clean, high-contrast lower-third.</p>
       </div>
     </section>
   );
