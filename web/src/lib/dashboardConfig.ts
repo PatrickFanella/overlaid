@@ -19,6 +19,8 @@ export type QuickAction =
   | { id: string; label: string; kind: 'clearOverlays' }
   | { id: string; label: string; kind: 'muteInput'; inputName: string; muted: boolean };
 
+export const quickActionKinds = ['setScene', 'sendAlert', 'showBRB', 'hideBRB', 'clearOverlays', 'muteInput'] as const;
+
 export type DashboardConfig = {
   setupChecklist: SetupChecklistItem[];
   streamPresets: StreamPreset[];
@@ -78,4 +80,40 @@ export function saveOperatorSecret(secret: string) {
   if (typeof window === 'undefined') return;
   if (secret.trim()) window.sessionStorage.setItem(OPERATOR_SECRET_KEY, secret);
   else window.sessionStorage.removeItem(OPERATOR_SECRET_KEY);
+}
+
+export function createQuickAction(kind: QuickAction['kind'], label = 'New action'): QuickAction {
+  const id = createQuickActionId(kind);
+
+  switch (kind) {
+    case 'setScene':
+      return { id, label, kind, sceneName: 'Main' };
+    case 'sendAlert':
+      return { id, label, kind, title: 'Sample alert', message: 'Quick action fired', severity: 'success' };
+    case 'showBRB':
+      return {
+        id,
+        label,
+        kind,
+        title: 'Be right back',
+        message: 'Short intermission. Stream resumes soon.',
+        eta: '5 min',
+        items: ['Hydrate', 'Stretch', 'Chat stays live'],
+      };
+    case 'hideBRB':
+      return { id, label, kind };
+    case 'clearOverlays':
+      return { id, label, kind };
+    case 'muteInput':
+      return { id, label, kind, inputName: 'Microphone', muted: true };
+  }
+}
+
+function createQuickActionId(kind: QuickAction['kind']) {
+  const suffix =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+
+  return `quick-${kind}-${Date.now().toString(36)}-${suffix}`;
 }

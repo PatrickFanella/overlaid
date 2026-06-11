@@ -50,6 +50,9 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/dashboard/control" />);
 
     expect(html).toContain('Stream control');
+    expect(html).toContain('Quick actions');
+    expect(html).toContain('BRB overlay');
+    expect(html).toContain('Scene controls');
   });
 
   it('renders the dashboard config route', () => {
