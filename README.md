@@ -93,6 +93,7 @@ OBS WebSocket notes:
 - Enable OBS WebSocket in OBS: `Tools → WebSocket Server Settings`.
 - Docker default OBS WebSocket v5 URL is `ws://host.docker.internal:4455`, with a Compose `host-gateway` mapping for Linux.
 - Native API runs can use `ws://localhost:4455`.
+- If Docker cannot reach OBS through the bridge network, use a local `docker-compose.override.yml` with API host networking and `OBS_WEBSOCKET_URL=ws://localhost:4455`.
 - If OBS runs on another machine, set `OBS_WEBSOCKET_URL=ws://<obs-host>:4455` for the API container/host.
 - If OBS WebSocket auth is enabled, set `OBS_WEBSOCKET_PASSWORD` in `.env`.
 

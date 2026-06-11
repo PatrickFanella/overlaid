@@ -29,6 +29,7 @@ Thumbs.db
 logs/
 
 # Docker / local data
+docker-compose.override.yml
 data/
 .local-data/
 tmp/

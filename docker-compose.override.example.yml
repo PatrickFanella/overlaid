@@ -3,6 +3,15 @@
 
 services:
   api:
+    # For local OBS on Linux, host networking is the simplest way for the API
+    # container to reach OBS WebSocket on localhost:4455.
+    # Copy this file to docker-compose.override.yml, uncomment these lines, and
+    # set OBS_WEBSOCKET_URL=ws://localhost:4455 in .env or below.
+    # network_mode: host
+    # ports: []
+    # environment:
+    #   OBS_WEBSOCKET_URL: ws://localhost:4455
+
     # MPRIS runs on the host user session bus. Enable this only when the API
     # container should read now-playing data from the same Linux desktop user.
     # Because this switches away from the image's built-in non-root user,
