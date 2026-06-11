@@ -59,7 +59,7 @@ export function SystemStatusRail({ apiBaseUrl, operatorSecret, config }: SystemS
   }, [apiBaseUrl]);
 
   return (
-    <section className="hud-panel hud-corners rounded-[1.35rem] p-3" style={{ position: 'sticky', top: '1rem', zIndex: 20 }}>
+    <section className="hud-panel hud-corners hud-sticky-rail rounded-[1.35rem] p-3">
       <div className="flex flex-wrap items-center justify-between gap-3 px-2 pt-1">
         <div>
           <p className="hud-label">System status</p>

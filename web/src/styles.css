@@ -336,6 +336,50 @@ body {
   color: #e5e7eb;
 }
 
+.hud-dashboard-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .hud-dashboard-grid--two {
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  }
+
+  .hud-dashboard-grid--three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.hud-sticky-rail {
+  position: sticky;
+  top: 1rem;
+  z-index: 20;
+}
+
+.hud-action-button {
+  border: 1px solid var(--hud-line);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.85rem 1rem;
+  color: var(--hud-text);
+  text-align: left;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.hud-action-button:hover {
+  border-color: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 50%, var(--hud-line));
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.hud-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 @keyframes hud-enter {
   from {
     opacity: 0;
