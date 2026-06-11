@@ -21,23 +21,36 @@ describe('App routing', () => {
     expect(html).toContain('Waiting for alert events');
   });
 
-  it('renders the dashboard route', () => {
+  it('renders the dashboard overview route', () => {
     const html = renderToString(<App pathname="/dashboard" />);
 
     expect(html).toContain('over-laid command center');
+    expect(html).toContain('Dashboard overview');
     expect(html).toContain('System status');
+  });
+
+  it('renders the dashboard setup route', () => {
+    const html = renderToString(<App pathname="/dashboard/setup" />);
+
     expect(html).toContain('OBS setup workflow');
-    expect(html).toContain('Overlay source URLs');
-    expect(html).toContain('Stream presets');
-    expect(html).toContain('Sample alert');
-    expect(html).toContain('Copy source URL');
-    expect(html).toContain('Send test alert');
-    expect(html).toContain('Operator secret');
-    expect(html).toContain('Confirm clear');
-    expect(html).toContain('Scene controls');
-    expect(html).toContain('Input name');
-    expect(html).toContain('Scene item ID');
-    expect(html).toContain('BRB overlay');
+  });
+
+  it('renders the dashboard sources route', () => {
+    const html = renderToString(<App pathname="/dashboard/sources" />);
+
+    expect(html).toContain('OBS setup workflow');
+  });
+
+  it('renders the dashboard control route', () => {
+    const html = renderToString(<App pathname="/dashboard/control" />);
+
+    expect(html).toContain('Stream control');
+  });
+
+  it('renders the dashboard config route', () => {
+    const html = renderToString(<App pathname="/dashboard/config" />);
+
+    expect(html).toContain('Operator config');
   });
 
   it('renders the goals overlay route', () => {

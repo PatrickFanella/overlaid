@@ -1,4 +1,3 @@
-import { DashboardPage } from './routes/Dashboard';
 import { HomePage } from './routes/Home';
 import { OverlayAlertsPage } from './routes/OverlayAlerts';
 import { OverlayBRBPage } from './routes/OverlayBRB';
@@ -8,6 +7,10 @@ import { OverlayGoalsPage } from './routes/OverlayGoals';
 import { OverlayNowPlayingPage } from './routes/OverlayNowPlaying';
 import { OverlayPlaceholderPage } from './routes/OverlayPlaceholder';
 import { OverlayTickerPage } from './routes/OverlayTicker';
+import { DashboardConfigPage } from './routes/dashboard/Config';
+import { DashboardControlPage } from './routes/dashboard/Control';
+import { DashboardOverviewPage } from './routes/dashboard/Overview';
+import { DashboardSetupPage } from './routes/dashboard/Setup';
 
 type AppProps = {
   pathname?: string;
@@ -52,7 +55,19 @@ export function getAppRoute(pathname: string) {
   }
 
   if (route === '/dashboard') {
-    return <DashboardPage />;
+    return <DashboardOverviewPage />;
+  }
+
+  if (route === '/dashboard/setup' || route === '/dashboard/sources') {
+    return <DashboardSetupPage activePath={route} />;
+  }
+
+  if (route === '/dashboard/control') {
+    return <DashboardControlPage />;
+  }
+
+  if (route === '/dashboard/config') {
+    return <DashboardConfigPage />;
   }
 
   if (route === '/overlay/alerts') {
