@@ -15,24 +15,16 @@ import {
   setOBSScene,
   setOBSSceneItemEnabled,
   type AlertPayload,
-  type BRBPayload,
   type OBSSceneList,
   type OBSInput,
   type OBSSceneItem,
   type OBSStatus,
   type TwitchStatus,
 } from '../lib/api';
-import { getDefaultApiBaseUrl, getOverlayApiBaseUrl } from '../lib/eventStream';
+import { getOverlayApiBaseUrl } from '../lib/eventStream';
 
-const overlayRoutes = [
-  { path: '/overlay/alerts', title: 'Alert feed', description: 'Live alert browser source' },
-  { path: '/overlay/chat', title: 'Twitch chat', description: 'Live chat browser source' },
-  { path: '/overlay/goals', title: 'Goal rail', description: 'Progress widget browser source' },
-  { path: '/overlay/now-playing', title: 'Now playing', description: 'Music and media browser source' },
-  { path: '/overlay/ticker', title: 'Ticker rail', description: 'Lower-third event ticker' },
-  { path: '/overlay/brb', title: 'BRB overlay', description: 'Intermission scene control' },
-  { path: '/overlay/debug', title: 'Event inspector', description: 'SSE event stream debugger' },
-] as const;
+import { buildOverlaySourceUrl, getBrowserOrigin, overlayRoutes } from '../lib/overlayRoutes';
+import { sampleAlert, sampleBRBHide, sampleBRBShow, sampleGoals, sampleTicker } from '../lib/dashboardSamples';
 
 const setupChecklist = [
   ['Browser sources added', 'Add every route once, then verify each source loads cleanly in OBS.'],
@@ -47,57 +39,6 @@ const streamPresets = [
   { title: 'BRB scene', accent: 'hud-accent-rose', sources: ['brb', 'ticker', 'now-playing'] },
   { title: 'Debug scene', accent: 'hud-accent-cyan', sources: ['debug', 'alerts', 'ticker'] },
 ] as const;
-
-const sampleAlert: AlertPayload = {
-  title: 'Sample alert',
-  message: 'Overlay command center smoke test passed',
-  severity: 'success',
-};
-
-const sampleTicker: AlertPayload = {
-  title: 'Sample ticker',
-  message: 'Lower-third ticker is live',
-  severity: 'info',
-  data: {
-    ticker: {
-      id: 'sample-ticker',
-      label: 'Ticker sample',
-      message: 'Lower-third ticker is live',
-    },
-  },
-};
-
-const sampleGoals: AlertPayload = {
-  title: 'Sample goals',
-  message: 'Goal rail accepted a live update',
-  severity: 'success',
-  data: {
-    goal: {
-      id: 'followers',
-      label: 'Follower goal',
-      current: 430,
-      target: 620,
-      unit: 'followers',
-      note: 'Sample goal update',
-      accent: 'var(--hud-emerald)',
-    },
-  },
-};
-
-const sampleBRBShow: BRBPayload = {
-  active: true,
-  title: 'Be right back',
-  message: 'Short intermission. Stream resumes soon.',
-  eta: '5 min',
-  items: ['Hydrate', 'Stretch', 'Chat stays live'],
-  data: { preset: 'sample-show' },
-};
-
-const sampleBRBHide: BRBPayload = {
-  ...sampleBRBShow,
-  active: false,
-  data: { preset: 'sample-hide' },
-};
 
 type ActionState = 'idle' | 'running' | 'success' | 'error';
 
@@ -814,23 +755,6 @@ function splitLines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 5);
-}
-
-function buildOverlaySourceUrl(path: string, apiBaseUrl: string) {
-  const origin = getBrowserOrigin();
-  const url = new URL(path, origin);
-  const defaultApiBaseUrl = getDefaultApiBaseUrl(origin);
-  if (apiBaseUrl && apiBaseUrl !== defaultApiBaseUrl) {
-    url.searchParams.set('apiBaseUrl', apiBaseUrl);
-  }
-  return url.toString();
-}
-
-function getBrowserOrigin() {
-  if (typeof window !== 'undefined' && window.location.origin) {
-    return window.location.origin;
-  }
-  return 'http://localhost:5173';
 }
 
 function getObsDiagnostics(issue: string | undefined, url: string) {
