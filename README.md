@@ -66,7 +66,11 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 
 ### Routes
 
-- `/dashboard`
+- `/dashboard` — compact overview and status.
+- `/dashboard/setup` — setup checklist, browser-source URLs, editable stream presets.
+- `/dashboard/sources` — setup/source URL alias.
+- `/dashboard/control` — stream controls, BRB, OBS controls, sample events, quick actions.
+- `/dashboard/config` — operator secret session storage, MPRIS decision, local console preferences.
 - `/overlay/alerts`
 - `/overlay/chat`
 - `/overlay/goals`

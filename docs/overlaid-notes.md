@@ -20,3 +20,14 @@
   - fire events, brb screen should be one component
   - scene controls
   - an editable element with quick actions such as secene buttons that will activate the scene, refresh element, fire event, turn off alerts, ect, anything useful as defaults and other custom things
+
+---
+
+## Implementation status
+
+- Theme/style: implemented with semantic HUD utility classes in `web/src/styles.css` and reusable dashboard component classes.
+- Dashboard split: implemented with `/dashboard`, `/dashboard/setup`, `/dashboard/sources`, `/dashboard/control`, and `/dashboard/config`.
+- Setup workflow: implemented on `/dashboard/setup`; checklist state persists locally and completed items can be hidden.
+- Operator secret: moved to `/dashboard/config` and stored in browser session storage.
+- Overlay URLs/presets: moved to `/dashboard/setup` with copyable source URLs and editable stream presets.
+- Stream control route: implemented on `/dashboard/control` with sample events, BRB controls, OBS controls, and editable quick actions.
