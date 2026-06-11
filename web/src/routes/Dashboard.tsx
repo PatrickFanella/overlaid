@@ -1,5 +1,20 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { apiUrl, clearOverlays, fetchTwitchStatus, sendTestAlert, sendWebhook, type AlertPayload, type TwitchStatus } from '../lib/api';
+import {
+  apiUrl,
+  clearOverlays,
+  fetchOBSScenes,
+  fetchOBSStatus,
+  fetchTwitchStatus,
+  sendTestAlert,
+  sendWebhook,
+  setOBSInputMute,
+  setOBSScene,
+  setOBSSceneItemEnabled,
+  type AlertPayload,
+  type OBSSceneList,
+  type OBSStatus,
+  type TwitchStatus,
+} from '../lib/api';
 import { getOverlayApiBaseUrl } from '../lib/eventStream';
 
 const overlayRoutes = ['/overlay/alerts', '/overlay/chat', '/overlay/goals', '/overlay/now-playing', '/overlay/ticker', '/overlay/brb', '/overlay/debug'] as const;
@@ -15,12 +30,18 @@ type ActionState = 'idle' | 'running' | 'success' | 'error';
 export function DashboardPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const [status, setStatus] = useState<TwitchStatus | null>(null);
+  const [obsStatus, setOBSStatus] = useState<OBSStatus | null>(null);
+  const [obsScenes, setOBSScenes] = useState<OBSSceneList | null>(null);
   const [statusError, setStatusError] = useState('');
+  const [obsError, setOBSError] = useState('');
   const [actionState, setActionState] = useState<ActionState>('idle');
   const [actionMessage, setActionMessage] = useState('');
   const [alert, setAlert] = useState(defaultAlert);
   const [webhookSource, setWebhookSource] = useState('n8n');
   const [webhookSecret, setWebhookSecret] = useState('');
+  const [selectedScene, setSelectedScene] = useState('');
+  const [inputName, setInputName] = useState('Mic/Aux');
+  const [sceneItemID, setSceneItemID] = useState('1');
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +55,28 @@ export function DashboardPage() {
       .catch((error: unknown) => {
         if (!cancelled) {
           setStatusError(error instanceof Error ? error.message : 'Unable to load Twitch status');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchOBSStatus(apiBaseUrl), fetchOBSScenes(apiBaseUrl)])
+      .then(([nextStatus, nextScenes]) => {
+        if (!cancelled) {
+          setOBSStatus(nextStatus);
+          setOBSScenes(nextScenes);
+          setSelectedScene((current) => current || nextScenes.currentProgramSceneName || nextScenes.scenes[0]?.sceneName || '');
+          setOBSError('');
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setOBSError(error instanceof Error ? error.message : 'Unable to load OBS status');
         }
       });
 
@@ -155,6 +198,67 @@ export function DashboardPage() {
             {actionMessage ? <p className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${actionClassName(actionState)}`}>{actionMessage}</p> : null}
           </section>
         </div>
+
+        <section className="mt-6 rounded-3xl border border-white/10 bg-black/35 p-6 shadow-2xl shadow-black/25 backdrop-blur">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-emerald-200">OBS</p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">Scene controls</h2>
+              <p className="mt-2 text-sm text-zinc-300">Switch scenes, mute inputs, or toggle a scene item through OBS WebSocket.</p>
+            </div>
+            <StatusPill active={Boolean(obsStatus?.authenticated)} label={obsStatus?.authenticated ? 'connected' : 'offline'} />
+          </div>
+
+          {obsError ? <p className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{obsError}</p> : null}
+
+          <dl className="mt-5 grid gap-3 text-sm md:grid-cols-3">
+            <StatusField label="URL" value={obsStatus?.url || 'not configured'} />
+            <StatusField label="OBS" value={obsStatus?.obsStudioVersion || 'not connected'} />
+            <StatusField label="Current scene" value={obsScenes?.currentProgramSceneName || 'not loaded'} />
+          </dl>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            <label className="grid gap-2 text-sm text-zinc-300">
+              Scene
+              <select className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" value={selectedScene} onChange={(event) => setSelectedScene(event.target.value)}>
+                {(obsScenes?.scenes || []).map((scene) => (
+                  <option key={scene.sceneName} value={scene.sceneName}>
+                    {scene.sceneName}
+                  </option>
+                ))}
+              </select>
+              <button className="rounded-full bg-emerald-300 px-5 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-200" type="button" onClick={() => void runAction('Switch OBS scene', () => setOBSScene(selectedScene, apiBaseUrl))}>
+                Switch scene
+              </button>
+            </label>
+
+            <label className="grid gap-2 text-sm text-zinc-300">
+              Input name
+              <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" value={inputName} onChange={(event) => setInputName(event.target.value)} />
+              <div className="flex gap-2">
+                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Mute OBS input', () => setOBSInputMute(inputName, true, apiBaseUrl))}>
+                  Mute
+                </button>
+                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Unmute OBS input', () => setOBSInputMute(inputName, false, apiBaseUrl))}>
+                  Unmute
+                </button>
+              </div>
+            </label>
+
+            <label className="grid gap-2 text-sm text-zinc-300">
+              Scene item ID
+              <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" inputMode="numeric" value={sceneItemID} onChange={(event) => setSceneItemID(event.target.value)} />
+              <div className="flex gap-2">
+                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Show OBS scene item', () => setOBSSceneItemEnabled(selectedScene, Number(sceneItemID), true, apiBaseUrl))}>
+                  Show
+                </button>
+                <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={() => void runAction('Hide OBS scene item', () => setOBSSceneItemEnabled(selectedScene, Number(sceneItemID), false, apiBaseUrl))}>
+                  Hide
+                </button>
+              </div>
+            </label>
+          </div>
+        </section>
 
         <section className="mt-6 rounded-3xl border border-white/10 bg-black/30 p-6 shadow-2xl shadow-black/25 backdrop-blur">
           <p className="text-xs uppercase tracking-[0.3em] text-zinc-400">OBS routes</p>

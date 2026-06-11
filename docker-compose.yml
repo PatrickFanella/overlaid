@@ -23,6 +23,7 @@ services:
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable
       OBS_WEBSOCKET_URL: ${OBS_WEBSOCKET_URL:-ws://localhost:4455}
+      OBS_WEBSOCKET_PASSWORD: ${OBS_WEBSOCKET_PASSWORD:-}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:5173}
       TWITCH_CHANNEL: ${TWITCH_CHANNEL:-patrick__eff}
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}

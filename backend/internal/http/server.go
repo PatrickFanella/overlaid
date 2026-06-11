@@ -7,18 +7,20 @@ import (
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 )
 
 type Server struct {
 	config config.Config
 	bus    *events.Bus
+	obs    obsws.Client
 	twitch *twitchAuthStore
 	mux    *http.ServeMux
 }
 
 func NewServer(cfg config.Config, bus *events.Bus) *Server {
-	server := &Server{config: cfg, bus: bus, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), mux: http.NewServeMux()}
+	server := &Server{config: cfg, bus: bus, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), mux: http.NewServeMux()}
 	_ = server.twitch.loadPersistedToken()
 	server.routes()
 	return server

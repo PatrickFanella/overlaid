@@ -26,6 +26,7 @@ describe('App routing', () => {
 
     expect(html).toContain('over-laid command center');
     expect(html).toContain('Send test alert');
+    expect(html).toContain('Scene controls');
   });
 
   it('renders placeholder overlay routes', () => {

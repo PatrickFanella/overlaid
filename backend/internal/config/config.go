@@ -11,6 +11,7 @@ type Config struct {
 	WebhookSecret      string
 	PublicWebURL       string
 	OBSWebSocketURL    string
+	OBSWebSocketPass   string
 	TwitchClientID     string
 	TwitchClientSecret string
 	TwitchChannel      string
@@ -27,6 +28,7 @@ func Load() Config {
 		WebhookSecret:      env("WEBHOOK_SECRET", ""),
 		PublicWebURL:       env("PUBLIC_WEB_URL", "http://localhost:5173"),
 		OBSWebSocketURL:    env("OBS_WEBSOCKET_URL", "ws://localhost:4455"),
+		OBSWebSocketPass:   env("OBS_WEBSOCKET_PASSWORD", ""),
 		TwitchClientID:     env("TWITCH_CLIENT_ID", ""),
 		TwitchClientSecret: env("TWITCH_CLIENT_SECRET", ""),
 		TwitchChannel:      env("TWITCH_CHANNEL", "patrick__eff"),

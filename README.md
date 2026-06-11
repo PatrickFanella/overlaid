@@ -22,7 +22,8 @@ docker compose up --build
 - `WEBHOOK_SECRET` — optional shared secret for `POST /api/integrations/webhook/{source}`. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
 - `VITE_API_BASE_URL` — optional build-time API base URL for local Vite builds. If unset, overlays derive the API URL from the browser host on port `8080`.
-- `OBS_WEBSOCKET_URL` — placeholder for future OBS WebSocket control.
+- `OBS_WEBSOCKET_URL` — OBS WebSocket v5 endpoint. Defaults to `ws://localhost:4455`.
+- `OBS_WEBSOCKET_PASSWORD` — optional OBS WebSocket password when auth is enabled in OBS.
 - `TWITCH_CHANNEL` — default Twitch channel: `patrick__eff`.
 - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_REDIRECT_URL` — Twitch OAuth Code flow settings.
 - `TWITCH_TOKEN_FILE` — durable OAuth token path. Defaults to `/data/twitch-token.json` in Docker.
@@ -80,6 +81,14 @@ http://<homelab-host>:5173/dashboard
 ```
 
 The dashboard can check Twitch auth status, open the Twitch login flow, send test alerts, clear overlays, and send generic webhook test events.
+It can also connect to OBS WebSocket to list scenes, switch the current program scene, mute/unmute an input, and show/hide scene items by ID.
+
+OBS WebSocket notes:
+
+- Enable OBS WebSocket in OBS: `Tools → WebSocket Server Settings`.
+- Default OBS WebSocket v5 URL is `ws://localhost:4455`.
+- If OBS runs on another machine, set `OBS_WEBSOCKET_URL=ws://<obs-host>:4455` for the API container/host.
+- If OBS WebSocket auth is enabled, set `OBS_WEBSOCKET_PASSWORD` in `.env`.
 
 Use this for the main alert source:
 
