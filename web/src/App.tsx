@@ -1,5 +1,6 @@
 import { HomePage } from './routes/Home';
 import { OverlayAlertsPage } from './routes/OverlayAlerts';
+import { OverlayChatPage } from './routes/OverlayChat';
 import { OverlayDebugPage } from './routes/OverlayDebug';
 import { OverlayPlaceholderPage } from './routes/OverlayPlaceholder';
 
@@ -47,6 +48,10 @@ export function getAppRoute(pathname: string) {
 
   if (route === '/overlay/alerts') {
     return <OverlayAlertsPage />;
+  }
+
+  if (route === '/overlay/chat') {
+    return <OverlayChatPage />;
   }
 
   if (route === '/overlay/debug') {

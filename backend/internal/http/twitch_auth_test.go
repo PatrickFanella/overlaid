@@ -67,6 +67,7 @@ func TestTwitchTokenSaveAndLoad(t *testing.T) {
 		ExpiresAt:    time.Now().Add(time.Hour).UTC(),
 		TokenType:    "bearer",
 		Login:        "saved_streamer",
+		UserID:       "12345",
 	}
 
 	if err := store.storeToken(original); err != nil {
@@ -89,7 +90,7 @@ func TestTwitchTokenSaveAndLoad(t *testing.T) {
 	if !ok {
 		t.Fatal("expected loaded token")
 	}
-	if loaded.AccessToken != original.AccessToken || loaded.RefreshToken != original.RefreshToken || loaded.Login != original.Login {
+	if loaded.AccessToken != original.AccessToken || loaded.RefreshToken != original.RefreshToken || loaded.Login != original.Login || loaded.UserID != original.UserID {
 		t.Fatalf("unexpected loaded token: %#v", loaded)
 	}
 	if !loaded.ExpiresAt.Equal(original.ExpiresAt) {
@@ -105,7 +106,7 @@ func TestTwitchCallbackPersistsToken(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
 			t.Fatalf("unexpected authorization header: %s", got)
 		}
-		_ = json.NewEncoder(w).Encode(twitchValidateResponse{Login: "signed_in_streamer"})
+		_ = json.NewEncoder(w).Encode(twitchValidateResponse{Login: "signed_in_streamer", UserID: "12345"})
 	}))
 	t.Cleanup(validateServer.Close)
 
@@ -183,7 +184,7 @@ func TestTwitchCallbackPersistsToken(t *testing.T) {
 	if err := json.Unmarshal(data, &disk); err != nil {
 		t.Fatalf("decode token file: %v", err)
 	}
-	if disk.AccessToken != "access-token" || disk.RefreshToken != "refresh-token" || disk.Login != "signed_in_streamer" {
+	if disk.AccessToken != "access-token" || disk.RefreshToken != "refresh-token" || disk.Login != "signed_in_streamer" || disk.UserID != "12345" {
 		t.Fatalf("unexpected persisted token: %#v", disk)
 	}
 }
@@ -198,6 +199,7 @@ func TestTwitchStatusReadsPersistedTokenAfterNewServer(t *testing.T) {
 		ExpiresAt:    time.Now().Add(30 * time.Minute).UTC(),
 		TokenType:    "bearer",
 		Login:        "persisted_streamer",
+		UserID:       "45678",
 	}
 	if err := seedStore.storeToken(seed); err != nil {
 		t.Fatalf("seed token: %v", err)
@@ -222,7 +224,7 @@ func TestTwitchExpiredTokenRefreshUpdatesStoreAndFile(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer refreshed-access" {
 			t.Fatalf("unexpected refresh validation header: %s", got)
 		}
-		_ = json.NewEncoder(w).Encode(twitchValidateResponse{Login: "refreshed_streamer"})
+		_ = json.NewEncoder(w).Encode(twitchValidateResponse{Login: "refreshed_streamer", UserID: "67890"})
 	}))
 	t.Cleanup(validateServer.Close)
 
@@ -269,6 +271,7 @@ func TestTwitchExpiredTokenRefreshUpdatesStoreAndFile(t *testing.T) {
 		ExpiresAt:    time.Now().Add(-time.Minute).UTC(),
 		TokenType:    "bearer",
 		Login:        "expired_streamer",
+		UserID:       "12345",
 	}
 	if err := seedStore.storeToken(seed); err != nil {
 		t.Fatalf("seed token: %v", err)
@@ -295,7 +298,7 @@ func TestTwitchExpiredTokenRefreshUpdatesStoreAndFile(t *testing.T) {
 	if err := json.Unmarshal(data, &disk); err != nil {
 		t.Fatalf("decode refreshed token file: %v", err)
 	}
-	if disk.AccessToken != "refreshed-access" || disk.RefreshToken != "rotated-refresh" || disk.Login != "refreshed_streamer" {
+	if disk.AccessToken != "refreshed-access" || disk.RefreshToken != "rotated-refresh" || disk.Login != "refreshed_streamer" || disk.UserID != "67890" {
 		t.Fatalf("unexpected refreshed token file: %#v", disk)
 	}
 }

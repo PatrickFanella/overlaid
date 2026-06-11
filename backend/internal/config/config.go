@@ -16,6 +16,7 @@ type Config struct {
 	TwitchRedirectURL  string
 	TwitchTokenFile    string
 	TwitchScopes       []string
+	TwitchEventSub     bool
 }
 
 func Load() Config {
@@ -29,7 +30,8 @@ func Load() Config {
 		TwitchChannel:      env("TWITCH_CHANNEL", "patrick__eff"),
 		TwitchRedirectURL:  env("TWITCH_REDIRECT_URL", "http://localhost:8080/api/auth/twitch/callback"),
 		TwitchTokenFile:    env("TWITCH_TOKEN_FILE", "/data/twitch-token.json"),
-		TwitchScopes:       envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read"}),
+		TwitchScopes:       envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers"}),
+		TwitchEventSub:     envBool("TWITCH_EVENTSUB_ENABLED", true),
 	}
 }
 
@@ -53,4 +55,20 @@ func envList(key string, fallback []string) []string {
 	}
 
 	return fields
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if value == "" {
+		return fallback
+	}
+
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }

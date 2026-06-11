@@ -28,7 +28,8 @@ services:
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
       TWITCH_REDIRECT_URL: ${TWITCH_REDIRECT_URL:-}
       TWITCH_TOKEN_FILE: ${TWITCH_TOKEN_FILE:-/data/twitch-token.json}
-      TWITCH_SCOPES: ${TWITCH_SCOPES:-user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read}
+      TWITCH_EVENTSUB_ENABLED: ${TWITCH_EVENTSUB_ENABLED:-true}
+      TWITCH_SCOPES: ${TWITCH_SCOPES:-user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers}
     volumes:
       - api-data:/data
     depends_on:

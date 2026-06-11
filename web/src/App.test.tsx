@@ -22,10 +22,16 @@ describe('App routing', () => {
   });
 
   it('renders placeholder overlay routes', () => {
+    const html = renderToString(<App pathname="/overlay/goals" />);
+
+    expect(html).toContain('Goals overlay');
+    expect(html).toContain('OBS browser-source ready');
+  });
+
+  it('renders the chat overlay route', () => {
     const html = renderToString(<App pathname="/overlay/chat" />);
 
-    expect(html).toContain('Chat overlay');
-    expect(html).toContain('OBS browser-source ready');
+    expect(html).toContain('Waiting for Twitch chat');
   });
 
   it('renders the debug overlay route', () => {

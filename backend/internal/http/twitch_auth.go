@@ -47,6 +47,7 @@ type twitchTokenInfo struct {
 	ExpiresAt    time.Time
 	TokenType    string
 	Login        string
+	UserID       string
 }
 
 type twitchTokenResponse struct {
@@ -64,6 +65,7 @@ type twitchTokenDisk struct {
 	ExpiresAt    time.Time `json:"expires_at"`
 	TokenType    string    `json:"token_type"`
 	Login        string    `json:"login"`
+	UserID       string    `json:"user_id"`
 }
 
 type twitchStatusResponse struct {
@@ -73,13 +75,20 @@ type twitchStatusResponse struct {
 	LoginURL       string     `json:"loginUrl"`
 	Scopes         []string   `json:"scopes"`
 	StreamerLogin  string     `json:"streamerLogin,omitempty"`
+	StreamerUserID string     `json:"streamerUserId,omitempty"`
 	TokenExpiresAt *time.Time `json:"tokenExpiresAt,omitempty"`
 	AuthError      string     `json:"authError,omitempty"`
 	LastAuthError  string     `json:"lastAuthError,omitempty"`
 }
 
 type twitchValidateResponse struct {
-	Login string `json:"login"`
+	Login  string `json:"login"`
+	UserID string `json:"user_id"`
+}
+
+type twitchValidatedToken struct {
+	Login  string
+	UserID string
 }
 
 func newTwitchAuthStore(tokenFile string) *twitchAuthStore {
@@ -116,6 +125,7 @@ func (s *twitchAuthStore) loadPersistedToken() error {
 		ExpiresAt:    disk.ExpiresAt,
 		TokenType:    disk.TokenType,
 		Login:        disk.Login,
+		UserID:       disk.UserID,
 	}
 
 	s.mu.Lock()
@@ -187,6 +197,7 @@ func (s *twitchAuthStore) persistToken(info *twitchTokenInfo) error {
 		ExpiresAt:    info.ExpiresAt,
 		TokenType:    info.TokenType,
 		Login:        info.Login,
+		UserID:       info.UserID,
 	}
 	data, err := json.MarshalIndent(disk, "", "  ")
 	if err != nil {
@@ -328,19 +339,19 @@ func (s *Server) twitchCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	login, err := s.validateTwitchAccessToken(r.Context(), response.AccessToken)
+	validated, err := s.validateTwitchAccessToken(r.Context(), response.AccessToken)
 	if err != nil {
 		s.failTwitchAuth(w, r, safeAuthFailureReason("token_validation_failed", err))
 		return
 	}
 
-	info := twitchTokenInfoFromResponse(login, response)
+	info := twitchTokenInfoFromResponse(validated, response)
 	if err := s.twitch.storeToken(info); err != nil {
 		s.failTwitchAuth(w, r, "token_persist_failed")
 		return
 	}
 
-	log.Printf("Twitch OAuth callback success for login=%s", login)
+	log.Printf("Twitch OAuth callback success for login=%s", validated.Login)
 	s.redirectTwitchResult(w, r, true, "")
 }
 
@@ -360,6 +371,7 @@ func (s *Server) twitchStatus(w http.ResponseWriter, r *http.Request) {
 		if status.StreamerLogin == "" {
 			status.StreamerLogin = s.config.TwitchChannel
 		}
+		status.StreamerUserID = token.UserID
 		expiresAt := token.ExpiresAt
 		status.TokenExpiresAt = &expiresAt
 	}
@@ -380,6 +392,17 @@ func (s *Server) ensureTwitchToken(ctx context.Context) (*twitchTokenInfo, bool)
 	}
 
 	now := time.Now()
+	if strings.TrimSpace(token.UserID) == "" && strings.TrimSpace(token.AccessToken) != "" && now.Before(token.ExpiresAt) {
+		validated, err := s.validateTwitchAccessToken(ctx, token.AccessToken)
+		if err == nil {
+			token.Login = validated.Login
+			token.UserID = validated.UserID
+			if err := s.twitch.storeToken(token); err == nil {
+				return token, true
+			}
+		}
+	}
+
 	if !token.needsRefresh(now) {
 		return token, true
 	}
@@ -402,6 +425,9 @@ func (s *Server) ensureTwitchToken(ctx context.Context) (*twitchTokenInfo, bool)
 
 	if refreshed.Login == "" {
 		refreshed.Login = token.Login
+	}
+	if refreshed.UserID == "" {
+		refreshed.UserID = token.UserID
 	}
 	if err := s.twitch.storeToken(refreshed); err != nil {
 		s.twitch.recordAuthError("token_persist_failed")
@@ -467,12 +493,12 @@ func (s *Server) refreshTwitchToken(ctx context.Context, refreshToken string) (*
 		return nil, err
 	}
 
-	login, err := s.validateTwitchAccessToken(ctx, response.AccessToken)
+	validated, err := s.validateTwitchAccessToken(ctx, response.AccessToken)
 	if err != nil {
 		return nil, err
 	}
 
-	return twitchTokenInfoFromResponse(login, response), nil
+	return twitchTokenInfoFromResponse(validated, response), nil
 }
 
 func (s *Server) requestTwitchToken(ctx context.Context, form url.Values) (twitchTokenResponse, error) {
@@ -541,43 +567,47 @@ func sanitizeAuthErrorDetail(detail string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-func (s *Server) validateTwitchAccessToken(ctx context.Context, accessToken string) (string, error) {
+func (s *Server) validateTwitchAccessToken(ctx context.Context, accessToken string) (twitchValidatedToken, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, twitchValidateEndpoint, nil)
 	if err != nil {
-		return "", err
+		return twitchValidatedToken{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := twitchHTTPClient.Do(req)
 	if err != nil {
-		return "", err
+		return twitchValidatedToken{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", fmt.Errorf("token validation failed: %s", strings.TrimSpace(string(body)))
+		return twitchValidatedToken{}, fmt.Errorf("token validation failed: %s", strings.TrimSpace(string(body)))
 	}
 
 	var validated twitchValidateResponse
 	if err := json.NewDecoder(resp.Body).Decode(&validated); err != nil {
-		return "", err
+		return twitchValidatedToken{}, err
 	}
 	if strings.TrimSpace(validated.Login) == "" {
-		return "", errors.New("validated twitch token did not include login")
+		return twitchValidatedToken{}, errors.New("validated twitch token did not include login")
 	}
-	return validated.Login, nil
+	if strings.TrimSpace(validated.UserID) == "" {
+		return twitchValidatedToken{}, errors.New("validated twitch token did not include user_id")
+	}
+	return twitchValidatedToken{Login: validated.Login, UserID: validated.UserID}, nil
 }
 
-func twitchTokenInfoFromResponse(login string, response twitchTokenResponse) *twitchTokenInfo {
+func twitchTokenInfoFromResponse(validated twitchValidatedToken, response twitchTokenResponse) *twitchTokenInfo {
 	return &twitchTokenInfo{
 		AccessToken:  response.AccessToken,
 		RefreshToken: response.RefreshToken,
 		Scope:        append([]string(nil), response.Scope...),
 		ExpiresAt:    time.Now().Add(time.Duration(response.ExpiresIn) * time.Second),
 		TokenType:    response.TokenType,
-		Login:        login,
+		Login:        validated.Login,
+		UserID:       validated.UserID,
 	}
 }
 

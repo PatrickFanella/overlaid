@@ -25,7 +25,8 @@ docker compose up --build
 - `TWITCH_CHANNEL` — default Twitch channel: `patrick__eff`.
 - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_REDIRECT_URL` — Twitch OAuth Code flow settings.
 - `TWITCH_TOKEN_FILE` — durable OAuth token path. Defaults to `/data/twitch-token.json` in Docker.
-- `TWITCH_SCOPES` — space-delimited scopes used for the login redirect. Defaults to `user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read`.
+- `TWITCH_EVENTSUB_ENABLED` — starts the Twitch EventSub WebSocket worker when OAuth is configured. Defaults to `true`.
+- `TWITCH_SCOPES` — space-delimited scopes used for the login redirect. Defaults to `user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers`.
 
 Twitch auth routes:
 
@@ -45,6 +46,18 @@ OAuth callback test flow:
 4. Check `GET /api/auth/twitch/status` for `authenticated`, `streamerLogin`, and `tokenExpiresAt`.
 
 On failures, the callback redirects with a safe `reason` query parameter and status includes recent non-secret auth diagnostics.
+
+### Twitch EventSub
+
+After OAuth succeeds, the API starts a background EventSub WebSocket worker. It creates subscriptions allowed by the saved token scopes and publishes Twitch events into the existing overlay SSE stream.
+
+Current mappings:
+
+- Twitch chat messages → `chat_message` events for `/overlay/chat`.
+- Channel point redemptions → alert events for `/overlay/alerts`.
+- Subscriptions, resubs, gift subs, bits, follows, and chat notifications → alert events for `/overlay/alerts`.
+
+If you added `moderator:read:followers` after an earlier login, re-run `/api/auth/twitch/login` so the saved token includes the new follow scope.
 
 ### Routes
 
@@ -79,6 +92,12 @@ Recommended settings:
 - Refresh browser when scene becomes active: off
 
 For the other browser sources, point OBS at the matching route above.
+
+Use this for chat:
+
+```text
+http://<homelab-host>:5173/overlay/chat
+```
 
 ### Test commands
 
