@@ -30,6 +30,7 @@ logs/
 
 # Docker / local data
 data/
+.local-data/
 tmp/
 .cache/
 

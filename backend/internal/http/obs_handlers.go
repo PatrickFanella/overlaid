@@ -95,6 +95,7 @@ func (s *Server) obsSetSceneItemEnabled(w http.ResponseWriter, r *http.Request) 
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)

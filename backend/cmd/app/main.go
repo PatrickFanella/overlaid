@@ -21,7 +21,14 @@ func main() {
 	defer stop()
 	server.StartBackground(ctx)
 
-	httpServer := &http.Server{Addr: cfg.Addr, Handler: server.Handler()}
+	httpServer := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           server.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      0, // SSE streams stay open; per-request handlers validate body sizes.
+		IdleTimeout:       60 * time.Second,
+	}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

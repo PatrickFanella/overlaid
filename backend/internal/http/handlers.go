@@ -10,6 +10,8 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 )
 
+const maxJSONBodyBytes = 1 << 20
+
 type alertRequest struct {
 	Title    string          `json:"title"`
 	Message  string          `json:"message"`
@@ -239,6 +241,7 @@ func bearerToken(header string) string {
 }
 
 func decodeAlert(w http.ResponseWriter, r *http.Request) (alertRequest, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
 	defer r.Body.Close()
 	var request alertRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -255,6 +258,7 @@ func decodeAlert(w http.ResponseWriter, r *http.Request) (alertRequest, bool) {
 }
 
 func decodeBRB(w http.ResponseWriter, r *http.Request) (brbRequest, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
 	defer r.Body.Close()
 	var request brbRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {

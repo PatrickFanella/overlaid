@@ -117,6 +117,27 @@ Recommended settings:
 
 For the other browser sources, point OBS at the matching route above.
 
+### Deploy modes
+
+Local dev:
+
+- Use `cp .env.example .env`, keep `OPERATOR_SECRET=` empty while developing, and run `make dev` plus the API or `docker compose up --build`.
+- Direct route access such as `http://localhost:5173/dashboard` and `http://localhost:5173/overlay/alerts` is expected.
+
+LAN-only streaming:
+
+- Set a non-empty `OPERATOR_SECRET` before using the dashboard on your network.
+- Keep overlay browser-source routes readable for OBS, but treat API port `8080` as a trusted-LAN service.
+- Set `CORS_ALLOWED_ORIGIN` to the dashboard/web origin instead of `*` when the host name is stable.
+- Use `docker-compose.override.example.yml` as a template when you need host MPRIS session-bus access.
+
+Public reverse proxy:
+
+- Put `/dashboard` and API mutating routes behind reverse-proxy authentication in addition to `OPERATOR_SECRET`.
+- Expose only the overlay routes needed by OBS/browser sources when possible.
+- Do not publish the API directly to the internet without auth/rate-limit/reverse-proxy controls.
+- Keep `TWITCH_TOKEN_FILE` and `OVERLAY_STATE_FILE` on the `api-data` volume and include that volume in backups if you want OAuth/state continuity.
+
 Use this for chat:
 
 ```text

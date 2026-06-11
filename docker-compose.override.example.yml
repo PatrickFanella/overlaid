@@ -1,0 +1,23 @@
+# Optional local overrides for advanced host integrations.
+# Copy selected sections into docker-compose.override.yml and adjust UID/GID/paths.
+
+services:
+  api:
+    # MPRIS runs on the host user session bus. Enable this only when the API
+    # container should read now-playing data from the same Linux desktop user.
+    # Because this switches away from the image's built-in non-root user,
+    # bind-mount a host-owned data directory so token/state files remain writable:
+    #   mkdir -p ./.local-data/api && chown 1000:1000 ./.local-data/api
+    user: "1000:1000"
+    environment:
+      MPRIS_ENABLED: "true"
+      DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/1000/bus
+    volumes:
+      - ./.local-data/api:/data
+      - /run/user/1000/bus:/run/user/1000/bus
+
+  postgres:
+    # Uncomment for local database debugging from the host.
+    # ports:
+    #   - "${POSTGRES_PORT:-55432}:5432"
+    ports: []
