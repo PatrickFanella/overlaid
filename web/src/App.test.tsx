@@ -51,6 +51,8 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/dashboard/config" />);
 
     expect(html).toContain('Operator config');
+    expect(html).toContain('Secret header');
+    expect(html).toContain('MPRIS decision');
   });
 
   it('renders the goals overlay route', () => {
