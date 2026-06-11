@@ -27,6 +27,7 @@ describe('App routing', () => {
     expect(html).toContain('over-laid command center');
     expect(html).toContain('Send test alert');
     expect(html).toContain('Scene controls');
+    expect(html).toContain('BRB overlay');
   });
 
   it('renders the goals overlay route', () => {
@@ -50,11 +51,11 @@ describe('App routing', () => {
     expect(html).toContain('Waiting for MPRIS');
   });
 
-  it('renders remaining placeholder overlay routes', () => {
+  it('renders the brb overlay route', () => {
     const html = renderToString(<App pathname="/overlay/brb" />);
 
     expect(html).toContain('BRB overlay');
-    expect(html).toContain('OBS browser-source ready');
+    expect(html).toContain('Waiting for intermission command');
   });
 
   it('renders the chat overlay route', () => {
@@ -110,5 +111,20 @@ describe('overlay event utilities', () => {
       title: 'Song',
     });
     expect(event?.data).toMatchObject({ player: 'spotify', positionMs: 30000 });
+  });
+
+  it('parses SSE brb payloads', () => {
+    const event = parseOverlayEvent(
+      '{"id":"brb","type":"brb","source":"dashboard","title":"Be right back","message":"Stretch break","data":{"active":true,"eta":"5 min","items":["Hydrate"]},"createdAt":"2026-06-10T00:00:00.000Z"}',
+      'brb',
+    );
+
+    expect(event).toMatchObject({
+      id: 'brb',
+      type: 'brb',
+      title: 'Be right back',
+      message: 'Stretch break',
+    });
+    expect(event?.data).toMatchObject({ active: true, eta: '5 min' });
   });
 });

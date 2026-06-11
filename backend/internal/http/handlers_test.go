@@ -87,6 +87,139 @@ func TestClearPublishesEvent(t *testing.T) {
 	}
 }
 
+func TestBRBStatusPublishesEvent(t *testing.T) {
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+
+	body := bytes.NewBufferString(`{"active":true,"title":"Intermission","message":"Stretch break","eta":"5 min","items":["Hydrate","Ads running"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/events/brb", body)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	select {
+	case got := <-client.Events:
+		if got.Type != events.EventTypeBRB || got.Title != "Intermission" || got.Source != "dashboard" {
+			t.Fatalf("unexpected event: %#v", got)
+		}
+		if got.Data["active"] != true || got.Data["eta"] != "5 min" {
+			t.Fatalf("unexpected brb data: %#v", got.Data)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for brb event")
+	}
+}
+
+func TestBRBStatusCanonicalFieldsOverrideData(t *testing.T) {
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+
+	body := bytes.NewBufferString(`{"active":false,"title":"Pause","message":"Back soon","eta":"2 min","items":["One","Two","Three","Four","Five","Six"],"data":{"active":true,"eta":"wrong","items":["wrong"]}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/events/brb", body)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	select {
+	case got := <-client.Events:
+		if got.Data["active"] != false || got.Data["eta"] != "2 min" {
+			t.Fatalf("canonical fields were not preserved: %#v", got.Data)
+		}
+		items, ok := got.Data["items"].([]string)
+		if !ok || len(items) != 5 || items[0] != "One" {
+			t.Fatalf("expected cleaned item list, got %#v", got.Data["items"])
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for brb event")
+	}
+}
+
+func TestStreamEventsReplaysRetainedBRB(t *testing.T) {
+	bus := events.NewBus(4)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+
+	body := bytes.NewBufferString(`{"active":true,"title":"Intermission","message":"Stretch break"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/events/brb", body)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected brb setup 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	streamReq := httptest.NewRequest(http.MethodGet, "/api/events/stream", nil).WithContext(ctx)
+	streamRec := &streamRecorder{ResponseRecorder: httptest.NewRecorder()}
+
+	done := make(chan struct{})
+	go func() {
+		server.Handler().ServeHTTP(streamRec, streamReq)
+		close(done)
+	}()
+
+	deadline := time.After(time.Second)
+	for !bytes.Contains(streamRec.Body.Bytes(), []byte("event: brb")) {
+		select {
+		case <-deadline:
+			cancel()
+			<-done
+			t.Fatalf("expected retained brb replay, got %q", streamRec.Body.String())
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	cancel()
+	<-done
+}
+
+func TestClearResetsRetainedBRB(t *testing.T) {
+	bus := events.NewBus(4)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+
+	brbReq := httptest.NewRequest(http.MethodPost, "/api/events/brb", bytes.NewBufferString(`{"active":true,"title":"Intermission","message":"Stretch break"}`))
+	brbRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(brbRec, brbReq)
+	if brbRec.Code != http.StatusAccepted {
+		t.Fatalf("expected brb setup 202, got %d: %s", brbRec.Code, brbRec.Body.String())
+	}
+
+	clearReq := httptest.NewRequest(http.MethodPost, "/api/events/clear", nil)
+	clearRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(clearRec, clearReq)
+	if clearRec.Code != http.StatusAccepted {
+		t.Fatalf("expected clear 202, got %d: %s", clearRec.Code, clearRec.Body.String())
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	streamReq := httptest.NewRequest(http.MethodGet, "/api/events/stream", nil).WithContext(ctx)
+	streamRec := &streamRecorder{ResponseRecorder: httptest.NewRecorder()}
+
+	done := make(chan struct{})
+	go func() {
+		server.Handler().ServeHTTP(streamRec, streamReq)
+		close(done)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+
+	if bytes.Contains(streamRec.Body.Bytes(), []byte("event: brb")) {
+		t.Fatalf("expected no retained brb replay after clear, got %q", streamRec.Body.String())
+	}
+}
+
 func TestWebhookPublishesSourceAlert(t *testing.T) {
 	bus := events.NewBus(4)
 	client := bus.Subscribe()

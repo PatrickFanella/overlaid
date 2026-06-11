@@ -80,7 +80,7 @@ Open the operator dashboard at:
 http://<homelab-host>:5173/dashboard
 ```
 
-The dashboard can check Twitch auth status, open the Twitch login flow, send test alerts, clear overlays, and send generic webhook test events.
+The dashboard can check Twitch auth status, open the Twitch login flow, send test alerts, clear overlays, control the BRB/intermission screen, and send generic webhook test events.
 It can also connect to OBS WebSocket to list scenes, switch the current program scene, mute/unmute an input, and show/hide scene items by ID.
 
 OBS WebSocket notes:
@@ -151,6 +151,22 @@ services:
       DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/1000/bus
     volumes:
       - /run/user/1000/bus:/run/user/1000/bus
+```
+
+`/overlay/brb` listens for dashboard `brb` events. Use the dashboard Intermission controls, or send a direct event:
+
+```bash
+curl -X POST http://localhost:8080/api/events/brb \
+  -H 'Content-Type: application/json' \
+  -d '{"active":true,"title":"Be right back","message":"Short intermission. Stream resumes soon.","eta":"5 min","items":["Hydrate","Stretch","Chat stays live"]}'
+```
+
+Hide the BRB screen without clearing every overlay:
+
+```bash
+curl -X POST http://localhost:8080/api/events/brb \
+  -H 'Content-Type: application/json' \
+  -d '{"active":false,"title":"BRB overlay","message":"Waiting for intermission command"}'
 ```
 
 ### Test commands

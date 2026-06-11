@@ -10,6 +10,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/events/stream", s.streamEvents)
 	s.mux.HandleFunc("POST /api/events/test-alert", s.testAlert)
 	s.mux.HandleFunc("POST /api/events/clear", s.clearEvents)
+	s.mux.HandleFunc("POST /api/events/brb", s.brbStatus)
 	s.mux.HandleFunc("POST /api/integrations/webhook/{source}", s.webhook)
 	s.mux.HandleFunc("GET /api/obs/status", s.obsStatus)
 	s.mux.HandleFunc("GET /api/obs/scenes", s.obsScenes)

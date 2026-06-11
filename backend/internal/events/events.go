@@ -15,6 +15,7 @@ const (
 	EventTypeChatMessage EventType = "chat_message"
 	EventTypeCommand     EventType = "custom_command"
 	EventTypeNowPlaying  EventType = "now_playing"
+	EventTypeBRB         EventType = "brb"
 )
 
 type Severity string
@@ -62,6 +63,19 @@ func NewNowPlaying(source, title, message string, data map[string]any) Event {
 	return Event{
 		ID:        newID(),
 		Type:      EventTypeNowPlaying,
+		Source:    source,
+		Title:     title,
+		Message:   message,
+		Severity:  SeverityInfo,
+		Data:      data,
+		CreatedAt: time.Now().UTC(),
+	}
+}
+
+func NewBRB(source, title, message string, data map[string]any) Event {
+	return Event{
+		ID:        newID(),
+		Type:      EventTypeBRB,
 		Source:    source,
 		Title:     title,
 		Message:   message,

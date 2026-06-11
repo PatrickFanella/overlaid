@@ -7,10 +7,12 @@ import {
   fetchTwitchStatus,
   sendTestAlert,
   sendWebhook,
+  setBRBStatus,
   setOBSInputMute,
   setOBSScene,
   setOBSSceneItemEnabled,
   type AlertPayload,
+  type BRBPayload,
   type OBSSceneList,
   type OBSStatus,
   type TwitchStatus,
@@ -25,6 +27,14 @@ const defaultAlert: AlertPayload = {
   severity: 'success',
 };
 
+const defaultBRB: BRBPayload = {
+  active: true,
+  title: 'Be right back',
+  message: 'Short intermission. Stream resumes soon.',
+  eta: '5 min',
+  items: ['Hydrate', 'Stretch', 'Chat stays live'],
+};
+
 type ActionState = 'idle' | 'running' | 'success' | 'error';
 
 export function DashboardPage() {
@@ -37,6 +47,8 @@ export function DashboardPage() {
   const [actionState, setActionState] = useState<ActionState>('idle');
   const [actionMessage, setActionMessage] = useState('');
   const [alert, setAlert] = useState(defaultAlert);
+  const [brb, setBRB] = useState(defaultBRB);
+  const [brbItemsText, setBRBItemsText] = useState(defaultBRB.items.join('\n'));
   const [webhookSource, setWebhookSource] = useState('n8n');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [selectedScene, setSelectedScene] = useState('');
@@ -108,6 +120,19 @@ export function DashboardPage() {
   function submitWebhook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void runAction(`Send ${webhookSource} webhook`, () => sendWebhook(webhookSource, alert, apiBaseUrl, webhookSecret));
+  }
+
+  function submitBRB(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextBRB = { ...brb, active: true, items: splitLines(brbItemsText) };
+    setBRB(nextBRB);
+    void runAction('Update BRB overlay', () => setBRBStatus(nextBRB, apiBaseUrl));
+  }
+
+  function hideBRB() {
+    const nextBRB = { ...brb, active: false, items: splitLines(brbItemsText) };
+    setBRB(nextBRB);
+    void runAction('Hide BRB overlay', () => setBRBStatus(nextBRB, apiBaseUrl));
   }
 
   return (
@@ -260,6 +285,40 @@ export function DashboardPage() {
           </div>
         </section>
 
+        <section className="mt-6 rounded-3xl border border-white/10 bg-black/35 p-6 shadow-2xl shadow-black/25 backdrop-blur">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-rose-200">Intermission</p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">BRB overlay</h2>
+              <p className="mt-2 text-sm text-zinc-300">Push a live intermission state to `/overlay/brb`, or clear it back to standby.</p>
+            </div>
+            <StatusPill active={brb.active} label={brb.active ? 'armed' : 'standby'} />
+          </div>
+
+          <form className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_0.7fr]" onSubmit={submitBRB}>
+            <div className="grid gap-4">
+              <TextInput label="BRB title" value={brb.title} onChange={(title) => setBRB((current) => ({ ...current, title }))} />
+              <TextInput label="Message" value={brb.message} onChange={(message) => setBRB((current) => ({ ...current, message }))} />
+              <TextInput label="Return ETA" value={brb.eta} onChange={(eta) => setBRB((current) => ({ ...current, eta }))} />
+            </div>
+            <label className="grid gap-2 text-sm text-zinc-300">
+              Notes, one per line
+              <textarea className="min-h-44 rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-rose-300/30 focus:ring-4" value={brbItemsText} onChange={(event) => setBRBItemsText(event.target.value)} />
+            </label>
+            <div className="grid content-end gap-3">
+              <button className="rounded-full bg-rose-300 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-rose-200" type="submit">
+                Show BRB
+              </button>
+              <button className="rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm text-zinc-100 transition hover:bg-white/10" type="button" onClick={hideBRB}>
+                Hide BRB
+              </button>
+              <a className="rounded-full border border-rose-200/40 bg-rose-200/10 px-5 py-3 text-center text-sm font-medium text-rose-100 transition hover:bg-rose-200/20" href="/overlay/brb">
+                Open BRB route
+              </a>
+            </div>
+          </form>
+        </section>
+
         <section className="mt-6 rounded-3xl border border-white/10 bg-black/30 p-6 shadow-2xl shadow-black/25 backdrop-blur">
           <p className="text-xs uppercase tracking-[0.3em] text-zinc-400">OBS routes</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -316,4 +375,12 @@ function actionClassName(state: ActionState) {
     default:
       return 'border-white/10 bg-white/5 text-zinc-200';
   }
+}
+
+function splitLines(value: string) {
+  return value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 5);
 }

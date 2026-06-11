@@ -17,6 +17,15 @@ type alertRequest struct {
 	Data     map[string]any  `json:"data"`
 }
 
+type brbRequest struct {
+	Active  *bool          `json:"active"`
+	Title   string         `json:"title"`
+	Message string         `json:"message"`
+	ETA     string         `json:"eta"`
+	Items   []string       `json:"items"`
+	Data    map[string]any `json:"data"`
+}
+
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = fmt.Fprintln(w, "ok")
@@ -37,6 +46,9 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	defer s.bus.Unsubscribe(client.ID)
 
 	_, _ = fmt.Fprint(w, ": connected\n\n")
+	if event, ok := s.currentBRB(); ok {
+		writeSSEEvent(w, event)
+	}
 	flusher.Flush()
 
 	for {
@@ -47,13 +59,9 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			payload, err := json.Marshal(event)
-			if err != nil {
+			if !writeSSEEvent(w, event) {
 				continue
 			}
-			_, _ = fmt.Fprintf(w, "id: %s\n", event.ID)
-			_, _ = fmt.Fprintf(w, "event: %s\n", event.Type)
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", payload)
 			flusher.Flush()
 		}
 	}
@@ -71,8 +79,60 @@ func (s *Server) testAlert(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) clearEvents(w http.ResponseWriter, _ *http.Request) {
+	s.clearBRB()
 	s.bus.Publish(events.NewClear("manual"))
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) brbStatus(w http.ResponseWriter, r *http.Request) {
+	request, ok := decodeBRB(w, r)
+	if !ok {
+		return
+	}
+
+	data := map[string]any{}
+	for key, value := range request.Data {
+		data[key] = value
+	}
+	data["active"] = request.Active != nil && *request.Active
+	data["eta"] = request.ETA
+	data["items"] = request.Items
+
+	event := events.NewBRB("dashboard", request.Title, request.Message, data)
+	s.setBRB(event)
+	s.bus.Publish(event)
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func writeSSEEvent(w http.ResponseWriter, event events.Event) bool {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return false
+	}
+	_, _ = fmt.Fprintf(w, "id: %s\n", event.ID)
+	_, _ = fmt.Fprintf(w, "event: %s\n", event.Type)
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", payload)
+	return true
+}
+
+func (s *Server) currentBRB() (events.Event, bool) {
+	s.brbMu.RLock()
+	defer s.brbMu.RUnlock()
+	return s.brb, s.hasBRB
+}
+
+func (s *Server) setBRB(event events.Event) {
+	s.brbMu.Lock()
+	s.brb = event
+	s.hasBRB = true
+	s.brbMu.Unlock()
+}
+
+func (s *Server) clearBRB() {
+	s.brbMu.Lock()
+	s.brb = events.Event{}
+	s.hasBRB = false
+	s.brbMu.Unlock()
 }
 
 func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +194,44 @@ func decodeAlert(w http.ResponseWriter, r *http.Request) (alertRequest, bool) {
 		return request, false
 	}
 	return request, true
+}
+
+func decodeBRB(w http.ResponseWriter, r *http.Request) (brbRequest, bool) {
+	defer r.Body.Close()
+	var request brbRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return request, false
+	}
+	request.Title = strings.TrimSpace(request.Title)
+	request.Message = strings.TrimSpace(request.Message)
+	request.ETA = strings.TrimSpace(request.ETA)
+	if request.Title == "" {
+		request.Title = "Be right back"
+	}
+	if request.Message == "" {
+		request.Message = "Short intermission. Stream resumes soon."
+	}
+	if request.Active == nil {
+		active := true
+		request.Active = &active
+	}
+	request.Items = cleanStrings(request.Items, 5)
+	return request, true
+}
+
+func cleanStrings(values []string, limit int) []string {
+	cleaned := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			cleaned = append(cleaned, value)
+		}
+		if limit > 0 && len(cleaned) >= limit {
+			break
+		}
+	}
+	return cleaned
 }
 
 func normalizeSeverity(severity events.Severity) events.Severity {

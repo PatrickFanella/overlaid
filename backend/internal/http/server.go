@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sync"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
@@ -18,6 +19,9 @@ type Server struct {
 	obs    obsws.Client
 	twitch *twitchAuthStore
 	mux    *http.ServeMux
+	brbMu  sync.RWMutex
+	brb    events.Event
+	hasBRB bool
 }
 
 func NewServer(cfg config.Config, bus *events.Bus) *Server {

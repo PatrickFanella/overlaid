@@ -1,6 +1,7 @@
 import { DashboardPage } from './routes/Dashboard';
 import { HomePage } from './routes/Home';
 import { OverlayAlertsPage } from './routes/OverlayAlerts';
+import { OverlayBRBPage } from './routes/OverlayBRB';
 import { OverlayChatPage } from './routes/OverlayChat';
 import { OverlayDebugPage } from './routes/OverlayDebug';
 import { OverlayGoalsPage } from './routes/OverlayGoals';
@@ -72,6 +73,10 @@ export function getAppRoute(pathname: string) {
 
   if (route === '/overlay/now-playing') {
     return <OverlayNowPlayingPage />;
+  }
+
+  if (route === '/overlay/brb') {
+    return <OverlayBRBPage />;
   }
 
   if (route === '/overlay/debug') {

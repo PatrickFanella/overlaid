@@ -19,6 +19,14 @@ export type AlertPayload = {
   severity: 'info' | 'success' | 'warning' | 'error';
 };
 
+export type BRBPayload = {
+  active: boolean;
+  title: string;
+  message: string;
+  eta: string;
+  items: string[];
+};
+
 export type OBSStatus = {
   configured: boolean;
   url: string;
@@ -90,6 +98,10 @@ export async function clearOverlays(explicitBaseUrl?: string) {
   if (!response.ok) {
     throw new Error(`Clear overlays failed: ${response.status}`);
   }
+}
+
+export async function setBRBStatus(payload: BRBPayload, explicitBaseUrl?: string) {
+  await postJSON('/api/events/brb', payload, explicitBaseUrl);
 }
 
 export async function sendWebhook(source: string, payload: AlertPayload, explicitBaseUrl?: string, webhookSecret?: string) {
