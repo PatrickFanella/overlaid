@@ -54,6 +54,18 @@ type Scene struct {
 	SceneUUID  string `json:"sceneUuid,omitempty"`
 }
 
+type Input struct {
+	InputName string `json:"inputName"`
+	InputKind string `json:"inputKind,omitempty"`
+	InputUuid string `json:"inputUuid,omitempty"`
+}
+
+type SceneItem struct {
+	SceneItemID      int    `json:"sceneItemId"`
+	SourceName       string `json:"sourceName"`
+	SceneItemEnabled bool   `json:"sceneItemEnabled"`
+}
+
 type envelope struct {
 	Op   int             `json:"op"`
 	Data json.RawMessage `json:"d"`
@@ -132,6 +144,49 @@ func (c Client) GetSceneList(ctx context.Context) (SceneList, error) {
 		return SceneList{}, err
 	}
 	return scenes, nil
+}
+
+func (c Client) GetInputList(ctx context.Context) ([]Input, error) {
+	data, err := c.call(ctx, "GetInputList", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var payload struct {
+		Inputs []Input `json:"inputs"`
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		return nil, err
+	}
+	return payload.Inputs, nil
+}
+
+func (c Client) GetSceneItemList(ctx context.Context, sceneName string) ([]SceneItem, error) {
+	sceneName = strings.TrimSpace(sceneName)
+	if sceneName == "" {
+		return nil, errors.New("sceneName is required")
+	}
+
+	data, err := c.call(ctx, "GetSceneItemList", map[string]any{"sceneName": sceneName})
+	if err != nil {
+		return nil, err
+	}
+
+	var payload struct {
+		SceneItems []SceneItem `json:"sceneItems"`
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		return nil, err
+	}
+	return payload.SceneItems, nil
 }
 
 func (c Client) SetCurrentProgramScene(ctx context.Context, sceneName string) error {

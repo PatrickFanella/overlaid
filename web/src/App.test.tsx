@@ -31,6 +31,8 @@ describe('App routing', () => {
     expect(html).toContain('Confirm clear');
     expect(html).toContain('Overlay monitor');
     expect(html).toContain('Scene controls');
+    expect(html).toContain('Input name');
+    expect(html).toContain('Scene item ID');
     expect(html).toContain('BRB overlay');
   });
 

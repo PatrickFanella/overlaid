@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 type setOBSSceneRequest struct {
@@ -31,6 +32,30 @@ func (s *Server) obsScenes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, scenes)
+}
+
+func (s *Server) obsInputs(w http.ResponseWriter, r *http.Request) {
+	inputs, err := s.obs.GetInputList(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, inputs)
+}
+
+func (s *Server) obsSceneItems(w http.ResponseWriter, r *http.Request) {
+	sceneName := strings.TrimSpace(r.URL.Query().Get("sceneName"))
+	if sceneName == "" {
+		http.Error(w, "sceneName query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	items, err := s.obs.GetSceneItemList(r.Context(), sceneName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, items)
 }
 
 func (s *Server) obsSetScene(w http.ResponseWriter, r *http.Request) {

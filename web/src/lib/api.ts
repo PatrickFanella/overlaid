@@ -44,6 +44,18 @@ export type OBSScene = {
   sceneUuid?: string;
 };
 
+export type OBSInput = {
+  inputName: string;
+  inputKind?: string;
+  inputUuid?: string;
+};
+
+export type OBSSceneItem = {
+  sceneItemId: number;
+  sourceName: string;
+  sceneItemEnabled: boolean;
+};
+
 export type OBSSceneList = {
   currentProgramSceneName: string;
   scenes: OBSScene[];
@@ -80,6 +92,23 @@ export async function fetchOBSScenes(explicitBaseUrl?: string) {
     throw new Error(`OBS scenes failed: ${response.status}`);
   }
   return (await response.json()) as OBSSceneList;
+}
+
+export async function fetchOBSInputs(explicitBaseUrl?: string) {
+  const response = await fetch(apiUrl('/api/obs/inputs', explicitBaseUrl), { headers: { Accept: 'application/json' } });
+  if (!response.ok) {
+    throw new Error(`OBS inputs failed: ${response.status}`);
+  }
+  return (await response.json()) as OBSInput[];
+}
+
+export async function fetchOBSSceneItems(sceneName: string, explicitBaseUrl?: string) {
+  const trimmedSceneName = sceneName.trim();
+  const response = await fetch(apiUrl(`/api/obs/scene-items?sceneName=${encodeURIComponent(trimmedSceneName)}`, explicitBaseUrl), { headers: { Accept: 'application/json' } });
+  if (!response.ok) {
+    throw new Error(`OBS scene items failed: ${response.status}`);
+  }
+  return (await response.json()) as OBSSceneItem[];
 }
 
 export async function setOBSScene(sceneName: string, explicitBaseUrl?: string, operatorSecret?: string) {

@@ -4,6 +4,8 @@ import {
   clearOverlays,
   fetchTwitchLoginURL,
   fetchOBSScenes,
+  fetchOBSInputs,
+  fetchOBSSceneItems,
   fetchOBSStatus,
   fetchTwitchStatus,
   sendTestAlert,
@@ -15,6 +17,8 @@ import {
   type AlertPayload,
   type BRBPayload,
   type OBSSceneList,
+  type OBSInput,
+  type OBSSceneItem,
   type OBSStatus,
   type TwitchStatus,
 } from '../lib/api';
@@ -51,6 +55,8 @@ export function DashboardPage() {
   const [status, setStatus] = useState<TwitchStatus | null>(null);
   const [obsStatus, setOBSStatus] = useState<OBSStatus | null>(null);
   const [obsScenes, setOBSScenes] = useState<OBSSceneList | null>(null);
+  const [obsInputs, setOBSInputs] = useState<OBSInput[] | null>(null);
+  const [obsSceneItems, setOBSSceneItems] = useState<OBSSceneItem[] | null>(null);
   const [statusError, setStatusError] = useState('');
   const [obsError, setOBSError] = useState('');
   const [actionState, setActionState] = useState<ActionState>('idle');
@@ -113,6 +119,53 @@ export function DashboardPage() {
       cancelled = true;
     };
   }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchOBSInputs(apiBaseUrl)
+      .then((nextInputs) => {
+        if (!cancelled) {
+          setOBSInputs(nextInputs);
+          setInputName((current) => (nextInputs.some((input) => input.inputName === current) ? current : nextInputs[0]?.inputName || current));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOBSInputs(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedScene) {
+      setOBSSceneItems(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    fetchOBSSceneItems(selectedScene, apiBaseUrl)
+      .then((nextSceneItems) => {
+        if (!cancelled) {
+          setOBSSceneItems(nextSceneItems);
+          setSceneItemID((current) => (nextSceneItems.some((item) => String(item.sceneItemId) === current) ? current : String(nextSceneItems[0]?.sceneItemId || current)));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOBSSceneItems(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl, selectedScene]);
 
   async function runAction(label: string, action: () => Promise<void>) {
     setClearArmed(false);
@@ -387,7 +440,18 @@ export function DashboardPage() {
 
             <label className="grid gap-2 text-sm text-zinc-300">
               <span className="hud-kicker">Input name</span>
-              <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" value={inputName} onChange={(event) => setInputName(event.target.value)} />
+              {obsInputs?.length ? (
+                <select className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" value={inputName} onChange={(event) => setInputName(event.target.value)}>
+                  {obsInputs.map((input) => (
+                    <option key={input.inputUuid || input.inputName} value={input.inputName}>
+                      {input.inputName}
+                      {input.inputKind ? ` · ${input.inputKind}` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" value={inputName} onChange={(event) => setInputName(event.target.value)} />
+              )}
               <div className="flex gap-2">
                 <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-400" type="button" disabled={isRunning} onClick={() => void runAction('Mute OBS input', () => setOBSInputMute(inputName, true, apiBaseUrl, operatorSecret))}>
                   Mute
@@ -400,7 +464,18 @@ export function DashboardPage() {
 
             <label className="grid gap-2 text-sm text-zinc-300">
               <span className="hud-kicker">Scene item ID</span>
-              <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" inputMode="numeric" value={sceneItemID} onChange={(event) => setSceneItemID(event.target.value)} />
+              {obsSceneItems?.length ? (
+                <select className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" value={sceneItemID} onChange={(event) => setSceneItemID(event.target.value)}>
+                  {obsSceneItems.map((item) => (
+                    <option key={item.sceneItemId} value={item.sceneItemId}>
+                      {item.sourceName} · #{item.sceneItemId}
+                      {item.sceneItemEnabled ? '' : ' (hidden)'}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-emerald-300/30 focus:ring-4" inputMode="numeric" value={sceneItemID} onChange={(event) => setSceneItemID(event.target.value)} />
+              )}
               <div className="flex gap-2">
                 <button className="flex-1 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-400" type="button" disabled={isRunning} onClick={() => void runAction('Show OBS scene item', () => setOBSSceneItemEnabled(selectedScene, Number(sceneItemID), true, apiBaseUrl, operatorSecret))}>
                   Show

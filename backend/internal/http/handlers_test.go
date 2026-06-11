@@ -3,14 +3,17 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"github.com/gorilla/websocket"
 )
 
 type streamRecorder struct {
@@ -37,6 +40,103 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+func TestOBSInputsReturnsInventory(t *testing.T) {
+	obsServer := newFakeOBSWebSocketServer(t, func(requestType string, requestData map[string]any) (map[string]any, error) {
+		if requestType != "GetInputList" {
+			t.Fatalf("unexpected request type: %s", requestType)
+		}
+		if len(requestData) != 0 {
+			t.Fatalf("expected empty request data, got %#v", requestData)
+		}
+		return map[string]any{"inputs": []map[string]any{{"inputName": "Mic/Aux", "inputKind": "wasapi_input_capture", "inputUuid": "abc"}}}, nil
+	})
+	defer obsServer.Close()
+
+	server := NewServer(config.Config{AllowedOrigin: "*", OBSWebSocketURL: wsURL(obsServer.URL)}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/api/obs/inputs", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var inputs []struct {
+		InputName string `json:"inputName"`
+		InputKind string `json:"inputKind"`
+		InputUuid string `json:"inputUuid"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &inputs); err != nil {
+		t.Fatalf("decode response failed: %v", err)
+	}
+	if len(inputs) != 1 || inputs[0].InputName != "Mic/Aux" || inputs[0].InputKind != "wasapi_input_capture" || inputs[0].InputUuid != "abc" {
+		t.Fatalf("unexpected inputs: %#v", inputs)
+	}
+}
+
+func TestOBSSceneItemsReturnsInventory(t *testing.T) {
+	obsServer := newFakeOBSWebSocketServer(t, func(requestType string, requestData map[string]any) (map[string]any, error) {
+		if requestType != "GetSceneItemList" {
+			t.Fatalf("unexpected request type: %s", requestType)
+		}
+		if got := requestData["sceneName"]; got != "Program" {
+			t.Fatalf("expected sceneName Program, got %#v", got)
+		}
+		return map[string]any{"sceneItems": []map[string]any{{"sceneItemId": 7, "sourceName": "Mic/Aux", "sceneItemEnabled": true}}}, nil
+	})
+	defer obsServer.Close()
+
+	server := NewServer(config.Config{AllowedOrigin: "*", OBSWebSocketURL: wsURL(obsServer.URL)}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/api/obs/scene-items?sceneName=Program", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var items []struct {
+		SceneItemID      int    `json:"sceneItemId"`
+		SourceName       string `json:"sourceName"`
+		SceneItemEnabled bool   `json:"sceneItemEnabled"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("decode response failed: %v", err)
+	}
+	if len(items) != 1 || items[0].SceneItemID != 7 || items[0].SourceName != "Mic/Aux" || !items[0].SceneItemEnabled {
+		t.Fatalf("unexpected scene items: %#v", items)
+	}
+}
+
+func TestOBSSceneItemsRequiresSceneName(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/api/obs/scene-items", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOBSInputsReturnsBadGatewayOnOBSFailure(t *testing.T) {
+	obsServer := newFakeOBSWebSocketServer(t, func(requestType string, requestData map[string]any) (map[string]any, error) {
+		return nil, context.Canceled
+	})
+	defer obsServer.Close()
+
+	server := NewServer(config.Config{AllowedOrigin: "*", OBSWebSocketURL: wsURL(obsServer.URL)}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/api/obs/inputs", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestOperatorSecretProtectsTestAlert(t *testing.T) {
 	server := NewServer(config.Config{AllowedOrigin: "*", OperatorSecret: "operator-secret"}, events.NewBus(4))
 	req := httptest.NewRequest(http.MethodPost, "/api/events/test-alert", bytes.NewBufferString(`{"title":"Nope","message":"Blocked"}`))
@@ -47,6 +147,56 @@ func TestOperatorSecretProtectsTestAlert(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
 	}
+}
+
+func newFakeOBSWebSocketServer(t *testing.T, handle func(requestType string, requestData map[string]any) (map[string]any, error)) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Fatalf("upgrade failed: %v", err)
+		}
+		defer conn.Close()
+
+		if err := conn.WriteJSON(map[string]any{"op": 0, "d": map[string]any{"obsStudioVersion": "30.2.0", "obsWebSocketVersion": "5.5.0", "rpcVersion": 1}}); err != nil {
+			t.Fatalf("write hello failed: %v", err)
+		}
+
+		var identify map[string]any
+		if err := conn.ReadJSON(&identify); err != nil {
+			t.Fatalf("read identify failed: %v", err)
+		}
+		if got := identify["op"]; got != float64(1) {
+			t.Fatalf("unexpected identify op: %#v", identify)
+		}
+		if err := conn.WriteJSON(map[string]any{"op": 2, "d": map[string]any{}}); err != nil {
+			t.Fatalf("write identified failed: %v", err)
+		}
+
+		var request map[string]any
+		if err := conn.ReadJSON(&request); err != nil {
+			t.Fatalf("read request failed: %v", err)
+		}
+		payload, _ := request["d"].(map[string]any)
+		requestType, _ := payload["requestType"].(string)
+		requestID, _ := payload["requestId"].(string)
+		requestData, _ := payload["requestData"].(map[string]any)
+		responseData, err := handle(requestType, requestData)
+		status := map[string]any{"result": true, "code": 100, "comment": "OK"}
+		if err != nil {
+			status = map[string]any{"result": false, "code": 500, "comment": err.Error()}
+			responseData = nil
+		}
+		response := map[string]any{"op": 7, "d": map[string]any{"requestType": requestType, "requestId": requestID, "requestStatus": status, "responseData": responseData}}
+		if err := conn.WriteJSON(response); err != nil {
+			t.Fatalf("write response failed: %v", err)
+		}
+	}))
+}
+
+func wsURL(httpURL string) string {
+	return strings.Replace(httpURL, "http://", "ws://", 1)
 }
 
 func TestOperatorSecretProtectsMutatingRoutes(t *testing.T) {

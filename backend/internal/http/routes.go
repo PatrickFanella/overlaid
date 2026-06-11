@@ -15,6 +15,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/integrations/webhook/{source}", s.webhook)
 	s.mux.HandleFunc("GET /api/obs/status", s.obsStatus)
 	s.mux.HandleFunc("GET /api/obs/scenes", s.obsScenes)
+	s.mux.HandleFunc("GET /api/obs/inputs", s.obsInputs)
+	s.mux.HandleFunc("GET /api/obs/scene-items", s.obsSceneItems)
 	s.mux.HandleFunc("POST /api/obs/scene", s.requireOperator(s.obsSetScene))
 	s.mux.HandleFunc("POST /api/obs/input/mute", s.requireOperator(s.obsSetInputMute))
 	s.mux.HandleFunc("POST /api/obs/scene-item/enabled", s.requireOperator(s.obsSetSceneItemEnabled))
