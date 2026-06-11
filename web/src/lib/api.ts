@@ -42,14 +42,19 @@ export async function clearOverlays(explicitBaseUrl?: string) {
   }
 }
 
-export async function sendWebhook(source: string, payload: AlertPayload, explicitBaseUrl?: string) {
-  await postJSON(`/api/integrations/webhook/${encodeURIComponent(source)}`, payload, explicitBaseUrl);
+export async function sendWebhook(source: string, payload: AlertPayload, explicitBaseUrl?: string, webhookSecret?: string) {
+  await postJSON(`/api/integrations/webhook/${encodeURIComponent(source)}`, payload, explicitBaseUrl, webhookSecret);
 }
 
-async function postJSON(path: string, payload: AlertPayload, explicitBaseUrl?: string) {
+async function postJSON(path: string, payload: AlertPayload, explicitBaseUrl?: string, webhookSecret?: string) {
+	const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
+	if (webhookSecret?.trim()) {
+		headers['X-Overlay-Webhook-Secret'] = webhookSecret.trim();
+	}
+
   const response = await fetch(apiUrl(path, explicitBaseUrl), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
   if (!response.ok) {

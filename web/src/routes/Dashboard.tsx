@@ -20,6 +20,7 @@ export function DashboardPage() {
   const [actionMessage, setActionMessage] = useState('');
   const [alert, setAlert] = useState(defaultAlert);
   const [webhookSource, setWebhookSource] = useState('n8n');
+  const [webhookSecret, setWebhookSecret] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -63,7 +64,7 @@ export function DashboardPage() {
 
   function submitWebhook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void runAction(`Send ${webhookSource} webhook`, () => sendWebhook(webhookSource, alert, apiBaseUrl));
+    void runAction(`Send ${webhookSource} webhook`, () => sendWebhook(webhookSource, alert, apiBaseUrl, webhookSecret));
   }
 
   return (
@@ -141,6 +142,10 @@ export function DashboardPage() {
               <label className="grid flex-1 gap-2 text-sm text-zinc-300">
                 Webhook source
                 <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-cyan-300/30 focus:ring-4" value={webhookSource} onChange={(event) => setWebhookSource(event.target.value)} />
+              </label>
+              <label className="grid flex-1 gap-2 text-sm text-zinc-300">
+                Webhook secret
+                <input className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-cyan-300/30 focus:ring-4" type="password" value={webhookSecret} onChange={(event) => setWebhookSecret(event.target.value)} placeholder="optional" />
               </label>
               <button className="self-end rounded-full border border-cyan-200/40 bg-cyan-200/10 px-5 py-3 text-sm font-medium text-cyan-100 transition hover:bg-cyan-200/20" type="submit">
                 Send webhook

@@ -19,6 +19,7 @@ docker compose up --build
 - `API_ADDR` / `API_PORT` — backend listen address and host port.
 - `POSTGRES_PORT` — host Postgres port. Defaults to `55432` to avoid clashing with a local Postgres on `5432`.
 - `CORS_ALLOWED_ORIGIN` — browser origin allowed to call the API.
+- `WEBHOOK_SECRET` — optional shared secret for `POST /api/integrations/webhook/{source}`. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
 - `VITE_API_BASE_URL` — optional build-time API base URL for local Vite builds. If unset, overlays derive the API URL from the browser host on port `8080`.
 - `OBS_WEBSOCKET_URL` — placeholder for future OBS WebSocket control.
@@ -129,6 +130,7 @@ Send a generic webhook event:
 ```bash
 curl -X POST http://localhost:8080/api/integrations/webhook/gitea \
   -H 'Content-Type: application/json' \
+  -H 'X-Overlay-Webhook-Secret: <WEBHOOK_SECRET if configured>' \
   -d '{"title":"Gitea","message":"Push received","severity":"info"}'
 ```
 

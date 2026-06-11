@@ -113,6 +113,64 @@ func TestWebhookPublishesSourceAlert(t *testing.T) {
 	}
 }
 
+func TestWebhookRequiresSharedSecretWhenConfigured(t *testing.T) {
+	bus := events.NewBus(4)
+	server := NewServer(config.Config{AllowedOrigin: "*", WebhookSecret: "super-secret"}, bus)
+
+	body := bytes.NewBufferString(`{"title":"Gitea","message":"Push received","severity":"info"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/integrations/webhook/gitea", body)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestWebhookAcceptsSharedSecretHeader(t *testing.T) {
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*", WebhookSecret: "super-secret"}, bus)
+
+	body := bytes.NewBufferString(`{"title":"Gitea","message":"Push received","severity":"info"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/integrations/webhook/gitea", body)
+	req.Header.Set("X-Overlay-Webhook-Secret", "super-secret")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	select {
+	case got := <-client.Events:
+		if got.Source != "gitea" || got.Title != "Gitea" {
+			t.Fatalf("unexpected event: %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for webhook event")
+	}
+}
+
+func TestWebhookAcceptsBearerSecret(t *testing.T) {
+	bus := events.NewBus(4)
+	server := NewServer(config.Config{AllowedOrigin: "*", WebhookSecret: "super-secret"}, bus)
+
+	body := bytes.NewBufferString(`{"title":"Gitea","message":"Push received","severity":"info"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/integrations/webhook/gitea", body)
+	req.Header.Set("Authorization", "Bearer super-secret")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestStreamEventsWritesSSE(t *testing.T) {
 	bus := events.NewBus(4)
 	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)

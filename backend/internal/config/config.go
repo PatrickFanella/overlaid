@@ -8,6 +8,7 @@ import (
 type Config struct {
 	Addr               string
 	AllowedOrigin      string
+	WebhookSecret      string
 	PublicWebURL       string
 	OBSWebSocketURL    string
 	TwitchClientID     string
@@ -23,6 +24,7 @@ func Load() Config {
 	return Config{
 		Addr:               env("API_ADDR", ":8080"),
 		AllowedOrigin:      env("CORS_ALLOWED_ORIGIN", "*"),
+		WebhookSecret:      env("WEBHOOK_SECRET", ""),
 		PublicWebURL:       env("PUBLIC_WEB_URL", "http://localhost:5173"),
 		OBSWebSocketURL:    env("OBS_WEBSOCKET_URL", "ws://localhost:4455"),
 		TwitchClientID:     env("TWITCH_CLIENT_ID", ""),

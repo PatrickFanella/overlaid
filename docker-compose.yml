@@ -20,6 +20,7 @@ services:
     environment:
       API_ADDR: ${API_ADDR:-:8080}
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-*}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable
       OBS_WEBSOCKET_URL: ${OBS_WEBSOCKET_URL:-ws://localhost:4455}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:5173}

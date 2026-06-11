@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -72,6 +73,11 @@ func (s *Server) clearEvents(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeWebhook(r) {
+		http.Error(w, "webhook authorization required", http.StatusUnauthorized)
+		return
+	}
+
 	source := strings.TrimSpace(r.PathValue("source"))
 	if source == "" {
 		http.Error(w, "source is required", http.StatusBadRequest)
@@ -83,6 +89,30 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	s.bus.Publish(events.NewAlert(source, request.Title, request.Message, normalizeSeverity(request.Severity)))
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) authorizeWebhook(r *http.Request) bool {
+	secret := strings.TrimSpace(s.config.WebhookSecret)
+	if secret == "" {
+		return true
+	}
+
+	provided := strings.TrimSpace(r.Header.Get("X-Overlay-Webhook-Secret"))
+	if provided == "" {
+		provided = bearerToken(r.Header.Get("Authorization"))
+	}
+	if provided == "" || len(provided) != len(secret) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(secret)) == 1
+}
+
+func bearerToken(header string) string {
+	header = strings.TrimSpace(header)
+	if len(header) < len("Bearer ") || !strings.EqualFold(header[:len("Bearer ")], "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(header[len("Bearer "):])
 }
 
 func decodeAlert(w http.ResponseWriter, r *http.Request) (alertRequest, bool) {
