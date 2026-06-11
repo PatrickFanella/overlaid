@@ -11,6 +11,7 @@ type Config struct {
 	AllowedOrigin       string
 	OperatorSecret      string
 	WebhookSecret       string
+	OverlayStateFile    string
 	PublicWebURL        string
 	OBSWebSocketURL     string
 	OBSWebSocketPass    string
@@ -33,6 +34,7 @@ func Load() Config {
 		AllowedOrigin:       env("CORS_ALLOWED_ORIGIN", "*"),
 		OperatorSecret:      env("OPERATOR_SECRET", ""),
 		WebhookSecret:       env("WEBHOOK_SECRET", ""),
+		OverlayStateFile:    env("OVERLAY_STATE_FILE", "/data/overlay-state.json"),
 		PublicWebURL:        env("PUBLIC_WEB_URL", "http://localhost:5173"),
 		OBSWebSocketURL:     env("OBS_WEBSOCKET_URL", "ws://localhost:4455"),
 		OBSWebSocketPass:    env("OBS_WEBSOCKET_PASSWORD", ""),

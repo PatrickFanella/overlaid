@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -269,6 +270,75 @@ func TestStreamEventsReplaysRetainedBRB(t *testing.T) {
 	}
 	cancel()
 	<-done
+}
+
+func TestOverlayStatePersistsAcrossServerRestart(t *testing.T) {
+	stateFile := filepath.Join(t.TempDir(), "overlay-state.json")
+	bus := events.NewBus(4)
+	server := NewServer(config.Config{AllowedOrigin: "*", OverlayStateFile: stateFile}, bus)
+
+	body := bytes.NewBufferString(`{"title":"Goal update","message":"Followers moved","data":{"goal":{"id":"followers","label":"Follower goal","current":430,"target":620}}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/events/test-alert", body)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected stateful alert 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	restarted := NewServer(config.Config{AllowedOrigin: "*", OverlayStateFile: stateFile}, events.NewBus(4))
+	ctx, cancel := context.WithCancel(context.Background())
+	streamReq := httptest.NewRequest(http.MethodGet, "/api/events/stream", nil).WithContext(ctx)
+	streamRec := &streamRecorder{ResponseRecorder: httptest.NewRecorder()}
+
+	done := make(chan struct{})
+	go func() {
+		restarted.Handler().ServeHTTP(streamRec, streamReq)
+		close(done)
+	}()
+
+	deadline := time.After(time.Second)
+	for !bytes.Contains(streamRec.Body.Bytes(), []byte("Follower goal")) {
+		select {
+		case <-deadline:
+			cancel()
+			<-done
+			t.Fatalf("expected retained goal replay, got %q", streamRec.Body.String())
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if !bytes.Contains(streamRec.Body.Bytes(), []byte(`"retainedStateKey":"goals"`)) {
+		cancel()
+		<-done
+		t.Fatalf("expected retained state marker, got %q", streamRec.Body.String())
+	}
+	cancel()
+	<-done
+}
+
+func TestStateKeysForEventWithGoalAndTickerAreScoped(t *testing.T) {
+	event := events.NewAlert("n8n", "Mixed", "Both", events.SeverityInfo)
+	event.Data = map[string]any{
+		"goal":   map[string]any{"id": "followers", "current": 10, "target": 20},
+		"ticker": map[string]any{"label": "goal", "message": "Followers moved"},
+	}
+
+	keys := stateKeysForEvent(event)
+	if len(keys) != 2 || keys[0] != "goals" || keys[1] != "ticker" {
+		t.Fatalf("unexpected state keys: %#v", keys)
+	}
+
+	goalEvent := eventWithRetainedStateKey(event, "goals")
+	tickerEvent := eventWithRetainedStateKey(event, "ticker")
+	if goalEvent.Data["retainedStateKey"] != "goals" {
+		t.Fatalf("expected goals marker, got %#v", goalEvent.Data)
+	}
+	if tickerEvent.Data["retainedStateKey"] != "ticker" {
+		t.Fatalf("expected ticker marker, got %#v", tickerEvent.Data)
+	}
+	if _, ok := event.Data["retainedStateKey"]; ok {
+		t.Fatalf("original event should not be mutated: %#v", event.Data)
+	}
 }
 
 func TestClearResetsRetainedBRB(t *testing.T) {

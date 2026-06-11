@@ -19,7 +19,7 @@ export function OverlayAlertsPage() {
           return;
         }
 
-        if (event.type !== 'alert') {
+        if (event.type !== 'alert' || event.data?.retainedStateKey) {
           return;
         }
 

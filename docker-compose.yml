@@ -22,6 +22,7 @@ services:
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-*}
       OPERATOR_SECRET: ${OPERATOR_SECRET:-}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      OVERLAY_STATE_FILE: ${OVERLAY_STATE_FILE:-/data/overlay-state.json}
       DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable
       OBS_WEBSOCKET_URL: ${OBS_WEBSOCKET_URL:-ws://localhost:4455}
       OBS_WEBSOCKET_PASSWORD: ${OBS_WEBSOCKET_PASSWORD:-}

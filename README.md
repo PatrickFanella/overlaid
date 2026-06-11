@@ -21,6 +21,7 @@ docker compose up --build
 - `CORS_ALLOWED_ORIGIN` — browser origin allowed to call the API.
 - `OPERATOR_SECRET` — optional shared secret for dashboard/operator mutating routes. Send as `X-Overlay-Operator-Secret` or `Authorization: Bearer <secret>`.
 - `WEBHOOK_SECRET` — optional shared secret for `POST /api/integrations/webhook/{source}`. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
+- `OVERLAY_STATE_FILE` — retained overlay state snapshot path. Defaults to `/data/overlay-state.json` in Docker.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
 - `VITE_API_BASE_URL` — optional build-time API base URL for local Vite builds. If unset, overlays derive the API URL from the browser host on port `8080`.
 - `OBS_WEBSOCKET_URL` — OBS WebSocket v5 endpoint. Defaults to `ws://localhost:4455`.
@@ -40,7 +41,7 @@ Twitch auth routes:
 
 Make sure the Twitch app callback URL matches `TWITCH_REDIRECT_URL`.
 
-If you run the API in Docker, the Twitch token persists in the `api-data` volume at `/data/twitch-token.json`.
+If you run the API in Docker, the Twitch token persists in the `api-data` volume at `/data/twitch-token.json`, and retained overlay state persists at `/data/overlay-state.json`.
 
 OAuth callback test flow:
 
@@ -128,11 +129,15 @@ http://<homelab-host>:5173/overlay/chat
 {"title":"Schedule","message":"Stream starts at 19:00","data":{"ticker":{"label":"schedule","message":"Stream starts at 19:00"}}}
 ```
 
+The most recent ticker payload is retained and replayed to OBS browser sources after reload/reconnect.
+
 `/overlay/goals` listens for explicit `data.goal` or `data.goals` payloads. Example goal update:
 
 ```json
 {"title":"Follower goal","message":"next unlock at 700","data":{"goal":{"id":"followers","label":"Follower goal","current":430,"target":620,"unit":"followers","note":"next unlock at 700"}}}
 ```
+
+The most recent goal payload is retained and replayed to OBS browser sources after reload/reconnect.
 
 `/overlay/now-playing` listens for backend `now_playing` events from Linux MPRIS. Enable it on a host that can access your user session D-Bus:
 
@@ -174,6 +179,8 @@ curl -X POST http://localhost:8080/api/events/brb \
   -H 'X-Overlay-Operator-Secret: <OPERATOR_SECRET if configured>' \
   -d '{"active":false,"title":"BRB overlay","message":"Waiting for intermission command"}'
 ```
+
+The current BRB/intermission state is retained and replayed to OBS browser sources after reload/reconnect. `POST /api/events/clear` clears retained overlay state.
 
 ### Test commands
 

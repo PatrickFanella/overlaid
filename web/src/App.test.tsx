@@ -42,7 +42,7 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/overlay/ticker" />);
 
     expect(html).toContain('Ticker rail');
-    expect(html).toContain('Stream systems nominal');
+    expect(html).toContain('Waiting for ticker events');
   });
 
   it('renders the now-playing overlay route', () => {

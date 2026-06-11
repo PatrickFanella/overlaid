@@ -46,7 +46,7 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	defer s.bus.Unsubscribe(client.ID)
 
 	_, _ = fmt.Fprint(w, ": connected\n\n")
-	if event, ok := s.currentBRB(); ok {
+	for _, event := range s.state.List() {
 		writeSSEEvent(w, event)
 	}
 	flusher.Flush()
@@ -74,12 +74,18 @@ func (s *Server) testAlert(w http.ResponseWriter, r *http.Request) {
 	}
 	event := events.NewAlert("manual", request.Title, request.Message, normalizeSeverity(request.Severity))
 	event.Data = request.Data
+	if !s.rememberOverlayState(w, event) {
+		return
+	}
 	s.bus.Publish(event)
 	w.WriteHeader(http.StatusAccepted)
 }
 
 func (s *Server) clearEvents(w http.ResponseWriter, _ *http.Request) {
-	s.clearBRB()
+	if err := s.state.Clear(); err != nil {
+		http.Error(w, "unable to clear overlay state", http.StatusInternalServerError)
+		return
+	}
 	s.bus.Publish(events.NewClear("manual"))
 	w.WriteHeader(http.StatusAccepted)
 }
@@ -99,7 +105,10 @@ func (s *Server) brbStatus(w http.ResponseWriter, r *http.Request) {
 	data["items"] = request.Items
 
 	event := events.NewBRB("dashboard", request.Title, request.Message, data)
-	s.setBRB(event)
+	if err := s.state.Set("brb", eventWithRetainedStateKey(event, "brb")); err != nil {
+		http.Error(w, "unable to persist brb state", http.StatusInternalServerError)
+		return
+	}
 	s.bus.Publish(event)
 	w.WriteHeader(http.StatusAccepted)
 }
@@ -113,26 +122,6 @@ func writeSSEEvent(w http.ResponseWriter, event events.Event) bool {
 	_, _ = fmt.Fprintf(w, "event: %s\n", event.Type)
 	_, _ = fmt.Fprintf(w, "data: %s\n\n", payload)
 	return true
-}
-
-func (s *Server) currentBRB() (events.Event, bool) {
-	s.brbMu.RLock()
-	defer s.brbMu.RUnlock()
-	return s.brb, s.hasBRB
-}
-
-func (s *Server) setBRB(event events.Event) {
-	s.brbMu.Lock()
-	s.brb = event
-	s.hasBRB = true
-	s.brbMu.Unlock()
-}
-
-func (s *Server) clearBRB() {
-	s.brbMu.Lock()
-	s.brb = events.Event{}
-	s.hasBRB = false
-	s.brbMu.Unlock()
 }
 
 func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
@@ -152,8 +141,51 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	event := events.NewAlert(source, request.Title, request.Message, normalizeSeverity(request.Severity))
 	event.Data = request.Data
+	if !s.rememberOverlayState(w, event) {
+		return
+	}
 	s.bus.Publish(event)
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) rememberOverlayState(w http.ResponseWriter, event events.Event) bool {
+	for _, key := range stateKeysForEvent(event) {
+		if err := s.state.Set(key, eventWithRetainedStateKey(event, key)); err != nil {
+			http.Error(w, "unable to persist overlay state", http.StatusInternalServerError)
+			return false
+		}
+	}
+	return true
+}
+
+func eventWithRetainedStateKey(event events.Event, key string) events.Event {
+	data := make(map[string]any, len(event.Data)+1)
+	for dataKey, value := range event.Data {
+		data[dataKey] = value
+	}
+	data["retainedStateKey"] = key
+	event.Data = data
+	return event
+}
+
+func stateKeysForEvent(event events.Event) []string {
+	if len(event.Data) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, 2)
+	if _, ok := event.Data["goal"]; ok {
+		keys = append(keys, "goals")
+	} else if _, ok := event.Data["goals"]; ok {
+		keys = append(keys, "goals")
+	}
+	if _, ok := event.Data["ticker"]; ok {
+		keys = append(keys, "ticker")
+	} else if _, ok := event.Data["tickerLabel"]; ok {
+		keys = append(keys, "ticker")
+	} else if _, ok := event.Data["tickerMessage"]; ok {
+		keys = append(keys, "ticker")
+	}
+	return keys
 }
 
 func (s *Server) requireOperator(next http.HandlerFunc) http.HandlerFunc {

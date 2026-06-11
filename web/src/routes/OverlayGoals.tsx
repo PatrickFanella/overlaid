@@ -12,14 +12,10 @@ type Goal = {
   accent: string;
 };
 
-const defaultGoals: Goal[] = [
-  { id: 'followers', label: 'Follower goal', current: 420, target: 620, unit: 'followers', note: 'next unlock at 700', accent: 'var(--hud-emerald)' },
-  { id: 'subs', label: 'Sub count', current: 18, target: 30, unit: 'subs', note: 'community push', accent: 'var(--hud-fuchsia)' },
-  { id: 'points', label: 'Channel points', current: 8, target: 12, unit: 'redemptions', note: 'tonight', accent: 'var(--hud-cyan)' },
-];
+const standbyGoal: Goal = { id: 'standby', label: 'Waiting for goal events', current: 0, target: 1, unit: 'items', note: 'send data.goal or data.goals', accent: 'var(--hud-emerald)' };
 
 export function OverlayGoalsPage() {
-  const [goals, setGoals] = useState<Goal[]>(defaultGoals);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [lastEvent, setLastEvent] = useState<OverlayEvent | null>(null);
   const [status, setStatus] = useState<OverlayStreamStatus>('connecting');
 
@@ -27,13 +23,20 @@ export function OverlayGoalsPage() {
     const stream = connectOverlayStream(getOverlayApiBaseUrl(), {
       onEvent(event) {
         if (event.type === 'clear') {
-          setGoals(defaultGoals);
+          setGoals([]);
           setLastEvent(null);
+          return;
+        }
+
+        if (event.data?.retainedStateKey && event.data.retainedStateKey !== 'goals') {
           return;
         }
 
         const nextGoals = goalsFromEvent(event);
         if (nextGoals.length === 0) {
+          if (event.data?.retainedStateKey) {
+            return;
+          }
           if (event.type === 'alert' || event.type === 'service_status') {
             setLastEvent(event);
           }
@@ -52,7 +55,7 @@ export function OverlayGoalsPage() {
   }, []);
 
   const streamLabel = useMemo(() => formatOverlayStreamLabel(status), [status]);
-  const primary = goals[0] ?? defaultGoals[0];
+  const primary = goals[0] ?? standbyGoal;
 
   return (
     <main className="hud-shell hud-shell--compact hud-scanlines text-white">
