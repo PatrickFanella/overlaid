@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
@@ -39,15 +41,19 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) StartBackground(ctx context.Context) {
 	if s.config.MPRISEnabled {
-		poller := mpris.Poller{
-			Reader:   mpris.DBusReader{Player: s.config.MPRISPlayer, PlayerPriority: s.config.MPRISPlayerPriority},
-			Interval: s.config.MPRISPollInterval,
-			Publish:  s.bus.Publish,
+		if !mprisSessionBusAvailable() {
+			log.Printf("MPRIS now-playing disabled: DBUS_SESSION_BUS_ADDRESS points to a missing session bus socket")
+		} else {
+			poller := mpris.Poller{
+				Reader:   mpris.DBusReader{Player: s.config.MPRISPlayer, PlayerPriority: s.config.MPRISPlayerPriority},
+				Interval: s.config.MPRISPollInterval,
+				Publish:  s.bus.Publish,
+			}
+			go func() {
+				log.Printf("MPRIS now-playing background worker enabled")
+				poller.Run(ctx)
+			}()
 		}
-		go func() {
-			log.Printf("MPRIS now-playing background worker enabled")
-			poller.Run(ctx)
-		}()
 	}
 
 	if !s.config.TwitchEventSub {
@@ -75,4 +81,24 @@ func (s *Server) StartBackground(ctx context.Context) {
 		log.Printf("Twitch EventSub background worker enabled")
 		client.Run(ctx)
 	}()
+}
+
+func mprisSessionBusAvailable() bool {
+	address := strings.TrimSpace(os.Getenv("DBUS_SESSION_BUS_ADDRESS"))
+	if address == "" {
+		return true
+	}
+	const unixPathPrefix = "unix:path="
+	if !strings.HasPrefix(address, unixPathPrefix) {
+		return true
+	}
+	path := strings.TrimPrefix(address, unixPathPrefix)
+	if comma := strings.Index(path, ","); comma >= 0 {
+		path = path[:comma]
+	}
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }

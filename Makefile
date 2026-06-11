@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 API_PORT ?= 8080
 WEB_PORT ?= 5173
 
-.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build smoke smoke-alert db-shell db-migrate db-tables db-reset
+.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build smoke smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -82,6 +82,13 @@ db-migrate: ## Apply SQL migrations to the Compose Postgres database
 
 db-tables: ## List tables in the Compose Postgres database
 	docker compose exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "\\dt"'
+
+db-reset-postgres: ## Remove only the Compose Postgres volume; preserves API token/state data
+	docker compose stop postgres
+	docker compose rm -f postgres
+	docker volume rm $$(docker volume ls -q \
+		--filter label=com.docker.compose.project=$$(basename "$$PWD") \
+		--filter label=com.docker.compose.volume=postgres-data)
 
 db-reset: ## Remove all Compose volumes; destructive, includes API token/state data
 	docker compose down -v
