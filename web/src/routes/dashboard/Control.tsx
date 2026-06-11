@@ -3,11 +3,11 @@ import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { loadDashboardConfig, loadOperatorSecret, saveDashboardConfig, saveOperatorSecret, type DashboardConfig } from '../../lib/dashboardConfig';
 import { DashboardShell } from './DashboardShell';
 import { BRBControl } from './components/BRBControl';
+import { ControlLayoutEditor } from './components/ControlLayoutEditor';
 import { OBSControls } from './components/OBSControls';
 import { QuickActionRunner } from './components/QuickActionRunner';
 import { QuickActionsEditor } from './components/QuickActionsEditor';
 import { SampleEventControls } from './components/SampleEventControls';
-import { SystemStatusRail } from './components/SystemStatusRail';
 
 export function DashboardControlPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
@@ -34,16 +34,18 @@ export function DashboardControlPage() {
       });
   }
 
+  const widgets = [...config.controlWidgets].filter((widget) => widget.enabled).sort((a, b) => a.order - b.order);
+
   return (
     <DashboardShell activePath="/dashboard/control">
-      <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
+      <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <p className="hud-label">Control</p>
-        <h2 className="mt-3 text-2xl font-black text-white">Stream control</h2>
-        <p className="hud-copy mt-2 text-sm text-zinc-300">Quick actions, live BRB controls, sample events, and OBS scene tools for the operator console.</p>
-        <label className="mt-5 grid gap-2 text-sm text-zinc-300 lg:max-w-xl">
+        <h2 className="hud-section-title">Stream control</h2>
+        <p className="hud-copy mt-1 text-xs text-zinc-300">Quick actions, BRB, samples, and OBS scene tools. Toggle, resize, and reorder modules below.</p>
+        <label className="mt-3 grid gap-1 text-xs text-zinc-300 lg:max-w-sm">
           <span className="hud-kicker">Operator secret</span>
           <input
-            className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-fuchsia-300/30 focus:ring-4"
+            className="hud-input"
             type="password"
             value={operatorSecret}
             onChange={(event) => updateOperatorSecret(event.target.value)}
@@ -52,12 +54,18 @@ export function DashboardControlPage() {
         </label>
       </section>
 
-      <SystemStatusRail apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} config={config} />
-      <QuickActionRunner actions={config.quickActions} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} />
-      <SampleEventControls apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} />
-      <BRBControl apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} />
-      <OBSControls apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} />
-      <QuickActionsEditor config={config} onChange={updateConfig} />
+      <ControlLayoutEditor config={config} onChange={updateConfig} />
+      <div className="hud-route-grid">
+        {widgets.map((widget) => {
+          const compact = widget.compact;
+          if (widget.id === 'quick-actions') return <QuickActionRunner key={widget.id} actions={config.quickActions} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} compact={compact} />;
+          if (widget.id === 'sample-events') return <SampleEventControls key={widget.id} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} compact={compact} />;
+          if (widget.id === 'brb') return <BRBControl key={widget.id} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} compact={compact} />;
+          if (widget.id === 'obs') return <OBSControls key={widget.id} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} compact={compact} />;
+          if (widget.id === 'editor') return <QuickActionsEditor key={widget.id} config={config} onChange={updateConfig} compact={compact} />;
+          return null;
+        })}
+      </div>
     </DashboardShell>
   );
 }

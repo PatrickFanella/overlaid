@@ -11,6 +11,7 @@ import { DashboardConfigPage } from './routes/dashboard/Config';
 import { DashboardControlPage } from './routes/dashboard/Control';
 import { DashboardOverviewPage } from './routes/dashboard/Overview';
 import { DashboardSetupPage } from './routes/dashboard/Setup';
+import { DashboardSourcesPage } from './routes/dashboard/Sources';
 
 type AppProps = {
   pathname?: string;
@@ -58,8 +59,12 @@ export function getAppRoute(pathname: string) {
     return <DashboardOverviewPage />;
   }
 
-  if (route === '/dashboard/setup' || route === '/dashboard/sources') {
-    return <DashboardSetupPage activePath={route} />;
+  if (route === '/dashboard/setup') {
+    return <DashboardSetupPage />;
+  }
+
+  if (route === '/dashboard/sources') {
+    return <DashboardSourcesPage />;
   }
 
   if (route === '/dashboard/control') {

@@ -3,9 +3,10 @@ import { createQuickAction, quickActionKinds, type DashboardConfig, type QuickAc
 type QuickActionsEditorProps = {
   config: DashboardConfig;
   onChange: (config: DashboardConfig) => void;
+  compact?: boolean;
 };
 
-export function QuickActionsEditor({ config, onChange }: QuickActionsEditorProps) {
+export function QuickActionsEditor({ config, onChange, compact = false }: QuickActionsEditorProps) {
   function updateAction(index: number, patch: Partial<QuickAction>) {
     onChange({
       ...config,
@@ -37,19 +38,19 @@ export function QuickActionsEditor({ config, onChange }: QuickActionsEditorProps
   }
 
   return (
-    <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="hud-label">Editable quick actions</p>
-          <h2 className="mt-3 text-2xl font-black text-white">Quick action presets</h2>
-          <p className="hud-copy mt-2 text-sm text-zinc-300">Edit labels and payload fields locally, then save them to this browser’s dashboard config.</p>
+          <h2 className="hud-section-title">Quick action presets</h2>
+          {!compact ? <p className="hud-copy mt-1 text-xs text-zinc-300">Edit labels and payload fields locally.</p> : null}
         </div>
-        <span className="hud-chip">{config.quickActions.length} actions</span>
+        <span className="hud-chip hud-chip--square">{config.quickActions.length} actions</span>
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-3">
+      <div className="mt-3 flex flex-wrap gap-2">
         <select
-          className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 outline-none ring-cyan-300/30 focus:ring-4"
+          className="hud-input max-w-56"
           defaultValue="setScene"
           onChange={(event) => {
             const kind = event.target.value as QuickAction['kind'];
@@ -63,9 +64,9 @@ export function QuickActionsEditor({ config, onChange }: QuickActionsEditorProps
         </select>
       </div>
 
-      <div className="mt-5 grid gap-4">
+      <div className="mt-3 grid gap-3">
         {config.quickActions.map((action, index) => (
-          <article key={action.id} className="hud-panel hud-corners rounded-[1.2rem] p-4">
+          <article key={action.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="grid gap-3 lg:flex-1 lg:grid-cols-2">
                 <label className="grid gap-2 text-sm text-zinc-300">

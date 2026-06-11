@@ -19,16 +19,16 @@ export function SetupChecklist({ config, onChange }: SetupChecklistProps) {
   }
 
   return (
-    <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
+    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="hud-label">OBS setup workflow</p>
-          <h2 className="mt-3 text-2xl font-black text-white">Checklist</h2>
-          <p className="hud-copy mt-2 text-sm text-zinc-300">Track OBS onboarding, smoke tests, and setup decisions locally in this browser.</p>
+          <h2 className="hud-section-title">Checklist</h2>
+          <p className="hud-copy mt-1 text-xs text-zinc-300">Track OBS onboarding, smoke tests, and setup decisions locally.</p>
         </div>
 
         <button
-          className="hud-chip"
+          className="hud-chip hud-chip--square"
           type="button"
           onClick={() => setShowCompleted((current) => !current)}
         >
@@ -42,9 +42,9 @@ export function SetupChecklist({ config, onChange }: SetupChecklistProps) {
         </p>
       ) : null}
 
-      <div className="mt-5 grid gap-3">
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
         {visibleItems.map((item) => (
-          <label key={item.id} className="hud-panel hud-corners flex cursor-pointer gap-3 rounded-[1.2rem] p-4">
+          <label key={item.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card flex cursor-pointer gap-2">
             <input
               className="mt-1 size-4 accent-cyan-300"
               type="checkbox"
@@ -52,8 +52,8 @@ export function SetupChecklist({ config, onChange }: SetupChecklistProps) {
               onChange={() => toggle(item.id)}
             />
             <span>
-              <span className="block font-semibold text-white">{item.title}</span>
-              <span className="mt-1 block text-sm text-zinc-300">{item.description}</span>
+              <span className="block text-sm font-bold text-white">{item.title}</span>
+              <span className="mt-1 block text-xs text-zinc-300">{item.description}</span>
             </span>
           </label>
         ))}

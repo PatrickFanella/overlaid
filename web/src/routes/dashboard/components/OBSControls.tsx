@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   fetchOBSInputs,
   fetchOBSSceneItems,
@@ -15,6 +15,7 @@ type OBSControlsProps = {
   apiBaseUrl: string;
   operatorSecret: string;
   isRunning: boolean;
+  compact?: boolean;
   runAction: (label: string, action: () => Promise<void>) => void;
 };
 
@@ -34,11 +35,11 @@ const defaultState: InventoryState = {
   sceneItems: [],
   currentSceneName: '',
   selectedSceneName: '',
-  loading: true,
+  loading: false,
   error: '',
 };
 
-export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, runAction }: OBSControlsProps) {
+export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = false, runAction }: OBSControlsProps) {
   const [state, setState] = useState<InventoryState>(defaultState);
 
   async function refreshSceneItems(sceneName: string) {
@@ -58,63 +59,47 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, runAction }
     }
   }
 
-  useEffect(() => {
-    let cancelled = false;
+  async function loadInventory() {
+    setState((current) => ({ ...current, loading: true, error: '' }));
 
-    async function load() {
-      setState((current) => ({ ...current, loading: true, error: '' }));
+    const [scenesResult, inputsResult] = await Promise.allSettled([fetchOBSScenes(apiBaseUrl), fetchOBSInputs(apiBaseUrl)]);
 
-      const [scenesResult, inputsResult] = await Promise.allSettled([fetchOBSScenes(apiBaseUrl), fetchOBSInputs(apiBaseUrl)]);
-      if (cancelled) {
-        return;
-      }
+    const scenes = scenesResult.status === 'fulfilled' ? scenesResult.value.scenes : [];
+    const currentSceneName = scenesResult.status === 'fulfilled' ? scenesResult.value.currentProgramSceneName : '';
+    const selectedSceneName = currentSceneName || scenes[0]?.sceneName || '';
+    setState({
+      scenes,
+      inputs: inputsResult.status === 'fulfilled' ? inputsResult.value : [],
+      sceneItems: [],
+      currentSceneName,
+      selectedSceneName,
+      loading: false,
+      error:
+        scenesResult.status === 'rejected' && inputsResult.status === 'rejected'
+          ? 'Unable to load OBS inventory.'
+          : scenesResult.status === 'rejected'
+            ? 'Unable to load OBS scenes.'
+            : inputsResult.status === 'rejected'
+              ? 'Unable to load OBS inputs.'
+              : '',
+    });
 
-      const scenes = scenesResult.status === 'fulfilled' ? scenesResult.value.scenes : [];
-      const currentSceneName = scenesResult.status === 'fulfilled' ? scenesResult.value.currentProgramSceneName : '';
-      const selectedSceneName = currentSceneName || scenes[0]?.sceneName || '';
-      setState({
-        scenes,
-        inputs: inputsResult.status === 'fulfilled' ? inputsResult.value : [],
-        sceneItems: [],
-        currentSceneName,
-        selectedSceneName,
-        loading: false,
-        error:
-          scenesResult.status === 'rejected' && inputsResult.status === 'rejected'
-            ? 'Unable to load OBS inventory.'
-            : scenesResult.status === 'rejected'
-              ? 'Unable to load OBS scenes.'
-              : inputsResult.status === 'rejected'
-                ? 'Unable to load OBS inputs.'
-                : '',
-      });
-
-      if (selectedSceneName) {
-        await loadSceneItems(selectedSceneName, cancelled);
-      }
+    if (selectedSceneName) {
+      await loadSceneItems(selectedSceneName);
     }
+  }
 
-    async function loadSceneItems(sceneName: string, wasCancelled = false) {
-      const itemsResult = await fetchOBSSceneItems(sceneName, apiBaseUrl)
-        .then((value) => ({ status: 'fulfilled' as const, value }))
-        .catch((error: unknown) => ({ status: 'rejected' as const, error }));
-      if (cancelled || wasCancelled) {
-        return;
-      }
+  async function loadSceneItems(sceneName: string) {
+    const itemsResult = await fetchOBSSceneItems(sceneName, apiBaseUrl)
+      .then((value) => ({ status: 'fulfilled' as const, value }))
+      .catch((error: unknown) => ({ status: 'rejected' as const, error }));
 
-      setState((current) => ({
-        ...current,
-        selectedSceneName: sceneName,
-        sceneItems: itemsResult.status === 'fulfilled' ? itemsResult.value : [],
-      }));
-    }
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [apiBaseUrl]);
+    setState((current) => ({
+      ...current,
+      selectedSceneName: sceneName,
+      sceneItems: itemsResult.status === 'fulfilled' ? itemsResult.value : [],
+    }));
+  }
 
   const selectedScene = useMemo(() => state.scenes.find((scene) => scene.sceneName === state.selectedSceneName), [state.scenes, state.selectedSceneName]);
 
@@ -152,18 +137,21 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, runAction }
   }
 
   return (
-    <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="hud-label">Scene controls</p>
-          <h2 className="mt-3 text-2xl font-black text-white">OBS controls</h2>
-          <p className="hud-copy mt-2 text-sm text-zinc-300">Select scenes, mute inputs, and toggle source items with the operator secret already loaded for this session.</p>
+          <h2 className="hud-section-title">OBS controls</h2>
+          {!compact ? <p className="hud-copy mt-1 text-xs text-zinc-300">Click refresh to load OBS inventory. This avoids WebSocket connect/disconnect spam on page load.</p> : null}
         </div>
-        <span className="hud-chip">{state.currentSceneName || 'unknown scene'}</span>
+        <div className="flex gap-2">
+          <button className="hud-chip hud-chip--square" type="button" disabled={isRunning || state.loading} onClick={() => void loadInventory()}>{state.loading ? 'loading' : 'refresh OBS'}</button>
+          <span className="hud-chip hud-chip--square">{state.currentSceneName || 'not loaded'}</span>
+        </div>
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <article className="hud-panel hud-corners rounded-[1.2rem] p-4">
+      <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
+        <article className="hud-panel hud-corners hud-panel--flat hud-compact-card">
           <p className="hud-kicker">Scenes</p>
           <div className="mt-4 grid gap-2">
             {state.loading && state.scenes.length === 0 ? <p className="text-sm text-zinc-400">Loading scene inventory…</p> : null}
@@ -183,7 +171,7 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, runAction }
           </div>
         </article>
 
-        <article className="hud-panel hud-corners rounded-[1.2rem] p-4">
+        <article className="hud-panel hud-corners hud-panel--flat hud-compact-card">
           <p className="hud-kicker">Inputs</p>
           <div className="mt-4 grid gap-2">
             {state.inputs.length === 0 ? <p className="text-sm text-zinc-400">No input inventory loaded.</p> : null}
@@ -202,7 +190,7 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, runAction }
         </article>
       </div>
 
-      <article className="mt-4 hud-panel hud-corners rounded-[1.2rem] p-4">
+      <article className="mt-3 hud-panel hud-corners hud-panel--flat hud-compact-card">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="hud-kicker">Current scene items</p>

@@ -1,12 +1,24 @@
 import { DashboardShell } from './DashboardShell';
+import { getOverlayApiBaseUrl } from '../../lib/eventStream';
+import { loadDashboardConfig, loadOperatorSecret } from '../../lib/dashboardConfig';
+import { SystemStatusRail } from './components/SystemStatusRail';
 
 export function DashboardOverviewPage() {
+  const apiBaseUrl = getOverlayApiBaseUrl();
+  const config = loadDashboardConfig();
+  const operatorSecret = loadOperatorSecret();
+
   return (
     <DashboardShell activePath="/dashboard">
-      <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
-        <p className="hud-label">System status</p>
-        <h2 className="mt-3 text-2xl font-black text-white">Dashboard overview</h2>
-        <p className="hud-copy mt-2 text-sm text-zinc-300">Compact overview for the operator console.</p>
+      <SystemStatusRail apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} config={config} />
+
+      <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+        <div className="grid gap-2 md:grid-cols-4">
+          <a className="hud-action-button hud-action-button--compact" href="/dashboard/setup">Setup checklist</a>
+          <a className="hud-action-button hud-action-button--compact" href="/dashboard/sources">Source URLs</a>
+          <a className="hud-action-button hud-action-button--compact" href="/dashboard/control">Stream control</a>
+          <a className="hud-action-button hud-action-button--compact" href="/dashboard/config">Config</a>
+        </div>
       </section>
     </DashboardShell>
   );

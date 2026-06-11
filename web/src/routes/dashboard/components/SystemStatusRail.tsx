@@ -59,16 +59,16 @@ export function SystemStatusRail({ apiBaseUrl, operatorSecret, config }: SystemS
   }, [apiBaseUrl]);
 
   return (
-    <section className="hud-panel hud-corners hud-sticky-rail rounded-[1.35rem] p-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-2 pt-1">
+    <section className="hud-panel hud-corners hud-panel--flat hud-sticky-rail rounded-sm p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1">
         <div>
           <p className="hud-label">System status</p>
-          <p className="mt-2 text-sm text-zinc-300">Live dashboard health for this operator workstation.</p>
+          <p className="mt-1 text-xs text-zinc-300">Live health for this operator workstation.</p>
         </div>
-        <span className="hud-chip">{state.loading ? 'refreshing' : 'ready'}</span>
+        <span className="hud-chip hud-chip--square">{state.loading ? 'refreshing' : 'ready'}</span>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
         <StatusItem label="API" value={apiBaseUrl} detail={state.error || 'overlay service'} accent="cyan" />
         <StatusItem label="Twitch" value={renderTwitchStatus(state.twitch)} detail={state.twitch?.channelTarget || 'status unavailable'} accent={state.twitch?.authenticated ? 'emerald' : 'amber'} />
         <StatusItem label="OBS" value={renderObsStatus(state.obs)} detail={state.obs?.url || 'status unavailable'} accent={state.obs?.reachable ? 'emerald' : 'amber'} />
@@ -89,10 +89,10 @@ type StatusItemProps = {
 
 function StatusItem({ label, value, detail, accent }: StatusItemProps) {
   return (
-    <article className={`hud-panel hud-corners rounded-[1.1rem] p-4 hud-accent-${accent}`}>
+    <article className={`hud-panel hud-corners hud-panel--flat hud-compact-card hud-accent-${accent}`}>
       <p className="hud-kicker">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-white">{value}</p>
-      <p className="mt-2 text-sm text-zinc-300">{detail}</p>
+      <p className="mt-1 text-sm font-bold text-white">{value}</p>
+      <p className="mt-1 truncate text-xs text-zinc-300">{detail}</p>
     </article>
   );
 }

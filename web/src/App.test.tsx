@@ -25,25 +25,25 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/dashboard" />);
 
     expect(html).toContain('over-laid command center');
-    expect(html).toContain('Dashboard overview');
     expect(html).toContain('System status');
+    expect(html).toContain('Twitch login');
   });
 
   it('renders the dashboard setup route', () => {
     const html = renderToString(<App pathname="/dashboard/setup" />);
 
     expect(html).toContain('OBS setup workflow');
-    expect(html).toContain('Overlay source URLs');
-    expect(html).toContain('Stream presets');
+    expect(html).toContain('Checklist');
+    expect(html).toContain('Browser sources added');
   });
 
   it('renders the dashboard sources route', () => {
     const html = renderToString(<App pathname="/dashboard/sources" />);
 
-    expect(html).toContain('OBS setup workflow');
     expect(html).toContain('Overlay source URLs');
     expect(html).toContain('/overlay/alerts');
     expect(html).toContain('Stream presets');
+    expect(html).toContain('Custom CSS');
   });
 
   it('renders the dashboard control route', () => {
@@ -53,6 +53,7 @@ describe('App routing', () => {
     expect(html).toContain('Quick actions');
     expect(html).toContain('BRB overlay');
     expect(html).toContain('Scene controls');
+    expect(html).toContain('Stream control modules');
   });
 
   it('renders the dashboard config route', () => {

@@ -6,10 +6,11 @@ type QuickActionRunnerProps = {
   apiBaseUrl: string;
   operatorSecret: string;
   isRunning: boolean;
+  compact?: boolean;
   runAction: (label: string, action: () => Promise<void>) => void;
 };
 
-export function QuickActionRunner({ actions, apiBaseUrl, operatorSecret, isRunning, runAction }: QuickActionRunnerProps) {
+export function QuickActionRunner({ actions, apiBaseUrl, operatorSecret, isRunning, compact = false, runAction }: QuickActionRunnerProps) {
   function execute(action: QuickAction) {
     switch (action.kind) {
       case 'setScene':
@@ -28,16 +29,16 @@ export function QuickActionRunner({ actions, apiBaseUrl, operatorSecret, isRunni
   }
 
   return (
-    <section className="hud-panel hud-corners rounded-[1.6rem] p-5">
+    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
       <p className="hud-label">Quick actions</p>
-      <h2 className="mt-3 text-2xl font-black text-white">Run configured actions</h2>
-      <p className="hud-copy mt-2 text-sm text-zinc-300">These presets are stored in browser local storage and execute through the same protected API helpers as the rest of the console.</p>
+      <h2 className="hud-section-title">Run configured actions</h2>
+      {!compact ? <p className="hud-copy mt-1 text-xs text-zinc-300">Stored in browser local storage and executed through protected API helpers.</p> : null}
 
       <div className="hud-dashboard-grid hud-dashboard-grid--three mt-5">
         {actions.map((action) => (
-          <button key={action.id} className="hud-action-button" type="button" disabled={isRunning} onClick={() => execute(action)}>
+          <button key={action.id} className="hud-action-button hud-action-button--compact" type="button" disabled={isRunning} onClick={() => execute(action)}>
             <span className="hud-kicker">{action.kind}</span>
-            <span className="mt-2 block text-lg font-semibold text-white">{action.label}</span>
+            <span className="mt-1 block text-sm font-bold text-white">{action.label}</span>
           </button>
         ))}
       </div>

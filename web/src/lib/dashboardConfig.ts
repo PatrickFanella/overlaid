@@ -11,6 +11,14 @@ export type StreamPreset = {
   sources: string[];
 };
 
+export type ControlWidget = {
+  id: string;
+  title: string;
+  enabled: boolean;
+  order: number;
+  compact: boolean;
+};
+
 export type QuickAction =
   | { id: string; label: string; kind: 'setScene'; sceneName: string }
   | { id: string; label: string; kind: 'sendAlert'; title: string; message: string; severity: 'info' | 'success' | 'warning' | 'error' }
@@ -25,6 +33,8 @@ export type DashboardConfig = {
   setupChecklist: SetupChecklistItem[];
   streamPresets: StreamPreset[];
   quickActions: QuickAction[];
+  controlWidgets: ControlWidget[];
+  customCSS: string;
   mprisDecision: 'enabled' | 'disabled' | 'undecided';
 };
 
@@ -51,6 +61,14 @@ export const defaultDashboardConfig: DashboardConfig = {
     { id: 'show-brb', label: 'Show BRB', kind: 'showBRB', title: 'Be right back', message: 'Short intermission. Stream resumes soon.', eta: '5 min', items: ['Hydrate', 'Stretch', 'Chat stays live'] },
     { id: 'hide-brb', label: 'Hide BRB', kind: 'hideBRB' },
   ],
+  controlWidgets: [
+    { id: 'quick-actions', title: 'Quick actions', enabled: true, order: 1, compact: true },
+    { id: 'sample-events', title: 'Sample events', enabled: true, order: 2, compact: true },
+    { id: 'brb', title: 'BRB controls', enabled: true, order: 3, compact: false },
+    { id: 'obs', title: 'OBS controls', enabled: true, order: 4, compact: false },
+    { id: 'editor', title: 'Quick action editor', enabled: true, order: 5, compact: false },
+  ],
+  customCSS: `body { background: transparent !important; }\n\n/* Compact OBS crop helper */\n#root { overflow: hidden; }`,
   mprisDecision: 'undecided',
 };
 
