@@ -1,7 +1,7 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
-.PHONY: help verify deps fmt lint test build compose-config open-pilot-check
+.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -34,3 +34,12 @@ compose-config:
 open-pilot-check:
 	@test -f .gitea/ISSUE_TEMPLATE/open-pilot-task.yaml
 	@grep -q 'Test Command' .gitea/ISSUE_TEMPLATE/open-pilot-task.yaml
+
+dev:
+	pnpm --dir web run dev
+
+docker-build:
+	docker compose up --build -d --remove-orphans
+
+logs:
+	docker compose logs -f

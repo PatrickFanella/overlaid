@@ -3,4 +3,17 @@
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: transparent;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  overflow-x: hidden;
 }

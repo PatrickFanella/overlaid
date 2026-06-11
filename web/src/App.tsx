@@ -1,11 +1,65 @@
-export default function App() {
-  return (
-<main className="min-h-screen bg-zinc-950 px-8 py-12 text-zinc-100">
-  <section className="mx-auto max-w-3xl rounded-2xl border border-zinc-800 bg-zinc-900 p-8 shadow-xl">
-    <p className="text-sm uppercase tracking-[0.3em] text-fuchsia-300">over-laid</p>
-    <h1 className="mt-4 text-4xl font-bold">Go + Vite React TypeScript</h1>
-    <p className="mt-4 text-zinc-300">A minimal full-stack app with Tailwind-ready styling and Open Pilot conventions.</p>
-  </section>
-</main>
-  );
+import { HomePage } from './routes/Home';
+import { OverlayAlertsPage } from './routes/OverlayAlerts';
+import { OverlayDebugPage } from './routes/OverlayDebug';
+import { OverlayPlaceholderPage } from './routes/OverlayPlaceholder';
+
+type AppProps = {
+  pathname?: string;
+};
+
+const overlayRoutes = new Set([
+  '/overlay/alerts',
+  '/overlay/chat',
+  '/overlay/goals',
+  '/overlay/now-playing',
+  '/overlay/ticker',
+  '/overlay/brb',
+  '/overlay/debug',
+]);
+
+function resolvePathname(pathname?: string) {
+  if (pathname) {
+    return normalizePathname(pathname);
+  }
+
+  if (typeof window === 'undefined') {
+    return '/';
+  }
+
+  return normalizePathname(window.location.pathname);
+}
+
+function normalizePathname(pathname: string) {
+  const cleaned = pathname.trim() || '/';
+  if (cleaned === '/') {
+    return '/';
+  }
+
+  return cleaned.replace(/\/+$/, '');
+}
+
+export function getAppRoute(pathname: string) {
+  const route = normalizePathname(pathname);
+
+  if (route === '/') {
+    return <HomePage />;
+  }
+
+  if (route === '/overlay/alerts') {
+    return <OverlayAlertsPage />;
+  }
+
+  if (route === '/overlay/debug') {
+    return <OverlayDebugPage />;
+  }
+
+  if (overlayRoutes.has(route)) {
+    return <OverlayPlaceholderPage pathname={route} />;
+  }
+
+  return <HomePage pathname={route} />;
+}
+
+export default function App({ pathname }: AppProps = {}) {
+  return getAppRoute(resolvePathname(pathname));
 }

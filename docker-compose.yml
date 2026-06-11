@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +18,19 @@ services:
   api:
     build: ./backend
     environment:
+      API_ADDR: ${API_ADDR:-:8080}
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-*}
       DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable
+      OBS_WEBSOCKET_URL: ${OBS_WEBSOCKET_URL:-ws://localhost:4455}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:5173}
+      TWITCH_CHANNEL: ${TWITCH_CHANNEL:-patrick__eff}
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
+      TWITCH_REDIRECT_URL: ${TWITCH_REDIRECT_URL:-}
+      TWITCH_TOKEN_FILE: ${TWITCH_TOKEN_FILE:-/data/twitch-token.json}
+      TWITCH_SCOPES: ${TWITCH_SCOPES:-user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read}
+    volumes:
+      - api-data:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -31,4 +43,5 @@ services:
       - "${WEB_PORT:-5173}:80"
 
 volumes:
+  api-data:
   postgres-data:
