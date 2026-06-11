@@ -63,6 +63,50 @@ func TestPollerPublishesStoppedStateWhenPlayerDisappears(t *testing.T) {
 	}
 }
 
+func TestChooseStatePrefersPlayingPlayerBeforePriority(t *testing.T) {
+	state, ok := chooseState([]State{
+		{Player: "Feishin", PlaybackStatus: "Paused"},
+		{Player: "vivaldi.instance35890", PlaybackStatus: "Playing"},
+	}, []string{"Feishin", "mpv", "vivaldi"})
+
+	if !ok {
+		t.Fatal("expected selected state")
+	}
+	if state.Player != "vivaldi.instance35890" {
+		t.Fatalf("expected active playing player, got %#v", state)
+	}
+}
+
+func TestChooseStateUsesPriorityWithinSamePlaybackStatus(t *testing.T) {
+	state, ok := chooseState([]State{
+		{Player: "vivaldi.instance35890", PlaybackStatus: "Paused"},
+		{Player: "Feishin", PlaybackStatus: "Paused"},
+		{Player: "mpv", PlaybackStatus: "Paused"},
+	}, []string{"Feishin", "mpv", "vivaldi"})
+
+	if !ok {
+		t.Fatal("expected selected state")
+	}
+	if state.Player != "Feishin" {
+		t.Fatalf("expected priority player, got %#v", state)
+	}
+}
+
+func TestSamePlayerAcceptsSuffixAndFullBusName(t *testing.T) {
+	if !samePlayer("org.mpris.MediaPlayer2.Feishin", "Feishin") {
+		t.Fatal("expected suffix match")
+	}
+	if !samePlayer("org.mpris.MediaPlayer2.vivaldi.instance35890", "vivaldi") {
+		t.Fatal("expected browser instance match")
+	}
+	if !samePlayer("org.mpris.MediaPlayer2.vivaldi.instance35890", "org.mpris.MediaPlayer2.vivaldi.instance35890") {
+		t.Fatal("expected exact full bus match")
+	}
+	if samePlayer("org.mpris.MediaPlayer2.vivaldi.instance111", "org.mpris.MediaPlayer2.vivaldi.instance222") {
+		t.Fatal("did not expect full bus pin to match another browser instance")
+	}
+}
+
 type disappearingReader struct {
 	reads int
 }

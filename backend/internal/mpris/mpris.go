@@ -113,8 +113,9 @@ func (s State) Event() events.Event {
 }
 
 type DBusReader struct {
-	Player string
-	Now    func() time.Time
+	Player         string
+	PlayerPriority []string
+	Now            func() time.Time
 }
 
 func (r DBusReader) Read(ctx context.Context) (State, bool, error) {
@@ -124,22 +125,56 @@ func (r DBusReader) Read(ctx context.Context) (State, bool, error) {
 	}
 	defer conn.Close()
 
-	name, err := r.resolvePlayer(ctx, conn)
+	state, ok, err := r.resolveState(ctx, conn)
 	if err != nil {
 		return State{}, false, err
 	}
-	if name == "" {
+	if !ok {
+		return State{}, false, nil
+	}
+	return state, true, nil
+
+}
+
+func (r DBusReader) resolveState(ctx context.Context, conn *dbus.Conn) (State, bool, error) {
+	names, err := listNames(ctx, conn)
+	if err != nil {
+		return State{}, false, err
+	}
+	candidates := mprisNames(names)
+	wanted := strings.TrimSpace(r.Player)
+	if wanted != "" {
+		for _, name := range candidates {
+			if samePlayer(name, wanted) {
+				state, err := r.readState(conn, name)
+				return state, err == nil, err
+			}
+		}
 		return State{}, false, nil
 	}
 
+	states := make([]State, 0, len(candidates))
+	for _, name := range candidates {
+		state, err := r.readState(conn, name)
+		if err != nil {
+			log.Printf("MPRIS read skipped for %s: %v", name, err)
+			continue
+		}
+		states = append(states, state)
+	}
+	state, ok := chooseState(states, r.PlayerPriority)
+	return state, ok, nil
+}
+
+func (r DBusReader) readState(conn *dbus.Conn, name string) (State, error) {
 	obj := conn.Object(name, objectPath)
 	metadataVariant, err := obj.GetProperty(playerInterface + ".Metadata")
 	if err != nil {
-		return State{}, false, err
+		return State{}, err
 	}
 	statusVariant, err := obj.GetProperty(playerInterface + ".PlaybackStatus")
 	if err != nil {
-		return State{}, false, err
+		return State{}, err
 	}
 	positionVariant, _ := obj.GetProperty(playerInterface + ".Position")
 
@@ -161,30 +196,112 @@ func (r DBusReader) Read(ctx context.Context) (State, bool, error) {
 		Position:       position,
 		Length:         variantDuration(metadata["mpris:length"]),
 		UpdatedAt:      now,
-	}, true, nil
+	}, nil
 }
 
-func (r DBusReader) resolvePlayer(ctx context.Context, conn *dbus.Conn) (string, error) {
-	names, err := listNames(ctx, conn)
-	if err != nil {
-		return "", err
-	}
-	wanted := strings.TrimSpace(r.Player)
+func mprisNames(names []string) []string {
 	players := make([]string, 0)
 	for _, name := range names {
 		if !strings.HasPrefix(name, busPrefix) {
 			continue
 		}
-		if wanted != "" && name != wanted && strings.TrimPrefix(name, busPrefix) != wanted {
-			continue
-		}
 		players = append(players, name)
 	}
 	sort.Strings(players)
-	if len(players) == 0 {
-		return "", nil
+	return players
+}
+
+func samePlayer(busName, wanted string) bool {
+	busName = strings.TrimSpace(busName)
+	wanted = strings.TrimSpace(wanted)
+	if strings.EqualFold(busName, wanted) {
+		return true
 	}
-	return players[0], nil
+	suffix := strings.TrimPrefix(busName, busPrefix)
+	if strings.EqualFold(suffix, wanted) {
+		return true
+	}
+	if strings.HasPrefix(wanted, busPrefix) || strings.Contains(wanted, ".") {
+		return false
+	}
+	return normalizePlayerName(busName) == normalizePlayerName(wanted)
+}
+
+func chooseState(states []State, priority []string) (State, bool) {
+	if len(states) == 0 {
+		return State{}, false
+	}
+	selected := states[0]
+	selectedScore := stateScore(selected, priority)
+	for _, state := range states[1:] {
+		score := stateScore(state, priority)
+		if score.betterThan(selectedScore) {
+			selected = state
+			selectedScore = score
+		}
+	}
+	return selected, true
+}
+
+type selectionScore struct {
+	status   int
+	priority int
+	name     string
+}
+
+func (s selectionScore) betterThan(other selectionScore) bool {
+	if s.status != other.status {
+		return s.status > other.status
+	}
+	if s.priority != other.priority {
+		return s.priority > other.priority
+	}
+	return s.name < other.name
+}
+
+func stateScore(state State, priority []string) selectionScore {
+	return selectionScore{
+		status:   playbackRank(state.PlaybackStatus),
+		priority: priorityRank(state.Player, priority),
+		name:     strings.ToLower(state.Player),
+	}
+}
+
+func playbackRank(status string) int {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "playing":
+		return 3
+	case "paused":
+		return 2
+	case "stopped":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func priorityRank(player string, priority []string) int {
+	normalized := normalizePlayerName(player)
+	for index, item := range priority {
+		if normalized == normalizePlayerName(item) {
+			return len(priority) - index
+		}
+	}
+	return 0
+}
+
+func normalizePlayerName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.TrimPrefix(name, busPrefix)
+	if index := strings.IndexByte(name, '.'); index > 0 {
+		// Browser players often expose volatile suffixes like
+		// vivaldi.instance35890. Treat the app prefix as the player name for
+		// priority matching while exact pinning still accepts the full bus name.
+		if strings.Contains(name[index+1:], "instance") {
+			name = name[:index]
+		}
+	}
+	return strings.ToLower(name)
 }
 
 func listNames(ctx context.Context, conn *dbus.Conn) ([]string, error) {

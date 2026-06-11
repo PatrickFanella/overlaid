@@ -134,9 +134,12 @@ http://<homelab-host>:5173/overlay/chat
 
 ```env
 MPRIS_ENABLED=true
-MPRIS_PLAYER=spotify # optional; also accepts org.mpris.MediaPlayer2.spotify
+MPRIS_PLAYER= # optional exact pin; accepts Feishin or org.mpris.MediaPlayer2.Feishin
+MPRIS_PLAYER_PRIORITY=Feishin,mpv,cliamp,ferrosonic,playerctld,vivaldi
 MPRIS_POLL_INTERVAL=2s
 ```
+
+If `MPRIS_PLAYER` is empty, over-laid scans `org.mpris.MediaPlayer2.*`, chooses a `Playing` player first, then `Paused`, then `Stopped`, and uses `MPRIS_PLAYER_PRIORITY` to break ties among players with the same playback state. Priority entries accept short names or full bus names. Set `MPRIS_PLAYER=Feishin` only when you want to pin one app and ignore the rest.
 
 MPRIS runs on the user session bus. Native API runs are the simplest supported path. Docker MPRIS is advanced: the base compose file only passes `DBUS_SESSION_BUS_ADDRESS`; you must also run as the matching host user and mount the host bus socket with an override, for example:
 

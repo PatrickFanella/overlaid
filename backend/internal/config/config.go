@@ -7,42 +7,44 @@ import (
 )
 
 type Config struct {
-	Addr               string
-	AllowedOrigin      string
-	WebhookSecret      string
-	PublicWebURL       string
-	OBSWebSocketURL    string
-	OBSWebSocketPass   string
-	TwitchClientID     string
-	TwitchClientSecret string
-	TwitchChannel      string
-	TwitchRedirectURL  string
-	TwitchTokenFile    string
-	TwitchScopes       []string
-	TwitchEventSub     bool
-	MPRISEnabled       bool
-	MPRISPlayer        string
-	MPRISPollInterval  time.Duration
+	Addr                string
+	AllowedOrigin       string
+	WebhookSecret       string
+	PublicWebURL        string
+	OBSWebSocketURL     string
+	OBSWebSocketPass    string
+	TwitchClientID      string
+	TwitchClientSecret  string
+	TwitchChannel       string
+	TwitchRedirectURL   string
+	TwitchTokenFile     string
+	TwitchScopes        []string
+	TwitchEventSub      bool
+	MPRISEnabled        bool
+	MPRISPlayer         string
+	MPRISPlayerPriority []string
+	MPRISPollInterval   time.Duration
 }
 
 func Load() Config {
 	return Config{
-		Addr:               env("API_ADDR", ":8080"),
-		AllowedOrigin:      env("CORS_ALLOWED_ORIGIN", "*"),
-		WebhookSecret:      env("WEBHOOK_SECRET", ""),
-		PublicWebURL:       env("PUBLIC_WEB_URL", "http://localhost:5173"),
-		OBSWebSocketURL:    env("OBS_WEBSOCKET_URL", "ws://localhost:4455"),
-		OBSWebSocketPass:   env("OBS_WEBSOCKET_PASSWORD", ""),
-		TwitchClientID:     env("TWITCH_CLIENT_ID", ""),
-		TwitchClientSecret: env("TWITCH_CLIENT_SECRET", ""),
-		TwitchChannel:      env("TWITCH_CHANNEL", "patrick__eff"),
-		TwitchRedirectURL:  env("TWITCH_REDIRECT_URL", "http://localhost:8080/api/auth/twitch/callback"),
-		TwitchTokenFile:    env("TWITCH_TOKEN_FILE", "/data/twitch-token.json"),
-		TwitchScopes:       envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers"}),
-		TwitchEventSub:     envBool("TWITCH_EVENTSUB_ENABLED", true),
-		MPRISEnabled:       envBool("MPRIS_ENABLED", false),
-		MPRISPlayer:        env("MPRIS_PLAYER", ""),
-		MPRISPollInterval:  envDuration("MPRIS_POLL_INTERVAL", 2*time.Second),
+		Addr:                env("API_ADDR", ":8080"),
+		AllowedOrigin:       env("CORS_ALLOWED_ORIGIN", "*"),
+		WebhookSecret:       env("WEBHOOK_SECRET", ""),
+		PublicWebURL:        env("PUBLIC_WEB_URL", "http://localhost:5173"),
+		OBSWebSocketURL:     env("OBS_WEBSOCKET_URL", "ws://localhost:4455"),
+		OBSWebSocketPass:    env("OBS_WEBSOCKET_PASSWORD", ""),
+		TwitchClientID:      env("TWITCH_CLIENT_ID", ""),
+		TwitchClientSecret:  env("TWITCH_CLIENT_SECRET", ""),
+		TwitchChannel:       env("TWITCH_CHANNEL", "patrick__eff"),
+		TwitchRedirectURL:   env("TWITCH_REDIRECT_URL", "http://localhost:8080/api/auth/twitch/callback"),
+		TwitchTokenFile:     env("TWITCH_TOKEN_FILE", "/data/twitch-token.json"),
+		TwitchScopes:        envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers"}),
+		TwitchEventSub:      envBool("TWITCH_EVENTSUB_ENABLED", true),
+		MPRISEnabled:        envBool("MPRIS_ENABLED", false),
+		MPRISPlayer:         env("MPRIS_PLAYER", ""),
+		MPRISPlayerPriority: envSplit("MPRIS_PLAYER_PRIORITY", []string{"Feishin", "mpv", "cliamp", "ferrosonic", "playerctld", "vivaldi"}),
+		MPRISPollInterval:   envDuration("MPRIS_POLL_INTERVAL", 2*time.Second),
 	}
 }
 
@@ -66,6 +68,28 @@ func envList(key string, fallback []string) []string {
 	}
 
 	return fields
+}
+
+func envSplit(key string, fallback []string) []string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return append([]string(nil), fallback...)
+	}
+
+	fields := strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n'
+	})
+	items := make([]string, 0, len(fields))
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if field != "" {
+			items = append(items, field)
+		}
+	}
+	if len(items) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return items
 }
 
 func envBool(key string, fallback bool) bool {

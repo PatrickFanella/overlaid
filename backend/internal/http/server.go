@@ -34,7 +34,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) StartBackground(ctx context.Context) {
 	if s.config.MPRISEnabled {
 		poller := mpris.Poller{
-			Reader:   mpris.DBusReader{Player: s.config.MPRISPlayer},
+			Reader:   mpris.DBusReader{Player: s.config.MPRISPlayer, PlayerPriority: s.config.MPRISPlayerPriority},
 			Interval: s.config.MPRISPollInterval,
 			Publish:  s.bus.Publish,
 		}
