@@ -33,12 +33,17 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/dashboard/setup" />);
 
     expect(html).toContain('OBS setup workflow');
+    expect(html).toContain('Overlay source URLs');
+    expect(html).toContain('Stream presets');
   });
 
   it('renders the dashboard sources route', () => {
     const html = renderToString(<App pathname="/dashboard/sources" />);
 
     expect(html).toContain('OBS setup workflow');
+    expect(html).toContain('Overlay source URLs');
+    expect(html).toContain('/overlay/alerts');
+    expect(html).toContain('Stream presets');
   });
 
   it('renders the dashboard control route', () => {
