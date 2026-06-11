@@ -32,6 +32,10 @@ services:
       TWITCH_TOKEN_FILE: ${TWITCH_TOKEN_FILE:-/data/twitch-token.json}
       TWITCH_EVENTSUB_ENABLED: ${TWITCH_EVENTSUB_ENABLED:-true}
       TWITCH_SCOPES: ${TWITCH_SCOPES:-user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers}
+      MPRIS_ENABLED: ${MPRIS_ENABLED:-false}
+      MPRIS_PLAYER: ${MPRIS_PLAYER:-}
+      MPRIS_POLL_INTERVAL: ${MPRIS_POLL_INTERVAL:-2s}
+      DBUS_SESSION_BUS_ADDRESS: ${DBUS_SESSION_BUS_ADDRESS:-}
     volumes:
       - api-data:/data
     depends_on:

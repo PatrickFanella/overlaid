@@ -130,6 +130,26 @@ http://<homelab-host>:5173/overlay/chat
 {"title":"Follower goal","message":"next unlock at 700","data":{"goal":{"id":"followers","label":"Follower goal","current":430,"target":620,"unit":"followers","note":"next unlock at 700"}}}
 ```
 
+`/overlay/now-playing` listens for backend `now_playing` events from Linux MPRIS. Enable it on a host that can access your user session D-Bus:
+
+```env
+MPRIS_ENABLED=true
+MPRIS_PLAYER=spotify # optional; also accepts org.mpris.MediaPlayer2.spotify
+MPRIS_POLL_INTERVAL=2s
+```
+
+MPRIS runs on the user session bus. Native API runs are the simplest supported path. Docker MPRIS is advanced: the base compose file only passes `DBUS_SESSION_BUS_ADDRESS`; you must also run as the matching host user and mount the host bus socket with an override, for example:
+
+```yaml
+services:
+  api:
+    user: "1000:1000"
+    environment:
+      DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/1000/bus
+    volumes:
+      - /run/user/1000/bus:/run/user/1000/bus
+```
+
 ### Test commands
 
 Send a test alert:

@@ -7,6 +7,7 @@ import (
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/mpris"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 )
@@ -31,6 +32,18 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) StartBackground(ctx context.Context) {
+	if s.config.MPRISEnabled {
+		poller := mpris.Poller{
+			Reader:   mpris.DBusReader{Player: s.config.MPRISPlayer},
+			Interval: s.config.MPRISPollInterval,
+			Publish:  s.bus.Publish,
+		}
+		go func() {
+			log.Printf("MPRIS now-playing background worker enabled")
+			poller.Run(ctx)
+		}()
+	}
+
 	if !s.config.TwitchEventSub {
 		return
 	}

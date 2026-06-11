@@ -14,6 +14,7 @@ const (
 	EventTypeService     EventType = "service_status"
 	EventTypeChatMessage EventType = "chat_message"
 	EventTypeCommand     EventType = "custom_command"
+	EventTypeNowPlaying  EventType = "now_playing"
 )
 
 type Severity string
@@ -53,6 +54,19 @@ func NewClear(source string) Event {
 		ID:        newID(),
 		Type:      EventTypeClear,
 		Source:    source,
+		CreatedAt: time.Now().UTC(),
+	}
+}
+
+func NewNowPlaying(source, title, message string, data map[string]any) Event {
+	return Event{
+		ID:        newID(),
+		Type:      EventTypeNowPlaying,
+		Source:    source,
+		Title:     title,
+		Message:   message,
+		Severity:  SeverityInfo,
+		Data:      data,
 		CreatedAt: time.Now().UTC(),
 	}
 }

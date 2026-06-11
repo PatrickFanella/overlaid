@@ -43,10 +43,17 @@ describe('App routing', () => {
     expect(html).toContain('Stream systems nominal');
   });
 
-  it('renders remaining placeholder overlay routes', () => {
+  it('renders the now-playing overlay route', () => {
     const html = renderToString(<App pathname="/overlay/now-playing" />);
 
     expect(html).toContain('Now playing');
+    expect(html).toContain('Waiting for MPRIS');
+  });
+
+  it('renders remaining placeholder overlay routes', () => {
+    const html = renderToString(<App pathname="/overlay/brb" />);
+
+    expect(html).toContain('BRB overlay');
     expect(html).toContain('OBS browser-source ready');
   });
 
@@ -88,5 +95,20 @@ describe('overlay event utilities', () => {
       message: 'World',
       severity: 'success',
     });
+  });
+
+  it('parses SSE now-playing payloads', () => {
+    const event = parseOverlayEvent(
+      '{"id":"np","type":"now_playing","source":"mpris","title":"Song","message":"Artist","data":{"player":"spotify","positionMs":30000,"lengthMs":120000},"createdAt":"2026-06-10T00:00:00.000Z"}',
+      'now_playing',
+    );
+
+    expect(event).toMatchObject({
+      id: 'np',
+      type: 'now_playing',
+      source: 'mpris',
+      title: 'Song',
+    });
+    expect(event?.data).toMatchObject({ player: 'spotify', positionMs: 30000 });
   });
 });

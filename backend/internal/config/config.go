@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -19,6 +20,9 @@ type Config struct {
 	TwitchTokenFile    string
 	TwitchScopes       []string
 	TwitchEventSub     bool
+	MPRISEnabled       bool
+	MPRISPlayer        string
+	MPRISPollInterval  time.Duration
 }
 
 func Load() Config {
@@ -36,6 +40,9 @@ func Load() Config {
 		TwitchTokenFile:    env("TWITCH_TOKEN_FILE", "/data/twitch-token.json"),
 		TwitchScopes:       envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers"}),
 		TwitchEventSub:     envBool("TWITCH_EVENTSUB_ENABLED", true),
+		MPRISEnabled:       envBool("MPRIS_ENABLED", false),
+		MPRISPlayer:        env("MPRIS_PLAYER", ""),
+		MPRISPollInterval:  envDuration("MPRIS_POLL_INTERVAL", 2*time.Second),
 	}
 }
 
@@ -75,4 +82,16 @@ func envBool(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration <= 0 {
+		return fallback
+	}
+	return duration
 }

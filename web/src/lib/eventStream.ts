@@ -9,7 +9,7 @@ export type OverlayStreamHandlers = {
   onStatusChange?: (status: OverlayStreamStatus) => void;
 };
 
-const overlayEventTypes = ['alert', 'clear', 'service_status', 'chat_message', 'custom_command'] as const;
+const overlayEventTypes = ['alert', 'clear', 'service_status', 'chat_message', 'custom_command', 'now_playing'] as const;
 
 export function getOverlayApiBaseUrl(explicitBaseUrl?: string) {
   return normalizeBaseUrl(explicitBaseUrl || getQueryApiBaseUrl() || import.meta.env.VITE_API_BASE_URL || getDefaultApiBaseUrl());

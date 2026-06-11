@@ -3,7 +3,8 @@ export type OverlayEventType =
   | 'clear'
   | 'service_status'
   | 'chat_message'
-  | 'custom_command';
+  | 'custom_command'
+  | 'now_playing';
 
 export type OverlaySeverity = 'info' | 'success' | 'warning' | 'error';
 
@@ -24,6 +25,7 @@ const eventTypes = new Set<OverlayEventType>([
   'service_status',
   'chat_message',
   'custom_command',
+  'now_playing',
 ]);
 
 const severities = new Set<OverlaySeverity>(['info', 'success', 'warning', 'error']);

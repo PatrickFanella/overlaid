@@ -5,7 +5,7 @@ const routes = [
   ['/overlay/alerts', 'Live alert overlay', 'Fully functional SSE-driven alert browser source.'],
   ['/overlay/chat', 'Chat overlay', 'Live Twitch chat browser source.'],
   ['/overlay/goals', 'Goals overlay', 'Placeholder route for progress widgets.'],
-  ['/overlay/now-playing', 'Now playing', 'Placeholder route for music/media status.'],
+  ['/overlay/now-playing', 'Now playing', 'Live MPRIS music/media browser source.'],
   ['/overlay/ticker', 'Ticker overlay', 'Placeholder route for rotating status cards.'],
   ['/overlay/brb', 'BRB overlay', 'Placeholder route for intermission scenes.'],
   ['/overlay/debug', 'Debug overlay', 'Event inspector for development and QA.'],
