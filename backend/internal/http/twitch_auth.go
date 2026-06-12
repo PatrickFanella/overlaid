@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 )
 
 var (
@@ -69,16 +71,17 @@ type twitchTokenDisk struct {
 }
 
 type twitchStatusResponse struct {
-	Configured     bool       `json:"configured"`
-	Authenticated  bool       `json:"authenticated"`
-	ChannelTarget  string     `json:"channelTarget"`
-	LoginURL       string     `json:"loginUrl"`
-	Scopes         []string   `json:"scopes"`
-	StreamerLogin  string     `json:"streamerLogin,omitempty"`
-	StreamerUserID string     `json:"streamerUserId,omitempty"`
-	TokenExpiresAt *time.Time `json:"tokenExpiresAt,omitempty"`
-	AuthError      string     `json:"authError,omitempty"`
-	LastAuthError  string     `json:"lastAuthError,omitempty"`
+	Configured     bool               `json:"configured"`
+	Authenticated  bool               `json:"authenticated"`
+	ChannelTarget  string             `json:"channelTarget"`
+	LoginURL       string             `json:"loginUrl"`
+	Scopes         []string           `json:"scopes"`
+	StreamerLogin  string             `json:"streamerLogin,omitempty"`
+	StreamerUserID string             `json:"streamerUserId,omitempty"`
+	TokenExpiresAt *time.Time         `json:"tokenExpiresAt,omitempty"`
+	AuthError      string             `json:"authError,omitempty"`
+	LastAuthError  string             `json:"lastAuthError,omitempty"`
+	EventSub       twitch.Diagnostics `json:"eventSub"`
 }
 
 type twitchValidateResponse struct {
@@ -386,6 +389,7 @@ func (s *Server) twitchStatus(w http.ResponseWriter, r *http.Request) {
 		LoginURL:      "/api/auth/twitch/login",
 		Scopes:        append([]string(nil), s.config.TwitchScopes...),
 		StreamerLogin: s.config.TwitchChannel,
+		EventSub:      s.twitchEventSubDiagnostics.Snapshot(),
 	}
 
 	if token, ok := s.ensureTwitchToken(r.Context()); ok {

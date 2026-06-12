@@ -16,12 +16,13 @@ import (
 )
 
 type Server struct {
-	config config.Config
-	bus    *events.Bus
-	obs    obsws.Client
-	state  *state.Store
-	twitch *twitchAuthStore
-	mux    *http.ServeMux
+	config                    config.Config
+	bus                       *events.Bus
+	obs                       obsws.Client
+	state                     *state.Store
+	twitch                    *twitchAuthStore
+	twitchEventSubDiagnostics *twitch.DiagnosticsStore
+	mux                       *http.ServeMux
 }
 
 func NewServer(cfg config.Config, bus *events.Bus) *Server {
@@ -29,7 +30,7 @@ func NewServer(cfg config.Config, bus *events.Bus) *Server {
 	if err := store.Load(); err != nil {
 		log.Printf("failed to load overlay state: %v", err)
 	}
-	server := &Server{config: cfg, bus: bus, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), mux: http.NewServeMux()}
+	server := &Server{config: cfg, bus: bus, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
 	_ = server.twitch.loadPersistedToken()
 	server.routes()
 	return server
@@ -74,7 +75,8 @@ func (s *Server) StartBackground(ctx context.Context) {
 				Scopes:      append([]string(nil), token.Scope...),
 			}, true
 		},
-		Publish: s.bus.Publish,
+		Publish:     s.bus.Publish,
+		Diagnostics: s.twitchEventSubDiagnostics,
 	}
 
 	go func() {

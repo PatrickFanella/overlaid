@@ -415,6 +415,9 @@ func TestTwitchStatusWithoutAuth(t *testing.T) {
 	if len(status.Scopes) != 2 {
 		t.Fatalf("unexpected scopes: %#v", status.Scopes)
 	}
+	if !status.EventSub.Enabled {
+		t.Fatal("expected eventSub.enabled true")
+	}
 }
 
 func TestTwitchStateExpires(t *testing.T) {
@@ -445,6 +448,7 @@ func newTwitchServerWithTokenFile(t *testing.T, tokenFile string) *Server {
 		TwitchRedirectURL:  "http://localhost:8080/api/auth/twitch/callback",
 		TwitchTokenFile:    tokenFile,
 		TwitchScopes:       []string{"user:read:chat", "user:write:chat"},
+		TwitchEventSub:     true,
 	}, events.NewBus(4))
 }
 

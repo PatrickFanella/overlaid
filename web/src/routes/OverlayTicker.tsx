@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { loadDashboardConfig } from '../lib/dashboardConfig';
 import { connectOverlayStream, getOverlayApiBaseUrl, type OverlayStreamStatus } from '../lib/eventStream';
 import { formatOverlayStreamLabel, type OverlayEvent, type OverlaySeverity } from '../lib/events';
 
@@ -10,9 +11,8 @@ type TickerItem = {
   source: string;
 };
 
-const maxTickerItems = 8;
-
 export function OverlayTickerPage() {
+  const display = loadDashboardConfig().display;
   const [items, setItems] = useState<TickerItem[]>([]);
   const [status, setStatus] = useState<OverlayStreamStatus>('connecting');
 
@@ -29,7 +29,7 @@ export function OverlayTickerPage() {
           return;
         }
 
-        setItems((current) => [item, ...current.filter((existing) => existing.id !== item.id)].slice(0, maxTickerItems));
+        setItems((current) => [item, ...current.filter((existing) => existing.id !== item.id)].slice(0, display.tickerMaxItems));
       },
       onStatusChange(nextStatus) {
         setStatus(nextStatus);
@@ -37,7 +37,7 @@ export function OverlayTickerPage() {
     });
 
     return () => stream.close();
-  }, []);
+  }, [display.tickerMaxItems]);
 
   const streamLabel = useMemo(() => formatOverlayStreamLabel(status), [status]);
 

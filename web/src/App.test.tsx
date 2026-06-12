@@ -37,6 +37,12 @@ describe('App routing', () => {
     expect(html).toContain('Browser sources added');
   });
 
+  it('renders the dashboard live preflight route', () => {
+    const html = renderToString(<App pathname="/dashboard/live" />);
+
+    expect(html).toContain('Live preflight');
+  });
+
   it('renders the dashboard sources route', () => {
     const html = renderToString(<App pathname="/dashboard/sources" />);
 
@@ -52,6 +58,8 @@ describe('App routing', () => {
     expect(html).toContain('Stream control');
     expect(html).toContain('operator secret missing');
     expect(html).toContain('Edit secret');
+    expect(html).toContain('Run overlay smoke sequence');
+    expect(html).toContain('require confirm');
   });
 
   it('renders the dashboard config route', () => {
@@ -60,6 +68,7 @@ describe('App routing', () => {
     expect(html).toContain('Operator config');
     expect(html).toContain('Secret header');
     expect(html).toContain('MPRIS decision');
+    expect(html).toContain('Overlay noise controls');
   });
 
   it('renders the goals overlay route', () => {

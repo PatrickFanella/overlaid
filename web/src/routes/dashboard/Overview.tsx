@@ -14,6 +14,7 @@ export function DashboardOverviewPage() {
 
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <div className="grid gap-2 md:grid-cols-4">
+          <a className="hud-action-button hud-action-button--compact" href="/dashboard/live">Live preflight</a>
           <a className="hud-action-button hud-action-button--compact" href="/dashboard/setup">Setup checklist</a>
           <a className="hud-action-button hud-action-button--compact" href="/dashboard/sources">Source URLs</a>
           <a className="hud-action-button hud-action-button--compact" href="/dashboard/control">Stream control</a>

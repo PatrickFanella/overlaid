@@ -30,6 +30,12 @@ export function DashboardConfigPage() {
     saveDashboardConfig(next);
   }
 
+  function updateDisplay(key: keyof DashboardConfig['display'], value: number) {
+    const next = { ...config, display: { ...config.display, [key]: Math.max(0, Math.floor(value || 0)) } };
+    setConfig(next);
+    saveDashboardConfig(next);
+  }
+
   return (
     <DashboardShell activePath="/dashboard/config">
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
@@ -67,6 +73,17 @@ export function DashboardConfigPage() {
       </section>
 
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+        <p className="hud-label">Overlay noise controls</p>
+        <p className="hud-copy mt-1 text-xs text-zinc-300">Tune how many live items stay visible and how aggressively repeated alerts are suppressed.</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <NumberControl label="Alert max visible" value={config.display.alertMaxVisible} onChange={(value) => updateDisplay('alertMaxVisible', value)} />
+          <NumberControl label="Alert dedupe seconds" value={config.display.alertDedupeSeconds} onChange={(value) => updateDisplay('alertDedupeSeconds', value)} />
+          <NumberControl label="Chat max visible" value={config.display.chatMaxVisible} onChange={(value) => updateDisplay('chatMaxVisible', value)} />
+          <NumberControl label="Ticker max items" value={config.display.tickerMaxItems} onChange={(value) => updateDisplay('tickerMaxItems', value)} />
+        </div>
+      </section>
+
+      <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <p className="hud-label">MPRIS decision</p>
         <p className="hud-copy mt-1 text-xs text-zinc-300">Use host MPRIS now-playing, keep it disabled, or decide later.</p>
         <div className="mt-3 grid gap-2 md:grid-cols-3">
@@ -80,5 +97,14 @@ export function DashboardConfigPage() {
         </div>
       </section>
     </DashboardShell>
+  );
+}
+
+function NumberControl({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="grid gap-2 text-xs text-zinc-300">
+      <span className="hud-kicker">{label}</span>
+      <input className="hud-input" type="number" min="0" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
   );
 }

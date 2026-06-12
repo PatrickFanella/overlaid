@@ -1,5 +1,6 @@
 import { clearOverlays, sendTestAlert, setBRBStatus, setOBSInputMute, setOBSScene } from '../../../lib/api';
 import type { QuickAction } from '../../../lib/dashboardConfig';
+import { ConfirmableActionButton } from './ConfirmableActionButton';
 
 type QuickActionRunnerProps = {
   actions: QuickAction[];
@@ -36,10 +37,7 @@ export function QuickActionRunner({ actions, apiBaseUrl, operatorSecret, isRunni
 
       <div className="hud-dashboard-grid hud-dashboard-grid--three mt-5">
         {actions.map((action) => (
-          <button key={action.id} className="hud-action-button hud-action-button--compact" type="button" disabled={isRunning} onClick={() => execute(action)}>
-            <span className="hud-kicker">{action.kind}</span>
-            <span className="mt-1 block text-sm font-bold text-white">{action.label}</span>
-          </button>
+          <ConfirmableActionButton key={action.id} label={action.label} confirm={action.confirm} disabled={isRunning} onRun={() => execute(action)} />
         ))}
       </div>
     </section>

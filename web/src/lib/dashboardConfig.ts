@@ -19,13 +19,20 @@ export type ControlWidget = {
   compact: boolean;
 };
 
+export type DisplayConfig = {
+  alertMaxVisible: number;
+  alertDedupeSeconds: number;
+  chatMaxVisible: number;
+  tickerMaxItems: number;
+};
+
 export type QuickAction =
-  | { id: string; label: string; kind: 'setScene'; sceneName: string }
-  | { id: string; label: string; kind: 'sendAlert'; title: string; message: string; severity: 'info' | 'success' | 'warning' | 'error' }
-  | { id: string; label: string; kind: 'showBRB'; title: string; message: string; eta: string; items: string[] }
-  | { id: string; label: string; kind: 'hideBRB' }
-  | { id: string; label: string; kind: 'clearOverlays' }
-  | { id: string; label: string; kind: 'muteInput'; inputName: string; muted: boolean };
+  | { id: string; label: string; kind: 'setScene'; sceneName: string; confirm?: boolean }
+  | { id: string; label: string; kind: 'sendAlert'; title: string; message: string; severity: 'info' | 'success' | 'warning' | 'error'; confirm?: boolean }
+  | { id: string; label: string; kind: 'showBRB'; title: string; message: string; eta: string; items: string[]; confirm?: boolean }
+  | { id: string; label: string; kind: 'hideBRB'; confirm?: boolean }
+  | { id: string; label: string; kind: 'clearOverlays'; confirm?: boolean }
+  | { id: string; label: string; kind: 'muteInput'; inputName: string; muted: boolean; confirm?: boolean };
 
 export const quickActionKinds = ['setScene', 'sendAlert', 'showBRB', 'hideBRB', 'clearOverlays', 'muteInput'] as const;
 
@@ -34,6 +41,7 @@ export type DashboardConfig = {
   streamPresets: StreamPreset[];
   quickActions: QuickAction[];
   controlWidgets: ControlWidget[];
+  display: DisplayConfig;
   customCSS: string;
   mprisDecision: 'enabled' | 'disabled' | 'undecided';
 };
@@ -56,10 +64,10 @@ export const defaultDashboardConfig: DashboardConfig = {
   ],
   quickActions: [
     { id: 'main-scene', label: 'Go Main', kind: 'setScene', sceneName: 'Main' },
-    { id: 'brb-scene', label: 'Go BRB', kind: 'setScene', sceneName: 'BRB' },
+    { id: 'brb-scene', label: 'Go BRB', kind: 'setScene', sceneName: 'BRB', confirm: true },
     { id: 'sample-alert', label: 'Sample Alert', kind: 'sendAlert', title: 'Sample alert', message: 'Quick action fired', severity: 'success' },
     { id: 'show-brb', label: 'Show BRB', kind: 'showBRB', title: 'Be right back', message: 'Short intermission. Stream resumes soon.', eta: '5 min', items: ['Hydrate', 'Stretch', 'Chat stays live'] },
-    { id: 'hide-brb', label: 'Hide BRB', kind: 'hideBRB' },
+    { id: 'hide-brb', label: 'Hide BRB', kind: 'hideBRB', confirm: false },
   ],
   controlWidgets: [
     { id: 'quick-actions', title: 'Quick actions', enabled: true, order: 1, compact: true },
@@ -68,6 +76,7 @@ export const defaultDashboardConfig: DashboardConfig = {
     { id: 'obs', title: 'OBS controls', enabled: true, order: 4, compact: false },
     { id: 'editor', title: 'Quick action editor', enabled: true, order: 5, compact: false },
   ],
+  display: { alertMaxVisible: 3, alertDedupeSeconds: 8, chatMaxVisible: 8, tickerMaxItems: 8 },
   customCSS: `body { background: transparent !important; }\n\n/* Compact OBS crop helper */\n#root { overflow: hidden; }`,
   mprisDecision: 'undecided',
 };
@@ -78,7 +87,8 @@ export function loadDashboardConfig(): DashboardConfig {
   if (!raw) return defaultDashboardConfig;
 
   try {
-    return { ...defaultDashboardConfig, ...JSON.parse(raw) } as DashboardConfig;
+    const parsed = JSON.parse(raw) as Partial<DashboardConfig>;
+    return { ...defaultDashboardConfig, ...parsed, display: { ...defaultDashboardConfig.display, ...parsed.display } } as DashboardConfig;
   } catch {
     return defaultDashboardConfig;
   }

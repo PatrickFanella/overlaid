@@ -5,6 +5,7 @@ import { loadOperatorSecret } from '../../lib/dashboardConfig';
 
 const dashboardLinks = [
   ['/dashboard', 'Overview'],
+  ['/dashboard/live', 'Live'],
   ['/dashboard/setup', 'Setup'],
   ['/dashboard/sources', 'Sources'],
   ['/dashboard/control', 'Stream control'],

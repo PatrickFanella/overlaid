@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -35,12 +36,98 @@ type Token struct {
 type TokenProvider func(context.Context) (Token, bool)
 type Publisher func(events.Event)
 
+type Diagnostics struct {
+	Enabled           bool      `json:"enabled"`
+	Connected         bool      `json:"connected"`
+	LastConnectedAt   time.Time `json:"lastConnectedAt,omitempty"`
+	LastEventAt       time.Time `json:"lastEventAt,omitempty"`
+	LastError         string    `json:"lastError,omitempty"`
+	SubscriptionsMade int       `json:"subscriptionsMade"`
+	SubscriptionsPlan int       `json:"subscriptionsPlan"`
+}
+
+type DiagnosticsStore struct {
+	mu sync.RWMutex
+	d  Diagnostics
+}
+
+func NewDiagnosticsStore(enabled bool) *DiagnosticsStore {
+	return &DiagnosticsStore{d: Diagnostics{Enabled: enabled}}
+}
+
+func (s *DiagnosticsStore) Snapshot() Diagnostics {
+	if s == nil {
+		return Diagnostics{}
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.d
+}
+
+func (s *DiagnosticsStore) MarkConnected(created, planned int) {
+	if s == nil {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.d.Connected = true
+	s.d.LastConnectedAt = time.Now().UTC()
+	s.d.SubscriptionsMade = created
+	s.d.SubscriptionsPlan = planned
+	if created == planned {
+		s.d.LastError = ""
+	}
+}
+
+func (s *DiagnosticsStore) MarkEvent() {
+	if s == nil {
+		return
+	}
+
+	s.mu.Lock()
+	s.d.LastEventAt = time.Now().UTC()
+	s.mu.Unlock()
+}
+
+func (s *DiagnosticsStore) MarkError(err error) {
+	if s == nil || err == nil {
+		return
+	}
+
+	message := strings.TrimSpace(err.Error())
+	if message == "" {
+		return
+	}
+
+	s.mu.Lock()
+	s.d.LastError = message
+	s.mu.Unlock()
+}
+
+func (s *DiagnosticsStore) MarkDisconnected(err error) {
+	if s == nil {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.d.Connected = false
+	if err != nil && strings.TrimSpace(s.d.LastError) == "" {
+		if message := strings.TrimSpace(err.Error()); message != "" {
+			s.d.LastError = message
+		}
+	}
+}
+
 type Client struct {
 	ClientID         string
 	WebSocketURL     string
 	SubscriptionURL  string
 	TokenProvider    TokenProvider
 	Publish          Publisher
+	Diagnostics      *DiagnosticsStore
 	HTTPClient       *http.Client
 	Dialer           *websocket.Dialer
 	Now              func() time.Time
@@ -175,9 +262,14 @@ func (c *Client) Run(ctx context.Context) {
 			continue
 		}
 
-		if err := c.runSession(ctx, token, c.websocketURL(), true); err != nil && ctx.Err() == nil {
-			log.Printf("Twitch EventSub session ended: %v", err)
-			wait(ctx, connectionRetryDelay)
+		if err := c.runSession(ctx, token, c.websocketURL(), true); err != nil {
+			if c.Diagnostics != nil {
+				c.Diagnostics.MarkDisconnected(err)
+			}
+			if ctx.Err() == nil {
+				log.Printf("Twitch EventSub session ended: %v", err)
+				wait(ctx, connectionRetryDelay)
+			}
 		}
 	}
 }
@@ -211,9 +303,14 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 	if createSubscriptions {
 		var planned int
 		created, planned = c.createSubscriptions(ctx, token, message.Payload.Session.ID)
+		if c.Diagnostics != nil {
+			c.Diagnostics.MarkConnected(created, planned)
+		}
 		if planned > 0 && created == 0 {
 			return errors.New("eventsub session created zero subscriptions")
 		}
+	} else if c.Diagnostics != nil {
+		c.Diagnostics.MarkConnected(0, 0)
 	}
 	log.Printf("Twitch EventSub connected session=%s subscriptions=%d", message.Payload.Session.ID, created)
 
@@ -235,6 +332,9 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 			return c.runSessionWithGrace(ctx, token, url)
 		case "notification":
 			if event, ok := MapNotification(message); ok {
+				if c.Diagnostics != nil {
+					c.Diagnostics.MarkEvent()
+				}
 				c.Publish(event)
 			}
 		case "revocation":
@@ -260,6 +360,9 @@ func (c *Client) createSubscriptions(ctx context.Context, token Token, sessionID
 		planned++
 		if err := c.createSubscription(ctx, token, sessionID, spec); err != nil {
 			log.Printf("Twitch EventSub subscribe failed type=%s: %v", spec.Type, err)
+			if c.Diagnostics != nil {
+				c.Diagnostics.MarkError(err)
+			}
 			continue
 		}
 		created++

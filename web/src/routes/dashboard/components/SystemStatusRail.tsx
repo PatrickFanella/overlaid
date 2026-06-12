@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchOBSStatus, fetchTwitchStatus, type OBSStatus, type TwitchStatus } from '../../../lib/api';
 import type { DashboardConfig } from '../../../lib/dashboardConfig';
+import { EventSubDiagnostics } from './EventSubDiagnostics';
 
 type SystemStatusRailProps = {
   apiBaseUrl: string;
@@ -75,6 +76,10 @@ export function SystemStatusRail({ apiBaseUrl, operatorSecret, config }: SystemS
         <StatusItem label="Operator" value={operatorSecret ? 'loaded' : 'missing'} detail={operatorSecret ? 'session secret in browser storage' : 'enter secret in Config'} accent={operatorSecret ? 'emerald' : 'rose'} />
         <StatusItem label="Quick actions" value={String(config.quickActions.length)} detail="editable presets" accent="fuchsia" />
         <StatusItem label="Setup" value={config.setupChecklist.every((item) => item.completed) ? 'complete' : 'in progress'} detail="local checklist state" accent="amber" />
+      </div>
+
+      <div className="mt-2">
+        <EventSubDiagnostics status={state.twitch} />
       </div>
     </section>
   );

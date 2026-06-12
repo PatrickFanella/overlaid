@@ -11,6 +11,15 @@ export type TwitchStatus = {
   tokenExpiresAt?: string;
   authError?: string;
   lastAuthError?: string;
+  eventSub?: {
+    enabled: boolean;
+    connected: boolean;
+    lastConnectedAt?: string;
+    lastEventAt?: string;
+    lastError?: string;
+    subscriptionsMade: number;
+    subscriptionsPlan: number;
+  };
 };
 
 export type AlertPayload = {

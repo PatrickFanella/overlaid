@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { loadDashboardConfig } from '../lib/dashboardConfig';
 import { connectOverlayStream, getOverlayApiBaseUrl, type OverlayStreamStatus } from '../lib/eventStream';
 import { formatOverlayStreamLabel, type OverlayEvent } from '../lib/events';
 
-const maxMessages = 8;
-
 export function OverlayChatPage() {
+  const display = loadDashboardConfig().display;
   const [messages, setMessages] = useState<OverlayEvent[]>([]);
   const [status, setStatus] = useState<OverlayStreamStatus>('connecting');
 
@@ -20,7 +20,7 @@ export function OverlayChatPage() {
           return;
         }
 
-        setMessages((current) => [...current, event].slice(-maxMessages));
+        setMessages((current) => [...current, event].slice(-display.chatMaxVisible));
       },
       onStatusChange(nextStatus) {
         setStatus(nextStatus);
@@ -30,7 +30,7 @@ export function OverlayChatPage() {
     return () => {
       stream.close();
     };
-  }, []);
+  }, [display.chatMaxVisible]);
 
   const streamLabel = useMemo(() => formatOverlayStreamLabel(status), [status]);
 

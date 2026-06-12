@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { loadDashboardConfig } from '../lib/dashboardConfig';
 import { connectOverlayStream, getOverlayApiBaseUrl, type OverlayStreamStatus } from '../lib/eventStream';
 import { formatOverlayStreamLabel, type OverlayEvent } from '../lib/events';
 
 type AlertEntry = OverlayEvent;
 
-const maxAlerts = 3;
-
 export function OverlayAlertsPage() {
+  const display = loadDashboardConfig().display;
   const [alerts, setAlerts] = useState<AlertEntry[]>([]);
   const [status, setStatus] = useState<OverlayStreamStatus>('connecting');
 
@@ -23,7 +23,12 @@ export function OverlayAlertsPage() {
           return;
         }
 
-        setAlerts((current) => [event, ...current].slice(0, maxAlerts));
+        setAlerts((current) => {
+          if (isDuplicateAlert(current, event, display.alertDedupeSeconds)) {
+            return current;
+          }
+          return [event, ...current].slice(0, display.alertMaxVisible);
+        });
       },
       onStatusChange(nextStatus) {
         setStatus(nextStatus);
@@ -33,7 +38,7 @@ export function OverlayAlertsPage() {
     return () => {
       stream.close();
     };
-  }, []);
+  }, [display.alertDedupeSeconds, display.alertMaxVisible]);
 
   const streamLabel = useMemo(() => formatOverlayStreamLabel(status), [status]);
 
@@ -89,6 +94,15 @@ export function OverlayAlertsPage() {
       </div>
     </main>
   );
+}
+
+function isDuplicateAlert(current: AlertEntry[], next: AlertEntry, dedupeSeconds: number) {
+  if (dedupeSeconds <= 0) {
+    return false;
+  }
+
+  const cutoff = Date.now() - dedupeSeconds * 1000;
+  return current.some((alert) => alert.title === next.title && alert.message === next.message && Date.parse(alert.createdAt) >= cutoff);
 }
 
 function severityLabel(severity: AlertEntry['severity']) {

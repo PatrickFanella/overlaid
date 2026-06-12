@@ -79,6 +79,8 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 - `/overlay/brb`
 - `/overlay/debug`
 
+For live operation, follow `docs/runbooks/live-stream-preflight.md`.
+
 ### OBS browser source
 
 Open the operator dashboard at:

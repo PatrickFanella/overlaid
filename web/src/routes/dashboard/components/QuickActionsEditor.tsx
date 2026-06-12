@@ -98,6 +98,16 @@ export function QuickActionsEditor({ config, onChange, compact = false }: QuickA
               </button>
             </div>
 
+            <label className="mt-3 flex items-center gap-2 text-xs text-zinc-300">
+              <input
+                className="size-4 accent-cyan-300"
+                type="checkbox"
+                checked={Boolean(action.confirm)}
+                onChange={(event) => updateAction(index, { confirm: event.target.checked })}
+              />
+              require confirm
+            </label>
+
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               {action.kind === 'setScene' ? (
                 <label className="grid gap-2 text-sm text-zinc-300">

@@ -7,6 +7,7 @@ import { ControlLayoutEditor } from './components/ControlLayoutEditor';
 import { OBSControls } from './components/OBSControls';
 import { QuickActionRunner } from './components/QuickActionRunner';
 import { QuickActionsEditor } from './components/QuickActionsEditor';
+import { RehearsalRunner } from './components/RehearsalRunner';
 import { SampleEventControls } from './components/SampleEventControls';
 
 export function DashboardControlPage() {
@@ -48,6 +49,7 @@ export function DashboardControlPage() {
       </section>
 
       <ControlLayoutEditor config={config} onChange={updateConfig} />
+      <RehearsalRunner apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} />
       <div className="hud-route-grid">
         {widgets.map((widget) => {
           const compact = widget.compact;
