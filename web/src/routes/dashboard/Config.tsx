@@ -51,6 +51,7 @@ export function DashboardConfigPage() {
               <input className="hud-input" type="password" value={operatorSecret} onChange={(event) => updateOperatorSecret(event.target.value)} placeholder="optional unless API requires it" />
             </label>
             <p className="mt-2 text-xs text-zinc-400">{operatorSecret ? 'Operator secret loaded.' : 'No operator secret stored.'}</p>
+            <p className="mt-2 text-xs text-zinc-400">This is the only dashboard route that edits the operator secret.</p>
           </div>
 
           <div className="hud-panel hud-corners hud-panel--flat hud-accent-amber hud-compact-card">

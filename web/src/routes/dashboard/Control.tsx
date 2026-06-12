@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
-import { loadDashboardConfig, loadOperatorSecret, saveDashboardConfig, saveOperatorSecret, type DashboardConfig } from '../../lib/dashboardConfig';
+import { loadDashboardConfig, loadOperatorSecret, saveDashboardConfig, type DashboardConfig } from '../../lib/dashboardConfig';
 import { DashboardShell } from './DashboardShell';
 import { BRBControl } from './components/BRBControl';
 import { ControlLayoutEditor } from './components/ControlLayoutEditor';
@@ -11,18 +11,13 @@ import { SampleEventControls } from './components/SampleEventControls';
 
 export function DashboardControlPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
-  const [operatorSecret, setOperatorSecret] = useState(() => loadOperatorSecret());
+  const [operatorSecret] = useState(() => loadOperatorSecret());
   const [config, setConfig] = useState<DashboardConfig>(() => loadDashboardConfig());
   const [runningAction, setRunningAction] = useState<string | null>(null);
 
   function updateConfig(next: DashboardConfig) {
     setConfig(next);
     saveDashboardConfig(next);
-  }
-
-  function updateOperatorSecret(value: string) {
-    setOperatorSecret(value);
-    saveOperatorSecret(value);
   }
 
   function runAction(label: string, action: () => Promise<void>) {
@@ -42,16 +37,14 @@ export function DashboardControlPage() {
         <p className="hud-label">Control</p>
         <h2 className="hud-section-title">Stream control</h2>
         <p className="hud-copy mt-1 text-xs text-zinc-300">Quick actions, BRB, samples, and OBS scene tools. Toggle, resize, and reorder modules below.</p>
-        <label className="mt-3 grid gap-1 text-xs text-zinc-300 lg:max-w-sm">
-          <span className="hud-kicker">Operator secret</span>
-          <input
-            className="hud-input"
-            type="password"
-            value={operatorSecret}
-            onChange={(event) => updateOperatorSecret(event.target.value)}
-            placeholder="loaded from session storage"
-          />
-        </label>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className={`hud-chip hud-chip--square ${operatorSecret ? 'hud-accent-emerald' : 'hud-accent-rose'}`}>
+            {operatorSecret ? 'operator secret loaded' : 'operator secret missing'}
+          </span>
+          <a className="hud-chip hud-chip--square" href="/dashboard/config">
+            Edit secret
+          </a>
+        </div>
       </section>
 
       <ControlLayoutEditor config={config} onChange={updateConfig} />
