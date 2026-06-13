@@ -60,9 +60,13 @@ logs: ## Follow Docker Compose logs
 	docker compose logs -f
 
 smoke: ## Smoke test API health and web shell
-	curl -fsS http://localhost:$(API_PORT)/healthz
-	curl -fsS http://localhost:$(WEB_PORT)/overlay/alerts >/dev/null
-	curl -fsS http://localhost:$(WEB_PORT)/dashboard >/dev/null
+	curl --max-time 15 -fsS http://localhost:$(API_PORT)/healthz
+	curl --max-time 15 -fsS http://localhost:$(API_PORT)/readyz
+	curl --max-time 15 -fsS http://localhost:$(API_PORT)/api/auth/twitch/status
+	curl --max-time 15 -fsS http://localhost:$(API_PORT)/api/obs/status
+	curl --max-time 15 -fsS http://localhost:$(WEB_PORT)/overlay/alerts >/dev/null
+	curl --max-time 15 -fsS http://localhost:$(WEB_PORT)/dashboard >/dev/null
+	curl --max-time 15 -fsS http://localhost:$(WEB_PORT)/dashboard/live >/dev/null
 
 smoke-alert: ## Send a test alert to the running API
 	curl -fsS -X POST http://localhost:$(API_PORT)/api/events/test-alert \
