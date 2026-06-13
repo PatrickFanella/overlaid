@@ -15,6 +15,23 @@
 
 ---
 
+## Completion status
+
+Status: complete. Implemented, reviewed, verified, committed, rebuilt/deployed locally, smoke-checked, and route spot-checked.
+
+Verification passed:
+
+- `make verify`
+- `docker compose config --quiet`
+- `docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --quiet`
+- `docker compose up -d --build`
+- `make smoke`
+- Route spot-checks: `/dashboard/config`, `/dashboard/control`, `/dashboard/sources`
+
+Live QA result: profile switching/import-export browser interaction pending next operator pass.
+
+---
+
 ## Sprint Acceptance Criteria
 
 - `DashboardConfig` includes `automationProfiles` and `activeAutomationProfileId` with backwards-compatible loading of old localStorage configs.
@@ -66,7 +83,7 @@ Modify:
 - Create: `web/src/lib/automationProfiles.ts`
 - Test: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add profile types and defaults**
+- [x] **Step 1: Add profile types and defaults**
 
 In `web/src/lib/dashboardConfig.ts`, add:
 
@@ -116,11 +133,11 @@ automationProfiles: [
 activeAutomationProfileId: 'full-console',
 ```
 
-- [ ] **Step 2: Preserve defaults during config load**
+- [x] **Step 2: Preserve defaults during config load**
 
 Add a `mergeAutomationProfiles` helper mirroring `mergeQuickActions`: keep persisted profiles first by `id`, append missing defaults, and force `activeAutomationProfileId` to an existing profile or `full-console`.
 
-- [ ] **Step 3: Add pure profile helpers**
+- [x] **Step 3: Add pure profile helpers**
 
 Create `web/src/lib/automationProfiles.ts` with exported helpers:
 
@@ -144,7 +161,7 @@ Semantics:
 
 Implementation detail: expose `normalizeDashboardConfig(parsed: Partial<DashboardConfig>): DashboardConfig` from `dashboardConfig.ts`. `loadDashboardConfig()` should parse localStorage then call this helper. `importDashboardConfig(raw)` should parse JSON and call the same helper. The normalizer should whitelist known `DashboardConfig` fields instead of preserving arbitrary imported keys.
 
-- [ ] **Step 4: Add tests**
+- [x] **Step 4: Add tests**
 
 In `web/src/App.test.tsx`, add tests that prove:
 - old localStorage JSON without profiles receives the default profiles and `full-console` active ID.
@@ -152,7 +169,7 @@ In `web/src/App.test.tsx`, add tests that prove:
 - missing profile IDs produce warnings and fall back safely.
 - export/import round-trips config without operator secret.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -182,7 +199,7 @@ git commit -m "feat: add automation profile model"
 - Modify: `web/src/routes/dashboard/components/StreamPresetEditor.tsx`
 - Test: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Teach quick-action runner about visible actions vs full catalog**
+- [x] **Step 1: Teach quick-action runner about visible actions vs full catalog**
 
 In `QuickActionRunner.tsx`, keep `actions` as the visible actions to render and add optional `actionCatalog?: QuickAction[]` for sequence resolution/execution:
 
@@ -206,7 +223,7 @@ const catalog = actionCatalog ?? actions;
 
 Use `catalog` for `runQuickActionSequence(action, catalog, executeAtomic)` and for `resolveQuickActionSequence(action, catalog)`. Continue rendering only `actions`. This prevents profile-filtered sequence buttons from losing hidden child actions like `main-scene`.
 
-- [ ] **Step 2: Filter control quick-action runner only**
+- [x] **Step 2: Filter control quick-action runner only**
 
 In `Control.tsx`, import `getActiveAutomationProfile` and `selectQuickActionsForProfile`. Compute `activeProfile`, `profileActions`, and warnings. Render a compact `Active profile` panel/chip above the widget grid. Pass `profileActions` to `QuickActionRunner`. Keep `QuickActionsEditor` receiving the full `config` so hidden actions remain editable.
 
@@ -224,13 +241,13 @@ When rendering the runner, pass the full catalog too:
 />
 ```
 
-- [ ] **Step 3: Filter stream presets on Sources**
+- [x] **Step 3: Filter stream presets on Sources**
 
 In `StreamPresetEditor.tsx`, add optional `presets?: StreamPreset[]`; render `presets ?? config.streamPresets`; update existing edits against full `config.streamPresets` by `id`.
 
 In `Sources.tsx`, import `getActiveAutomationProfile` and `selectStreamPresetsForProfile`; render active profile copy and pass filtered presets to `StreamPresetEditor`.
 
-- [ ] **Step 4: Add route and runner tests**
+- [x] **Step 4: Add route and runner tests**
 
 Update SSR route tests:
 - `/dashboard/control` contains `Active profile` and `Full console`.
@@ -247,7 +264,7 @@ const html = renderToString(<QuickActionRunner actions={visibleActions} actionCa
 expect(html).toContain('Go Live');
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -273,7 +290,7 @@ git commit -m "feat: apply automation profiles to dashboard"
 - Modify: `web/src/routes/dashboard/Config.tsx`
 - Test: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Create profile manager component**
+- [x] **Step 1: Create profile manager component**
 
 Create a component that receives `config` and `onChange`. It should render:
 - active-profile selector.
@@ -283,11 +300,11 @@ Create a component that receives `config` and `onChange`. It should render:
 - import textarea + button that calls `importDashboardConfig(raw)` and then `onChange(next)`.
 - copy explaining export excludes session-only operator secret.
 
-- [ ] **Step 2: Mount on Config page**
+- [x] **Step 2: Mount on Config page**
 
 In `Config.tsx`, import and render `AutomationProfileManager` after operator secret/webhook cards and before overlay noise controls. Use existing `setConfig(next); saveDashboardConfig(next)` pattern.
 
-- [ ] **Step 3: Add SSR route assertions**
+- [x] **Step 3: Add SSR route assertions**
 
 Update `/dashboard/config` route test to contain:
 - `Automation profiles`
@@ -296,7 +313,7 @@ Update `/dashboard/config` route test to contain:
 - `Import dashboard config`
 - `operator secret is not exported`
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
@@ -321,15 +338,15 @@ git commit -m "feat: add automation profile manager"
 - Modify: `README.md`
 - Modify: `docs/runbooks/obs-automation-sequences.md`
 
-- [ ] **Step 1: Update README**
+- [x] **Step 1: Update README**
 
 Document that `/dashboard/config` manages local automation profiles/show modes, `/dashboard/control` and `/dashboard/sources` respect the active profile, and export/import backs up dashboard config only, not operator secret.
 
-- [ ] **Step 2: Update OBS automation runbook**
+- [x] **Step 2: Update OBS automation runbook**
 
 Add a section explaining recommended profiles (`Full console`, `Main live`, `BRB ops`), how profile filtering affects quick actions/sequences, and how to export JSON before changing a show setup.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
@@ -351,7 +368,7 @@ git commit -m "docs: add automation profile runbook guidance"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-13-plan-7-automation-profiles.md`
 
-- [ ] **Step 1: Run final checks**
+- [x] **Step 1: Run final checks**
 
 Run:
 
@@ -368,11 +385,11 @@ curl --max-time 15 -fsS http://localhost:5173/dashboard/sources >/dev/null
 
 Expected: all pass. `/readyz` may report JSON `status: degraded`; smoke only requires HTTP success.
 
-- [ ] **Step 2: Mark plan complete**
+- [x] **Step 2: Mark plan complete**
 
 Add a completion block near the top of this plan with the final verification commands and any live-QA follow-up. Check all task boxes.
 
-- [ ] **Step 3: Commit completion**
+- [x] **Step 3: Commit completion**
 
 Run:
 
@@ -385,8 +402,8 @@ git commit -m "docs: mark plan 7 complete"
 
 ## Review Checklist
 
-- [ ] No task leaves the repo in a knowingly broken or failing intermediate state.
-- [ ] Existing saved configs without profiles load with default profiles.
-- [ ] Profile filtering never deletes hidden actions/presets.
-- [ ] Export JSON contains `DashboardConfig` only and does not include session-only operator secret.
-- [ ] `make verify` passes after every implementation commit.
+- [x] No task leaves the repo in a knowingly broken or failing intermediate state.
+- [x] Existing saved configs without profiles load with default profiles.
+- [x] Profile filtering never deletes hidden actions/presets.
+- [x] Export JSON contains `DashboardConfig` only and does not include session-only operator secret.
+- [x] `make verify` passes after every implementation commit.
