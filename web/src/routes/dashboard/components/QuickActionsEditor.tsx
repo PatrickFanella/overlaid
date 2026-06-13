@@ -1,4 +1,5 @@
 import { createQuickAction, quickActionKinds, type DashboardConfig, type QuickAction } from '../../../lib/dashboardConfig';
+import { resolveQuickActionSequence } from '../../../lib/quickActionSequences';
 
 type QuickActionsEditorProps = {
   config: DashboardConfig;
@@ -144,6 +145,54 @@ export function QuickActionsEditor({ config, onChange, compact = false }: QuickA
                 </>
               ) : null}
 
+              {action.kind === 'sequence' ? (() => {
+                const resolvedSequence = resolveQuickActionSequence(action, config.quickActions);
+                const selfReferences = action.actionIds
+                  .map((actionId) => actionId.trim())
+                  .filter((actionId) => actionId && actionId === action.id)
+                  .map((actionId) => `Self reference skipped: ${actionId}`);
+                const warnings = [...resolvedSequence.warnings, ...selfReferences];
+
+                return (
+                  <>
+                    <label className="grid gap-2 text-sm text-zinc-300 lg:col-span-2">
+                      <span className="hud-kicker">Action IDs</span>
+                      <textarea
+                        className="min-h-28 rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 font-mono text-sm text-zinc-100 outline-none ring-cyan-300/30 focus:ring-4"
+                        value={action.actionIds.join('\n')}
+                        onChange={(event) =>
+                          updateAction(index, {
+                            actionIds: event.target.value
+                              .split(/\r?\n/)
+                              .map((actionId) => actionId.trim())
+                              .filter((actionId) => actionId.length > 0),
+                          })
+                        }
+                      />
+                      <span className="text-xs text-zinc-500">One action ID per line. Sequence actions skip missing, nested, and self references.</span>
+                    </label>
+
+                    <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
+                      <input
+                        className="size-4 accent-cyan-300"
+                        type="checkbox"
+                        checked={Boolean(action.stopOnError)}
+                        onChange={(event) => updateAction(index, { stopOnError: event.target.checked })}
+                      />
+                      Stop sequence on first failed step
+                    </label>
+
+                    {warnings.length > 0 ? (
+                      <ul className="grid gap-1 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-xs text-amber-100 lg:col-span-2">
+                        {warnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </>
+                );
+              })() : null}
+
               {action.kind === 'refreshSource' ? (
                 <label className="grid gap-2 text-sm text-zinc-300">
                   <span className="hud-kicker">Source input name</span>
@@ -268,6 +317,15 @@ function mergeAction(action: QuickAction, patch: Partial<QuickAction>): QuickAct
 
   if (next.kind === 'setScene') {
     return { ...next, sceneName: next.sceneName || 'Main' };
+  }
+
+  if (next.kind === 'sequence') {
+    return {
+      ...next,
+      actionIds: Array.isArray(next.actionIds) ? next.actionIds : ['main-scene', 'refresh-alerts'],
+      stopOnError: Boolean(next.stopOnError),
+      confirm: Boolean(next.confirm),
+    };
   }
 
   if (next.kind === 'runPreset') {

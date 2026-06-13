@@ -71,6 +71,8 @@ describe('App routing', () => {
     expect(html).toContain('Go Live Main');
     expect(html).toContain('Start BRB');
     expect(html).toContain('Sequences run listed actions in order');
+    expect(html).toContain('Action IDs');
+    expect(html).toContain('Stop sequence on first failed step');
   });
 
   it('renders the dashboard config route', () => {
