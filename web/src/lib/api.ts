@@ -49,6 +49,19 @@ export type OBSStatus = {
   error?: string;
 };
 
+export type ReadinessStatus = 'ok' | 'degraded';
+
+export type ReadinessCheck = {
+  name: string;
+  status: ReadinessStatus;
+  hint?: string;
+};
+
+export type ReadinessReport = {
+  status: ReadinessStatus;
+  checks: ReadinessCheck[];
+};
+
 export type OBSScene = {
   sceneIndex: number;
   sceneName: string;
@@ -95,6 +108,14 @@ export async function fetchOBSStatus(explicitBaseUrl?: string) {
     throw new Error(`OBS status failed: ${response.status}`);
   }
   return (await response.json()) as OBSStatus;
+}
+
+export async function fetchReadiness(explicitBaseUrl?: string) {
+  const response = await fetch(apiUrl('/readyz', explicitBaseUrl), { headers: { Accept: 'application/json' } });
+  if (!response.ok) {
+    throw new Error(`Readiness failed: ${response.status}`);
+  }
+  return (await response.json()) as ReadinessReport;
 }
 
 export async function fetchOBSScenes(explicitBaseUrl?: string) {
