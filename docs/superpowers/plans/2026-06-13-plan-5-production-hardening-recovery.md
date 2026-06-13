@@ -15,6 +15,23 @@
 
 ---
 
+## Completion status
+
+Status: complete. Implemented, reviewed, verified, committed, rebuilt/deployed locally, smoke-checked, and route spot-checked.
+
+Verification passed:
+
+- `make verify`
+- `docker compose config --quiet`
+- `docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --quiet`
+- `docker compose up -d --build`
+- `make smoke`
+- Route spot-checks: `/readyz`, `/dashboard/live`, `/overlay/alerts`
+
+Live QA result: pending real outage/recovery rehearsal.
+
+---
+
 ## Current Baseline
 
 - `GET /healthz` in `backend/internal/http/handlers.go` returns plain `ok` and is used by Compose healthchecks.
@@ -78,7 +95,7 @@ Modify:
 - Modify: `backend/internal/http/twitch_auth.go`
 - Modify: `backend/internal/http/handlers_test.go`
 
-- [ ] **Step 1: Add failing readiness tests**
+- [x] **Step 1: Add failing readiness tests**
 
 Add tests to `backend/internal/http/handlers_test.go` near `TestHealthz`:
 
@@ -161,7 +178,7 @@ func readyzHasCheck(checks []struct {
 
 Add `os` to the test imports if missing.
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -171,7 +188,7 @@ Run:
 
 Expected: FAIL because `/readyz` is not registered.
 
-- [ ] **Step 3: Capture startup load errors**
+- [x] **Step 3: Capture startup load errors**
 
 Modify `backend/internal/http/server.go` `Server`:
 
@@ -207,7 +224,7 @@ server.routes()
 return server
 ```
 
-- [ ] **Step 4: Register and implement `/readyz`**
+- [x] **Step 4: Register and implement `/readyz`**
 
 First factor the existing Twitch status HTTP handler in `backend/internal/http/twitch_auth.go`:
 
@@ -363,7 +380,7 @@ func buildOBSReadinessChecks(status obsws.Status) []readinessCheck {
 
 Add `context` and `time` to `handlers.go` imports.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run:
 
@@ -390,7 +407,7 @@ git commit -m "feat: add readiness diagnostics endpoint"
 - Modify: `backend/internal/state/state_test.go`
 - Modify: `backend/internal/http/twitch_auth_test.go`
 
-- [ ] **Step 1: Add retained-state recovery tests**
+- [x] **Step 1: Add retained-state recovery tests**
 
 Add imports to `backend/internal/state/state_test.go`:
 
@@ -434,7 +451,7 @@ func TestFileStoreLoadMalformedFileReturnsErrorAndKeepsEmptyState(t *testing.T) 
 }
 ```
 
-- [ ] **Step 2: Inspect and fill Twitch token recovery coverage**
+- [x] **Step 2: Inspect and fill Twitch token recovery coverage**
 
 If `backend/internal/http/twitch_auth_test.go` already covers missing and malformed token files, add only a focused assertion that malformed files set `lastAuthError` to `token_file_invalid` and do not authenticate. Use this shape:
 
@@ -459,7 +476,7 @@ func TestLoadPersistedTokenInvalidFileRecordsRecoveryReason(t *testing.T) {
 
 If helper names differ, use the existing test helper pattern in `twitch_auth_test.go` instead of introducing duplicate helpers.
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run:
 
@@ -485,7 +502,7 @@ git commit -m "test: cover state and token recovery"
 **Files:**
 - Modify: `Makefile`
 
-- [ ] **Step 1: Update smoke target**
+- [x] **Step 1: Update smoke target**
 
 Replace the `smoke` target commands in `Makefile` with:
 
@@ -500,7 +517,7 @@ smoke: ## Smoke test API health, readiness, status APIs, and web shell
 	curl --max-time 15 -fsS http://localhost:$(WEB_PORT)/dashboard/live >/dev/null
 ```
 
-- [ ] **Step 2: Run smoke-compatible checks**
+- [x] **Step 2: Run smoke-compatible checks**
 
 Run:
 
@@ -510,7 +527,7 @@ make verify
 
 Expected: PASS. Do not run `make smoke` until the stack is running.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add Makefile
@@ -525,7 +542,7 @@ git commit -m "chore: expand smoke checks"
 - Create: `docs/runbooks/production-recovery.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Create recovery runbook**
+- [x] **Step 1: Create recovery runbook**
 
 Create `docs/runbooks/production-recovery.md`:
 
@@ -595,7 +612,7 @@ docker compose logs --tail=100 api
 - Back up the `api-data` volume before destructive resets if Twitch auth/state continuity matters.
 ```
 
-- [ ] **Step 2: Link runbook and clarify health/readiness in README**
+- [x] **Step 2: Link runbook and clarify health/readiness in README**
 
 In `README.md`, add near live-operation runbooks:
 
@@ -610,7 +627,7 @@ Add a short note near deploy modes or guardrails:
 `/readyz` always returns HTTP 200 when the process can produce diagnostics; inspect the JSON `status` and `checks` fields for degraded optional dependencies.
 ```
 
-- [ ] **Step 3: Run verification and commit**
+- [x] **Step 3: Run verification and commit**
 
 Run:
 
@@ -634,7 +651,7 @@ git commit -m "docs: add production recovery runbook"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-13-plan-5-production-hardening-recovery.md`
 
-- [ ] **Step 1: Run full local checks**
+- [x] **Step 1: Run full local checks**
 
 Run:
 
@@ -646,7 +663,7 @@ make verify
 
 Expected: all pass.
 
-- [ ] **Step 2: Rebuild and smoke-check**
+- [x] **Step 2: Rebuild and smoke-check**
 
 Run:
 
@@ -657,7 +674,7 @@ make smoke
 
 Expected: image rebuild succeeds and expanded smoke checks pass.
 
-- [ ] **Step 3: Spot-check recovery routes**
+- [x] **Step 3: Spot-check recovery routes**
 
 Open or curl:
 
@@ -669,7 +686,7 @@ Open or curl:
 
 Expected: `/readyz` returns JSON with `status` and `checks`; web routes load without SPA fallback errors.
 
-- [ ] **Step 4: Update this plan completion status**
+- [x] **Step 4: Update this plan completion status**
 
 Add this block near the top of this plan after the header:
 
@@ -694,7 +711,7 @@ Live QA result: pending real outage/recovery rehearsal.
 
 Check every task checkbox that was completed.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 Run pre-commit inspection:
 
