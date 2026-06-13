@@ -96,6 +96,11 @@ describe('App routing', () => {
 
     expect(html).toContain('Operator config');
     expect(html).toContain('Secret header');
+    expect(html).toContain('Automation profiles');
+    expect(html).toContain('Active profile');
+    expect(html).toContain('Export dashboard config');
+    expect(html).toContain('Import dashboard config');
+    expect(html).toContain('operator secret is not exported');
     expect(html).toContain('MPRIS decision');
     expect(html).toContain('Overlay noise controls');
   });

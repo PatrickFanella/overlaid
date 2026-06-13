@@ -8,6 +8,7 @@ import {
 } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { DashboardShell } from './DashboardShell';
+import { AutomationProfileManager } from './components/AutomationProfileManager';
 
 export function DashboardConfigPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
@@ -24,16 +25,19 @@ export function DashboardConfigPage() {
     saveOperatorSecret(value);
   }
 
-  function setMprisDecision(mprisDecision: DashboardConfig['mprisDecision']) {
-    const next = { ...config, mprisDecision };
+  function updateConfig(next: DashboardConfig) {
     setConfig(next);
     saveDashboardConfig(next);
   }
 
+  function setMprisDecision(mprisDecision: DashboardConfig['mprisDecision']) {
+    const next = { ...config, mprisDecision };
+    updateConfig(next);
+  }
+
   function updateDisplay(key: keyof DashboardConfig['display'], value: number) {
     const next = { ...config, display: { ...config.display, [key]: Math.max(0, Math.floor(value || 0)) } };
-    setConfig(next);
-    saveDashboardConfig(next);
+    updateConfig(next);
   }
 
   return (
@@ -82,6 +86,8 @@ export function DashboardConfigPage() {
           <NumberControl label="Ticker max items" value={config.display.tickerMaxItems} onChange={(value) => updateDisplay('tickerMaxItems', value)} />
         </div>
       </section>
+
+      <AutomationProfileManager config={config} onChange={updateConfig} />
 
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <p className="hud-label">MPRIS decision</p>
