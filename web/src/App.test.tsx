@@ -58,6 +58,8 @@ describe('App routing', () => {
     expect(html).toContain('Stream control');
     expect(html).toContain('operator secret missing');
     expect(html).toContain('Edit secret');
+    expect(html).toContain('Session log');
+    expect(html).toContain('Recent operator actions');
     expect(html).toContain('Run overlay smoke sequence');
     expect(html).toContain('require confirm');
   });

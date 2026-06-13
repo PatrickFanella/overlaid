@@ -1,6 +1,14 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { loadDashboardConfig, loadOperatorSecret, saveDashboardConfig, type DashboardConfig } from '../../lib/dashboardConfig';
+import {
+  clearSessionLog,
+  createSessionLogEntry,
+  loadSessionLog,
+  prependSessionLogEntry,
+  saveSessionLog,
+  type SessionLogEntry,
+} from '../../lib/sessionLog';
 import { DashboardShell } from './DashboardShell';
 import { BRBControl } from './components/BRBControl';
 import { ControlLayoutEditor } from './components/ControlLayoutEditor';
@@ -8,12 +16,15 @@ import { OBSControls } from './components/OBSControls';
 import { QuickActionRunner } from './components/QuickActionRunner';
 import { QuickActionsEditor } from './components/QuickActionsEditor';
 import { RehearsalRunner } from './components/RehearsalRunner';
+import { SessionLogPanel } from './components/SessionLogPanel';
 import { SampleEventControls } from './components/SampleEventControls';
 
 export function DashboardControlPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const [operatorSecret] = useState(() => loadOperatorSecret());
   const [config, setConfig] = useState<DashboardConfig>(() => loadDashboardConfig());
+  const [sessionLog, setSessionLog] = useState<SessionLogEntry[]>(() => loadSessionLog());
+  const sessionLogRef = useRef(sessionLog);
   const [runningAction, setRunningAction] = useState<string | null>(null);
 
   function updateConfig(next: DashboardConfig) {
@@ -21,10 +32,23 @@ export function DashboardControlPage() {
     saveDashboardConfig(next);
   }
 
+  function recordLog(label: string, status: SessionLogEntry['status'], message: string) {
+    const next = prependSessionLogEntry(sessionLogRef.current, createSessionLogEntry(label, status, message));
+    sessionLogRef.current = next;
+    setSessionLog(next);
+    saveSessionLog(next);
+  }
+
   function runAction(label: string, action: () => Promise<void>) {
     setRunningAction(label);
+    recordLog(label, 'running', 'Action started.');
     void action()
-      .catch(() => {})
+      .then(() => {
+        recordLog(label, 'success', 'Action completed.');
+      })
+      .catch((error) => {
+        recordLog(label, 'error', error instanceof Error ? error.message : 'Action failed.');
+      })
       .finally(() => {
         setRunningAction((current) => (current === label ? null : current));
       });
@@ -50,6 +74,14 @@ export function DashboardControlPage() {
 
       <ControlLayoutEditor config={config} onChange={updateConfig} />
       <RehearsalRunner apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} />
+      <SessionLogPanel
+        entries={sessionLog}
+        onClear={() => {
+          sessionLogRef.current = [];
+          clearSessionLog();
+          setSessionLog([]);
+        }}
+      />
       <div className="hud-route-grid">
         {widgets.map((widget) => {
           const compact = widget.compact;
