@@ -10,6 +10,8 @@ curl http://localhost:8080/readyz
 docker compose ps
 ```
 
+Open `http://localhost:5173/dashboard/live` for the human-readable readiness cockpit.
+
 Check API and web logs for the failing path:
 
 ```bash
@@ -22,6 +24,7 @@ docker compose logs -f web
 - `/healthz` is liveness only. Compose healthchecks use it.
 - `/readyz` is operator diagnostics. It reports dependency status and can return HTTP 200 with `status: degraded`.
 - Use `/readyz` to see whether OBS, Twitch auth, EventSub, or retained state need attention.
+- `/dashboard/live` is the human-readable view of the same readiness data, plus recent operator context.
 
 ## OBS recovery
 

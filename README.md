@@ -66,6 +66,7 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 
 ### Routes
 
+- `/dashboard/live` — live ops cockpit with preflight checks, `/readyz`, EventSub diagnostics, setup checklist status, and recent operator actions.
 - `/dashboard` — compact overview and status.
 - `/dashboard/setup` — setup checklist, browser-source URLs, editable stream presets.
 - `/dashboard/sources` — setup/source URL alias.
@@ -79,7 +80,7 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 - `/overlay/brb`
 - `/overlay/debug`
 
-For live operation, follow `docs/runbooks/live-stream-preflight.md`.
+For live operation, start with `/dashboard/live` and follow `docs/runbooks/live-stream-preflight.md`.
 For production recovery, follow `docs/runbooks/production-recovery.md`.
 For OBS automation sequences, follow `docs/runbooks/obs-automation-sequences.md`.
 For moderator or broadcaster Twitch chat controls, use `docs/runbooks/twitch-chat-commands.md`.

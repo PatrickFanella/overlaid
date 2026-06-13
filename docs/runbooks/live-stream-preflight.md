@@ -9,7 +9,7 @@ make smoke
 
 ## Dashboard
 
-Open:
+Start at:
 
 ```text
 http://localhost:5173/dashboard/live
@@ -48,6 +48,10 @@ Check OBS WebSocket settings, host networking override, and `OBS_WEBSOCKET_PASSW
 ### Operator controls return 401
 
 Open `/dashboard/config` and enter `OPERATOR_SECRET`.
+
+## Browser sources during stream
+
+Do not rely on OBS browser sources until `/dashboard/live` is clear of readiness incidents. Fix any degraded checks first, then confirm the browser sources are stable before going live.
 
 
 ## Live QA status
