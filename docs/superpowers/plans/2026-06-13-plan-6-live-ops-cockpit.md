@@ -15,6 +15,23 @@
 
 ---
 
+## Completion status
+
+Status: complete. Implemented, reviewed, verified, committed, rebuilt/deployed locally, smoke-checked, and route spot-checked.
+
+Verification passed:
+
+- `make verify`
+- `docker compose config --quiet`
+- `docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --quiet`
+- `docker compose up -d --build`
+- `make smoke`
+- Route spot-check: `/dashboard/live`
+
+Live QA result: pending next real stream.
+
+---
+
 ## Sprint Acceptance Criteria
 
 - `/dashboard/live` renders a “Live ops cockpit” header and still includes the existing preflight and EventSub diagnostics.
@@ -62,7 +79,7 @@ Modify:
 - Modify: `web/src/lib/api.ts`
 - Create: `web/src/routes/dashboard/components/ReadinessPanel.tsx`
 
-- [ ] **Step 1: Add readiness types and fetch helper**
+- [x] **Step 1: Add readiness types and fetch helper**
 
 In `web/src/lib/api.ts`, add these exported types after `OBSStatus`:
 
@@ -93,7 +110,7 @@ export async function fetchReadiness(explicitBaseUrl?: string) {
 }
 ```
 
-- [ ] **Step 2: Create readiness panel component**
+- [x] **Step 2: Create readiness panel component**
 
 Create `web/src/routes/dashboard/components/ReadinessPanel.tsx`:
 
@@ -157,7 +174,7 @@ export function ReadinessPanel({ report, loading, error }: ReadinessPanelProps) 
 }
 ```
 
-- [ ] **Step 3: Run tests and typecheck after component creation**
+- [x] **Step 3: Run tests and typecheck after component creation**
 
 Run:
 
@@ -168,7 +185,7 @@ pnpm --dir web run build
 
 Expected: existing route tests pass; component and API types compile.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Commit:
 
@@ -187,7 +204,7 @@ git commit -m "feat: add readiness cockpit panel"
 - Modify: `web/src/routes/dashboard/components/SessionLogPanel.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Create checklist summary component**
+- [x] **Step 1: Create checklist summary component**
 
 Create `web/src/routes/dashboard/components/LiveChecklistSummary.tsx`:
 
@@ -227,7 +244,7 @@ export function LiveChecklistSummary({ items }: LiveChecklistSummaryProps) {
 }
 ```
 
-- [ ] **Step 2: Make session log panel support read-only rendering**
+- [x] **Step 2: Make session log panel support read-only rendering**
 
 Modify `web/src/routes/dashboard/components/SessionLogPanel.tsx` so `onClear` is optional:
 
@@ -250,7 +267,7 @@ Render the clear button only when `onClear` exists:
 
 Keep `/dashboard/control` unchanged; it already passes `onClear`.
 
-- [ ] **Step 3: Wire readiness + session log into live page**
+- [x] **Step 3: Wire readiness + session log into live page**
 
 Modify `web/src/routes/dashboard/Live.tsx`:
 
@@ -286,7 +303,7 @@ const [twitchResult, obsResult, readinessResult] = await Promise.allSettled([
 ]);
 ```
 
-- [ ] **Step 4: Strengthen route and component assertions**
+- [x] **Step 4: Strengthen route and component assertions**
 
 Update `/dashboard/live` route test in `web/src/App.test.tsx` to assert:
 
@@ -322,7 +339,7 @@ it('renders degraded readiness incidents', () => {
 });
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -350,7 +367,7 @@ git commit -m "feat: add live ops cockpit"
 - Modify: `docs/runbooks/live-stream-preflight.md`
 - Modify: `docs/runbooks/production-recovery.md`
 
-- [ ] **Step 1: Update README dashboard route copy**
+- [x] **Step 1: Update README dashboard route copy**
 
 In `README.md`, update the `/dashboard/live` or live-operation section to say:
 
@@ -358,7 +375,7 @@ In `README.md`, update the `/dashboard/live` or live-operation section to say:
 Use `/dashboard/live` as the live ops cockpit: it combines preflight checks, `/readyz` readiness, EventSub diagnostics, setup checklist status, and recent operator actions.
 ```
 
-- [ ] **Step 2: Update live preflight runbook**
+- [x] **Step 2: Update live preflight runbook**
 
 In `docs/runbooks/live-stream-preflight.md`, add near the top:
 
@@ -366,7 +383,7 @@ In `docs/runbooks/live-stream-preflight.md`, add near the top:
 Start at `/dashboard/live`. Treat it as the live ops cockpit: fix any readiness incidents before relying on OBS browser sources during a stream.
 ```
 
-- [ ] **Step 3: Update production recovery runbook**
+- [x] **Step 3: Update production recovery runbook**
 
 In `docs/runbooks/production-recovery.md`, add to fast checks:
 
@@ -380,7 +397,7 @@ And add one sentence:
 For a human-readable view of the same readiness data, open `/dashboard/live`.
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
@@ -402,7 +419,7 @@ git commit -m "docs: document live ops cockpit"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-13-plan-6-live-ops-cockpit.md`
 
-- [ ] **Step 1: Run final checks**
+- [x] **Step 1: Run final checks**
 
 Run:
 
@@ -417,7 +434,7 @@ curl --max-time 15 -fsS http://localhost:5173/dashboard/live >/dev/null
 
 Expected: all pass.
 
-- [ ] **Step 2: Update completion status**
+- [x] **Step 2: Update completion status**
 
 Add near the top after the header:
 
@@ -442,7 +459,7 @@ Live QA result: pending next real stream.
 
 Check every completed task checkbox.
 
-- [ ] **Step 3: Commit completion**
+- [x] **Step 3: Commit completion**
 
 Run:
 
