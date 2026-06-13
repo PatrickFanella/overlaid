@@ -24,12 +24,12 @@ export function OverlayDebugPage() {
 
   return (
     <main className="hud-shell hud-shell--compact hud-shell--debug hud-scanlines text-white">
-      <section className="hud-panel hud-corners hud-accent-cyan w-full max-w-4xl rounded-[1.4rem] p-6">
+      <section className="hud-panel hud-corners hud-accent-cyan w-full max-w-4xl p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="hud-label">/overlay/debug</p>
-            <h1 className="mt-3 text-[clamp(2rem,4vw,3.4rem)] font-semibold tracking-tight">Event inspector</h1>
-            <p className="mt-2 text-sm text-zinc-300">Live SSE feed from {getOverlayApiBaseUrl()}.</p>
+            <h1 className="mt-3 text-[clamp(1.8rem,3.5vw,3rem)] font-black tracking-[-0.05em]">Event inspector</h1>
+            <p className="mt-2 text-sm text-zinc-300">tail -f {getOverlayApiBaseUrl()}/api/events/stream</p>
           </div>
           <span className="hud-chip">
             <span className="hud-led" />
@@ -39,13 +39,13 @@ export function OverlayDebugPage() {
 
         <div className="mt-5 grid gap-3">
           {events.length === 0 ? (
-            <p className="hud-panel hud-corners rounded-[1.25rem] border border-dashed border-white/10 px-4 py-5 text-sm text-zinc-400">
+            <p className="hud-panel hud-corners border border-dashed border-white/10 px-4 py-5 text-sm text-zinc-400">
               Waiting for events…
             </p>
           ) : null}
 
           {events.map((event) => (
-            <pre key={event.id} className="hud-panel hud-corners hud-event-json rounded-[1.25rem] px-4 py-4">
+            <pre key={event.id} className="hud-panel hud-corners hud-event-json px-4 py-4">
               {JSON.stringify(event, null, 2)}
             </pre>
           ))}

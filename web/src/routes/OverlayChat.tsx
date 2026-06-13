@@ -37,10 +37,10 @@ export function OverlayChatPage() {
   return (
     <main className="hud-shell hud-shell--chat hud-scanlines">
       <section className="ml-0 flex w-full max-w-[34rem] flex-col gap-3">
-        <header className="hud-panel hud-corners hud-accent-cyan flex items-center justify-between gap-3 rounded-[1.4rem] px-5 py-4">
+        <header className="hud-panel hud-corners hud-accent-cyan flex items-center justify-between gap-3 px-4 py-3">
           <div>
             <p className="hud-label">Twitch chat</p>
-            <p className="mt-2 text-sm text-zinc-200">Lower-left feed · OBS browser source</p>
+            <p className="mt-1 text-xs text-zinc-300">/chat :: eventsub</p>
           </div>
           <span className="hud-chip">
             <span className="hud-led" />
@@ -50,7 +50,7 @@ export function OverlayChatPage() {
 
         <div role="log" aria-live="polite" aria-relevant="additions text" className="grid gap-3">
           {messages.length === 0 ? (
-            <div className="hud-panel hud-corners hud-accent-cyan rounded-[1.4rem] px-5 py-4 shadow-2xl shadow-black/30">
+            <div className="hud-panel hud-corners hud-accent-cyan px-4 py-3 shadow-none">
               <p className="text-base font-semibold text-white">Waiting for Twitch chat</p>
               <p className="mt-1 text-sm text-zinc-300">EventSub chat messages will appear here.</p>
             </div>
@@ -63,9 +63,9 @@ export function OverlayChatPage() {
             const badges = getChatBadges(twitchEvent);
 
             return (
-              <article key={message.id} className="hud-panel hud-corners hud-chat-row rounded-[1.35rem] border-white/10 bg-black/35 px-5 py-4 shadow-xl shadow-black/30" style={color ? ({ '--hud-accent': color } as CSSProperties) : undefined}>
+              <article key={message.id} className="hud-panel hud-corners hud-chat-row border-white/10 bg-black/35 px-4 py-3 shadow-none" style={color ? ({ '--hud-accent': color } as CSSProperties) : undefined}>
                 <div className="flex items-start gap-3">
-                  <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/40">
+                  <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-white/10 bg-black/60">
                     <span className="hud-led" />
                   </div>
 

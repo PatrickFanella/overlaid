@@ -43,7 +43,7 @@ export function OverlayTickerPage() {
 
   return (
     <main className="hud-shell hud-shell--ticker hud-scanlines text-white">
-      <section className="hud-panel hud-corners hud-accent-fuchsia pointer-events-none w-full rounded-[1.4rem] p-4">
+      <section className="hud-panel hud-corners hud-accent-fuchsia pointer-events-none w-full p-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="hud-chip hud-accent-rose">
             <span className="hud-led" />
@@ -53,7 +53,7 @@ export function OverlayTickerPage() {
           <span className="hud-badge">{items.length} items</span>
         </div>
 
-        <div role="log" aria-live="polite" aria-relevant="additions text" className="mt-4 overflow-hidden rounded-[1.1rem] border border-white/10 bg-black/35 px-4 py-3">
+        <div role="log" aria-live="polite" aria-relevant="additions text" className="mt-3 overflow-hidden border-2 border-white/10 bg-black px-3 py-2">
           <div className="hud-ticker-track">
             {(items.length ? [...items, ...items] : [{ id: 'standby', label: 'Ticker rail', message: 'Waiting for ticker events', severity: 'info' as const, source: 'over-laid' }]).map((item, index) => (
               <article key={`${item.id}-${index}`} className={`hud-ticker-item hud-alert-card--${item.severity}`}>

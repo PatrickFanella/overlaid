@@ -20,11 +20,13 @@ export function LivePreflight({ twitch, obs, config, operatorSecret }: LivePrefl
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
       <p className="hud-label">Live preflight</p>
-      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-3 grid gap-2">
         {checks.map((check) => (
           <article key={check.label} className={`hud-panel hud-corners hud-panel--flat hud-compact-card ${check.ok ? 'hud-accent-emerald' : 'hud-accent-rose'}`}>
-            <p className="hud-kicker">{check.ok ? 'ready' : 'fix'}</p>
-            <p className="mt-1 text-sm font-bold text-white">{check.label}</p>
+            <div className="hud-terminal-line">
+              <span className="hud-terminal-key">{check.ok ? 'ok' : 'fix'}</span>
+              <span className="hud-terminal-value font-bold">{check.label}</span>
+            </div>
             {!check.ok ? <p className="mt-1 text-xs text-zinc-300">{check.fix}</p> : null}
           </article>
         ))}

@@ -47,7 +47,7 @@ export function OverlayBRBPage() {
 
   return (
     <main className="hud-shell hud-shell--compact hud-scanlines text-white">
-      <section className={`hud-panel hud-corners mx-auto grid w-full max-w-5xl gap-5 rounded-[1.6rem] p-7 ${state.active ? 'hud-accent-rose' : 'hud-accent-cyan'}`}>
+      <section className={`hud-panel hud-corners mx-auto grid w-full max-w-5xl gap-5 p-6 ${state.active ? 'hud-accent-rose' : 'hud-accent-cyan'}`}>
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="hud-label">/overlay/brb</p>
@@ -65,7 +65,7 @@ export function OverlayBRBPage() {
         </header>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_0.75fr]">
-          <section className="hud-panel hud-corners rounded-[1.35rem] p-5">
+          <section className="hud-panel hud-corners p-5">
             <p className="hud-kicker">Return window</p>
             <p className="mt-3 text-[clamp(2rem,5vw,4.5rem)] font-black tracking-[-0.05em] text-white">{state.eta || 'SOON'}</p>
             <p className="mt-4 text-sm uppercase tracking-[0.26em] text-zinc-400">{state.updatedAt ? `updated ${formatTime(state.updatedAt)}` : 'dashboard controlled'}</p>
@@ -73,7 +73,7 @@ export function OverlayBRBPage() {
 
           <section className="grid gap-3" aria-label="Intermission notes">
             {items.map((item, index) => (
-              <div key={`${item}-${index}`} className="hud-panel hud-corners rounded-[1.15rem] p-4" style={{ '--hud-accent': ['var(--hud-rose)', 'var(--hud-amber)', 'var(--hud-cyan)'][index % 3] } as CSSProperties}>
+              <div key={`${item}-${index}`} className="hud-panel hud-corners p-4" style={{ '--hud-accent': ['var(--hud-rose)', 'var(--hud-amber)', 'var(--hud-cyan)'][index % 3] } as CSSProperties}>
                 <p className="hud-kicker">{String(index + 1).padStart(2, '0')}</p>
                 <p className="mt-2 text-lg font-semibold text-white">{item}</p>
               </div>

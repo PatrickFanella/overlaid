@@ -60,7 +60,7 @@ export function OverlayGoalsPage() {
   return (
     <main className="hud-shell hud-shell--compact hud-scanlines text-white">
       <section className="mx-auto grid w-full max-w-5xl gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="hud-panel hud-corners hud-accent-emerald rounded-[1.4rem] p-6" style={{ '--hud-accent': primary.accent } as CSSProperties}>
+        <div className="hud-panel hud-corners hud-accent-emerald p-5" style={{ '--hud-accent': primary.accent } as CSSProperties}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="hud-label">Goal rail</p>
@@ -89,7 +89,7 @@ export function OverlayGoalsPage() {
 
         <aside className="grid gap-3">
           {goals.slice(1, 4).map((goal) => (
-            <article key={goal.id} className="hud-panel hud-corners rounded-[1.25rem] p-4" style={{ '--hud-accent': goal.accent } as CSSProperties}>
+            <article key={goal.id} className="hud-panel hud-corners p-4" style={{ '--hud-accent': goal.accent } as CSSProperties}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="hud-kicker">{goal.label}</p>
@@ -103,7 +103,7 @@ export function OverlayGoalsPage() {
             </article>
           ))}
 
-          <article className="hud-panel hud-corners hud-accent-cyan rounded-[1.25rem] p-4">
+          <article className="hud-panel hud-corners hud-accent-cyan p-4">
             <p className="hud-kicker">Latest signal</p>
             <p className="mt-2 text-lg font-semibold text-white">{lastEvent?.title || 'Waiting for goal events'}</p>
             <p className="mt-2 text-sm leading-6 text-zinc-300">{lastEvent?.message || 'Send an SSE event with data.goal or data.goals to update this browser source.'}</p>

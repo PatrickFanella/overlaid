@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -16,10 +17,11 @@
   --dracula-pink: #ff79c6;
 
   --hud-bg: var(--dracula-background);
-  --hud-panel: #282a36;
-  --hud-panel-strong: #343746;
-  --hud-line: color-mix(in oklab, var(--dracula-comment) 72%, white 8%);
-  --hud-line-soft: color-mix(in oklab, var(--dracula-comment) 38%, transparent);
+  --hud-panel: #1f2029;
+  --hud-panel-strong: #282a36;
+  --hud-terminal: #191a21;
+  --hud-line: color-mix(in oklab, var(--dracula-purple) 54%, var(--dracula-comment));
+  --hud-line-soft: color-mix(in oklab, var(--dracula-comment) 52%, transparent);
   --hud-text: var(--dracula-foreground);
   --hud-muted: color-mix(in oklab, var(--dracula-comment) 82%, var(--dracula-foreground));
   --hud-cyan: var(--dracula-cyan);
@@ -29,8 +31,8 @@
   --hud-amber: var(--dracula-yellow);
   --hud-orange: var(--dracula-orange);
   --hud-rose: var(--dracula-red);
-  --hud-shadow: 6px 6px 0 color-mix(in oklab, black 72%, var(--dracula-background));
-  font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --hud-shadow: 5px 5px 0 #000;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   background: transparent;
 }
 
@@ -50,6 +52,7 @@ body {
   overflow-x: hidden;
   color: var(--hud-text);
   background: transparent;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 ::selection {
@@ -59,14 +62,17 @@ body {
 
 .hud-shell {
   min-height: 100vh;
-  padding: 32px;
+  padding: 24px;
   color: var(--hud-text);
   background: transparent;
 }
 
 .hud-shell--dashboard {
   padding: 12px;
-  background: var(--dracula-background);
+  background:
+    radial-gradient(circle at 0 0, color-mix(in oklab, var(--dracula-purple) 13%, transparent), transparent 36rem),
+    radial-gradient(circle at 100% 0, color-mix(in oklab, var(--dracula-pink) 10%, transparent), transparent 34rem),
+    var(--dracula-background);
 }
 
 .hud-shell--compact {
@@ -102,20 +108,18 @@ body {
 .hud-panel {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--hud-line);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 18%),
-    radial-gradient(circle at top left, color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 18%, transparent), transparent 38%),
-    linear-gradient(180deg, var(--hud-panel), var(--hud-panel-strong));
-  box-shadow: var(--hud-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(14px) saturate(1.1);
-  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  border: 2px solid var(--hud-line);
+  border-radius: 2px !important;
+  background: var(--hud-panel);
+  box-shadow: var(--hud-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .hud-panel--flat {
   border: 2px solid var(--hud-line);
-  background: var(--hud-panel);
-  box-shadow: 4px 4px 0 color-mix(in oklab, black 74%, var(--dracula-background));
+  background: var(--hud-terminal);
+  box-shadow: 4px 4px 0 #000;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -129,8 +133,10 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(115deg, transparent 0 42%, rgba(255, 255, 255, 0.09) 50%, transparent 58%);
-  opacity: 0.32;
+  background:
+    linear-gradient(var(--hud-accent, var(--hud-cyan)), var(--hud-accent, var(--hud-cyan))) 0 0 / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 9%, transparent) 0, color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 9%, transparent) 1px, transparent 1px, transparent 12px);
+  opacity: 0.24;
 }
 
 .hud-corners::after {
@@ -138,7 +144,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.6;
+  opacity: 0.86;
   background:
     linear-gradient(var(--hud-accent, var(--hud-cyan)), var(--hud-accent, var(--hud-cyan))) 0 0 / 20px 2px no-repeat,
     linear-gradient(var(--hud-accent, var(--hud-cyan)), var(--hud-accent, var(--hud-cyan))) 0 0 / 2px 20px no-repeat,
@@ -175,17 +181,17 @@ body {
 }
 
 .hud-label {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.68rem;
-  letter-spacing: 0.34em;
+  font-weight: 800;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 72%, white);
 }
 
 .hud-kicker {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.7rem;
-  letter-spacing: 0.24em;
+  font-weight: 700;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--hud-muted);
 }
@@ -194,7 +200,7 @@ body {
   margin: 0;
   font-size: clamp(1.9rem, 3vw, 3.25rem);
   line-height: 0.96;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.06em;
   text-wrap: balance;
 }
 
@@ -212,11 +218,10 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  border: 1px solid color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 30%, var(--hud-line));
-  background: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 12%, rgba(0, 0, 0, 0.45));
-  padding: 0.4rem 0.75rem;
-  border-radius: 999px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  border: 2px solid color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 44%, var(--hud-line));
+  background: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 10%, #000);
+  padding: 0.36rem 0.62rem;
+  border-radius: 2px;
   font-size: 0.68rem;
   line-height: 1;
   letter-spacing: 0.22em;
@@ -225,7 +230,7 @@ body {
 }
 
 .hud-chip--square {
-  border-radius: 0.2rem;
+  border-radius: 2px;
   padding: 0.35rem 0.55rem;
   letter-spacing: 0.16em;
 }
@@ -241,14 +246,14 @@ body {
   font-weight: 900;
   line-height: 1.05;
   letter-spacing: -0.02em;
-  color: white;
+  color: var(--dracula-foreground);
 }
 
 .hud-input {
   width: 100%;
   border: 2px solid var(--hud-line);
-  border-radius: 0.2rem;
-  background: color-mix(in oklab, var(--dracula-background) 86%, black);
+  border-radius: 2px;
+  background: #15161d;
   padding: 0.55rem 0.65rem;
   color: var(--hud-text);
   outline: none;
@@ -265,11 +270,11 @@ body {
 }
 
 .hud-led {
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 999px;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 1px;
   background: var(--hud-accent, var(--hud-cyan));
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 15%, transparent), 0 0 22px color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 85%, transparent);
+  box-shadow: 0 0 0 2px #000, 0 0 10px color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 70%, transparent);
 }
 
 .hud-grid {
@@ -283,7 +288,7 @@ body {
 
 .hud-divider {
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--hud-line), transparent);
+  background: var(--hud-line);
 }
 
 .hud-alert-card,
@@ -292,7 +297,7 @@ body {
 .hud-debug-card,
 .hud-home-card,
 .hud-dashboard-card {
-  border-radius: 1.4rem;
+  border-radius: 2px;
 }
 
 .hud-alert-card {
@@ -333,10 +338,9 @@ body {
   align-items: center;
   gap: 0.4rem;
   padding: 0.3rem 0.6rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid var(--hud-line-soft);
-  background: rgba(255, 255, 255, 0.04);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: #15161d;
   font-size: 0.62rem;
   line-height: 1;
   letter-spacing: 0.2em;
@@ -347,10 +351,10 @@ body {
 .hud-progress {
   position: relative;
   height: 0.85rem;
-  border-radius: 999px;
+  border-radius: 1px;
   overflow: hidden;
   border: 1px solid var(--hud-line);
-  background: rgba(255, 255, 255, 0.04);
+  background: #15161d;
 }
 
 .hud-progress--large {
@@ -362,8 +366,8 @@ body {
   inset: 0 auto 0 0;
   width: var(--hud-progress, 50%);
   border-radius: inherit;
-  background: linear-gradient(90deg, color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 82%, white), color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 40%, transparent));
-  box-shadow: 0 0 22px color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 50%, transparent);
+  background: var(--hud-accent, var(--hud-cyan));
+  box-shadow: none;
 }
 
 .hud-glow {
@@ -379,9 +383,9 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.028) 0, rgba(255, 255, 255, 0.028) 1px, transparent 1px, transparent 5px);
+  background: repeating-linear-gradient(180deg, rgba(248, 248, 242, 0.026) 0, rgba(248, 248, 242, 0.026) 1px, transparent 1px, transparent 4px);
   mix-blend-mode: screen;
-  opacity: 0.3;
+  opacity: 0.22;
 }
 
 .hud-ticker-track {
@@ -398,8 +402,8 @@ body {
   align-items: center;
   gap: 0.75rem;
   border: 1px solid color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 28%, var(--hud-line));
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 10%, rgba(0, 0, 0, 0.55));
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 8%, #000);
   padding: 0.55rem 0.75rem;
 }
 
@@ -409,7 +413,8 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.75rem;
   line-height: 1.5;
-  color: #e5e7eb;
+  color: var(--dracula-foreground);
+  background: #15161d;
 }
 
 .hud-dashboard-grid {
@@ -444,8 +449,8 @@ body {
 
 .hud-action-button {
   border: 2px solid var(--hud-line);
-  border-radius: 0.2rem;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  background: #15161d;
   padding: 0.65rem 0.75rem;
   color: var(--hud-text);
   text-align: left;
@@ -461,13 +466,39 @@ body {
 }
 
 .hud-compact-card {
-  border-radius: 0.2rem;
+  border-radius: 2px;
   padding: 0.65rem;
 }
 
 .hud-action-button:hover {
   border-color: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 50%, var(--hud-line));
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 11%, #000);
+  transform: translate(-1px, -1px);
+}
+
+.hud-terminal-line {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.42fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--hud-line-soft);
+  padding: 0.35rem 0;
+  font-size: 0.78rem;
+}
+
+.hud-terminal-line:last-child {
+  border-bottom: 0;
+}
+
+.hud-terminal-key {
+  color: var(--hud-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hud-terminal-value {
+  min-width: 0;
+  color: var(--hud-text);
+  overflow-wrap: anywhere;
 }
 
 .hud-action-button:disabled {

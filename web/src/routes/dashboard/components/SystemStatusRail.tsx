@@ -64,7 +64,7 @@ export function SystemStatusRail({ apiBaseUrl, operatorSecret, config }: SystemS
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1">
         <div>
           <p className="hud-label">System status</p>
-          <p className="mt-1 text-xs text-zinc-300">Live health for this operator workstation.</p>
+          <p className="mt-1 text-xs text-zinc-300">backend :: operator :: overlay bus</p>
         </div>
         <span className="hud-chip hud-chip--square">{state.loading ? 'refreshing' : 'ready'}</span>
       </div>
@@ -95,9 +95,11 @@ type StatusItemProps = {
 function StatusItem({ label, value, detail, accent }: StatusItemProps) {
   return (
     <article className={`hud-panel hud-corners hud-panel--flat hud-compact-card hud-accent-${accent}`}>
-      <p className="hud-kicker">{label}</p>
-      <p className="mt-1 text-sm font-bold text-white">{value}</p>
-      <p className="mt-1 truncate text-xs text-zinc-300">{detail}</p>
+      <div className="hud-terminal-line">
+        <span className="hud-terminal-key">{label}</span>
+        <span className="hud-terminal-value font-bold">{value}</span>
+      </div>
+      <p className="mt-1 truncate text-xs text-zinc-300">// {detail}</p>
     </article>
   );
 }

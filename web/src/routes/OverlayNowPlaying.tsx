@@ -54,12 +54,12 @@ export function OverlayNowPlayingPage() {
 
   return (
     <main className="hud-shell hud-shell--compact hud-scanlines text-white">
-      <section className="hud-panel hud-corners hud-accent-cyan mx-auto grid w-full max-w-5xl gap-5 rounded-[1.4rem] p-6 lg:grid-cols-[220px_1fr] lg:items-center">
-        <div className="flex items-center justify-center rounded-[1.4rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(103,232,249,0.35),transparent_42%),linear-gradient(160deg,rgba(255,255,255,0.08),rgba(0,0,0,0.2))] p-5 shadow-inner shadow-black/40">
+      <section className="hud-panel hud-corners hud-accent-cyan mx-auto grid w-full max-w-5xl gap-5 p-5 lg:grid-cols-[180px_1fr] lg:items-center">
+        <div className="flex items-center justify-center border-2 border-white/10 bg-black p-4 shadow-none">
           {track.artUrl ? (
-            <img src={track.artUrl} alt="" className="h-44 w-44 rounded-[1.1rem] border border-white/15 object-cover shadow-2xl shadow-black/50" />
+            <img src={track.artUrl} alt="" className="h-36 w-36 border-2 border-white/15 object-cover shadow-none" />
           ) : (
-            <div className="flex h-44 w-44 items-center justify-center rounded-[1.1rem] border border-white/15 bg-black/45 text-5xl font-black tracking-[0.18em] text-cyan-100">NP</div>
+            <div className="flex h-36 w-36 items-center justify-center border-2 border-white/15 bg-black text-4xl font-black tracking-[0.18em] text-cyan-100">NP</div>
           )}
         </div>
 
