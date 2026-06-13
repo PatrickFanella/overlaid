@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
 import { parseOverlayEvent } from './lib/events';
-import { defaultDashboardConfig, loadDashboardConfig } from './lib/dashboardConfig';
+import { defaultDashboardConfig, loadDashboardConfig, type QuickAction } from './lib/dashboardConfig';
+import { resolveQuickActionSequence, runQuickActionSequence } from './lib/quickActionSequences';
+import { QuickActionRunner } from './routes/dashboard/components/QuickActionRunner';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -66,6 +68,9 @@ describe('App routing', () => {
     expect(html).toContain('Run Main preset');
     expect(html).toContain('Refresh Alerts');
     expect(html).toContain('require confirm');
+    expect(html).toContain('Go Live Main');
+    expect(html).toContain('Start BRB');
+    expect(html).toContain('Sequences run listed actions in order');
   });
 
   it('renders the dashboard config route', () => {
@@ -214,8 +219,121 @@ describe('dashboard config loading', () => {
       'brb-scene',
       'sample-alert',
       'show-brb',
+      'sequence-go-live-main',
+      'sequence-start-brb',
     ]);
     expect(config.quickActions[0]).toMatchObject({ label: 'Go Main now' });
     expect(config.quickActions[1]).toMatchObject({ label: 'Custom Hide' });
+  });
+});
+
+describe('quick action sequence utilities', () => {
+  it('hides no-op sequence buttons while keeping runnable actions', () => {
+    const actions: QuickAction[] = [
+      { id: 'a', label: 'Run Main', kind: 'setScene', sceneName: 'Main' },
+      { id: 'empty', label: 'Empty Sequence', kind: 'sequence', actionIds: ['missing', 'nested'], stopOnError: true },
+      { id: 'nested', label: 'Nested', kind: 'sequence', actionIds: ['a'], stopOnError: true },
+      { id: 'live', label: 'Go Live', kind: 'sequence', actionIds: ['a'], stopOnError: true },
+    ];
+
+    const html = renderToString(
+      <QuickActionRunner
+        actions={actions}
+        apiBaseUrl="http://localhost:8080"
+        operatorSecret="secret"
+        isRunning={false}
+        runAction={() => {
+          throw new Error('unused');
+        }}
+      />,
+    );
+
+    expect(html).toContain('Run Main');
+    expect(html).toContain('Go Live');
+    expect(html).not.toContain('Empty Sequence');
+  });
+
+  it('resolves atomic quick actions in sequence order', () => {
+    const actions = [
+      { id: 'a', label: 'Go Main', kind: 'setScene' as const, sceneName: 'Main' },
+      { id: 'b', label: 'Refresh Alerts', kind: 'refreshSource' as const, inputName: 'Alerts Browser' },
+      { id: 'seq', label: 'Go Live', kind: 'sequence' as const, actionIds: ['a', 'b'], stopOnError: true },
+    ];
+
+    const resolved = resolveQuickActionSequence(actions[2], actions);
+
+    expect(resolved.steps.map((action) => action.id)).toEqual(['a', 'b']);
+    expect(resolved.warnings).toEqual([]);
+  });
+
+  it('skips missing and nested sequence actions with warnings', () => {
+    const actions = [
+      { id: 'a', label: 'Go Main', kind: 'setScene' as const, sceneName: 'Main' },
+      { id: 'nested', label: 'Nested', kind: 'sequence' as const, actionIds: ['a'], stopOnError: true },
+      { id: 'seq', label: 'Go Live', kind: 'sequence' as const, actionIds: ['a', 'missing', 'nested', 'seq'], stopOnError: true },
+    ];
+
+    const resolved = resolveQuickActionSequence(actions[2], actions);
+
+    expect(resolved.steps.map((action) => action.id)).toEqual(['a']);
+    expect(resolved.warnings).toContain('Missing action: missing');
+    expect(resolved.warnings).toContain('Nested sequence skipped: nested');
+    expect(resolved.warnings).toContain('Nested sequence skipped: seq');
+  });
+
+  it('runs sequence child actions in order', async () => {
+    const actions = [
+      { id: 'a', label: 'Go Main', kind: 'setScene' as const, sceneName: 'Main' },
+      { id: 'b', label: 'Refresh Alerts', kind: 'refreshSource' as const, inputName: 'Alerts Browser' },
+      { id: 'seq', label: 'Go Live', kind: 'sequence' as const, actionIds: ['a', 'b'], stopOnError: true },
+    ];
+    const calls: string[] = [];
+    const sequence = actions[2];
+    if (sequence.kind !== 'sequence') throw new Error('expected sequence');
+
+    const result = await runQuickActionSequence(sequence, actions, async (action) => {
+      calls.push(action.id);
+    });
+
+    expect(calls).toEqual(['a', 'b']);
+    expect(result).toEqual({ warnings: [], failures: [], ran: 2 });
+  });
+
+  it('stops after the first failed step when stopOnError is true', async () => {
+    const actions = [
+      { id: 'a', label: 'Go Main', kind: 'setScene' as const, sceneName: 'Main' },
+      { id: 'b', label: 'Refresh Alerts', kind: 'refreshSource' as const, inputName: 'Alerts Browser' },
+      { id: 'seq', label: 'Go Live', kind: 'sequence' as const, actionIds: ['a', 'b'], stopOnError: true },
+    ];
+    const calls: string[] = [];
+    const sequence = actions[2];
+    if (sequence.kind !== 'sequence') throw new Error('expected sequence');
+
+    const result = await runQuickActionSequence(sequence, actions, async (action) => {
+      calls.push(action.id);
+      throw new Error('boom');
+    });
+
+    expect(calls).toEqual(['a']);
+    expect(result.failures).toEqual(['Go Main: boom']);
+  });
+
+  it('continues after failed steps when stopOnError is false', async () => {
+    const actions = [
+      { id: 'a', label: 'Go Main', kind: 'setScene' as const, sceneName: 'Main' },
+      { id: 'b', label: 'Refresh Alerts', kind: 'refreshSource' as const, inputName: 'Alerts Browser' },
+      { id: 'seq', label: 'Go Live', kind: 'sequence' as const, actionIds: ['a', 'b'], stopOnError: false },
+    ];
+    const calls: string[] = [];
+    const sequence = actions[2];
+    if (sequence.kind !== 'sequence') throw new Error('expected sequence');
+
+    const result = await runQuickActionSequence(sequence, actions, async (action) => {
+      calls.push(action.id);
+      throw new Error('boom');
+    });
+
+    expect(calls).toEqual(['a', 'b']);
+    expect(result.failures).toEqual(['Go Main: boom', 'Refresh Alerts: boom']);
   });
 });

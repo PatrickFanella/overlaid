@@ -27,6 +27,7 @@ export type DisplayConfig = {
 };
 
 export type QuickAction =
+  | { id: string; label: string; kind: 'sequence'; actionIds: string[]; stopOnError: boolean; confirm?: boolean }
   | { id: string; label: string; kind: 'setScene'; sceneName: string; confirm?: boolean }
   | { id: string; label: string; kind: 'runPreset'; presetId: string; sceneName: string; confirm?: boolean }
   | { id: string; label: string; kind: 'refreshSource'; inputName: string; confirm?: boolean }
@@ -36,7 +37,7 @@ export type QuickAction =
   | { id: string; label: string; kind: 'clearOverlays'; confirm?: boolean }
   | { id: string; label: string; kind: 'muteInput'; inputName: string; muted: boolean; confirm?: boolean };
 
-export const quickActionKinds = ['setScene', 'sendAlert', 'showBRB', 'hideBRB', 'clearOverlays', 'muteInput', 'runPreset', 'refreshSource'] as const;
+export const quickActionKinds = ['sequence', 'setScene', 'sendAlert', 'showBRB', 'hideBRB', 'clearOverlays', 'muteInput', 'runPreset', 'refreshSource'] as const;
 
 export type DashboardConfig = {
   setupChecklist: SetupChecklistItem[];
@@ -72,6 +73,8 @@ export const defaultDashboardConfig: DashboardConfig = {
     { id: 'sample-alert', label: 'Sample Alert', kind: 'sendAlert', title: 'Sample alert', message: 'Quick action fired', severity: 'success' },
     { id: 'show-brb', label: 'Show BRB', kind: 'showBRB', title: 'Be right back', message: 'Short intermission. Stream resumes soon.', eta: '5 min', items: ['Hydrate', 'Stretch', 'Chat stays live'] },
     { id: 'hide-brb', label: 'Hide BRB', kind: 'hideBRB', confirm: false },
+    { id: 'sequence-go-live-main', label: 'Go Live Main', kind: 'sequence', actionIds: ['main-scene', 'refresh-alerts', 'hide-brb'], stopOnError: true, confirm: true },
+    { id: 'sequence-start-brb', label: 'Start BRB', kind: 'sequence', actionIds: ['brb-scene', 'show-brb'], stopOnError: true, confirm: true },
   ],
   controlWidgets: [
     { id: 'quick-actions', title: 'Quick actions', enabled: true, order: 1, compact: true },
@@ -144,6 +147,8 @@ export function createQuickAction(kind: QuickAction['kind'], label = 'New action
   const id = createQuickActionId(kind);
 
   switch (kind) {
+    case 'sequence':
+      return { id, label, kind, actionIds: ['main-scene', 'refresh-alerts'], stopOnError: true, confirm: true };
     case 'setScene':
       return { id, label, kind, sceneName: 'Main' };
     case 'runPreset':

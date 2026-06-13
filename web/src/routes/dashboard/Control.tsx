@@ -39,12 +39,12 @@ export function DashboardControlPage() {
     saveSessionLog(next);
   }
 
-  function runAction(label: string, action: () => Promise<void>) {
+  function runAction(label: string, action: () => Promise<string | void>) {
     setRunningAction(label);
     recordLog(label, 'running', 'Action started.');
     void action()
-      .then(() => {
-        recordLog(label, 'success', 'Action completed.');
+      .then((message) => {
+        recordLog(label, 'success', message || 'Action completed.');
       })
       .catch((error) => {
         recordLog(label, 'error', error instanceof Error ? error.message : 'Action failed.');
