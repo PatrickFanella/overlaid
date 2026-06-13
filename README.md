@@ -71,7 +71,7 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 - `/dashboard/setup` — setup checklist, browser-source URLs, editable stream presets.
 - `/dashboard/sources` — setup/source URL alias.
 - `/dashboard/control` — stream controls, BRB, OBS controls, sample events, quick actions.
-- `/dashboard/config` — operator secret session storage, MPRIS decision, local console preferences.
+- `/dashboard/config` — operator secret session storage, MPRIS decision, local console preferences, and local automation profiles/show modes.
 - `/overlay/alerts`
 - `/overlay/chat`
 - `/overlay/goals`
@@ -100,6 +100,8 @@ The dashboard can check Twitch auth status, open the Twitch login flow, discover
 If `OPERATOR_SECRET` is configured, enter it in the dashboard before using mutating controls such as test alerts, clear, BRB, or OBS commands.
 The same secret is required to start Twitch OAuth; the dashboard sends it as a header to request a one-time Twitch authorize URL.
 It can also connect to OBS WebSocket to list scenes, switch the current program scene, mute/unmute an input, and show/hide scene items by ID.
+
+Automation profiles are stored locally in `/dashboard/config`. The active profile is respected by `/dashboard/control` and `/dashboard/sources`, which means the operator can switch between show modes without deleting unused actions or presets. Export/import on `/dashboard/config` backs up the dashboard config JSON only; it does not include the operator secret or other session-only data.
 
 OBS WebSocket notes:
 

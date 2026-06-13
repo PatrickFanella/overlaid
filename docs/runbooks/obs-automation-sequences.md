@@ -31,6 +31,20 @@ The default dashboard config includes:
 
 If a default sequence is missing after an update, refresh the dashboard config so the stable default IDs can be merged back in.
 
+## Automation profiles and show modes
+
+The dashboard now supports local automation profiles in `/dashboard/config`. Use these as show modes, not as access control:
+
+- `Full console` — everything visible; best for setup, testing, and editing.
+- `Main live` — the normal live-show profile for primary scene switching and alert refresh actions.
+- `BRB ops` — the intermission profile for BRB and standby controls.
+
+Profile filtering changes what `/dashboard/control` and `/dashboard/sources` show, but it does not delete any hidden quick actions or presets. The full catalog stays in config so you can switch profiles later without rebuilding the show setup.
+
+For sequences, the visible button list is filtered by the active profile, but sequence execution still resolves child actions from the full catalog. That means a visible sequence can still call hidden child actions when they exist in the dashboard config, while missing child IDs are warned about and skipped.
+
+Before changing a show setup or reshaping the profile list, export the dashboard JSON from `/dashboard/config` first so you have a local backup of the current automation profiles and other dashboard settings.
+
 ## Editing a sequence
 
 1. Open `/dashboard/control`.
