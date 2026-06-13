@@ -15,6 +15,23 @@
 
 ---
 
+## Completion status
+
+Status: complete. Implemented, reviewed, verified, committed, rebuilt/deployed locally, smoke-checked, and route spot-checked.
+
+Verification passed:
+
+- `make verify`
+- `docker compose config --quiet`
+- `docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --quiet`
+- `docker compose up -d --build`
+- `make smoke`
+- Route spot-checks: `/dashboard/live`, `/overlay/chat`, `/overlay/debug`
+
+Live QA result: pending real Twitch broadcaster/moderator command test.
+
+---
+
 ## Current Baseline
 
 - `backend/internal/twitch/eventsub.go` already subscribes to `channel.chat.message` and maps it to `events.EventTypeChatMessage`.
@@ -80,7 +97,7 @@ Modify:
 - Create: `backend/internal/twitch/commands_test.go`
 - Modify: `backend/internal/events/events.go`
 
-- [ ] **Step 1: Add failing parser tests**
+- [x] **Step 1: Add failing parser tests**
 
 Create `backend/internal/twitch/commands_test.go` with these tests:
 
@@ -203,7 +220,7 @@ cd backend && go test ./internal/twitch -run 'ChatCommand|CommandProcessor' -cou
 
 Expected: FAIL because command types/functions do not exist.
 
-- [ ] **Step 2: Add command diagnostic event helper**
+- [x] **Step 2: Add command diagnostic event helper**
 
 In `backend/internal/events/events.go`, add:
 
@@ -222,7 +239,7 @@ func NewCommand(source, title, message string, severity Severity, data map[strin
 }
 ```
 
-- [ ] **Step 3: Implement parser, permission gate, and processor**
+- [x] **Step 3: Implement parser, permission gate, and processor**
 
 Create `backend/internal/twitch/commands.go`:
 
@@ -378,7 +395,7 @@ func truncateCommandText(text string, limit int) string {
 }
 ```
 
-- [ ] **Step 4: Run parser tests**
+- [x] **Step 4: Run parser tests**
 
 Run:
 
@@ -389,7 +406,7 @@ cd backend && go test ./internal/twitch -run 'ChatCommand|CommandProcessor' -cou
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 Run:
 
@@ -409,7 +426,7 @@ git commit -m "feat: add twitch chat command parser"
 - Modify: `backend/internal/http/server.go`
 - Modify: `backend/internal/http/handlers_test.go`
 
-- [ ] **Step 1: Add EventSub command wiring tests**
+- [x] **Step 1: Add EventSub command wiring tests**
 
 In `backend/internal/twitch/eventsub_test.go`, add tests that build an `EventSubMessage` for `channel.chat.message` with `message.text = "!alert hydrate"`, `chatter_user_name = "Mod"`, `chatter_user_login = "mod"`, and badges containing moderator. Assert command processing emits the normal chat event plus command diagnostic plus alert action.
 
@@ -501,7 +518,7 @@ cd backend && go test ./internal/twitch -run 'EventsForNotification|ChatCommand'
 
 Expected: FAIL because `EventsForNotification` does not exist.
 
-- [ ] **Step 2: Add EventSub command extraction helpers**
+- [x] **Step 2: Add EventSub command extraction helpers**
 
 In `backend/internal/twitch/eventsub.go`, add:
 
@@ -568,7 +585,7 @@ func badgeItems(value any) []any {
 
 Because manually constructed tests may use `[]map[string]any`, `badgeItems` supports both decoded JSON (`[]any`) and direct test fixtures (`[]map[string]any`).
 
-- [ ] **Step 3: Add command processor to EventSub client**
+- [x] **Step 3: Add command processor to EventSub client**
 
 In `backend/internal/twitch/eventsub.go`, add field to `Client`:
 
@@ -627,7 +644,7 @@ func (s *Server) publishEventSubEvent(event events.Event) {
 
 Keep regular Twitch chat/alert/follow/subscription events transient; only `clear` and `brb` need retained-state handling here.
 
-- [ ] **Step 4: Add retained-state tests for EventSub command publishing**
+- [x] **Step 4: Add retained-state tests for EventSub command publishing**
 
 In `backend/internal/http/handlers_test.go`, add focused tests for the server helper:
 
@@ -656,7 +673,7 @@ func TestPublishEventSubEventPersistsBRB(t *testing.T) {
 }
 ```
 
-- [ ] **Step 5: Run EventSub and server retained-state tests**
+- [x] **Step 5: Run EventSub and server retained-state tests**
 
 Run:
 
@@ -668,7 +685,7 @@ gofmt -w backend/internal/twitch/eventsub.go backend/internal/twitch/eventsub_te
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 2**
+- [x] **Step 6: Commit Task 2**
 
 Run:
 
@@ -687,7 +704,7 @@ git commit -m "feat: wire twitch chat commands to overlays"
 - Modify: `web/src/routes/dashboard/components/EventSubDiagnostics.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add frontend test assertions**
+- [x] **Step 1: Add frontend test assertions**
 
 In `web/src/App.test.tsx`, update the dashboard live route test to assert:
 
@@ -704,7 +721,7 @@ pnpm --dir web run test -- --run src/App.test.tsx
 
 Expected: FAIL because the copy is not rendered yet.
 
-- [ ] **Step 2: Type command event data**
+- [x] **Step 2: Type command event data**
 
 In `web/src/lib/events.ts`, add:
 
@@ -721,7 +738,7 @@ export type CommandEventData = {
 
 Keep the existing permissive `data` shape on `OverlayEvent`; this sprint only documents the typed shape for command consumers and does not refactor every event parser.
 
-- [ ] **Step 3: Add dashboard diagnostics copy**
+- [x] **Step 3: Add dashboard diagnostics copy**
 
 In `web/src/routes/dashboard/components/EventSubDiagnostics.tsx`, add a compact terminal row or paragraph near the existing subscription diagnostics:
 
@@ -732,7 +749,7 @@ In `web/src/routes/dashboard/components/EventSubDiagnostics.tsx`, add a compact 
 </div>
 ```
 
-- [ ] **Step 4: Verify and commit Task 3**
+- [x] **Step 4: Verify and commit Task 3**
 
 Run:
 
@@ -752,14 +769,14 @@ git commit -m "feat: surface twitch command diagnostics"
 - Create: `docs/runbooks/twitch-chat-commands.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Create the runbook**
+- [x] **Step 1: Create the runbook**
 
 Create `docs/runbooks/twitch-chat-commands.md`:
 
 ````md
 # Twitch Chat Commands Runbook
 
-Plan 3 adds a small, moderator-only Twitch chat command layer on top of EventSub chat messages.
+Plan 3 adds a small broadcaster-or-moderator Twitch chat command layer on top of EventSub chat messages.
 
 ## Requirements
 
@@ -804,15 +821,15 @@ Plan 3 adds a small, moderator-only Twitch chat command layer on top of EventSub
 - If no chat appears, check Twitch auth, scopes, EventSub diagnostics, and API logs.
 ````
 
-- [ ] **Step 2: Link runbook from README**
+- [x] **Step 2: Link runbook from README**
 
 In `README.md`, near the existing live operation runbook links, add:
 
 ```md
-For moderator-only Twitch chat controls, use `docs/runbooks/twitch-chat-commands.md`.
+For broadcaster or moderator Twitch chat controls, use `docs/runbooks/twitch-chat-commands.md`.
 ```
 
-- [ ] **Step 3: Verify and commit Task 4**
+- [x] **Step 3: Verify and commit Task 4**
 
 Run:
 
@@ -829,7 +846,7 @@ git commit -m "docs: add twitch chat command runbook"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-13-plan-3-twitch-interaction-layer.md`
 
-- [ ] **Step 1: Run final verification**
+- [x] **Step 1: Run final verification**
 
 Run:
 
@@ -841,7 +858,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.example.yml conf
 
 Expected: all commands pass.
 
-- [ ] **Step 2: Rebuild and smoke local stack**
+- [x] **Step 2: Rebuild and smoke local stack**
 
 Run:
 
@@ -852,7 +869,7 @@ make smoke
 
 Expected: `/healthz`, `/overlay/alerts`, and `/dashboard` respond.
 
-- [ ] **Step 3: Route spot-check**
+- [x] **Step 3: Route spot-check**
 
 Open or request:
 
@@ -868,7 +885,7 @@ Expected:
 - Chat overlay still renders without command-specific chrome.
 - Debug overlay can show `custom_command` events when they arrive.
 
-- [ ] **Step 4: Mark Plan 3 complete**
+- [x] **Step 4: Mark Plan 3 complete**
 
 After implementation, review, verification, commit, push, rebuild, and smoke, add near the top of this file:
 
@@ -890,7 +907,7 @@ Live QA result: pending real Twitch moderator command test.
 ---
 ```
 
-- [ ] **Step 5: Commit and push completion update**
+- [x] **Step 5: Commit and push completion update**
 
 Run:
 
@@ -904,7 +921,7 @@ git push origin main
 
 ## Final Self-Review Checklist
 
-- Spec coverage: parsing, moderator-only gating, cooldowns, alert/clear/BRB/back actions, diagnostics, frontend copy, and runbook are all represented.
+- Spec coverage: parsing, broadcaster/moderator gating, cooldowns, alert/clear/BRB/back actions, diagnostics, frontend copy, and runbook are all represented.
 - YAGNI check: no IRC, no outbound chat replies, no database, no arbitrary quick-action execution.
 - Safety check: viewer commands produce diagnostics but no overlay-changing actions.
 - Regression check: regular chat messages still publish as `chat_message` events.
