@@ -42,6 +42,8 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/dashboard/live" />);
 
     expect(html).toContain('Live preflight');
+    expect(html).toContain('Chat commands');
+    expect(html).toContain('mods + broadcaster only');
   });
 
   it('renders the dashboard sources route', () => {

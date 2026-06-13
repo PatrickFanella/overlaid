@@ -693,7 +693,7 @@ In `web/src/App.test.tsx`, update the dashboard live route test to assert:
 
 ```ts
 expect(html).toContain('Chat commands');
-expect(html).toContain('moderator-only');
+expect(html).toContain('mods + broadcaster only');
 ```
 
 Run:
@@ -728,7 +728,7 @@ In `web/src/routes/dashboard/components/EventSubDiagnostics.tsx`, add a compact 
 ```tsx
 <div className="hud-terminal-line">
   <span className="hud-terminal-key">Chat commands</span>
-  <span className="hud-terminal-value">moderator-only when EventSub chat is connected</span>
+  <span className="hud-terminal-value">mods + broadcaster only</span>
 </div>
 ```
 
@@ -864,7 +864,7 @@ http://localhost:5173/overlay/debug
 
 Expected:
 
-- Live route mentions moderator-only chat commands.
+- Live route mentions mods + broadcaster chat commands.
 - Chat overlay still renders without command-specific chrome.
 - Debug overlay can show `custom_command` events when they arrive.
 

@@ -9,6 +9,15 @@ export type OverlayEventType =
 
 export type OverlaySeverity = 'info' | 'success' | 'warning' | 'error';
 
+export type CommandEventData = {
+  command: string;
+  args: string;
+  user: string;
+  login: string;
+  isBroadcaster: boolean;
+  isModerator: boolean;
+};
+
 export type OverlayEvent = {
   id: string;
   type: OverlayEventType;

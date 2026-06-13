@@ -8,6 +8,7 @@ export function EventSubDiagnostics({ status }: { status: TwitchStatus | null })
       <p className="hud-label">Twitch EventSub</p>
       <div className="mt-2 grid gap-1">
         <div className="hud-terminal-line"><span className="hud-terminal-key">link</span><span className="hud-terminal-value">{eventSub?.connected ? 'connected' : 'not connected'}</span></div>
+        <div className="hud-terminal-line"><span className="hud-terminal-key">Chat commands</span><span className="hud-terminal-value">mods + broadcaster only</span></div>
         <div className="hud-terminal-line"><span className="hud-terminal-key">subs</span><span className="hud-terminal-value">{eventSub ? `${eventSub.subscriptionsMade}/${eventSub.subscriptionsPlan}` : 'n/a'}</span></div>
         <div className="hud-terminal-line"><span className="hud-terminal-key">last event</span><span className="hud-terminal-value">{eventSub?.lastEventAt || 'waiting'}</span></div>
       </div>
