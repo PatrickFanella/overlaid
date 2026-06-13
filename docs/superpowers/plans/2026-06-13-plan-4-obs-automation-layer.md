@@ -15,6 +15,23 @@
 
 ---
 
+## Completion status
+
+Status: complete. Implemented, reviewed, verified, committed, rebuilt/deployed locally, smoke-checked, and route spot-checked.
+
+Verification passed:
+
+- `make verify`
+- `docker compose config --quiet`
+- `docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --quiet`
+- `docker compose up -d --build`
+- `make smoke`
+- Route spot-checks: `/dashboard/control`, `/dashboard/live`, `/overlay/alerts`
+
+Live QA result: pending off-stream OBS sequence rehearsal.
+
+---
+
 ## Current Baseline
 
 - `web/src/lib/dashboardConfig.ts` owns local dashboard config and quick action definitions.
@@ -79,7 +96,7 @@ Modify:
 - Modify: `web/src/routes/dashboard/components/QuickActionRunner.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Update imports in `web/src/App.test.tsx`:
 
@@ -202,7 +219,7 @@ describe('quick action sequence utilities', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -212,7 +229,7 @@ pnpm --dir web run test -- --run src/App.test.tsx
 
 Expected: FAIL because sequence types, defaults, resolver, and runner do not exist yet.
 
-- [ ] **Step 3: Add sequence config support**
+- [x] **Step 3: Add sequence config support**
 
 Modify `web/src/lib/dashboardConfig.ts`:
 
@@ -245,7 +262,7 @@ case 'sequence':
   return { id, label, kind, actionIds: ['main-scene', 'refresh-alerts'], stopOnError: true, confirm: true };
 ```
 
-- [ ] **Step 4: Add sequence resolver/runner utility**
+- [x] **Step 4: Add sequence resolver/runner utility**
 
 Create `web/src/lib/quickActionSequences.ts`:
 
@@ -309,7 +326,7 @@ export async function runQuickActionSequence(
 }
 ```
 
-- [ ] **Step 5: Wire session log success messages and sequence execution**
+- [x] **Step 5: Wire session log success messages and sequence execution**
 
 In `web/src/routes/dashboard/Control.tsx`, change `runAction` to accept success text:
 
@@ -388,7 +405,7 @@ Make the runner explanatory copy render even when the widget is compact:
 <p className="hud-copy mt-1 text-xs text-zinc-300">Stored in browser local storage and executed through protected API helpers. Sequences run listed actions in order, skip nested sequences, and write warnings to the session log.</p>
 ```
 
-- [ ] **Step 6: Run tests, build, and commit**
+- [x] **Step 6: Run tests, build, and commit**
 
 Run:
 
@@ -415,7 +432,7 @@ git commit -m "feat: add obs automation sequences"
 - Modify: `web/src/routes/dashboard/components/QuickActionsEditor.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add failing editor assertions**
+- [x] **Step 1: Add failing editor assertions**
 
 In the dashboard control route test in `web/src/App.test.tsx`, add:
 
@@ -424,7 +441,7 @@ expect(html).toContain('Action IDs');
 expect(html).toContain('Stop sequence on first failed step');
 ```
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 Run:
 
@@ -434,7 +451,7 @@ pnpm --dir web run test -- --run src/App.test.tsx
 
 Expected: FAIL because the editor does not render sequence fields yet.
 
-- [ ] **Step 3: Add editor sequence fields and warnings**
+- [x] **Step 3: Add editor sequence fields and warnings**
 
 Update imports in `web/src/routes/dashboard/components/QuickActionsEditor.tsx`:
 
@@ -489,7 +506,7 @@ if (next.kind === 'sequence') {
 }
 ```
 
-- [ ] **Step 4: Run tests, build, and commit**
+- [x] **Step 4: Run tests, build, and commit**
 
 Run:
 
@@ -516,7 +533,7 @@ git commit -m "feat: add sequence quick action editor"
 - Create: `docs/runbooks/obs-automation-sequences.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Create the runbook**
+- [x] **Step 1: Create the runbook**
 
 Create `docs/runbooks/obs-automation-sequences.md`:
 
@@ -564,7 +581,7 @@ Use sequence quick actions when one live operation should run several existing d
 - If a sequence does nothing, check that every listed action ID exists and is not another sequence.
 ```
 
-- [ ] **Step 2: Link the runbook from README**
+- [x] **Step 2: Link the runbook from README**
 
 In `README.md`, add this line near the other live-operation runbooks:
 
@@ -572,7 +589,7 @@ In `README.md`, add this line near the other live-operation runbooks:
 For dashboard OBS automation chains, use `docs/runbooks/obs-automation-sequences.md`.
 ```
 
-- [ ] **Step 3: Run verification and commit**
+- [x] **Step 3: Run verification and commit**
 
 Run:
 
@@ -596,7 +613,7 @@ git commit -m "docs: add obs automation sequence runbook"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-13-plan-4-obs-automation-layer.md`
 
-- [ ] **Step 1: Run full local checks**
+- [x] **Step 1: Run full local checks**
 
 Run:
 
@@ -608,7 +625,7 @@ make verify
 
 Expected: all pass.
 
-- [ ] **Step 2: Rebuild and smoke-check**
+- [x] **Step 2: Rebuild and smoke-check**
 
 Run:
 
@@ -619,7 +636,7 @@ make smoke
 
 Expected: image rebuild succeeds and smoke checks pass.
 
-- [ ] **Step 3: Spot-check dashboard routes**
+- [x] **Step 3: Spot-check dashboard routes**
 
 Open or curl the deployed web origin routes:
 
@@ -631,7 +648,7 @@ Open or curl the deployed web origin routes:
 
 Expected: routes load without SPA fallback errors. `/dashboard/control` contains `Go Live Main` and `Start BRB`.
 
-- [ ] **Step 4: Update this plan completion status**
+- [x] **Step 4: Update this plan completion status**
 
 Add this block near the top of this plan after the header:
 
@@ -656,7 +673,7 @@ Live QA result: pending off-stream OBS sequence rehearsal.
 
 Check every task checkbox that was completed.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 Run the required pre-commit inspection first:
 
