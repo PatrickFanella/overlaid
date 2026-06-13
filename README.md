@@ -80,6 +80,7 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 - `/overlay/debug`
 
 For live operation, follow `docs/runbooks/live-stream-preflight.md`.
+For OBS automation sequences, follow `docs/runbooks/obs-automation-sequences.md`.
 For moderator or broadcaster Twitch chat controls, use `docs/runbooks/twitch-chat-commands.md`.
 For post-build route checks and styling changes, use `docs/runbooks/visual-qa.md`.
 
