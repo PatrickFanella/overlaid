@@ -50,6 +50,19 @@ func NewAlert(source, title, message string, severity Severity) Event {
 	}
 }
 
+func NewCommand(source, title, message string, severity Severity, data map[string]any) Event {
+	return Event{
+		ID:        newID(),
+		Type:      EventTypeCommand,
+		Source:    source,
+		Title:     title,
+		Message:   message,
+		Severity:  severity,
+		Data:      data,
+		CreatedAt: time.Now().UTC(),
+	}
+}
+
 func NewClear(source string) Event {
 	return Event{
 		ID:        newID(),
