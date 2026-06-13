@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,6 +20,17 @@ import (
 type streamRecorder struct {
 	*httptest.ResponseRecorder
 	flushed bool
+}
+
+type readyzResponse struct {
+	Status string        `json:"status"`
+	Checks []readyzCheck `json:"checks"`
+}
+
+type readyzCheck struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Hint   string `json:"hint"`
 }
 
 func (r *streamRecorder) Flush() {
@@ -37,6 +49,179 @@ func TestHealthz(t *testing.T) {
 	}
 	if rec.Body.String() != "ok\n" {
 		t.Fatalf("expected ok body, got %q", rec.Body.String())
+	}
+}
+
+func TestReadyzReportsProcessAndOptionalDependencies(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body readyzResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode readyz: %v", err)
+	}
+	if body.Status == "" || len(body.Checks) == 0 {
+		t.Fatalf("expected readiness status and checks, got %#v", body)
+	}
+	assertReadyzCheckSet(t, body.Checks, map[string]string{
+		"process":         "ok",
+		"retained_state":  "ok",
+		"twitch_config":   "degraded",
+		"twitch_auth":     "degraded",
+		"twitch_eventsub": "degraded",
+		"obs_config":      "degraded",
+		"obs_reachable":   "degraded",
+		"obs_auth":        "degraded",
+	})
+	if body.Status != "degraded" {
+		t.Fatalf("expected degraded overall status, got %#v", body)
+	}
+}
+
+func TestReadyzReportsStateLoadFailure(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "overlay-state.json")
+	if err := os.WriteFile(statePath, []byte("not-json"), 0o600); err != nil {
+		t.Fatalf("write corrupt state: %v", err)
+	}
+	server := NewServer(config.Config{AllowedOrigin: "*", OverlayStateFile: statePath}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 degraded report, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body readyzResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode readyz: %v", err)
+	}
+	if body.Status != "degraded" {
+		t.Fatalf("expected degraded status, got %#v", body)
+	}
+	if !readyzHasCheck(body.Checks, "retained_state", "degraded") {
+		t.Fatalf("expected retained_state degraded check, got %#v", body.Checks)
+	}
+}
+
+func readyzHasCheck(checks []readyzCheck, name, status string) bool {
+	for _, check := range checks {
+		if check.Name == name && check.Status == status {
+			return true
+		}
+	}
+	return false
+}
+
+func assertReadyzCheckSet(t *testing.T, checks []readyzCheck, expected map[string]string) {
+	t.Helper()
+	if len(checks) != len(expected) {
+		t.Fatalf("expected %d checks, got %d: %#v", len(expected), len(checks), checks)
+	}
+	seen := make(map[string]struct{}, len(checks))
+	for _, check := range checks {
+		if want, ok := expected[check.Name]; !ok {
+			t.Fatalf("unexpected check %q: %#v", check.Name, checks)
+		} else if check.Status != want {
+			t.Fatalf("unexpected status for %q: want %q got %q (%#v)", check.Name, want, check.Status, checks)
+		}
+		seen[check.Name] = struct{}{}
+	}
+	for name := range expected {
+		if _, ok := seen[name]; !ok {
+			t.Fatalf("missing check %q: %#v", name, checks)
+		}
+	}
+}
+
+func TestReadyzReturnsDegradedWhenOBSHelloStalls(t *testing.T) {
+	obsServer := newStalledOBSWebSocketServer(t)
+	defer obsServer.Close()
+
+	server := NewServer(config.Config{AllowedOrigin: "*", OBSWebSocketURL: wsURL(obsServer.URL)}, events.NewBus(4))
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		server.Handler().ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("readyz timed out waiting for stalled OBS hello")
+	}
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body readyzResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode readyz: %v", err)
+	}
+	assertReadyzCheckSet(t, body.Checks, map[string]string{
+		"process":         "ok",
+		"retained_state":  "ok",
+		"twitch_config":   "degraded",
+		"twitch_auth":     "degraded",
+		"twitch_eventsub": "degraded",
+		"obs_config":      "ok",
+		"obs_reachable":   "degraded",
+		"obs_auth":        "degraded",
+	})
+	if body.Status != "degraded" {
+		t.Fatalf("expected degraded overall status, got %#v", body)
+	}
+}
+
+func TestReadyzReportsOBSAuthFailureSeparately(t *testing.T) {
+	obsServer := newAuthRequiredOBSWebSocketServer(t)
+	defer obsServer.Close()
+
+	server := NewServer(config.Config{AllowedOrigin: "*", OBSWebSocketURL: wsURL(obsServer.URL), OBSWebSocketPass: "wrong-password"}, events.NewBus(4))
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		server.Handler().ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("readyz timed out waiting for OBS auth failure")
+	}
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body readyzResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode readyz: %v", err)
+	}
+	if !readyzHasCheck(body.Checks, "obs_reachable", "ok") || !readyzHasCheck(body.Checks, "obs_auth", "degraded") {
+		t.Fatalf("expected obs reachable ok and obs auth degraded, got %#v", body.Checks)
+	}
+	if body.Status != "degraded" {
+		t.Fatalf("expected degraded overall status, got %#v", body)
 	}
 }
 
@@ -192,6 +377,46 @@ func newFakeOBSWebSocketServer(t *testing.T, handle func(requestType string, req
 		if err := conn.WriteJSON(response); err != nil {
 			t.Fatalf("write response failed: %v", err)
 		}
+	}))
+}
+
+func newStalledOBSWebSocketServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Fatalf("upgrade failed: %v", err)
+		}
+		defer conn.Close()
+
+		<-r.Context().Done()
+	}))
+}
+
+func newAuthRequiredOBSWebSocketServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Fatalf("upgrade failed: %v", err)
+		}
+		defer conn.Close()
+
+		if err := conn.WriteJSON(map[string]any{"op": 0, "d": map[string]any{"obsStudioVersion": "30.2.0", "obsWebSocketVersion": "5.5.0", "rpcVersion": 1, "authentication": map[string]any{"challenge": "challenge", "salt": "salt"}}}); err != nil {
+			t.Fatalf("write hello failed: %v", err)
+		}
+
+		var identify map[string]any
+		if err := conn.ReadJSON(&identify); err != nil {
+			t.Fatalf("read identify failed: %v", err)
+		}
+		if got := identify["op"]; got != float64(1) {
+			t.Fatalf("unexpected identify op: %#v", identify)
+		}
+
+		<-r.Context().Done()
 	}))
 }
 

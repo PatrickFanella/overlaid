@@ -26,6 +26,8 @@ const (
 	defaultTimeout = 10 * time.Second
 )
 
+var errOBSAuthFailed = errors.New("obs websocket authentication failed")
+
 type Client struct {
 	URL      string
 	Password string
@@ -117,6 +119,14 @@ func (c Client) Status(ctx context.Context) Status {
 	conn, hello, err := c.connect(ctx)
 	if err != nil {
 		status.Error = err.Error()
+		if errors.Is(err, errOBSAuthFailed) {
+			status.Reachable = true
+			status.Authenticated = false
+			status.OBSStudioVersion = hello.OBSStudioVersion
+			status.OBSWebSocketVersion = hello.OBSWebSocketVersion
+			status.RPCVersion = hello.RPCVersion
+			return status
+		}
 		return status
 	}
 	defer conn.Close()
@@ -229,18 +239,28 @@ func (c Client) SetSceneItemEnabled(ctx context.Context, sceneName string, scene
 }
 
 func (c Client) call(ctx context.Context, requestType string, payload map[string]any) (map[string]any, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
 	conn, _, err := c.connect(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
+	deadline := deadlineFromContext(ctx)
 
 	requestID := newRequestID()
+	if err := setConnDeadline(conn, deadline); err != nil {
+		return nil, err
+	}
 	if err := conn.WriteJSON(envelope{Op: opRequest, Data: mustJSON(requestData{RequestType: requestType, RequestID: requestID, RequestData: payload})}); err != nil {
 		return nil, err
 	}
 
 	for {
+		if err := setConnDeadline(conn, deadline); err != nil {
+			return nil, err
+		}
 		var msg envelope
 		if err := conn.ReadJSON(&msg); err != nil {
 			return nil, err
@@ -273,6 +293,7 @@ func (c Client) connect(ctx context.Context) (*websocket.Conn, helloData, error)
 	}
 	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
+	deadline := deadlineFromContext(ctx)
 
 	dialer := c.Dialer
 	if dialer == nil {
@@ -280,6 +301,10 @@ func (c Client) connect(ctx context.Context) (*websocket.Conn, helloData, error)
 	}
 	conn, _, err := dialer.DialContext(ctx, c.URL, http.Header{"Sec-WebSocket-Protocol": []string{"obswebsocket.json"}})
 	if err != nil {
+		return nil, helloData{}, err
+	}
+	if err := setConnDeadline(conn, deadline); err != nil {
+		conn.Close()
 		return nil, helloData{}, err
 	}
 
@@ -293,21 +318,29 @@ func (c Client) connect(ctx context.Context) (*websocket.Conn, helloData, error)
 	if hello.Authentication != nil {
 		if strings.TrimSpace(c.Password) == "" {
 			conn.Close()
-			return nil, helloData{}, errors.New("obs websocket password is required")
+			return nil, hello, fmt.Errorf("%w: obs websocket password is required", errOBSAuthFailed)
 		}
 		identify.Authentication = ComputeAuthentication(c.Password, hello.Authentication.Salt, hello.Authentication.Challenge)
 	}
 
+	if err := setConnDeadline(conn, deadline); err != nil {
+		conn.Close()
+		return nil, hello, fmt.Errorf("%w: %v", errOBSAuthFailed, err)
+	}
 	if err := conn.WriteJSON(envelope{Op: opIdentify, Data: mustJSON(identify)}); err != nil {
 		conn.Close()
-		return nil, helloData{}, err
+		return nil, hello, fmt.Errorf("%w: %v", errOBSAuthFailed, err)
 	}
 
 	for {
+		if err := setConnDeadline(conn, deadline); err != nil {
+			conn.Close()
+			return nil, hello, fmt.Errorf("%w: %v", errOBSAuthFailed, err)
+		}
 		var msg envelope
 		if err := conn.ReadJSON(&msg); err != nil {
 			conn.Close()
-			return nil, helloData{}, err
+			return nil, hello, fmt.Errorf("%w: %v", errOBSAuthFailed, err)
 		}
 		if msg.Op == opIdentified {
 			return conn, hello, nil
@@ -328,6 +361,20 @@ func readHello(conn *websocket.Conn) (helloData, error) {
 		return helloData{}, err
 	}
 	return hello, nil
+}
+
+func deadlineFromContext(ctx context.Context) time.Time {
+	if deadline, ok := ctx.Deadline(); ok {
+		return deadline
+	}
+	return time.Now().Add(defaultTimeout)
+}
+
+func setConnDeadline(conn *websocket.Conn, deadline time.Time) error {
+	if err := conn.SetReadDeadline(deadline); err != nil {
+		return err
+	}
+	return conn.SetWriteDeadline(deadline)
 }
 
 func ComputeAuthentication(password, salt, challenge string) string {

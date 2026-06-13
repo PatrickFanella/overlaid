@@ -382,6 +382,10 @@ func (s *Server) twitchCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) twitchStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.buildTwitchStatus(r.Context()))
+}
+
+func (s *Server) buildTwitchStatus(ctx context.Context) twitchStatusResponse {
 	status := twitchStatusResponse{
 		Configured:    s.twitchConfigured(),
 		Authenticated: false,
@@ -392,7 +396,7 @@ func (s *Server) twitchStatus(w http.ResponseWriter, r *http.Request) {
 		EventSub:      s.twitchEventSubDiagnostics.Snapshot(),
 	}
 
-	if token, ok := s.ensureTwitchToken(r.Context()); ok {
+	if token, ok := s.ensureTwitchToken(ctx); ok {
 		status.Authenticated = true
 		status.StreamerLogin = token.Login
 		if status.StreamerLogin == "" {
@@ -408,8 +412,7 @@ func (s *Server) twitchStatus(w http.ResponseWriter, r *http.Request) {
 		status.LastAuthError = reason
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(status)
+	return status
 }
 
 func (s *Server) ensureTwitchToken(ctx context.Context) (*twitchTokenInfo, bool) {

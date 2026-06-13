@@ -1,14 +1,17 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
 )
 
 const maxJSONBodyBytes = 1 << 20
@@ -29,9 +32,102 @@ type brbRequest struct {
 	Data    map[string]any `json:"data"`
 }
 
+type readinessResponse struct {
+	Status string           `json:"status"`
+	Checks []readinessCheck `json:"checks"`
+}
+
+type readinessCheck struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Hint   string `json:"hint,omitempty"`
+}
+
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = fmt.Fprintln(w, "ok")
+}
+
+func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
+	checks := []readinessCheck{{Name: "process", Status: "ok"}}
+
+	if s.stateLoadError != "" {
+		checks = append(checks, readinessCheck{Name: "retained_state", Status: "degraded", Hint: "overlay state file could not be loaded; back it up, inspect JSON, or clear retained overlay state"})
+	} else {
+		checks = append(checks, readinessCheck{Name: "retained_state", Status: "ok"})
+	}
+
+	checks = append(checks, s.buildTwitchReadinessChecks(r.Context())...)
+
+	obsCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	checks = append(checks, buildOBSReadinessChecks(s.obs.Status(obsCtx))...)
+
+	status := "ok"
+	for _, check := range checks {
+		if check.Status != "ok" {
+			status = "degraded"
+			break
+		}
+	}
+
+	writeJSON(w, readinessResponse{Status: status, Checks: checks})
+}
+
+func (s *Server) buildTwitchReadinessChecks(ctx context.Context) []readinessCheck {
+	if !s.twitchConfigured() {
+		return []readinessCheck{
+			{Name: "twitch_config", Status: "degraded", Hint: "Twitch is not configured; set Twitch env vars before relying on EventSub"},
+			{Name: "twitch_auth", Status: "degraded", Hint: "Twitch cannot authenticate until configured"},
+			{Name: "twitch_eventsub", Status: "degraded", Hint: "EventSub cannot connect until Twitch is configured"},
+		}
+	}
+
+	checks := []readinessCheck{{Name: "twitch_config", Status: "ok"}}
+	if s.twitchTokenLoadError != "" {
+		return append(checks,
+			readinessCheck{Name: "twitch_auth", Status: "degraded", Hint: "saved Twitch token could not be loaded; re-run Twitch login"},
+			readinessCheck{Name: "twitch_eventsub", Status: "degraded", Hint: "EventSub needs valid Twitch auth"},
+		)
+	}
+
+	status := s.buildTwitchStatus(ctx)
+	if !status.Authenticated {
+		return append(checks,
+			readinessCheck{Name: "twitch_auth", Status: "degraded", Hint: "Twitch is not authenticated; open /dashboard/live and login"},
+			readinessCheck{Name: "twitch_eventsub", Status: "degraded", Hint: "EventSub needs valid Twitch auth"},
+		)
+	}
+
+	checks = append(checks, readinessCheck{Name: "twitch_auth", Status: "ok"})
+	if status.EventSub.Enabled && !status.EventSub.Connected {
+		return append(checks, readinessCheck{Name: "twitch_eventsub", Status: "degraded", Hint: "EventSub is enabled but not connected; check token scopes and API logs"})
+	}
+	return append(checks, readinessCheck{Name: "twitch_eventsub", Status: "ok"})
+}
+
+func buildOBSReadinessChecks(status obsws.Status) []readinessCheck {
+	if !status.Configured {
+		return []readinessCheck{
+			{Name: "obs_config", Status: "degraded", Hint: "OBS WebSocket URL is not configured"},
+			{Name: "obs_reachable", Status: "degraded", Hint: "OBS cannot be reached until configured"},
+			{Name: "obs_auth", Status: "degraded", Hint: "OBS authentication cannot be checked until configured"},
+		}
+	}
+
+	checks := []readinessCheck{{Name: "obs_config", Status: "ok"}}
+	if !status.Reachable {
+		return append(checks,
+			readinessCheck{Name: "obs_reachable", Status: "degraded", Hint: "OBS WebSocket is not reachable; check OBS, URL, Docker networking, and host override"},
+			readinessCheck{Name: "obs_auth", Status: "degraded", Hint: "OBS auth cannot be checked until reachable"},
+		)
+	}
+
+	checks = append(checks, readinessCheck{Name: "obs_reachable", Status: "ok"})
+	if !status.Authenticated {
+		return append(checks, readinessCheck{Name: "obs_auth", Status: "degraded", Hint: "OBS WebSocket authentication failed; check OBS_WEBSOCKET_PASSWORD"})
+	}
+	return append(checks, readinessCheck{Name: "obs_auth", Status: "ok"})
 }
 
 func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {

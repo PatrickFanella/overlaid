@@ -4,6 +4,7 @@ import "net/http"
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.healthz)
+	s.mux.HandleFunc("GET /readyz", s.readyz)
 	s.mux.HandleFunc("GET /api/auth/twitch/login", s.twitchLogin)
 	s.mux.HandleFunc("POST /api/auth/twitch/login-url", s.requireOperator(s.twitchLoginURL))
 	s.mux.HandleFunc("GET /api/auth/twitch/callback", s.twitchCallback)

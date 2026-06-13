@@ -21,18 +21,25 @@ type Server struct {
 	bus                       *events.Bus
 	obs                       obsws.Client
 	state                     *state.Store
+	stateLoadError            string
 	twitch                    *twitchAuthStore
+	twitchTokenLoadError      string
 	twitchEventSubDiagnostics *twitch.DiagnosticsStore
 	mux                       *http.ServeMux
 }
 
 func NewServer(cfg config.Config, bus *events.Bus) *Server {
 	store := state.New(cfg.OverlayStateFile)
+	stateLoadError := ""
 	if err := store.Load(); err != nil {
+		stateLoadError = err.Error()
 		log.Printf("failed to load overlay state: %v", err)
 	}
-	server := &Server{config: cfg, bus: bus, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
-	_ = server.twitch.loadPersistedToken()
+	server := &Server{config: cfg, bus: bus, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, stateLoadError: stateLoadError, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
+	if err := server.twitch.loadPersistedToken(); err != nil {
+		server.twitchTokenLoadError = err.Error()
+		log.Printf("failed to load twitch token: %v", err)
+	}
 	server.routes()
 	return server
 }

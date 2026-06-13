@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -101,6 +102,50 @@ func TestRefreshBrowserSourceRequiresInputName(t *testing.T) {
 	}
 }
 
+func TestStatusReturnsQuicklyWhenHelloStalls(t *testing.T) {
+	server := newStalledOBSWebSocketServer(t)
+	defer server.Close()
+
+	client := Client{URL: wsURL(server.URL)}
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	status := client.Status(ctx)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Status took too long: %s", elapsed)
+	}
+	if status.Reachable {
+		t.Fatalf("expected stalled OBS to be unreachable, got %#v", status)
+	}
+	if status.Error == "" {
+		t.Fatalf("expected error for stalled OBS, got %#v", status)
+	}
+}
+
+func TestStatusReportsReachableOnAuthFailure(t *testing.T) {
+	server := newAuthRequiredOBSWebSocketServer(t)
+	defer server.Close()
+
+	client := Client{URL: wsURL(server.URL), Password: "wrong-password"}
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	status := client.Status(ctx)
+	if !status.Reachable {
+		t.Fatalf("expected auth failure to remain reachable, got %#v", status)
+	}
+	if status.Authenticated {
+		t.Fatalf("expected auth failure to be unauthenticated, got %#v", status)
+	}
+	if status.OBSStudioVersion != "30.2.0" || status.OBSWebSocketVersion != "5.5.0" || status.RPCVersion != 1 {
+		t.Fatalf("expected hello metadata to be preserved, got %#v", status)
+	}
+	if status.Error == "" {
+		t.Fatalf("expected error for auth failure, got %#v", status)
+	}
+}
+
 func newFakeOBSWebSocketServer(t *testing.T, handle func(requestType string, requestData map[string]any) map[string]any) *httptest.Server {
 	t.Helper()
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
@@ -139,6 +184,46 @@ func newFakeOBSWebSocketServer(t *testing.T, handle func(requestType string, req
 		if err := conn.WriteJSON(envelope{Op: opRequestResponse, Data: mustJSON(response)}); err != nil {
 			t.Fatalf("write response failed: %v", err)
 		}
+	}))
+}
+
+func newStalledOBSWebSocketServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Fatalf("upgrade failed: %v", err)
+		}
+		defer conn.Close()
+
+		<-r.Context().Done()
+	}))
+}
+
+func newAuthRequiredOBSWebSocketServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Fatalf("upgrade failed: %v", err)
+		}
+		defer conn.Close()
+
+		if err := conn.WriteJSON(envelope{Op: opHello, Data: mustJSON(helloData{OBSStudioVersion: "30.2.0", OBSWebSocketVersion: "5.5.0", RPCVersion: 1, Authentication: &authentication{Challenge: "challenge", Salt: "salt"}})}); err != nil {
+			t.Fatalf("write hello failed: %v", err)
+		}
+
+		var identify envelope
+		if err := conn.ReadJSON(&identify); err != nil {
+			t.Fatalf("read identify failed: %v", err)
+		}
+		if identify.Op != opIdentify {
+			t.Fatalf("unexpected identify op: %#v", identify)
+		}
+
+		<-r.Context().Done()
 	}))
 }
 
