@@ -1,6 +1,7 @@
 package state
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -53,5 +54,32 @@ func TestFileStoreRoundTrip(t *testing.T) {
 	list := loaded.List()
 	if len(list) != 2 || list[0].Title != "BRB" || list[1].Title != "Ticker" {
 		t.Fatalf("unexpected loaded list: %#v", list)
+	}
+}
+
+func TestFileStoreLoadMissingFileIsAllowed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "overlay-state.json")
+	store := New(path)
+
+	if err := store.Load(); err != nil {
+		t.Fatalf("load missing state: %v", err)
+	}
+	if got := store.List(); len(got) != 0 {
+		t.Fatalf("expected no retained events, got %#v", got)
+	}
+}
+
+func TestFileStoreLoadMalformedJSONReturnsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "overlay-state.json")
+	if err := os.WriteFile(path, []byte("not-json"), 0o600); err != nil {
+		t.Fatalf("write corrupt state: %v", err)
+	}
+
+	store := New(path)
+	if err := store.Load(); err == nil {
+		t.Fatal("expected malformed state load error")
+	}
+	if got := store.List(); len(got) != 0 {
+		t.Fatalf("expected no retained events after malformed load, got %#v", got)
 	}
 }

@@ -130,6 +130,49 @@ func TestTwitchTokenSaveAndLoad(t *testing.T) {
 	}
 }
 
+func TestTwitchMissingTokenFileIsAllowed(t *testing.T) {
+	server := newTwitchServerWithTokenFile(t, filepath.Join(t.TempDir(), "missing-token.json"))
+
+	if err := server.twitch.loadPersistedToken(); err != nil {
+		t.Fatalf("load missing token file: %v", err)
+	}
+	if token, ok := server.twitch.snapshot(); ok || token != nil {
+		t.Fatalf("expected no token snapshot, got %#v ok=%v", token, ok)
+	}
+	if got := server.twitch.recentAuthError(); got != "" {
+		t.Fatalf("unexpected auth error for missing token file: %s", got)
+	}
+}
+
+func TestTwitchMalformedTokenFileDoesNotPanicAndRecordsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "invalid-token.json")
+	if err := os.WriteFile(path, []byte("not-json"), 0o600); err != nil {
+		t.Fatalf("write invalid file: %v", err)
+	}
+
+	server := newTwitchServerWithTokenFile(t, path)
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("loadPersistedToken panicked: %v", r)
+		}
+	}()
+
+	if err := server.twitch.loadPersistedToken(); err == nil {
+		t.Fatal("expected malformed token load error")
+	}
+	if token, ok := server.twitch.snapshot(); ok || token != nil {
+		t.Fatalf("expected no token snapshot, got %#v ok=%v", token, ok)
+	}
+	if got := server.twitch.recentAuthError(); got != "token_file_invalid" {
+		t.Fatalf("unexpected auth error: %s", got)
+	}
+
+	status := readTwitchStatus(t, server)
+	if status.AuthError != "token_file_invalid" || status.LastAuthError != "token_file_invalid" {
+		t.Fatalf("unexpected status auth error: %#v", status)
+	}
+}
+
 func TestTwitchCallbackPersistsToken(t *testing.T) {
 	validateServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -359,6 +402,12 @@ func TestTwitchMissingOrInvalidTokenFileDoesNotCrash(t *testing.T) {
 		}
 		if status.AuthError != "token_file_invalid" || status.LastAuthError != "token_file_invalid" {
 			t.Fatalf("unexpected auth error: %#v", status)
+		}
+		if token, ok := server.twitch.snapshot(); ok || token != nil {
+			t.Fatalf("expected no token snapshot, got %#v ok=%v", token, ok)
+		}
+		if got := server.twitch.recentAuthError(); got != "token_file_invalid" {
+			t.Fatalf("unexpected recent auth error: %s", got)
 		}
 	})
 }
