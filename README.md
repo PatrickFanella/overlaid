@@ -80,9 +80,12 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 - `/overlay/debug`
 
 For live operation, follow `docs/runbooks/live-stream-preflight.md`.
+For production recovery, follow `docs/runbooks/production-recovery.md`.
 For OBS automation sequences, follow `docs/runbooks/obs-automation-sequences.md`.
 For moderator or broadcaster Twitch chat controls, use `docs/runbooks/twitch-chat-commands.md`.
 For post-build route checks and styling changes, use `docs/runbooks/visual-qa.md`.
+
+`/healthz` stays the cheap liveness check used by Compose healthchecks. `curl http://localhost:8080/readyz` is the operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, or retained state need attention.
 
 ### OBS browser source
 
