@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -12,6 +13,8 @@ type Config struct {
 	OperatorSecret      string
 	WebhookSecret       string
 	OverlayStateFile    string
+	EventHistoryFile    string
+	EventHistoryLimit   int
 	PublicWebURL        string
 	OBSWebSocketURL     string
 	OBSWebSocketPass    string
@@ -35,6 +38,8 @@ func Load() Config {
 		OperatorSecret:      env("OPERATOR_SECRET", ""),
 		WebhookSecret:       env("WEBHOOK_SECRET", ""),
 		OverlayStateFile:    env("OVERLAY_STATE_FILE", "/data/overlay-state.json"),
+		EventHistoryFile:    env("EVENT_HISTORY_FILE", "/data/event-history.jsonl"),
+		EventHistoryLimit:   envInt("EVENT_HISTORY_LIMIT", 250),
 		PublicWebURL:        env("PUBLIC_WEB_URL", "http://localhost:5173"),
 		OBSWebSocketURL:     env("OBS_WEBSOCKET_URL", "ws://localhost:4455"),
 		OBSWebSocketPass:    env("OBS_WEBSOCKET_PASSWORD", ""),
@@ -122,4 +127,16 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return duration
+}
+
+func envInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
 }
