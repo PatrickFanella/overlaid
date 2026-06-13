@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -113,6 +114,22 @@ func (s *Server) brbStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.bus.Publish(event)
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) publishEventSubEvent(event events.Event) {
+	switch event.Type {
+	case events.EventTypeClear:
+		if err := s.state.Clear(); err != nil {
+			log.Printf("failed to clear retained state for eventsub clear: %v", err)
+			return
+		}
+	case events.EventTypeBRB:
+		if err := s.state.Set("brb", eventWithRetainedStateKey(event, "brb")); err != nil {
+			log.Printf("failed to persist retained state for eventsub brb: %v", err)
+			return
+		}
+	}
+	s.bus.Publish(event)
 }
 
 func writeSSEEvent(w http.ResponseWriter, event events.Event) bool {

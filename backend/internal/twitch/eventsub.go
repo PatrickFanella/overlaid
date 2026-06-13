@@ -126,6 +126,7 @@ type Client struct {
 	WebSocketURL     string
 	SubscriptionURL  string
 	TokenProvider    TokenProvider
+	CommandProcessor *CommandProcessor
 	Publish          Publisher
 	Diagnostics      *DiagnosticsStore
 	HTTPClient       *http.Client
@@ -331,7 +332,7 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 			}
 			return c.runSessionWithGrace(ctx, token, url)
 		case "notification":
-			if event, ok := MapNotification(message); ok {
+			for _, event := range EventsForNotification(message, c.CommandProcessor) {
 				if c.Diagnostics != nil {
 					c.Diagnostics.MarkEvent()
 				}
@@ -411,6 +412,27 @@ func MapNotification(message EventSubMessage) (events.Event, bool) {
 		}
 	}
 	return events.Event{}, false
+}
+
+func EventsForNotification(message EventSubMessage, processor *CommandProcessor) []events.Event {
+	event, ok := MapNotification(message)
+	if !ok {
+		return nil
+	}
+
+	eventsOut := []events.Event{event}
+	if message.Payload.Subscription.Type != "channel.chat.message" || processor == nil {
+		return eventsOut
+	}
+
+	text := stringValue(nestedMap(message.Payload.Event, "message"), "text")
+	command, ok := ParseChatCommand(text)
+	if !ok {
+		return eventsOut
+	}
+
+	user := chatCommandUserFromEvent(message.Payload.Event)
+	return append(eventsOut, processor.Handle(command, user)...)
 }
 
 func mapChatMessage(message EventSubMessage) (events.Event, bool) {
@@ -506,6 +528,47 @@ func overlayEvent(eventType events.EventType, source, title, text string, severi
 			"twitchEvent":  message.Payload.Event,
 		},
 		CreatedAt: time.Now().UTC(),
+	}
+}
+
+func chatCommandUserFromEvent(event map[string]any) ChatCommandUser {
+	user := ChatCommandUser{
+		Name:  firstNonEmpty(stringValue(event, "chatter_user_name"), stringValue(event, "chatter_user_login"), stringValue(event, "user_name"), stringValue(event, "user_login")),
+		Login: firstNonEmpty(stringValue(event, "chatter_user_login"), stringValue(event, "user_login")),
+	}
+
+	chatterID := stringValue(event, "chatter_user_id")
+	broadcasterID := stringValue(event, "broadcaster_user_id")
+	user.IsBroadcaster = hasBadge(event, "broadcaster") || (chatterID != "" && broadcasterID != "" && chatterID == broadcasterID)
+	user.IsModerator = hasBadge(event, "moderator")
+	return user
+}
+
+func hasBadge(event map[string]any, wanted string) bool {
+	for _, badge := range badgeMaps(event["badges"]) {
+		if strings.EqualFold(firstNonEmpty(stringValue(badge, "set_id"), stringValue(badge, "id"), stringValue(badge, "name")), wanted) {
+			return true
+		}
+	}
+	return false
+}
+
+func badgeMaps(value any) []map[string]any {
+	switch badges := value.(type) {
+	case []map[string]any:
+		return badges
+	case []any:
+		out := make([]map[string]any, 0, len(badges))
+		for _, badge := range badges {
+			if badgeMap, ok := badge.(map[string]any); ok {
+				out = append(out, badgeMap)
+			}
+		}
+		return out
+	case map[string]any:
+		return []map[string]any{badges}
+	default:
+		return nil
 	}
 }
 

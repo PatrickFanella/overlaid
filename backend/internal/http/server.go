@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
@@ -75,8 +76,9 @@ func (s *Server) StartBackground(ctx context.Context) {
 				Scopes:      append([]string(nil), token.Scope...),
 			}, true
 		},
-		Publish:     s.bus.Publish,
-		Diagnostics: s.twitchEventSubDiagnostics,
+		CommandProcessor: twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second}),
+		Publish:          s.publishEventSubEvent,
+		Diagnostics:      s.twitchEventSubDiagnostics,
 	}
 
 	go func() {

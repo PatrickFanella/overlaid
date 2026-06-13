@@ -395,6 +395,61 @@ func TestBRBStatusPublishesEvent(t *testing.T) {
 	}
 }
 
+func TestPublishEventSubEventPersistsBRB(t *testing.T) {
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+
+	server.publishEventSubEvent(events.NewBRB("twitch", "BRB", "Back", map[string]any{"active": false}))
+
+	select {
+	case got := <-client.Events:
+		if got.Type != events.EventTypeBRB || got.Source != "twitch" {
+			t.Fatalf("unexpected published event: %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for brb event")
+	}
+
+	list := server.state.List()
+	if len(list) != 1 {
+		t.Fatalf("expected one retained event, got %#v", list)
+	}
+	if list[0].Type != events.EventTypeBRB || list[0].Data["retainedStateKey"] != "brb" || list[0].Data["active"] != false {
+		t.Fatalf("unexpected retained brb event: %#v", list[0])
+	}
+}
+
+func TestPublishEventSubEventClearsRetainedState(t *testing.T) {
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+
+	server.publishEventSubEvent(events.NewBRB("twitch", "BRB", "Intermission", map[string]any{"active": true}))
+	select {
+	case <-client.Events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for setup brb event")
+	}
+
+	server.publishEventSubEvent(events.NewClear("twitch"))
+
+	select {
+	case got := <-client.Events:
+		if got.Type != events.EventTypeClear || got.Source != "twitch" {
+			t.Fatalf("unexpected clear event: %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for clear event")
+	}
+
+	if list := server.state.List(); len(list) != 0 {
+		t.Fatalf("expected retained state to be cleared, got %#v", list)
+	}
+}
+
 func TestBRBStatusCanonicalFieldsOverrideData(t *testing.T) {
 	bus := events.NewBus(4)
 	client := bus.Subscribe()
