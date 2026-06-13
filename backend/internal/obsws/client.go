@@ -207,6 +207,15 @@ func (c Client) SetInputMute(ctx context.Context, inputName string, muted bool) 
 	return err
 }
 
+func (c Client) RefreshBrowserSource(ctx context.Context, inputName string) error {
+	inputName = strings.TrimSpace(inputName)
+	if inputName == "" {
+		return errors.New("inputName is required")
+	}
+	_, err := c.call(ctx, "PressInputPropertiesButton", map[string]any{"inputName": inputName, "propertyName": "refreshnocache"})
+	return err
+}
+
 func (c Client) SetSceneItemEnabled(ctx context.Context, sceneName string, sceneItemID int, enabled bool) error {
 	sceneName = strings.TrimSpace(sceneName)
 	if sceneName == "" {

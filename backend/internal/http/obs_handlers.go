@@ -21,6 +21,10 @@ type setOBSSceneItemEnabledRequest struct {
 	Enabled     bool   `json:"enabled"`
 }
 
+type refreshOBSSourceRequest struct {
+	InputName string `json:"inputName"`
+}
+
 func (s *Server) obsStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.obs.Status(r.Context()))
 }
@@ -88,6 +92,18 @@ func (s *Server) obsSetSceneItemEnabled(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := s.obs.SetSceneItemEnabled(r.Context(), request.SceneName, request.SceneItemID, request.Enabled); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) obsRefreshSource(w http.ResponseWriter, r *http.Request) {
+	var request refreshOBSSourceRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if err := s.obs.RefreshBrowserSource(r.Context(), request.InputName); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}

@@ -3,6 +3,7 @@ import {
   fetchOBSInputs,
   fetchOBSSceneItems,
   fetchOBSScenes,
+  refreshOBSSource,
   setOBSInputMute,
   setOBSScene,
   setOBSSceneItemEnabled,
@@ -136,6 +137,12 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
     });
   }
 
+  function refreshSource(inputName: string) {
+    runAction(`Refresh source: ${inputName}`, async () => {
+      await refreshOBSSource(inputName, apiBaseUrl, operatorSecret);
+    });
+  }
+
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
@@ -207,9 +214,14 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
                 <p className="text-sm font-semibold text-white">{item.sourceName}</p>
                 <p className="text-xs uppercase tracking-[0.24em] text-zinc-400">{item.sceneItemEnabled ? 'enabled' : 'hidden'}</p>
               </div>
-              <button className="hud-chip" type="button" disabled={isRunning} onClick={() => toggleSceneItem(item.sceneItemId, !item.sceneItemEnabled)}>
-                {item.sceneItemEnabled ? 'Disable' : 'Enable'}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button className="hud-chip" type="button" disabled={isRunning} onClick={() => refreshSource(item.sourceName)}>
+                  Refresh
+                </button>
+                <button className="hud-chip" type="button" disabled={isRunning} onClick={() => toggleSceneItem(item.sceneItemId, !item.sceneItemEnabled)}>
+                  {item.sceneItemEnabled ? 'Disable' : 'Enable'}
+                </button>
+              </div>
             </div>
           ))}
         </div>

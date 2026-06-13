@@ -134,6 +134,10 @@ export async function setOBSSceneItemEnabled(sceneName: string, sceneItemId: num
   await postJSON('/api/obs/scene-item/enabled', { sceneName, sceneItemId, enabled }, explicitBaseUrl, { operatorSecret });
 }
 
+export async function refreshOBSSource(inputName: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  await postJSON('/api/obs/source/refresh', { inputName }, explicitBaseUrl, { operatorSecret });
+}
+
 export async function sendTestAlert(payload: AlertPayload, explicitBaseUrl?: string, operatorSecret?: string) {
   await postJSON('/api/events/test-alert', payload, explicitBaseUrl, { operatorSecret });
 }

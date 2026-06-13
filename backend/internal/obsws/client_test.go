@@ -73,6 +73,34 @@ func TestGetSceneItemListRequiresSceneName(t *testing.T) {
 	}
 }
 
+func TestRefreshBrowserSourceSendsExpectedRequest(t *testing.T) {
+	server := newFakeOBSWebSocketServer(t, func(requestType string, requestData map[string]any) map[string]any {
+		if requestType != "PressInputPropertiesButton" {
+			t.Fatalf("unexpected request type: %s", requestType)
+		}
+		if got := requestData["inputName"]; got != "Alerts Browser" {
+			t.Fatalf("unexpected inputName: %#v", got)
+		}
+		if got := requestData["propertyName"]; got != "refreshnocache" {
+			t.Fatalf("unexpected propertyName: %#v", got)
+		}
+		return map[string]any{}
+	})
+	defer server.Close()
+
+	client := Client{URL: wsURL(server.URL)}
+	if err := client.RefreshBrowserSource(context.Background(), " Alerts Browser "); err != nil {
+		t.Fatalf("RefreshBrowserSource failed: %v", err)
+	}
+}
+
+func TestRefreshBrowserSourceRequiresInputName(t *testing.T) {
+	client := Client{}
+	if err := client.RefreshBrowserSource(context.Background(), "   "); err == nil {
+		t.Fatal("expected error for missing input name")
+	}
+}
+
 func newFakeOBSWebSocketServer(t *testing.T, handle func(requestType string, requestData map[string]any) map[string]any) *httptest.Server {
 	t.Helper()
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}

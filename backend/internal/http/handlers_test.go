@@ -211,6 +211,7 @@ func TestOperatorSecretProtectsMutatingRoutes(t *testing.T) {
 		{name: "obs scene", path: "/api/obs/scene", body: `{"sceneName":"Scene"}`},
 		{name: "obs mute", path: "/api/obs/input/mute", body: `{"inputName":"Mic/Aux","muted":true}`},
 		{name: "obs item", path: "/api/obs/scene-item/enabled", body: `{"sceneName":"Scene","sceneItemId":1,"enabled":true}`},
+		{name: "obs source refresh", path: "/api/obs/source/refresh", body: `{"inputName":"Alerts Browser"}`},
 	}
 
 	for _, test := range tests {
@@ -272,6 +273,45 @@ func TestOperatorSecretAllowsHeader(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for event")
+	}
+}
+
+func TestOBSRefreshBrowserSourceRequiresOperator(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", OperatorSecret: "operator-secret"}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodPost, "/api/obs/source/refresh", strings.NewReader(`{"inputName":"Alerts Browser"}`))
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOBSRefreshBrowserSource(t *testing.T) {
+	obsServer := newFakeOBSWebSocketServer(t, func(requestType string, requestData map[string]any) (map[string]any, error) {
+		if requestType != "PressInputPropertiesButton" {
+			t.Fatalf("unexpected request type: %s", requestType)
+		}
+		if got := requestData["inputName"]; got != "Alerts Browser" {
+			t.Fatalf("unexpected inputName: %#v", got)
+		}
+		if got := requestData["propertyName"]; got != "refreshnocache" {
+			t.Fatalf("unexpected propertyName: %#v", got)
+		}
+		return map[string]any{}, nil
+	})
+	defer obsServer.Close()
+
+	server := NewServer(config.Config{AllowedOrigin: "*", OperatorSecret: "operator-secret", OBSWebSocketURL: wsURL(obsServer.URL)}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodPost, "/api/obs/source/refresh", strings.NewReader(`{"inputName":"Alerts Browser"}`))
+	req.Header.Set("Authorization", "Bearer operator-secret")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

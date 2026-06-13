@@ -20,6 +20,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/obs/scene", s.requireOperator(s.obsSetScene))
 	s.mux.HandleFunc("POST /api/obs/input/mute", s.requireOperator(s.obsSetInputMute))
 	s.mux.HandleFunc("POST /api/obs/scene-item/enabled", s.requireOperator(s.obsSetSceneItemEnabled))
+	s.mux.HandleFunc("POST /api/obs/source/refresh", s.requireOperator(s.obsRefreshSource))
 }
 
 func (s *Server) withCORS(next http.Handler) http.Handler {
