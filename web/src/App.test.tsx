@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
 import { parseOverlayEvent } from './lib/events';
-import { defaultDashboardConfig, loadDashboardConfig, type QuickAction } from './lib/dashboardConfig';
+import { defaultDashboardConfig, loadDashboardConfig, normalizeDashboardConfig, type QuickAction } from './lib/dashboardConfig';
+import {
+  exportDashboardConfig,
+  getActiveAutomationProfile,
+  importDashboardConfig,
+  selectQuickActionsForProfile,
+} from './lib/automationProfiles';
 import { resolveQuickActionSequence, runQuickActionSequence } from './lib/quickActionSequences';
 import { QuickActionRunner } from './routes/dashboard/components/QuickActionRunner';
 import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
@@ -208,6 +214,19 @@ describe('dashboard config loading', () => {
     vi.unstubAllGlobals();
   });
 
+  it('adds default automation profiles to old local storage configs', () => {
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: () => JSON.stringify({ quickActions: defaultDashboardConfig.quickActions.slice(0, 1) }),
+      },
+    });
+
+    const config = loadDashboardConfig();
+
+    expect(config.automationProfiles.map((profile) => profile.id)).toEqual(['full-console', 'main-live', 'brb-ops']);
+    expect(config.activeAutomationProfileId).toBe('full-console');
+  });
+
   it('keeps persisted quick actions and appends missing defaults', () => {
     const persistedQuickActions = [
       {
@@ -246,6 +265,167 @@ describe('dashboard config loading', () => {
     ]);
     expect(config.quickActions[0]).toMatchObject({ label: 'Go Main now' });
     expect(config.quickActions[1]).toMatchObject({ label: 'Custom Hide' });
+  });
+});
+
+describe('automation profile helpers', () => {
+  it('filters main live quick actions in profile order', () => {
+    const config = normalizeDashboardConfig({
+      ...defaultDashboardConfig,
+      activeAutomationProfileId: 'main-live',
+    });
+
+    const { actions, warnings } = selectQuickActionsForProfile(config);
+
+    expect(actions.map((action) => action.id)).toEqual(['sequence-go-live-main', 'preset-main', 'refresh-alerts', 'sample-alert', 'hide-brb']);
+    expect(warnings).toEqual([]);
+  });
+
+  it('warns on missing quick action ids and falls back to all actions', () => {
+    const config = normalizeDashboardConfig({
+      ...defaultDashboardConfig,
+      activeAutomationProfileId: 'missing-profile',
+      automationProfiles: [
+        ...defaultDashboardConfig.automationProfiles,
+        {
+          id: 'missing-profile',
+          title: 'Broken profile',
+          description: 'Only missing ids.',
+          quickActionIds: ['missing-a', 'missing-b'],
+          streamPresetIds: ['missing-c'],
+        },
+      ],
+    });
+
+    const { actions, warnings } = selectQuickActionsForProfile(config);
+
+    expect(actions.map((action) => action.id)).toEqual(defaultDashboardConfig.quickActions.map((action) => action.id));
+    expect(warnings).toEqual([
+      { profileId: 'missing-profile', message: 'Missing quick action: missing-a' },
+      { profileId: 'missing-profile', message: 'Missing quick action: missing-b' },
+      { profileId: 'missing-profile', message: 'No valid quick actions selected; falling back to all quick actions.' },
+    ]);
+  });
+
+  it('round-trips dashboard config without operator secret', () => {
+    const raw = JSON.stringify({
+      ...defaultDashboardConfig,
+      operatorSecret: 'super-secret',
+      activeAutomationProfileId: 'main-live',
+      unknownField: 'ignored',
+    });
+
+    const imported = importDashboardConfig(raw);
+    const exported = exportDashboardConfig(imported);
+    const parsed = JSON.parse(exported) as Record<string, unknown>;
+
+    expect(exported).not.toContain('super-secret');
+    expect(parsed).not.toHaveProperty('operatorSecret');
+    expect(parsed).not.toHaveProperty('unknownField');
+    expect(parsed.activeAutomationProfileId).toBe('main-live');
+    expect(getActiveAutomationProfile(imported).id).toBe('main-live');
+  });
+
+  it('drops nested unknown fields from imported dashboard config', () => {
+    const raw = JSON.stringify({
+      ...defaultDashboardConfig,
+      quickActions: [
+        {
+          id: 'scene-custom',
+          label: 'Custom scene',
+          kind: 'setScene',
+          sceneName: 'Scene A',
+          operatorSecret: 'quick-action-secret',
+          nested: { token: 'hidden' },
+        },
+        {
+          id: 'sequence-custom',
+          label: 'Custom sequence',
+          kind: 'sequence',
+          actionIds: ['scene-custom'],
+          stopOnError: true,
+          confirm: false,
+          operatorSecret: 'sequence-secret',
+        },
+      ],
+      automationProfiles: [
+        {
+          id: 'custom-profile',
+          title: 'Custom profile',
+          description: 'Custom description',
+          quickActionIds: ['scene-custom'],
+          streamPresetIds: ['main'],
+          operatorSecret: 'profile-secret',
+          nested: { token: 'hidden' },
+        },
+      ],
+      streamPresets: [
+        {
+          id: 'main',
+          title: 'Main scene',
+          sources: ['alerts'],
+          operatorSecret: 'preset-secret',
+          extra: 'ignored',
+        },
+      ],
+      setupChecklist: [
+        {
+          id: 'check-1',
+          title: 'Checklist item',
+          description: 'Custom checklist item',
+          completed: true,
+          operatorSecret: 'check-secret',
+          extra: 'ignored',
+        },
+      ],
+      controlWidgets: [
+        {
+          id: 'widget-1',
+          title: 'Widget',
+          enabled: true,
+          order: 2,
+          compact: false,
+          operatorSecret: 'widget-secret',
+          extra: 'ignored',
+        },
+      ],
+      display: {
+        alertMaxVisible: 4,
+        alertDedupeSeconds: 12,
+        chatMaxVisible: 6,
+        tickerMaxItems: 9,
+        operatorSecret: 'display-secret',
+        extra: 'ignored',
+      },
+    });
+
+    const exported = exportDashboardConfig(importDashboardConfig(raw));
+    const parsed = JSON.parse(exported) as {
+      quickActions: Array<Record<string, unknown>>;
+      automationProfiles: Array<Record<string, unknown>>;
+      streamPresets: Array<Record<string, unknown>>;
+      setupChecklist: Array<Record<string, unknown>>;
+      controlWidgets: Array<Record<string, unknown>>;
+      display: Record<string, unknown>;
+    };
+
+    expect(exported).not.toContain('operatorSecret');
+    expect(exported).not.toContain('nested');
+    expect(exported).not.toContain('extra');
+    expect(parsed.quickActions[0]).toEqual({ id: 'scene-custom', label: 'Custom scene', kind: 'setScene', sceneName: 'Scene A' });
+    expect(parsed.quickActions[1]).toEqual({
+      id: 'sequence-custom',
+      label: 'Custom sequence',
+      kind: 'sequence',
+      actionIds: ['scene-custom'],
+      stopOnError: true,
+      confirm: false,
+    });
+    expect(Object.keys(parsed.automationProfiles[0]).sort()).toEqual(['description', 'id', 'quickActionIds', 'streamPresetIds', 'title']);
+    expect(Object.keys(parsed.streamPresets[0]).sort()).toEqual(['id', 'sources', 'title']);
+    expect(Object.keys(parsed.setupChecklist[0]).sort()).toEqual(['completed', 'description', 'id', 'title']);
+    expect(Object.keys(parsed.controlWidgets[0]).sort()).toEqual(['compact', 'enabled', 'id', 'order', 'title']);
+    expect(Object.keys(parsed.display).sort()).toEqual(['alertDedupeSeconds', 'alertMaxVisible', 'chatMaxVisible', 'tickerMaxItems']);
   });
 });
 
