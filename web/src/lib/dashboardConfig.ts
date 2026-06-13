@@ -28,13 +28,15 @@ export type DisplayConfig = {
 
 export type QuickAction =
   | { id: string; label: string; kind: 'setScene'; sceneName: string; confirm?: boolean }
+  | { id: string; label: string; kind: 'runPreset'; presetId: string; sceneName: string; confirm?: boolean }
+  | { id: string; label: string; kind: 'refreshSource'; inputName: string; confirm?: boolean }
   | { id: string; label: string; kind: 'sendAlert'; title: string; message: string; severity: 'info' | 'success' | 'warning' | 'error'; confirm?: boolean }
   | { id: string; label: string; kind: 'showBRB'; title: string; message: string; eta: string; items: string[]; confirm?: boolean }
   | { id: string; label: string; kind: 'hideBRB'; confirm?: boolean }
   | { id: string; label: string; kind: 'clearOverlays'; confirm?: boolean }
   | { id: string; label: string; kind: 'muteInput'; inputName: string; muted: boolean; confirm?: boolean };
 
-export const quickActionKinds = ['setScene', 'sendAlert', 'showBRB', 'hideBRB', 'clearOverlays', 'muteInput'] as const;
+export const quickActionKinds = ['setScene', 'sendAlert', 'showBRB', 'hideBRB', 'clearOverlays', 'muteInput', 'runPreset', 'refreshSource'] as const;
 
 export type DashboardConfig = {
   setupChecklist: SetupChecklistItem[];
@@ -64,6 +66,8 @@ export const defaultDashboardConfig: DashboardConfig = {
   ],
   quickActions: [
     { id: 'main-scene', label: 'Go Main', kind: 'setScene', sceneName: 'Main' },
+    { id: 'preset-main', label: 'Run Main preset', kind: 'runPreset', presetId: 'main', sceneName: 'Main', confirm: true },
+    { id: 'refresh-alerts', label: 'Refresh Alerts', kind: 'refreshSource', inputName: 'Alerts Browser' },
     { id: 'brb-scene', label: 'Go BRB', kind: 'setScene', sceneName: 'BRB', confirm: true },
     { id: 'sample-alert', label: 'Sample Alert', kind: 'sendAlert', title: 'Sample alert', message: 'Quick action fired', severity: 'success' },
     { id: 'show-brb', label: 'Show BRB', kind: 'showBRB', title: 'Be right back', message: 'Short intermission. Stream resumes soon.', eta: '5 min', items: ['Hydrate', 'Stretch', 'Chat stays live'] },
@@ -81,6 +85,25 @@ export const defaultDashboardConfig: DashboardConfig = {
   mprisDecision: 'undecided',
 };
 
+function mergeQuickActions(persistedQuickActions: QuickAction[] | undefined) {
+  const mergedQuickActions: QuickAction[] = [];
+  const seenIds = new Set<string>();
+
+  for (const action of persistedQuickActions ?? []) {
+    if (seenIds.has(action.id)) continue;
+    seenIds.add(action.id);
+    mergedQuickActions.push(action);
+  }
+
+  for (const action of defaultDashboardConfig.quickActions) {
+    if (seenIds.has(action.id)) continue;
+    seenIds.add(action.id);
+    mergedQuickActions.push(action);
+  }
+
+  return mergedQuickActions;
+}
+
 export function loadDashboardConfig(): DashboardConfig {
   if (typeof window === 'undefined') return defaultDashboardConfig;
   const raw = window.localStorage.getItem(CONFIG_KEY);
@@ -88,7 +111,14 @@ export function loadDashboardConfig(): DashboardConfig {
 
   try {
     const parsed = JSON.parse(raw) as Partial<DashboardConfig>;
-    return { ...defaultDashboardConfig, ...parsed, display: { ...defaultDashboardConfig.display, ...parsed.display } } as DashboardConfig;
+    const persistedQuickActions = Array.isArray(parsed.quickActions) ? (parsed.quickActions as QuickAction[]) : undefined;
+
+    return {
+      ...defaultDashboardConfig,
+      ...parsed,
+      quickActions: mergeQuickActions(persistedQuickActions),
+      display: { ...defaultDashboardConfig.display, ...parsed.display },
+    } as DashboardConfig;
   } catch {
     return defaultDashboardConfig;
   }
@@ -116,6 +146,10 @@ export function createQuickAction(kind: QuickAction['kind'], label = 'New action
   switch (kind) {
     case 'setScene':
       return { id, label, kind, sceneName: 'Main' };
+    case 'runPreset':
+      return { id, label, kind, presetId: 'main', sceneName: 'Main', confirm: true };
+    case 'refreshSource':
+      return { id, label, kind, inputName: 'Alerts Browser' };
     case 'sendAlert':
       return { id, label, kind, title: 'Sample alert', message: 'Quick action fired', severity: 'success' };
     case 'showBRB':

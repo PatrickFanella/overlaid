@@ -121,6 +121,41 @@ export function QuickActionsEditor({ config, onChange, compact = false }: QuickA
                 </label>
               ) : null}
 
+              {action.kind === 'runPreset' ? (
+                <>
+                  <label className="grid gap-2 text-sm text-zinc-300">
+                    <span className="hud-kicker">Run preset</span>
+                    <input
+                      className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-cyan-300/30 focus:ring-4"
+                      type="text"
+                      value={action.presetId}
+                      onChange={(event) => updateAction(index, { presetId: event.target.value })}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-zinc-300">
+                    <span className="hud-kicker">Scene name</span>
+                    <input
+                      className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-cyan-300/30 focus:ring-4"
+                      type="text"
+                      value={action.sceneName}
+                      onChange={(event) => updateAction(index, { sceneName: event.target.value })}
+                    />
+                  </label>
+                </>
+              ) : null}
+
+              {action.kind === 'refreshSource' ? (
+                <label className="grid gap-2 text-sm text-zinc-300">
+                  <span className="hud-kicker">Source input name</span>
+                  <input
+                    className="rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-zinc-100 outline-none ring-cyan-300/30 focus:ring-4"
+                    type="text"
+                    value={action.inputName}
+                    onChange={(event) => updateAction(index, { inputName: event.target.value })}
+                  />
+                </label>
+              ) : null}
+
               {action.kind === 'muteInput' ? (
                 <label className="grid gap-2 text-sm text-zinc-300">
                   <span className="hud-kicker">Input name</span>
@@ -233,6 +268,19 @@ function mergeAction(action: QuickAction, patch: Partial<QuickAction>): QuickAct
 
   if (next.kind === 'setScene') {
     return { ...next, sceneName: next.sceneName || 'Main' };
+  }
+
+  if (next.kind === 'runPreset') {
+    return {
+      ...next,
+      presetId: next.presetId || 'main',
+      sceneName: next.sceneName || 'Main',
+      confirm: Boolean(next.confirm),
+    };
+  }
+
+  if (next.kind === 'refreshSource') {
+    return { ...next, inputName: next.inputName || 'Alerts Browser' };
   }
 
   if (next.kind === 'muteInput') {

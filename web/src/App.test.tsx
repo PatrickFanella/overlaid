@@ -1,8 +1,9 @@
 import { renderToString } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
 import { parseOverlayEvent } from './lib/events';
+import { defaultDashboardConfig, loadDashboardConfig } from './lib/dashboardConfig';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -60,7 +61,8 @@ describe('App routing', () => {
     expect(html).toContain('Edit secret');
     expect(html).toContain('Session log');
     expect(html).toContain('Recent operator actions');
-    expect(html).toContain('Run overlay smoke sequence');
+    expect(html).toContain('Run Main preset');
+    expect(html).toContain('Refresh Alerts');
     expect(html).toContain('require confirm');
   });
 
@@ -169,5 +171,49 @@ describe('overlay event utilities', () => {
       message: 'Stretch break',
     });
     expect(event?.data).toMatchObject({ active: true, eta: '5 min' });
+  });
+});
+
+describe('dashboard config loading', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps persisted quick actions and appends missing defaults', () => {
+    const persistedQuickActions = [
+      {
+        ...defaultDashboardConfig.quickActions[0],
+        label: 'Go Main now',
+      },
+      {
+        id: 'custom-hide',
+        label: 'Custom Hide',
+        kind: 'hideBRB' as const,
+      },
+      {
+        ...defaultDashboardConfig.quickActions[6],
+      },
+    ];
+
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: () => JSON.stringify({ quickActions: persistedQuickActions }),
+      },
+    });
+
+    const config = loadDashboardConfig();
+
+    expect(config.quickActions.map((action) => action.id)).toEqual([
+      'main-scene',
+      'custom-hide',
+      'hide-brb',
+      'preset-main',
+      'refresh-alerts',
+      'brb-scene',
+      'sample-alert',
+      'show-brb',
+    ]);
+    expect(config.quickActions[0]).toMatchObject({ label: 'Go Main now' });
+    expect(config.quickActions[1]).toMatchObject({ label: 'Custom Hide' });
   });
 });

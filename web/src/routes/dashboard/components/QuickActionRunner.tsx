@@ -1,4 +1,4 @@
-import { clearOverlays, sendTestAlert, setBRBStatus, setOBSInputMute, setOBSScene } from '../../../lib/api';
+import { clearOverlays, refreshOBSSource, sendTestAlert, setBRBStatus, setOBSInputMute, setOBSScene } from '../../../lib/api';
 import type { QuickAction } from '../../../lib/dashboardConfig';
 import { ConfirmableActionButton } from './ConfirmableActionButton';
 
@@ -16,6 +16,10 @@ export function QuickActionRunner({ actions, apiBaseUrl, operatorSecret, isRunni
     switch (action.kind) {
       case 'setScene':
         return runAction(action.label, () => setOBSScene(action.sceneName, apiBaseUrl, operatorSecret));
+      case 'runPreset':
+        return runAction(action.label, () => setOBSScene(action.sceneName, apiBaseUrl, operatorSecret));
+      case 'refreshSource':
+        return runAction(action.label, () => refreshOBSSource(action.inputName, apiBaseUrl, operatorSecret));
       case 'sendAlert':
         return runAction(action.label, () => sendTestAlert({ title: action.title, message: action.message, severity: action.severity }, apiBaseUrl, operatorSecret));
       case 'showBRB':
