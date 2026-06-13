@@ -15,6 +15,18 @@
 
 ---
 
+## Completion status
+
+Status: complete. Implemented, verified, committed, pushed, deployed, and live-QA checked. User live QA result: OK so far. This file is now a historical execution plan, not the active backlog.
+
+Completed commits:
+
+- `ff9e9f1` — centralized dashboard operator secret ownership.
+- `4796faf` — added live stream readiness tools.
+- `45d560f` — sharpened Neubrutal Dracula overlay styling.
+
+---
+
 ## Sprint Theme
 
 **Live Stream Readiness: make one real stream boringly reliable.**
@@ -78,7 +90,7 @@ Modify:
 - Modify: `web/src/routes/dashboard/Config.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Remove editable operator secret input from stream control**
+- [x] **Step 1: Remove editable operator secret input from stream control**
 
 In `web/src/routes/dashboard/Control.tsx`, replace the password input block with this compact status/link block:
 
@@ -93,7 +105,7 @@ In `web/src/routes/dashboard/Control.tsx`, replace the password input block with
 
 Remove `updateOperatorSecret()` from `Control.tsx` if unused.
 
-- [ ] **Step 2: Make Config route the only edit surface**
+- [x] **Step 2: Make Config route the only edit surface**
 
 In `web/src/routes/dashboard/Config.tsx`, keep the existing password input and add a small warning line:
 
@@ -103,7 +115,7 @@ In `web/src/routes/dashboard/Config.tsx`, keep the existing password input and a
 </p>
 ```
 
-- [ ] **Step 3: Update tests**
+- [x] **Step 3: Update tests**
 
 In `web/src/App.test.tsx`, update the control route test:
 
@@ -114,7 +126,7 @@ expect(html).toContain('Edit secret');
 
 Keep config route expectations for `Secret header`.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -125,7 +137,7 @@ pnpm --dir web run build
 
 Expected: all frontend tests/build pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/src/routes/dashboard/Control.tsx web/src/routes/dashboard/Config.tsx web/src/App.test.tsx
@@ -144,7 +156,7 @@ git commit -m "refactor: centralize dashboard operator secret"
 - Modify: `web/src/lib/api.ts`
 - Create: `web/src/routes/dashboard/components/EventSubDiagnostics.tsx`
 
-- [ ] **Step 1: Add diagnostics type to EventSub package**
+- [x] **Step 1: Add diagnostics type to EventSub package**
 
 In `backend/internal/twitch/eventsub.go`, add:
 
@@ -177,7 +189,7 @@ func (s *DiagnosticsStore) Snapshot() Diagnostics {
 
 Add methods `MarkConnected(created, planned int)`, `MarkEvent()`, `MarkError(err error)`, and `MarkDisconnected(err error)`.
 
-- [ ] **Step 2: Wire diagnostics into EventSub client**
+- [x] **Step 2: Wire diagnostics into EventSub client**
 
 Add `Diagnostics *DiagnosticsStore` to `twitch.Client` and call:
 
@@ -190,7 +202,7 @@ c.Diagnostics.MarkDisconnected(err)
 
 at the existing connection, notification, subscribe failure, and session-end points.
 
-- [ ] **Step 3: Own diagnostics in HTTP server**
+- [x] **Step 3: Own diagnostics in HTTP server**
 
 In `backend/internal/http/server.go`, add field:
 
@@ -206,7 +218,7 @@ twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub),
 
 Pass it into the EventSub client in `StartBackground`.
 
-- [ ] **Step 4: Add diagnostics to Twitch status response**
+- [x] **Step 4: Add diagnostics to Twitch status response**
 
 In `backend/internal/http/twitch_auth.go`, add to `twitchStatusResponse`:
 
@@ -216,7 +228,7 @@ EventSub twitch.Diagnostics `json:"eventSub"`
 
 Set it in `twitchStatus` using `s.twitchEventSubDiagnostics.Snapshot()`.
 
-- [ ] **Step 5: Add backend test**
+- [x] **Step 5: Add backend test**
 
 In `backend/internal/http/twitch_auth_test.go`, assert `/api/auth/twitch/status` includes:
 
@@ -226,7 +238,7 @@ if !body.EventSub.Enabled {
 }
 ```
 
-- [ ] **Step 6: Add frontend type and diagnostics component**
+- [x] **Step 6: Add frontend type and diagnostics component**
 
 In `web/src/lib/api.ts`, extend `TwitchStatus`:
 
@@ -262,7 +274,7 @@ export function EventSubDiagnostics({ status }: { status: TwitchStatus | null })
 }
 ```
 
-- [ ] **Step 7: Verify and commit**
+- [x] **Step 7: Verify and commit**
 
 Run:
 
@@ -289,7 +301,7 @@ git commit -m "feat: expose twitch eventsub diagnostics"
 - Modify: `web/src/App.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add nav route**
+- [x] **Step 1: Add nav route**
 
 In `DashboardShell.tsx`, add:
 
@@ -299,7 +311,7 @@ In `DashboardShell.tsx`, add:
 
 to `dashboardLinks` immediately after Overview.
 
-- [ ] **Step 2: Create LivePreflight component**
+- [x] **Step 2: Create LivePreflight component**
 
 Create `web/src/routes/dashboard/components/LivePreflight.tsx`:
 
@@ -333,11 +345,11 @@ export function LivePreflight({ twitch, obs, config, operatorSecret }: { twitch:
 }
 ```
 
-- [ ] **Step 3: Create live route**
+- [x] **Step 3: Create live route**
 
 Create `web/src/routes/dashboard/Live.tsx` to load Twitch/OBS status with `fetchTwitchStatus`, `fetchOBSStatus`, local config, operator secret, then render `LivePreflight` and `EventSubDiagnostics`.
 
-- [ ] **Step 4: Route it**
+- [x] **Step 4: Route it**
 
 In `web/src/App.tsx`:
 
@@ -345,7 +357,7 @@ In `web/src/App.tsx`:
 if (route === '/dashboard/live') return <DashboardLivePage />;
 ```
 
-- [ ] **Step 5: Link from overview**
+- [x] **Step 5: Link from overview**
 
 In `Overview.tsx`, add shortcut link:
 
@@ -353,7 +365,7 @@ In `Overview.tsx`, add shortcut link:
 <a className="hud-action-button hud-action-button--compact" href="/dashboard/live">Live preflight</a>
 ```
 
-- [ ] **Step 6: Test**
+- [x] **Step 6: Test**
 
 In `App.test.tsx`:
 
@@ -364,7 +376,7 @@ it('renders the dashboard live preflight route', () => {
 });
 ```
 
-- [ ] **Step 7: Verify and commit**
+- [x] **Step 7: Verify and commit**
 
 ```bash
 pnpm --dir web run test
@@ -383,7 +395,7 @@ git commit -m "feat: add live preflight dashboard route"
 - Modify: `web/src/routes/dashboard/Control.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add rehearsal helper**
+- [x] **Step 1: Add rehearsal helper**
 
 Create `web/src/lib/rehearsal.ts`:
 
@@ -414,7 +426,7 @@ export function createRehearsalSteps(apiBaseUrl: string, operatorSecret: string)
 }
 ```
 
-- [ ] **Step 2: Add RehearsalRunner component**
+- [x] **Step 2: Add RehearsalRunner component**
 
 Create `web/src/routes/dashboard/components/RehearsalRunner.tsx`:
 
@@ -468,11 +480,11 @@ export function RehearsalRunner({ apiBaseUrl, operatorSecret }: { apiBaseUrl: st
 }
 ```
 
-- [ ] **Step 3: Mount it on control route**
+- [x] **Step 3: Mount it on control route**
 
 In `Control.tsx`, render `RehearsalRunner` near the top, after `ControlLayoutEditor`.
 
-- [ ] **Step 4: Test and commit**
+- [x] **Step 4: Test and commit**
 
 Update `/dashboard/control` test to expect `Run overlay smoke sequence`. Run:
 
@@ -499,7 +511,7 @@ git commit -m "feat: add stream rehearsal runner"
 - Modify: `web/src/routes/dashboard/components/QuickActionsEditor.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add confirmation flag**
+- [x] **Step 1: Add confirmation flag**
 
 In `dashboardConfig.ts`, add `confirm?: boolean` to every `QuickAction` variant:
 
@@ -514,7 +526,7 @@ Set defaults:
 { id: 'hide-brb', label: 'Hide BRB', kind: 'hideBRB', confirm: false }
 ```
 
-- [ ] **Step 2: Add confirmable button**
+- [x] **Step 2: Add confirmable button**
 
 Create `ConfirmableActionButton.tsx`:
 
@@ -543,11 +555,11 @@ export function ConfirmableActionButton({ label, confirm, disabled, onRun }: { l
 }
 ```
 
-- [ ] **Step 3: Use it in QuickActionRunner**
+- [x] **Step 3: Use it in QuickActionRunner**
 
 Replace quick-action buttons with `ConfirmableActionButton`, passing `confirm={action.confirm}`.
 
-- [ ] **Step 4: Expose confirm toggle in editor**
+- [x] **Step 4: Expose confirm toggle in editor**
 
 In `QuickActionsEditor.tsx`, add checkbox:
 
@@ -558,7 +570,7 @@ In `QuickActionsEditor.tsx`, add checkbox:
 </label>
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```bash
 pnpm --dir web run test
@@ -579,7 +591,7 @@ git commit -m "feat: add confirmable quick actions"
 - Modify: `web/src/routes/dashboard/Config.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add display config**
+- [x] **Step 1: Add display config**
 
 In `DashboardConfig`, add:
 
@@ -598,7 +610,7 @@ Default:
 display: { alertMaxVisible: 3, alertDedupeSeconds: 8, chatMaxVisible: 8, tickerMaxItems: 8 }
 ```
 
-- [ ] **Step 2: Load display config in overlays**
+- [x] **Step 2: Load display config in overlays**
 
 In each overlay component, import `loadDashboardConfig()` and use display limits. For alerts, skip identical title/message within dedupe window:
 
@@ -608,11 +620,11 @@ const display = loadDashboardConfig().display;
 
 Keep fallbacks if localStorage config is missing.
 
-- [ ] **Step 3: Add compact controls on Config route**
+- [x] **Step 3: Add compact controls on Config route**
 
 In `Config.tsx`, add number inputs for `alertMaxVisible`, `alertDedupeSeconds`, `chatMaxVisible`, `tickerMaxItems`, saving via `saveDashboardConfig`.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 ```bash
 make verify
@@ -628,7 +640,7 @@ git commit -m "feat: add overlay noise controls"
 - Create: `docs/runbooks/live-stream-preflight.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Create runbook**
+- [x] **Step 1: Create runbook**
 
 Create `docs/runbooks/live-stream-preflight.md`:
 
@@ -685,7 +697,7 @@ Check OBS WebSocket settings, host networking override, and `OBS_WEBSOCKET_PASSW
 Open `/dashboard/config` and enter `OPERATOR_SECRET`.
 ```
 
-- [ ] **Step 2: Link runbook from README**
+- [x] **Step 2: Link runbook from README**
 
 Add near dashboard route docs:
 
@@ -693,7 +705,7 @@ Add near dashboard route docs:
 For live operation, follow `docs/runbooks/live-stream-preflight.md`.
 ```
 
-- [ ] **Step 3: Final verification**
+- [x] **Step 3: Final verification**
 
 Run:
 
@@ -705,7 +717,7 @@ docker compose up -d --build web
 make smoke
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md docs/runbooks/live-stream-preflight.md

@@ -15,6 +15,14 @@
 
 ---
 
+## Completion status
+
+Status: complete. The polished stream-tool scope has been implemented across the current codebase: protected operator controls, retained overlay snapshots, multi-route dashboard/operator polish, OBS inventory controls, and deployment guardrails. This file is now a historical execution plan, not the active backlog.
+
+Live QA result: OK so far.
+
+---
+
 ## Current baseline
 
 - Branch: `main`, remote `origin=https://git.subcult.tv/PatrickFanella/over-laid.git`.
@@ -57,7 +65,7 @@
 - Modify: `docker-compose.yml`
 - Modify: `README.md`
 
-- [ ] **Step 1: Add failing backend tests for protected mutating routes**
+- [x] **Step 1: Add failing backend tests for protected mutating routes**
 
 Add tests to `backend/internal/http/handlers_test.go`:
 
@@ -102,7 +110,7 @@ func TestOperatorSecretAllowsBearerToken(t *testing.T) {
 Run: `cd backend && go test ./internal/http -run 'TestOperatorSecret' -count=1`
 Expected: FAIL because `OperatorSecret` and middleware do not exist.
 
-- [ ] **Step 2: Implement operator secret config and middleware**
+- [x] **Step 2: Implement operator secret config and middleware**
 
 In `backend/internal/config/config.go`, add:
 
@@ -158,7 +166,7 @@ s.mux.HandleFunc("POST /api/obs/scene-item/enabled", s.requireOperator(s.obsSetS
 
 Leave `GET /api/events/stream` readable for OBS browser sources.
 
-- [ ] **Step 3: Wire dashboard operator secret**
+- [x] **Step 3: Wire dashboard operator secret**
 
 In `web/src/lib/api.ts`, extend `postJSON` with an optional operator secret header:
 
@@ -170,7 +178,7 @@ Thread the value through `sendTestAlert`, `clearOverlays`, `setBRBStatus`, and O
 
 In `web/src/routes/Dashboard.tsx`, add a password input labeled `Operator secret` and keep it in component state. Do not persist it yet.
 
-- [ ] **Step 4: Update env/docs**
+- [x] **Step 4: Update env/docs**
 
 Add to `.env.example` and `docker-compose.yml`:
 
@@ -180,7 +188,7 @@ OPERATOR_SECRET=
 
 Update `README.md` to state: if `OPERATOR_SECRET` is set, dashboard mutating actions must send it as `X-Overlay-Operator-Secret` or `Authorization: Bearer <secret>`.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -212,7 +220,7 @@ git push origin main
 - Modify: `web/src/routes/OverlayTicker.tsx`
 - Modify: `README.md`
 
-- [ ] **Step 1: Add state store tests**
+- [x] **Step 1: Add state store tests**
 
 Create `backend/internal/state/state_test.go` with tests for setting, listing, deleting, and JSON-file persistence:
 
@@ -224,7 +232,7 @@ func TestFileStoreRoundTrip(t *testing.T) { /* save state file, load in new stor
 Run: `cd backend && go test ./internal/state -count=1`
 Expected: FAIL until the package exists.
 
-- [ ] **Step 2: Implement tiny retained state store**
+- [x] **Step 2: Implement tiny retained state store**
 
 Create `backend/internal/state/state.go` with:
 
@@ -242,7 +250,7 @@ func (s *Store) Save() error
 
 Use one JSON file under `/data/overlay-state.json` by default. Keep file mode `0600`, parent dirs `0700`.
 
-- [ ] **Step 3: Replace server-only BRB retention with state store snapshots**
+- [x] **Step 3: Replace server-only BRB retention with state store snapshots**
 
 In `backend/internal/config/config.go`, add `OverlayStateFile` default `/data/overlay-state.json`.
 
@@ -254,11 +262,11 @@ In `brbStatus`, `s.state.Set("brb", event)` before publish.
 
 In `clearEvents`, `s.state.Clear()` before publishing clear.
 
-- [ ] **Step 4: Store goal/ticker state from webhook/test-alert data**
+- [x] **Step 4: Store goal/ticker state from webhook/test-alert data**
 
 When an alert/webhook includes `data.goal`, `data.goals`, or `data.ticker`, store a derived state event under keys `goals` and `ticker`. Keep this simple: retain the last event containing each state payload; do not persist chat/alerts.
 
-- [ ] **Step 5: Update frontend empty/default behavior**
+- [x] **Step 5: Update frontend empty/default behavior**
 
 Remove fake demo defaults from `OverlayGoals.tsx` and `OverlayTicker.tsx`. Show intentional standby copy until retained state arrives:
 
@@ -267,7 +275,7 @@ Waiting for goal events
 Waiting for ticker events
 ```
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 
@@ -294,7 +302,7 @@ git push origin main
 - Modify: `web/src/styles.css`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add dashboard route tests for status rail and confirmation**
+- [x] **Step 1: Add dashboard route tests for status rail and confirmation**
 
 In `web/src/App.test.tsx`, assert `/dashboard` renders:
 
@@ -308,11 +316,11 @@ expect(html).toContain('Overlay monitor');
 Run: `pnpm --dir web run test -- --run src/App.test.tsx`
 Expected: FAIL.
 
-- [ ] **Step 2: Convert dashboard to HUD console layout**
+- [x] **Step 2: Convert dashboard to HUD console layout**
 
 In `Dashboard.tsx`, replace the generic glass top sections with `hud-panel`, `hud-corners`, `hud-label`, `hud-chip`, and a top `System status` rail containing Twitch, OBS, API, and action state.
 
-- [ ] **Step 3: Add safer action behavior**
+- [x] **Step 3: Add safer action behavior**
 
 Disable mutating buttons while `actionState === 'running'`. Add a two-step clear overlays button:
 
@@ -322,11 +330,11 @@ const [clearArmed, setClearArmed] = useState(false);
 
 First click sets `clearArmed`; second click within the visible armed state calls `clearOverlays`.
 
-- [ ] **Step 4: Add overlay monitor cards**
+- [x] **Step 4: Add overlay monitor cards**
 
 Add an `Overlay monitor` section with route cards for all browser sources, last-known status text, and direct open links. Keep it text-only; no iframes.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -359,7 +367,7 @@ git push origin main
 - Modify: `web/src/routes/Dashboard.tsx`
 - Modify: `README.md`
 
-- [ ] **Step 1: Add OBS client tests for input and scene item request shapes**
+- [x] **Step 1: Add OBS client tests for input and scene item request shapes**
 
 Add tests around request envelopes for:
 
@@ -371,7 +379,7 @@ GetSceneItemList
 Run: `cd backend && go test ./internal/obsws -count=1`
 Expected: FAIL until implemented.
 
-- [ ] **Step 2: Implement OBS inventory methods**
+- [x] **Step 2: Implement OBS inventory methods**
 
 Add to `backend/internal/obsws/client.go`:
 
@@ -382,7 +390,7 @@ func (c Client) GetInputList(ctx context.Context) ([]Input, error)
 func (c Client) GetSceneItemList(ctx context.Context, sceneName string) ([]SceneItem, error)
 ```
 
-- [ ] **Step 3: Add HTTP routes and frontend selectors**
+- [x] **Step 3: Add HTTP routes and frontend selectors**
 
 Routes:
 
@@ -393,7 +401,7 @@ GET /api/obs/scene-items?sceneName=<name>
 
 Dashboard should use dropdowns instead of free-text for OBS input and scene item where inventory is available, with free-text fallback if OBS is offline.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run `make verify`, then commit:
 
@@ -417,7 +425,7 @@ git push origin main
 - Create: `docker-compose.override.example.yml`
 - Modify: `README.md`
 
-- [ ] **Step 1: Add HTTP server timeouts and body limits**
+- [x] **Step 1: Add HTTP server timeouts and body limits**
 
 In `backend/cmd/app/main.go`, set:
 
@@ -430,11 +438,11 @@ IdleTimeout:       60 * time.Second,
 
 In JSON handlers, wrap request bodies with `http.MaxBytesReader(w, r.Body, 1<<20)`.
 
-- [ ] **Step 2: Add Compose restart/health checks**
+- [x] **Step 2: Add Compose restart/health checks**
 
 In `docker-compose.yml`, add `restart: unless-stopped` and health checks for API and web. Avoid exposing Postgres by default unless the project still needs host access.
 
-- [ ] **Step 3: Add deployment modes doc**
+- [x] **Step 3: Add deployment modes doc**
 
 In `README.md`, add sections:
 
@@ -446,7 +454,7 @@ Public reverse proxy
 
 Document that dashboard/API mutating routes require `OPERATOR_SECRET`, overlays need readable web route + SSE, and public exposure should use reverse proxy auth.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 

@@ -25,9 +25,14 @@
 
 ## Implementation status
 
-- Theme/style: implemented with semantic HUD utility classes in `web/src/styles.css` and reusable dashboard component classes.
-- Dashboard split: implemented with `/dashboard`, `/dashboard/setup`, `/dashboard/sources`, `/dashboard/control`, and `/dashboard/config`.
+- Theme/style: implemented with semantic HUD utility classes in `web/src/styles.css`, the Neubrutal HUD design direction, Dracula colors, and terminal-style overlay/dashboard surfaces.
+- Dashboard split: implemented with `/dashboard`, `/dashboard/live`, `/dashboard/setup`, `/dashboard/sources`, `/dashboard/control`, and `/dashboard/config`.
 - Setup workflow: implemented on `/dashboard/setup`; checklist state persists locally and completed items can be hidden.
 - Operator secret: moved to `/dashboard/config` and stored in browser session storage.
-- Overlay URLs/presets: moved to `/dashboard/setup` with copyable source URLs and editable stream presets.
-- Stream control route: implemented on `/dashboard/control` with sample events, BRB controls, OBS controls, and editable quick actions.
+- Overlay URLs/presets: moved to `/dashboard/setup` and `/dashboard/sources` with copyable source URLs and editable stream presets.
+- Stream control route: implemented on `/dashboard/control` with sample events, rehearsal runner, BRB controls, OBS controls, and editable/confirmable quick actions.
+- Live readiness: implemented on `/dashboard/live` with Twitch auth, EventSub, OBS, operator-secret, and setup preflight checks.
+- Runtime diagnostics: Twitch EventSub diagnostics are exposed through backend status and dashboard UI.
+- Overlay behavior: alerts/chat/ticker have configurable noise controls; goals/ticker/BRB state is retained and replayed to reconnecting browser sources.
+- Deployment: production guardrails, Compose health checks/restart policy, and live preflight runbook are documented.
+- Live QA: user completed a live QA pass; status is OK so far.

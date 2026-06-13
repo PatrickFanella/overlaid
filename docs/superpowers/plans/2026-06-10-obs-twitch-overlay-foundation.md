@@ -15,6 +15,14 @@
 
 ---
 
+## Completion status
+
+Status: complete. The OBS/Twitch overlay foundation is implemented in the current codebase and has been superseded by the polished stream-tool and live-readiness plans. This file is now a historical execution plan, not the active backlog.
+
+Live QA result: OK so far.
+
+---
+
 ## Product Decisions
 
 - **MVP priority:** overlays first.
@@ -90,7 +98,7 @@ Each overlay gets its own browser-source route. The MVP uses one shared backend 
 - Create: `backend/internal/events/bus.go`
 - Create: `backend/internal/events/bus_test.go`
 
-- [ ] **Step 1: Write the failing bus tests**
+- [x] **Step 1: Write the failing bus tests**
 
 Create `backend/internal/events/bus_test.go`:
 
@@ -154,7 +162,7 @@ func TestBusUnsubscribeClosesChannel(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -164,7 +172,7 @@ cd backend && go test ./internal/events
 
 Expected: FAIL because `backend/internal/events` does not exist yet.
 
-- [ ] **Step 3: Implement the event model**
+- [x] **Step 3: Implement the event model**
 
 Create `backend/internal/events/events.go`:
 
@@ -237,7 +245,7 @@ func newID() string {
 }
 ```
 
-- [ ] **Step 4: Implement the bus**
+- [x] **Step 4: Implement the bus**
 
 Create `backend/internal/events/bus.go`:
 
@@ -300,7 +308,7 @@ func (b *Bus) Publish(event Event) {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run:
 
@@ -310,7 +318,7 @@ cd backend && go test ./internal/events
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/internal/events
@@ -329,7 +337,7 @@ git commit -m "feat: add overlay event bus"
 - Create: `backend/internal/http/handlers_test.go`
 - Modify: `backend/cmd/app/main.go`
 
-- [ ] **Step 1: Write failing HTTP tests**
+- [x] **Step 1: Write failing HTTP tests**
 
 Create `backend/internal/http/handlers_test.go`:
 
@@ -406,7 +414,7 @@ func TestWebhookPublishesSourceAlert(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -416,7 +424,7 @@ cd backend && go test ./internal/http
 
 Expected: FAIL because packages do not exist yet.
 
-- [ ] **Step 3: Add config loader**
+- [x] **Step 3: Add config loader**
 
 Create `backend/internal/config/config.go`:
 
@@ -452,7 +460,7 @@ func env(key, fallback string) string {
 }
 ```
 
-- [ ] **Step 4: Add HTTP server and routes**
+- [x] **Step 4: Add HTTP server and routes**
 
 Create `backend/internal/http/server.go`:
 
@@ -512,7 +520,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 }
 ```
 
-- [ ] **Step 5: Add handlers**
+- [x] **Step 5: Add handlers**
 
 Create `backend/internal/http/handlers.go`:
 
@@ -630,7 +638,7 @@ func normalizeSeverity(severity events.Severity) events.Severity {
 }
 ```
 
-- [ ] **Step 6: Replace main entrypoint**
+- [x] **Step 6: Replace main entrypoint**
 
 Modify `backend/cmd/app/main.go`:
 
@@ -658,7 +666,7 @@ func main() {
 }
 ```
 
-- [ ] **Step 7: Run tests**
+- [x] **Step 7: Run tests**
 
 Run:
 
@@ -668,7 +676,7 @@ cd backend && go test ./...
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/cmd/app/main.go backend/internal/config backend/internal/http
@@ -687,7 +695,7 @@ git commit -m "feat: expose overlay event API"
 - Modify: `web/src/App.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Write/update frontend tests**
+- [x] **Step 1: Write/update frontend tests**
 
 If the repo does not already have DOM test helpers, install them first:
 
@@ -740,7 +748,7 @@ describe('App', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -750,7 +758,7 @@ pnpm --dir web run test
 
 Expected: FAIL because routes/components do not exist or old copy is still rendered.
 
-- [ ] **Step 3: Add frontend event types**
+- [x] **Step 3: Add frontend event types**
 
 Create `web/src/lib/events.ts`:
 
@@ -824,7 +832,7 @@ export function createOverlayEventStream(handlers: EventStreamHandlers): EventSo
 }
 ```
 
-- [ ] **Step 4: Add overlay and home routes**
+- [x] **Step 4: Add overlay and home routes**
 
 Create `web/src/routes/OverlayAlerts.tsx`:
 
@@ -933,7 +941,7 @@ export default function App() {
 }
 ```
 
-- [ ] **Step 5: Run tests and build**
+- [x] **Step 5: Run tests and build**
 
 Run:
 
@@ -944,7 +952,7 @@ pnpm --dir web run build
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add web/package.json web/pnpm-lock.yaml web/vite.config.ts web/src
@@ -960,7 +968,7 @@ git commit -m "feat: add OBS alert overlay route"
 - Modify: `docker-compose.yml`
 - Modify: `README.md`
 
-- [ ] **Step 1: Update `.env.example`**
+- [x] **Step 1: Update `.env.example`**
 
 Replace or extend `.env.example` with:
 
@@ -989,7 +997,7 @@ TWITCH_CHANNEL=patrick__eff
 TWITCH_REDIRECT_URL=
 ```
 
-- [ ] **Step 2: Update Docker Compose API env**
+- [x] **Step 2: Update Docker Compose API env**
 
 Modify `docker-compose.yml` API service:
 
@@ -1012,7 +1020,7 @@ Modify `docker-compose.yml` API service:
 
 Keep future OAuth secrets out of committed files; only document non-secret placeholders in the checked-in env example.
 
-- [ ] **Step 3: Update README**
+- [x] **Step 3: Update README**
 
 Add this section to `README.md` after Quick start:
 
@@ -1063,7 +1071,7 @@ curl -X POST http://localhost:8080/api/integrations/webhook/gitea \
 ```
 ```
 
-- [ ] **Step 4: Verify compose config**
+- [x] **Step 4: Verify compose config**
 
 Run:
 
@@ -1073,7 +1081,7 @@ docker compose config --quiet
 
 Expected: no output and exit code 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .env.example docker-compose.yml README.md
@@ -1087,7 +1095,7 @@ git commit -m "docs: document overlay homelab setup"
 **Files:**
 - No new files.
 
-- [ ] **Step 1: Run full verification**
+- [x] **Step 1: Run full verification**
 
 Run:
 
@@ -1097,7 +1105,7 @@ make verify
 
 Expected: PASS.
 
-- [ ] **Step 2: Run stack manually**
+- [x] **Step 2: Run stack manually**
 
 Run:
 
@@ -1111,7 +1119,7 @@ Expected:
 - Web is reachable on `http://localhost:5173`.
 - Overlay is reachable on `http://localhost:5173/overlay/alerts`.
 
-- [ ] **Step 3: Send manual alert while overlay is open**
+- [x] **Step 3: Send manual alert while overlay is open**
 
 Run:
 
@@ -1123,7 +1131,7 @@ curl -X POST http://localhost:8080/api/events/test-alert \
 
 Expected: overlay displays the alert for about 8 seconds.
 
-- [ ] **Step 4: Send generic Gitea-style webhook**
+- [x] **Step 4: Send generic Gitea-style webhook**
 
 Run:
 
@@ -1135,7 +1143,7 @@ curl -X POST http://localhost:8080/api/integrations/webhook/gitea \
 
 Expected: overlay displays a Gitea-sourced alert.
 
-- [ ] **Step 5: Commit any verification fixes**
+- [x] **Step 5: Commit any verification fixes**
 
 ```bash
 git status --short

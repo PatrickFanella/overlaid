@@ -48,3 +48,8 @@ Check OBS WebSocket settings, host networking override, and `OBS_WEBSOCKET_PASSW
 ### Operator controls return 401
 
 Open `/dashboard/config` and enter `OPERATOR_SECRET`.
+
+
+## Live QA status
+
+Latest manual live QA pass: OK so far. Keep using this runbook before each real stream and update this section if a recurring failure appears.

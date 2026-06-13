@@ -15,6 +15,14 @@
 
 ---
 
+## Completion status
+
+Status: complete. The overlaid notes implementation is reflected in `docs/overlaid-notes.md` and the current dashboard/overlay code: shared HUD utilities, multi-route operator dashboard, setup/config/control/source routes, persisted local dashboard config, and reusable control components. This file is now a historical execution plan, not the active backlog.
+
+Live QA result: OK so far.
+
+---
+
 ## Source Notes Coverage
 
 This plan covers every item from `docs/overlaid-notes.md`:
@@ -88,7 +96,7 @@ Optional backend create/modify for Task 6 if cross-browser persistence is requir
 - Modify: `web/src/routes/Dashboard.tsx`
 - Test: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Create shared overlay route metadata**
+- [x] **Step 1: Create shared overlay route metadata**
 
 Create `web/src/lib/overlayRoutes.ts`:
 
@@ -130,7 +138,7 @@ export function buildOverlaySourceUrl(path: string, apiBaseUrl: string) {
 }
 ```
 
-- [ ] **Step 2: Create sample payload module**
+- [x] **Step 2: Create sample payload module**
 
 Create `web/src/lib/dashboardSamples.ts`:
 
@@ -183,7 +191,7 @@ export const sampleBRBHide: BRBPayload = {
 };
 ```
 
-- [ ] **Step 3: Create dashboard config/storage helper**
+- [x] **Step 3: Create dashboard config/storage helper**
 
 Create `web/src/lib/dashboardConfig.ts`:
 
@@ -270,7 +278,7 @@ export function saveOperatorSecret(secret: string) {
 }
 ```
 
-- [ ] **Step 4: Replace duplicated constants in `Dashboard.tsx`**
+- [x] **Step 4: Replace duplicated constants in `Dashboard.tsx`**
 
 Modify `web/src/routes/Dashboard.tsx` imports:
 
@@ -281,7 +289,7 @@ import { sampleAlert, sampleTicker, sampleGoals, sampleBRBShow, sampleBRBHide } 
 
 Remove local `overlayRoutes`, `sampleAlert`, `sampleTicker`, `sampleGoals`, `sampleBRBShow`, `sampleBRBHide`, `buildOverlaySourceUrl`, and `getBrowserOrigin` definitions.
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Run:
 
@@ -291,7 +299,7 @@ pnpm --dir web run test
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit extraction**
+- [x] **Step 6: Commit extraction**
 
 ```bash
 git add web/src/lib/overlayRoutes.ts web/src/lib/dashboardSamples.ts web/src/lib/dashboardConfig.ts web/src/routes/Dashboard.tsx web/src/App.test.tsx
@@ -312,7 +320,7 @@ git commit -m "refactor: extract dashboard configuration helpers"
 - Modify: `web/src/App.tsx`
 - Test: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add dashboard shell navigation**
+- [x] **Step 1: Add dashboard shell navigation**
 
 Create `web/src/routes/dashboard/DashboardShell.tsx`:
 
@@ -351,7 +359,7 @@ export function DashboardShell({ activePath, children }: { activePath: string; c
 }
 ```
 
-- [ ] **Step 2: Add initial route components with real headings**
+- [x] **Step 2: Add initial route components with real headings**
 
 Create `web/src/routes/dashboard/Overview.tsx`:
 
@@ -372,7 +380,7 @@ export function DashboardOverviewPage() {
 
 Create similarly named components for `Setup`, `Control`, and `Config` with headings `OBS setup workflow`, `Stream control`, and `Operator config`.
 
-- [ ] **Step 3: Route dashboard paths in `App.tsx`**
+- [x] **Step 3: Route dashboard paths in `App.tsx`**
 
 Modify `web/src/App.tsx` imports:
 
@@ -392,7 +400,7 @@ if (route === '/dashboard/control') return <DashboardControlPage />;
 if (route === '/dashboard/config') return <DashboardConfigPage />;
 ```
 
-- [ ] **Step 4: Convert old `Dashboard.tsx` into a compatibility export**
+- [x] **Step 4: Convert old `Dashboard.tsx` into a compatibility export**
 
 Replace `web/src/routes/Dashboard.tsx` with:
 
@@ -404,7 +412,7 @@ export function DashboardPage() {
 }
 ```
 
-- [ ] **Step 5: Add route tests**
+- [x] **Step 5: Add route tests**
 
 Modify `web/src/App.test.tsx`:
 
@@ -425,7 +433,7 @@ it('renders dashboard config route', () => {
 });
 ```
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 ```bash
 pnpm --dir web run test
@@ -433,7 +441,7 @@ pnpm --dir web run test
 
 Expected: all dashboard route tests pass.
 
-- [ ] **Step 7: Commit route split skeleton**
+- [x] **Step 7: Commit route split skeleton**
 
 ```bash
 git add web/src/App.tsx web/src/App.test.tsx web/src/routes/Dashboard.tsx web/src/routes/dashboard/
@@ -449,7 +457,7 @@ git commit -m "feat: split dashboard into operator routes"
 - Modify: `web/src/lib/dashboardConfig.ts`
 - Test: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Implement config route with session-backed operator secret**
+- [x] **Step 1: Implement config route with session-backed operator secret**
 
 Replace `DashboardConfigPage` content in `web/src/routes/dashboard/Config.tsx` with:
 
@@ -502,7 +510,7 @@ export function DashboardConfigPage() {
 }
 ```
 
-- [ ] **Step 2: Remove operator secret input from overview/control pages**
+- [x] **Step 2: Remove operator secret input from overview/control pages**
 
 When later moving controls into `/dashboard/control`, call `loadOperatorSecret()` inside that route and show only a status chip:
 
@@ -511,7 +519,7 @@ const operatorSecret = loadOperatorSecret();
 const operatorSecretLabel = operatorSecret ? 'operator secret loaded' : 'operator secret missing';
 ```
 
-- [ ] **Step 3: Test config route**
+- [x] **Step 3: Test config route**
 
 Add to `web/src/App.test.tsx`:
 
@@ -523,14 +531,14 @@ it('renders operator config route', () => {
 });
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 pnpm --dir web run test
 pnpm --dir web run build
 ```
 
-- [ ] **Step 5: Commit config route**
+- [x] **Step 5: Commit config route**
 
 ```bash
 git add web/src/routes/dashboard/Config.tsx web/src/lib/dashboardConfig.ts web/src/App.test.tsx
@@ -549,7 +557,7 @@ git commit -m "feat: add dashboard config route"
 - Modify: `web/src/lib/dashboardConfig.ts`
 - Test: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Build checklist component that hides when complete**
+- [x] **Step 1: Build checklist component that hides when complete**
 
 Create `web/src/routes/dashboard/components/SetupChecklist.tsx`:
 
@@ -587,7 +595,7 @@ export function SetupChecklist({ config, onChange }: { config: DashboardConfig; 
 }
 ```
 
-- [ ] **Step 2: Build overlay source cards component**
+- [x] **Step 2: Build overlay source cards component**
 
 Move copyable URL card logic from old dashboard into `OverlaySourceCards.tsx` with props:
 
@@ -600,7 +608,7 @@ type OverlaySourceCardsProps = {
 
 Use `overlayRoutes` and `buildOverlaySourceUrl()` from `web/src/lib/overlayRoutes.ts`.
 
-- [ ] **Step 3: Build editable preset editor**
+- [x] **Step 3: Build editable preset editor**
 
 Create `StreamPresetEditor.tsx` with simple text fields: preset title and comma-separated sources.
 
@@ -619,7 +627,7 @@ function parseSources(value: string) {
 }
 ```
 
-- [ ] **Step 4: Compose setup route**
+- [x] **Step 4: Compose setup route**
 
 Modify `web/src/routes/dashboard/Setup.tsx`:
 
@@ -658,7 +666,7 @@ export function DashboardSetupPage() {
 }
 ```
 
-- [ ] **Step 5: Verify setup route tests**
+- [x] **Step 5: Verify setup route tests**
 
 ```bash
 pnpm --dir web run test
@@ -666,7 +674,7 @@ pnpm --dir web run test
 
 Expected: tests include `OBS setup workflow`, `Overlay source URLs`, and `Stream presets` on `/dashboard/setup`.
 
-- [ ] **Step 6: Commit setup route**
+- [x] **Step 6: Commit setup route**
 
 ```bash
 git add web/src/routes/dashboard/Setup.tsx web/src/routes/dashboard/components/SetupChecklist.tsx web/src/routes/dashboard/components/OverlaySourceCards.tsx web/src/routes/dashboard/components/StreamPresetEditor.tsx web/src/lib/dashboardConfig.ts web/src/App.test.tsx
@@ -688,7 +696,7 @@ git commit -m "feat: add editable dashboard setup route"
 - Modify: `web/src/lib/dashboardConfig.ts`
 - Test: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Move BRB form into component**
+- [x] **Step 1: Move BRB form into component**
 
 Create `BRBControl.tsx` with props:
 
@@ -703,7 +711,7 @@ type BRBControlProps = {
 
 Move the existing BRB state, `submitBRB`, `hideBRB`, and text-area parsing logic out of `Dashboard.tsx` into this component.
 
-- [ ] **Step 2: Move OBS controls into component**
+- [x] **Step 2: Move OBS controls into component**
 
 Create `OBSControls.tsx` with the existing scene/input/scene-item selection logic and props:
 
@@ -718,11 +726,11 @@ type OBSControlsProps = {
 
 Move OBS fetching from dashboard into this component for now. Keep existing fallback behavior when inventories fail.
 
-- [ ] **Step 3: Move sample buttons into component**
+- [x] **Step 3: Move sample buttons into component**
 
 Create `SampleEventControls.tsx` using `sampleAlert`, `sampleTicker`, `sampleGoals`, `sampleBRBShow`, `sampleBRBHide`.
 
-- [ ] **Step 4: Implement quick action runner**
+- [x] **Step 4: Implement quick action runner**
 
 Create `QuickActionRunner.tsx`:
 
@@ -751,11 +759,11 @@ export function QuickActionRunner({ actions, apiBaseUrl, operatorSecret, runActi
 }
 ```
 
-- [ ] **Step 5: Implement minimal quick actions editor**
+- [x] **Step 5: Implement minimal quick actions editor**
 
 Create `QuickActionsEditor.tsx` with fields for label and kind. For the first pass, support editing label and scene name for `setScene`, input name for `muteInput`, and alert title/message for `sendAlert`. Add/remove buttons update localStorage config.
 
-- [ ] **Step 6: Compose control route**
+- [x] **Step 6: Compose control route**
 
 Modify `Control.tsx` to load operator secret from session storage, config from local storage, and render:
 
@@ -770,7 +778,7 @@ Modify `Control.tsx` to load operator secret from session storage, config from l
 </DashboardShell>
 ```
 
-- [ ] **Step 7: Verify**
+- [x] **Step 7: Verify**
 
 ```bash
 pnpm --dir web run test
@@ -779,7 +787,7 @@ pnpm --dir web run build
 
 Expected: `/dashboard/control` renders `Stream control`, `Quick actions`, `BRB overlay`, and `Scene controls`.
 
-- [ ] **Step 8: Commit control route**
+- [x] **Step 8: Commit control route**
 
 ```bash
 git add web/src/routes/dashboard/Control.tsx web/src/routes/dashboard/components/BRBControl.tsx web/src/routes/dashboard/components/OBSControls.tsx web/src/routes/dashboard/components/SampleEventControls.tsx web/src/routes/dashboard/components/QuickActionRunner.tsx web/src/routes/dashboard/components/QuickActionsEditor.tsx web/src/routes/dashboard/components/SystemStatusRail.tsx web/src/lib/dashboardConfig.ts web/src/App.test.tsx
@@ -795,7 +803,7 @@ git commit -m "feat: add stream control route and quick actions"
 - Modify: dashboard components created above
 - Test: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add reusable semantic classes**
+- [x] **Step 1: Add reusable semantic classes**
 
 Append to `web/src/styles.css`:
 
@@ -842,7 +850,7 @@ Append to `web/src/styles.css`:
 }
 ```
 
-- [ ] **Step 2: Replace repeated dashboard grid/button classes**
+- [x] **Step 2: Replace repeated dashboard grid/button classes**
 
 In new dashboard components, replace repeated class strings like:
 
@@ -858,7 +866,7 @@ className="hud-dashboard-grid hud-dashboard-grid--three mt-5"
 
 Replace repeated rounded action button classes with `hud-action-button` plus accent-specific classes only where needed.
 
-- [ ] **Step 3: Add sticky compact system status rail**
+- [x] **Step 3: Add sticky compact system status rail**
 
 In `SystemStatusRail.tsx`, use:
 
@@ -868,7 +876,7 @@ In `SystemStatusRail.tsx`, use:
 </section>
 ```
 
-- [ ] **Step 4: Verify visual utility compile**
+- [x] **Step 4: Verify visual utility compile**
 
 ```bash
 pnpm --dir web run build
@@ -876,7 +884,7 @@ pnpm --dir web run build
 
 Expected: CSS builds without errors.
 
-- [ ] **Step 5: Commit CSS utilities**
+- [x] **Step 5: Commit CSS utilities**
 
 ```bash
 git add web/src/styles.css web/src/routes/dashboard/
@@ -891,7 +899,7 @@ git commit -m "style: consolidate dashboard hud utilities"
 - Modify: `README.md`
 - Modify: `docs/overlaid-notes.md`
 
-- [ ] **Step 1: Document new dashboard routes**
+- [x] **Step 1: Document new dashboard routes**
 
 Add to README dashboard section:
 
@@ -905,7 +913,7 @@ Dashboard routes:
 - `/dashboard/config` — operator secret session storage, MPRIS decision, local console preferences.
 ```
 
-- [ ] **Step 2: Mark notes implementation status**
+- [x] **Step 2: Mark notes implementation status**
 
 Append to `docs/overlaid-notes.md`:
 
@@ -922,7 +930,7 @@ Append to `docs/overlaid-notes.md`:
 - Stream control route: includes samples, BRB, OBS controls, and editable quick actions.
 ```
 
-- [ ] **Step 3: Full verification**
+- [x] **Step 3: Full verification**
 
 Run:
 
@@ -934,7 +942,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.example.yml conf
 
 Expected: all commands pass.
 
-- [ ] **Step 4: Rebuild web and smoke local routes**
+- [x] **Step 4: Rebuild web and smoke local routes**
 
 Run:
 
@@ -945,7 +953,7 @@ make smoke
 
 Expected: `/dashboard`, `/overlay/alerts`, and `/healthz` respond.
 
-- [ ] **Step 5: Commit docs**
+- [x] **Step 5: Commit docs**
 
 ```bash
 git add README.md docs/overlaid-notes.md
