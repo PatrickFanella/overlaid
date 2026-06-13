@@ -5,6 +5,7 @@ import { ConfirmableActionButton } from './ConfirmableActionButton';
 
 type QuickActionRunnerProps = {
   actions: QuickAction[];
+  actionCatalog?: QuickAction[];
   apiBaseUrl: string;
   operatorSecret: string;
   isRunning: boolean;
@@ -12,7 +13,9 @@ type QuickActionRunnerProps = {
   runAction: (label: string, action: () => Promise<string | void>) => void;
 };
 
-export function QuickActionRunner({ actions, apiBaseUrl, operatorSecret, isRunning, compact = false, runAction }: QuickActionRunnerProps) {
+export function QuickActionRunner({ actions, actionCatalog, apiBaseUrl, operatorSecret, isRunning, compact = false, runAction }: QuickActionRunnerProps) {
+  const sequenceCatalog = actionCatalog ?? actions;
+
   function executeAtomic(action: AtomicQuickAction) {
     switch (action.kind) {
       case 'setScene':
@@ -40,7 +43,7 @@ export function QuickActionRunner({ actions, apiBaseUrl, operatorSecret, isRunni
     }
 
     return runAction(action.label, async () => {
-      const result = await runQuickActionSequence(action, actions, executeAtomic);
+      const result = await runQuickActionSequence(action, sequenceCatalog, executeAtomic);
       if (result.ran === 0) {
         throw new Error(['Sequence has no runnable actions', ...result.warnings].join('; '));
       }
@@ -53,7 +56,7 @@ export function QuickActionRunner({ actions, apiBaseUrl, operatorSecret, isRunni
     });
   }
 
-  const visibleActions = actions.filter((action) => action.kind !== 'sequence' || resolveQuickActionSequence(action, actions).steps.length > 0);
+  const visibleActions = actions.filter((action) => action.kind !== 'sequence' || resolveQuickActionSequence(action, sequenceCatalog).steps.length > 0);
 
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">

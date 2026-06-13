@@ -2,6 +2,7 @@ import type { DashboardConfig, StreamPreset } from '../../../lib/dashboardConfig
 
 type StreamPresetEditorProps = {
   config: DashboardConfig;
+  presets?: StreamPreset[];
   onChange: (config: DashboardConfig) => void;
 };
 
@@ -19,7 +20,9 @@ function updatePreset(config: DashboardConfig, id: string, patch: Partial<Stream
   };
 }
 
-export function StreamPresetEditor({ config, onChange }: StreamPresetEditorProps) {
+export function StreamPresetEditor({ config, presets, onChange }: StreamPresetEditorProps) {
+  const visiblePresets = presets ?? config.streamPresets;
+
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
       <p className="hud-label">Stream presets</p>
@@ -27,7 +30,7 @@ export function StreamPresetEditor({ config, onChange }: StreamPresetEditorProps
       <p className="hud-copy mt-1 text-xs text-zinc-300">Scene-specific overlay sets stored locally.</p>
 
       <div className="mt-3 grid gap-2 lg:grid-cols-3">
-        {config.streamPresets.map((preset) => (
+        {visiblePresets.map((preset) => (
           <article key={preset.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card">
             <p className="hud-kicker">Preset {preset.id}</p>
 

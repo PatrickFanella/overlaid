@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { loadDashboardConfig, loadOperatorSecret, saveDashboardConfig, type DashboardConfig } from '../../lib/dashboardConfig';
+import { getActiveAutomationProfile, selectQuickActionsForProfile } from '../../lib/automationProfiles';
 import {
   clearSessionLog,
   createSessionLogEntry,
@@ -26,6 +27,8 @@ export function DashboardControlPage() {
   const [sessionLog, setSessionLog] = useState<SessionLogEntry[]>(() => loadSessionLog());
   const sessionLogRef = useRef(sessionLog);
   const [runningAction, setRunningAction] = useState<string | null>(null);
+  const activeAutomationProfile = getActiveAutomationProfile(config);
+  const { actions: profileActions, warnings: profileWarnings } = selectQuickActionsForProfile(config);
 
   function updateConfig(next: DashboardConfig) {
     setConfig(next);
@@ -70,6 +73,20 @@ export function DashboardControlPage() {
             Edit secret
           </a>
         </div>
+        <div className="mt-4 grid gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="hud-label">Active profile</p>
+            <span className="hud-chip hud-chip--square hud-accent-cyan">{activeAutomationProfile.title}</span>
+          </div>
+          <p className="text-xs text-zinc-400">{activeAutomationProfile.description}</p>
+          {profileWarnings.length > 0 ? (
+            <ul className="grid gap-1 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+              {profileWarnings.map((warning) => (
+                <li key={`${warning.profileId}:${warning.message}`}>{warning.message}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       </section>
 
       <ControlLayoutEditor config={config} onChange={updateConfig} />
@@ -85,7 +102,7 @@ export function DashboardControlPage() {
       <div className="hud-route-grid">
         {widgets.map((widget) => {
           const compact = widget.compact;
-          if (widget.id === 'quick-actions') return <QuickActionRunner key={widget.id} actions={config.quickActions} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} compact={compact} />;
+          if (widget.id === 'quick-actions') return <QuickActionRunner key={widget.id} actions={profileActions} actionCatalog={config.quickActions} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} compact={compact} />;
           if (widget.id === 'sample-events') return <SampleEventControls key={widget.id} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} compact={compact} />;
           if (widget.id === 'brb') return <BRBControl key={widget.id} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} compact={compact} />;
           if (widget.id === 'obs') return <OBSControls key={widget.id} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} isRunning={runningAction !== null} runAction={runAction} compact={compact} />;

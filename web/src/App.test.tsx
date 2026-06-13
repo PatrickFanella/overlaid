@@ -65,6 +65,8 @@ describe('App routing', () => {
 
     expect(html).toContain('Overlay source URLs');
     expect(html).toContain('/overlay/alerts');
+    expect(html).toContain('Active profile');
+    expect(html).toContain('Full console');
     expect(html).toContain('Stream presets');
     expect(html).toContain('Custom CSS');
   });
@@ -75,6 +77,8 @@ describe('App routing', () => {
     expect(html).toContain('Stream control');
     expect(html).toContain('operator secret missing');
     expect(html).toContain('Edit secret');
+    expect(html).toContain('Active profile');
+    expect(html).toContain('Full console');
     expect(html).toContain('Session log');
     expect(html).toContain('Recent operator actions');
     expect(html).toContain('Run Main preset');
@@ -453,6 +457,30 @@ describe('quick action sequence utilities', () => {
     expect(html).toContain('Run Main');
     expect(html).toContain('Go Live');
     expect(html).not.toContain('Empty Sequence');
+  });
+
+  it('renders sequences when children exist only in the action catalog', () => {
+    const actions: QuickAction[] = [{ id: 'seq', label: 'Visible Sequence', kind: 'sequence', actionIds: ['child-only'], stopOnError: true }];
+    const actionCatalog: QuickAction[] = [
+      { id: 'child-only', label: 'Hidden Child', kind: 'setScene', sceneName: 'Main' },
+      actions[0],
+    ];
+
+    const html = renderToString(
+      <QuickActionRunner
+        actions={actions}
+        actionCatalog={actionCatalog}
+        apiBaseUrl="http://localhost:8080"
+        operatorSecret="secret"
+        isRunning={false}
+        runAction={() => {
+          throw new Error('unused');
+        }}
+      />,
+    );
+
+    expect(html).toContain('Visible Sequence');
+    expect(html).not.toContain('Hidden Child');
   });
 
   it('resolves atomic quick actions in sequence order', () => {
