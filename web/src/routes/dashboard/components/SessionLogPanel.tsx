@@ -2,7 +2,7 @@ import type { SessionLogEntry } from '../../../lib/sessionLog';
 
 type SessionLogPanelProps = {
   entries: SessionLogEntry[];
-  onClear: () => void;
+  onClear?: () => void;
 };
 
 export function SessionLogPanel({ entries, onClear }: SessionLogPanelProps) {
@@ -13,9 +13,11 @@ export function SessionLogPanel({ entries, onClear }: SessionLogPanelProps) {
           <p className="hud-label">Session log</p>
           <h2 className="hud-section-title">Recent operator actions</h2>
         </div>
-        <button className="hud-chip hud-chip--square" type="button" onClick={onClear}>
-          clear log
-        </button>
+        {onClear ? (
+          <button className="hud-chip hud-chip--square" type="button" onClick={onClear}>
+            clear log
+          </button>
+        ) : null}
       </div>
 
       <div className="mt-3 grid gap-2" role="log" aria-live="polite" aria-relevant="additions text">

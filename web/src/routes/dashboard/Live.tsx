@@ -1,36 +1,51 @@
 import { useEffect, useState } from 'react';
-import { fetchOBSStatus, fetchTwitchStatus, type OBSStatus, type TwitchStatus } from '../../lib/api';
+import { fetchOBSStatus, fetchReadiness, fetchTwitchStatus, type OBSStatus, type ReadinessReport, type TwitchStatus } from '../../lib/api';
 import { loadDashboardConfig, loadOperatorSecret } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
+import { loadSessionLog, type SessionLogEntry } from '../../lib/sessionLog';
 import { DashboardShell } from './DashboardShell';
 import { EventSubDiagnostics } from './components/EventSubDiagnostics';
 import { LivePreflight } from './components/LivePreflight';
+import { LiveChecklistSummary } from './components/LiveChecklistSummary';
+import { ReadinessPanel } from './components/ReadinessPanel';
+import { SessionLogPanel } from './components/SessionLogPanel';
 
 type LiveStatus = {
   twitch: TwitchStatus | null;
   obs: OBSStatus | null;
+  readiness: ReadinessReport | null;
   loading: boolean;
   error: string;
+  readinessError: string;
 };
 
 export function DashboardLivePage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const config = loadDashboardConfig();
   const operatorSecret = loadOperatorSecret();
-  const [status, setStatus] = useState<LiveStatus>({ twitch: null, obs: null, loading: true, error: '' });
+  const [sessionLog] = useState<SessionLogEntry[]>(() => loadSessionLog());
+  const [status, setStatus] = useState<LiveStatus>({ twitch: null, obs: null, readiness: null, loading: false, error: '', readinessError: '' });
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      const [twitchResult, obsResult] = await Promise.allSettled([fetchTwitchStatus(apiBaseUrl), fetchOBSStatus(apiBaseUrl)]);
+      setStatus((current) => ({ ...current, loading: true, error: '', readinessError: '' }));
+
+      const [twitchResult, obsResult, readinessResult] = await Promise.allSettled([
+        fetchTwitchStatus(apiBaseUrl),
+        fetchOBSStatus(apiBaseUrl),
+        fetchReadiness(apiBaseUrl),
+      ]);
       if (cancelled) return;
 
       setStatus({
         twitch: twitchResult.status === 'fulfilled' ? twitchResult.value : null,
         obs: obsResult.status === 'fulfilled' ? obsResult.value : null,
+        readiness: readinessResult.status === 'fulfilled' ? readinessResult.value : null,
         loading: false,
         error: twitchResult.status === 'rejected' || obsResult.status === 'rejected' ? 'Some live status checks are unavailable.' : '',
+        readinessError: readinessResult.status === 'rejected' ? 'Readiness check unavailable.' : '',
       });
     }
 
@@ -44,7 +59,7 @@ export function DashboardLivePage() {
     <DashboardShell activePath="/dashboard/live">
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <p className="hud-label">Live</p>
-        <h2 className="hud-section-title">Stream readiness</h2>
+        <h2 className="hud-section-title">Live ops cockpit</h2>
         <p className="hud-copy mt-1 text-xs text-zinc-300">Use this before going live to catch missing auth, EventSub, OBS, operator, or setup steps.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="hud-chip hud-chip--square">{status.loading ? 'checking' : 'checked'}</span>
@@ -52,8 +67,11 @@ export function DashboardLivePage() {
         </div>
       </section>
 
+      <ReadinessPanel report={status.readiness} loading={status.loading} error={status.readinessError} />
       <LivePreflight twitch={status.twitch} obs={status.obs} config={config} operatorSecret={operatorSecret} />
       <EventSubDiagnostics status={status.twitch} />
+      <LiveChecklistSummary items={config.setupChecklist} />
+      <SessionLogPanel entries={sessionLog} />
     </DashboardShell>
   );
 }

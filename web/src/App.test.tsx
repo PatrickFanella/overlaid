@@ -6,6 +6,7 @@ import { parseOverlayEvent } from './lib/events';
 import { defaultDashboardConfig, loadDashboardConfig, type QuickAction } from './lib/dashboardConfig';
 import { resolveQuickActionSequence, runQuickActionSequence } from './lib/quickActionSequences';
 import { QuickActionRunner } from './routes/dashboard/components/QuickActionRunner';
+import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -43,6 +44,11 @@ describe('App routing', () => {
   it('renders the dashboard live preflight route', () => {
     const html = renderToString(<App pathname="/dashboard/live" />);
 
+    expect(html).toContain('Live ops cockpit');
+    expect(html).toContain('Backend readiness');
+    expect(html).toContain('Readiness report unavailable');
+    expect(html).toContain('Setup checklist summary');
+    expect(html).toContain('Recent operator actions');
     expect(html).toContain('Live preflight');
     expect(html).toContain('Chat commands');
     expect(html).toContain('mods + broadcaster only');
@@ -82,6 +88,20 @@ describe('App routing', () => {
     expect(html).toContain('Secret header');
     expect(html).toContain('MPRIS decision');
     expect(html).toContain('Overlay noise controls');
+  });
+
+  it('renders degraded readiness incidents', () => {
+    const html = renderToString(
+      <ReadinessPanel
+        loading={false}
+        error=""
+        report={{ status: 'degraded', checks: [{ name: 'obs_auth', status: 'degraded', hint: 'Check OBS password.' }] }}
+      />,
+    );
+
+    expect(html).toContain('Operator incidents');
+    expect(html).toContain('obs auth');
+    expect(html).toContain('Check OBS password.');
   });
 
   it('renders the goals overlay route', () => {
