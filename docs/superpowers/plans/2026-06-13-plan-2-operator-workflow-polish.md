@@ -15,6 +15,23 @@
 
 ---
 
+## Completion status
+
+Status: complete. Implemented, reviewed, verified, committed, rebuilt/deployed locally, smoke-checked, and route spot-checked.
+
+Verification passed:
+
+- `make verify`
+- `docker compose config --quiet`
+- `docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --quiet`
+- `docker compose up -d --build`
+- `make smoke`
+- Route spot-checks: `/dashboard/control`, `/dashboard/live`, `/overlay/alerts`
+
+Live QA result: OK so far.
+
+---
+
 ## Current Baseline
 
 - Branch: `main`, remote `origin=https://git.subcult.tv/PatrickFanella/over-laid.git`.
@@ -76,7 +93,7 @@ Modify:
 - Modify: `web/src/routes/dashboard/Control.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add route test for session log panel**
+- [x] **Step 1: Add route test for session log panel**
 
 In `web/src/App.test.tsx`, update the `/dashboard/control` test to assert:
 
@@ -93,7 +110,7 @@ pnpm --dir web run test -- --run src/App.test.tsx
 
 Expected: FAIL because `Session log` is not rendered yet.
 
-- [ ] **Step 2: Create session log helpers**
+- [x] **Step 2: Create session log helpers**
 
 Create `web/src/lib/sessionLog.ts`:
 
@@ -153,7 +170,7 @@ function createLogID() {
 }
 ```
 
-- [ ] **Step 3: Create session log panel**
+- [x] **Step 3: Create session log panel**
 
 Create `web/src/routes/dashboard/components/SessionLogPanel.tsx`:
 
@@ -185,7 +202,7 @@ export function SessionLogPanel({ entries, onClear }: { entries: SessionLogEntry
 }
 ```
 
-- [ ] **Step 4: Wire session log into Control route action runner**
+- [x] **Step 4: Wire session log into Control route action runner**
 
 In `web/src/routes/dashboard/Control.tsx`, import:
 
@@ -228,7 +245,7 @@ Render near the top of the control route, after `RehearsalRunner`:
 <SessionLogPanel entries={sessionLog} onClear={() => { clearSessionLog(); setSessionLog([]); }} />
 ```
 
-- [ ] **Step 5: Verify and commit Task 1**
+- [x] **Step 5: Verify and commit Task 1**
 
 Run:
 
@@ -260,7 +277,7 @@ git commit -m "feat: add operator session action log"
 - Modify: `web/src/lib/api.ts`
 - Modify: `web/src/routes/dashboard/components/OBSControls.tsx`
 
-- [ ] **Step 1: Add failing OBS client test for source refresh request shape**
+- [x] **Step 1: Add failing OBS client test for source refresh request shape**
 
 In `backend/internal/obsws/client_test.go`, add:
 
@@ -300,7 +317,7 @@ cd backend && go test ./internal/obsws -run RefreshBrowserSource -count=1
 
 Expected: FAIL because `RefreshBrowserSource` does not exist.
 
-- [ ] **Step 2: Implement OBS client refresh helper**
+- [x] **Step 2: Implement OBS client refresh helper**
 
 In `backend/internal/obsws/client.go`, add:
 
@@ -324,7 +341,7 @@ cd backend && go test ./internal/obsws -run RefreshBrowserSource -count=1
 
 Expected: PASS.
 
-- [ ] **Step 3: Add protected HTTP route test**
+- [x] **Step 3: Add protected HTTP route test**
 
 In `backend/internal/http/handlers_test.go`, add tests using the existing OBS test dialer pattern:
 
@@ -376,7 +393,7 @@ cd backend && go test ./internal/http -run OBSRefreshBrowserSource -count=1
 
 Expected: FAIL because route and handler do not exist.
 
-- [ ] **Step 4: Implement HTTP handler and route**
+- [x] **Step 4: Implement HTTP handler and route**
 
 In `backend/internal/http/obs_handlers.go`, add request type:
 
@@ -417,7 +434,7 @@ cd backend && go test ./internal/http -run OBSRefreshBrowserSource -count=1
 
 Expected: PASS.
 
-- [ ] **Step 5: Add frontend API helper**
+- [x] **Step 5: Add frontend API helper**
 
 In `web/src/lib/api.ts`, add:
 
@@ -427,7 +444,7 @@ export async function refreshOBSSource(inputName: string, explicitBaseUrl?: stri
 }
 ```
 
-- [ ] **Step 6: Add per-source refresh buttons in OBS controls**
+- [x] **Step 6: Add per-source refresh buttons in OBS controls**
 
 In `web/src/routes/dashboard/components/OBSControls.tsx`, import `refreshOBSSource` and add:
 
@@ -445,7 +462,7 @@ In the `state.sceneItems.map` row, add a second button next to enable/disable:
 </button>
 ```
 
-- [ ] **Step 7: Verify and commit Task 2**
+- [x] **Step 7: Verify and commit Task 2**
 
 Run:
 
@@ -472,7 +489,7 @@ git commit -m "feat: add obs source refresh controls"
 - Modify: `web/src/routes/dashboard/components/QuickActionsEditor.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add failing test for preset workflow action UI**
+- [x] **Step 1: Add failing test for preset workflow action UI**
 
 In `web/src/App.test.tsx`, update the `/dashboard/control` test to assert:
 
@@ -489,7 +506,7 @@ pnpm --dir web run test -- --run src/App.test.tsx
 
 Expected: FAIL until the editor exposes preset workflow fields.
 
-- [ ] **Step 2: Extend quick action type and defaults**
+- [x] **Step 2: Extend quick action type and defaults**
 
 In `web/src/lib/dashboardConfig.ts`, extend `QuickAction` with:
 
@@ -520,7 +537,7 @@ case 'refreshSource':
   return { id, label, kind, inputName: 'Alerts Browser' };
 ```
 
-- [ ] **Step 3: Execute new quick action kinds**
+- [x] **Step 3: Execute new quick action kinds**
 
 In `web/src/routes/dashboard/components/QuickActionRunner.tsx`, import `refreshOBSSource` from API.
 
@@ -535,7 +552,7 @@ case 'refreshSource':
 
 The first version of `runPreset` sets the OBS scene only. Source visibility stays controlled by explicit scene-item buttons and refresh-source actions so the sprint does not introduce an implicit scene-source orchestration engine.
 
-- [ ] **Step 4: Expose editor fields for preset and refresh actions**
+- [x] **Step 4: Expose editor fields for preset and refresh actions**
 
 In `web/src/routes/dashboard/components/QuickActionsEditor.tsx`, add form branches:
 
@@ -560,7 +577,7 @@ In `web/src/routes/dashboard/components/QuickActionsEditor.tsx`, add form branch
 ) : null}
 ```
 
-- [ ] **Step 5: Verify and commit Task 3**
+- [x] **Step 5: Verify and commit Task 3**
 
 Run:
 
@@ -587,7 +604,7 @@ git commit -m "feat: add preset workflow quick actions"
 - Create: `docs/runbooks/visual-qa.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Confirm visual QA runbook does not already exist**
+- [x] **Step 1: Confirm visual QA runbook does not already exist**
 
 Run:
 
@@ -597,7 +614,7 @@ test ! -f docs/runbooks/visual-qa.md
 
 Expected: PASS before the file exists. This confirms the task creates the new runbook.
 
-- [ ] **Step 2: Create visual QA runbook**
+- [x] **Step 2: Create visual QA runbook**
 
 Create `docs/runbooks/visual-qa.md`:
 
@@ -657,7 +674,7 @@ If a visual issue appears during QA, capture:
 - Whether `make verify` and `make smoke` passed.
 ````
 
-- [ ] **Step 3: Link visual QA runbook from README**
+- [x] **Step 3: Link visual QA runbook from README**
 
 In `README.md`, near the existing live preflight runbook link, add:
 
@@ -665,7 +682,7 @@ In `README.md`, near the existing live preflight runbook link, add:
 For visual checks after overlay or dashboard changes, follow `docs/runbooks/visual-qa.md`.
 ```
 
-- [ ] **Step 4: Verify docs and commit Task 4**
+- [x] **Step 4: Verify docs and commit Task 4**
 
 Run:
 
@@ -689,7 +706,7 @@ git commit -m "docs: add visual qa runbook"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-13-plan-2-operator-workflow-polish.md`
 
-- [ ] **Step 1: Run full verification**
+- [x] **Step 1: Run full verification**
 
 Run:
 
@@ -701,7 +718,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.example.yml conf
 
 Expected: all commands pass.
 
-- [ ] **Step 2: Rebuild and smoke local stack**
+- [x] **Step 2: Rebuild and smoke local stack**
 
 Run:
 
@@ -712,7 +729,7 @@ make smoke
 
 Expected: `/healthz`, `/overlay/alerts`, and `/dashboard` respond.
 
-- [ ] **Step 3: Manual route spot-check**
+- [x] **Step 3: Manual route spot-check**
 
 Open:
 
@@ -728,7 +745,7 @@ Expected:
 - Live route still renders preflight checks.
 - Alerts overlay stays minimal/readable.
 
-- [ ] **Step 4: Mark Plan 2 complete when deployed**
+- [x] **Step 4: Mark Plan 2 complete when deployed**
 
 After implementation, commit, push, deploy, and manual spot-check, add this block under the first `---` near the top of this file:
 
@@ -742,7 +759,7 @@ Live QA result: OK so far.
 ---
 ```
 
-- [ ] **Step 5: Commit plan completion update**
+- [x] **Step 5: Commit plan completion update**
 
 Run:
 
