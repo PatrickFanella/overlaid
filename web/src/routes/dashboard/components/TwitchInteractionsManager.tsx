@@ -6,74 +6,22 @@ import {
   type ChannelPointRule,
   type TwitchInteractionRules,
 } from '../../../lib/api';
+import {
+  aliasCommands,
+  createEmptyTwitchInteractionRules,
+  normalizeImportedTwitchInteractionRules,
+  rewardActions,
+  updateTwitchAliasRule,
+  updateTwitchRewardRule,
+} from '../../../lib/twitchInteractionRules';
 
 type TwitchInteractionsManagerProps = {
   apiBaseUrl?: string;
   operatorSecret: string;
 };
 
-const aliasCommands = ['alert', 'clear', 'brb', 'back'] as const;
-const rewardActions = ['alert', 'brb', 'clear', 'ignore'] as const;
-
-function createEmptyRules(): TwitchInteractionRules {
-  return { chatAliases: [], channelPointRules: [] };
-}
-
-function cloneRules(rules: TwitchInteractionRules): TwitchInteractionRules {
-  return {
-    chatAliases: rules.chatAliases.map((rule) => ({ ...rule })),
-    channelPointRules: rules.channelPointRules.map((rule) => ({ ...rule })),
-  };
-}
-
-function isRules(value: unknown): value is TwitchInteractionRules {
-  if (typeof value !== 'object' || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return Array.isArray(record.chatAliases) && Array.isArray(record.channelPointRules);
-}
-
-function normalizeImportedRules(value: unknown): TwitchInteractionRules {
-  if (!isRules(value)) {
-    throw new Error('invalid rules JSON');
-  }
-
-  const chatAliases = value.chatAliases
-    .filter((entry): entry is ChatAliasRule => typeof entry === 'object' && entry !== null && typeof entry.alias === 'string' && typeof entry.command === 'string' && typeof entry.enabled === 'boolean')
-    .map((entry) => ({ alias: entry.alias, command: aliasCommands.includes(entry.command as (typeof aliasCommands)[number]) ? (entry.command as ChatAliasRule['command']) : 'alert', enabled: entry.enabled }));
-  const channelPointRules = value.channelPointRules
-    .filter(
-      (entry): entry is ChannelPointRule =>
-        typeof entry === 'object' &&
-        entry !== null &&
-        typeof entry.rewardTitle === 'string' &&
-        typeof entry.action === 'string' &&
-        typeof entry.enabled === 'boolean',
-    )
-    .map((entry) => ({
-      rewardTitle: entry.rewardTitle,
-      action: rewardActions.includes(entry.action as (typeof rewardActions)[number]) ? (entry.action as ChannelPointRule['action']) : 'ignore',
-      title: typeof entry.title === 'string' ? entry.title : undefined,
-      message: typeof entry.message === 'string' ? entry.message : undefined,
-      enabled: entry.enabled,
-    }));
-
-  return { chatAliases, channelPointRules };
-}
-
-function updateAlias(rules: TwitchInteractionRules, index: number, patch: Partial<ChatAliasRule>) {
-  const next = cloneRules(rules);
-  next.chatAliases[index] = { ...next.chatAliases[index], ...patch };
-  return next;
-}
-
-function updateReward(rules: TwitchInteractionRules, index: number, patch: Partial<ChannelPointRule>) {
-  const next = cloneRules(rules);
-  next.channelPointRules[index] = { ...next.channelPointRules[index], ...patch };
-  return next;
-}
-
 export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: TwitchInteractionsManagerProps) {
-  const [rules, setRules] = useState<TwitchInteractionRules>(() => createEmptyRules());
+  const [rules, setRules] = useState<TwitchInteractionRules>(() => createEmptyTwitchInteractionRules());
   const [loadError, setLoadError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -89,7 +37,7 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
     fetchTwitchInteractions({ baseUrl: apiBaseUrl, operatorSecret })
       .then((response) => {
         if (cancelled) return;
-        setRules(response.rules ?? createEmptyRules());
+        setRules(response.rules ?? createEmptyTwitchInteractionRules());
         setLoadError(response.loadError ?? '');
       })
       .catch((error: unknown) => {
@@ -122,7 +70,7 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
   function handleImport() {
     try {
       const parsed = JSON.parse(importRaw) as unknown;
-      setRules(normalizeImportedRules(parsed));
+      setRules(normalizeImportedTwitchInteractionRules(parsed));
       setImportError('');
       setStatusMessage('Imported backend rules JSON.');
     } catch {
@@ -142,7 +90,7 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
 
     try {
       const response = await saveTwitchInteractions(rules, apiBaseUrl, operatorSecret);
-      setRules(response.rules ?? createEmptyRules());
+      setRules(response.rules ?? createEmptyTwitchInteractionRules());
       setLoadError(response.loadError ?? '');
       setStatusMessage('Saved Twitch interaction rules.');
     } catch (error: unknown) {
@@ -181,11 +129,11 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
                 <article key={`${rule.alias || 'alias'}-${index}`} className="grid gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-3 md:grid-cols-[1fr_10rem_auto] md:items-end">
                   <label className="grid gap-1 text-xs text-zinc-300">
                     <span className="hud-kicker">Alias</span>
-                    <input className="hud-input" type="text" value={rule.alias} onChange={(event) => setRules((current) => updateAlias(current, index, { alias: event.target.value }))} placeholder="panic" />
+                    <input className="hud-input" type="text" value={rule.alias} onChange={(event) => setRules((current) => updateTwitchAliasRule(current, index, { alias: event.target.value }))} placeholder="panic" />
                   </label>
                   <label className="grid gap-1 text-xs text-zinc-300">
                     <span className="hud-kicker">Command</span>
-                    <select className="hud-input" value={rule.command} onChange={(event) => setRules((current) => updateAlias(current, index, { command: event.target.value as ChatAliasRule['command'] }))}>
+                    <select className="hud-input" value={rule.command} onChange={(event) => setRules((current) => updateTwitchAliasRule(current, index, { command: event.target.value as ChatAliasRule['command'] }))}>
                       {aliasCommands.map((command) => (
                         <option key={command} value={command}>
                           {command}
@@ -196,7 +144,7 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
                   <div className="flex items-center gap-2">
                     <label className="grid gap-1 text-xs text-zinc-300">
                       <span className="hud-kicker">Enabled</span>
-                      <input type="checkbox" checked={rule.enabled} onChange={(event) => setRules((current) => updateAlias(current, index, { enabled: event.target.checked }))} />
+                      <input type="checkbox" checked={rule.enabled} onChange={(event) => setRules((current) => updateTwitchAliasRule(current, index, { enabled: event.target.checked }))} />
                     </label>
                     <button className="hud-chip" type="button" onClick={() => setRules((current) => ({ ...current, chatAliases: current.chatAliases.filter((_, itemIndex) => itemIndex !== index) }))}>
                       Remove
@@ -228,11 +176,11 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
                   <div className="grid gap-2 md:grid-cols-2 xl:col-span-2">
                     <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
                       <span className="hud-kicker">Reward title</span>
-                      <input className="hud-input" type="text" value={rule.rewardTitle} onChange={(event) => setRules((current) => updateReward(current, index, { rewardTitle: event.target.value }))} placeholder="Hydrate break" />
+                      <input className="hud-input" type="text" value={rule.rewardTitle} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { rewardTitle: event.target.value }))} placeholder="Hydrate break" />
                     </label>
                     <label className="grid gap-1 text-xs text-zinc-300">
                       <span className="hud-kicker">Action</span>
-                      <select className="hud-input" value={rule.action} onChange={(event) => setRules((current) => updateReward(current, index, { action: event.target.value as ChannelPointRule['action'] }))}>
+                      <select className="hud-input" value={rule.action} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { action: event.target.value as ChannelPointRule['action'] }))}>
                         {rewardActions.map((action) => (
                           <option key={action} value={action}>
                             {action}
@@ -242,15 +190,15 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
                     </label>
                     <label className="grid gap-1 text-xs text-zinc-300">
                       <span className="hud-kicker">Enabled</span>
-                      <input type="checkbox" checked={rule.enabled} onChange={(event) => setRules((current) => updateReward(current, index, { enabled: event.target.checked }))} />
+                      <input type="checkbox" checked={rule.enabled} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { enabled: event.target.checked }))} />
                     </label>
                     <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
                       <span className="hud-kicker">Title override</span>
-                      <input className="hud-input" type="text" value={rule.title ?? ''} onChange={(event) => setRules((current) => updateReward(current, index, { title: event.target.value }))} placeholder="Optional alert title" />
+                      <input className="hud-input" type="text" value={rule.title ?? ''} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { title: event.target.value }))} placeholder="Optional alert title" />
                     </label>
                     <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
                       <span className="hud-kicker">Message override</span>
-                      <textarea className="hud-input min-h-20 font-mono text-xs" value={rule.message ?? ''} onChange={(event) => setRules((current) => updateReward(current, index, { message: event.target.value }))} placeholder="Optional alert message" />
+                      <textarea className="hud-input min-h-20 font-mono text-xs" value={rule.message ?? ''} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { message: event.target.value }))} placeholder="Optional alert message" />
                     </label>
                   </div>
                   <button className="hud-chip self-start" type="button" onClick={() => setRules((current) => ({ ...current, channelPointRules: current.channelPointRules.filter((_, itemIndex) => itemIndex !== index) }))}>

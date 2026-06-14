@@ -16,6 +16,7 @@ import {
 } from './lib/dashboardConfig';
 import { formatQuickActionRunResult, getConfirmableActionLabel, getVisibleQuickActions, nextConfirmableActionState } from './lib/controlActions';
 import { buildHideBRBPayload, buildShowBRBPayload, parseBRBItems } from './lib/brbPayloads';
+import { normalizeImportedTwitchInteractionRules, updateTwitchAliasRule, updateTwitchRewardRule } from './lib/twitchInteractionRules';
 import {
   exportDashboardConfig,
   getActiveAutomationProfile,
@@ -857,5 +858,42 @@ describe('BRB payload helpers', () => {
       items: ['Hydrate', 'Stretch', 'Chat stays live'],
       data: { preset: 'sample-hide' },
     });
+  });
+});
+
+describe('twitch interaction rule helpers', () => {
+  it('normalizes imported Twitch interaction rules safely', () => {
+    const rules = normalizeImportedTwitchInteractionRules({
+      chatAliases: [{ alias: 'panic', command: 'unsafe', enabled: true, operatorSecret: 'hidden' }],
+      channelPointRules: [{ rewardTitle: 'Hydrate', action: 'unsafe', title: 'T', message: 'M', enabled: true, nested: { token: 'hidden' } }],
+    });
+
+    expect(rules).toEqual({
+      chatAliases: [{ alias: 'panic', command: 'alert', enabled: true }],
+      channelPointRules: [{ rewardTitle: 'Hydrate', action: 'ignore', title: 'T', message: 'M', enabled: true }],
+    });
+    expect(JSON.stringify(rules)).not.toContain('operatorSecret');
+    expect(JSON.stringify(rules)).not.toContain('nested');
+  });
+
+  it('rejects invalid Twitch interaction rule imports', () => {
+    expect(() => normalizeImportedTwitchInteractionRules({ chatAliases: [] })).toThrow('invalid rules JSON');
+  });
+
+  it('updates Twitch interaction rules immutably', () => {
+    const original = {
+      chatAliases: [{ alias: 'panic', command: 'alert' as const, enabled: true }],
+      channelPointRules: [{ rewardTitle: 'Hydrate', action: 'ignore' as const, enabled: true }],
+    };
+
+    const updatedAliasRules = updateTwitchAliasRule(original, 0, { command: 'brb' });
+    const updatedRewardRules = updateTwitchRewardRule(original, 0, { action: 'alert' });
+
+    expect(updatedAliasRules.chatAliases[0].command).toBe('brb');
+    expect(updatedRewardRules.channelPointRules[0].action).toBe('alert');
+    expect(original.chatAliases[0].command).toBe('alert');
+    expect(original.channelPointRules[0].action).toBe('ignore');
+    expect(updatedAliasRules.chatAliases[0]).not.toBe(original.chatAliases[0]);
+    expect(updatedRewardRules.channelPointRules[0]).not.toBe(original.channelPointRules[0]);
   });
 });
