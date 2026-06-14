@@ -35,6 +35,9 @@ data/
 tmp/
 .cache/
 
+# Local backup archives; may contain Twitch tokens/state/history/rules
+backups/
+
 # Node / TypeScript / React / Vite / Tailwind
 node_modules/
 dist/

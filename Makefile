@@ -3,8 +3,13 @@ SHELL := /usr/bin/env bash
 
 API_PORT ?= 8080
 WEB_PORT ?= 5173
+VERSION ?= dev
+BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf unknown)
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+GO_LDFLAGS := -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Version=$(VERSION) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Commit=$(BUILD_COMMIT) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.BuiltAt=$(BUILD_DATE)
+BACKUP_DIR ?= backups
 
-.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build smoke smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset
+.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build smoke smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -28,7 +33,7 @@ test: ## Run backend and frontend tests
 
 build: ## Build backend binary and frontend assets
 	mkdir -p bin
-	cd backend && go build -o ../bin/over-laid-api ./cmd/app
+	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/over-laid-api ./cmd/app
 	pnpm --dir web run build
 
 compose-config: ## Validate Docker Compose configuration
@@ -54,13 +59,14 @@ ps: ## Show Docker Compose service status
 	docker compose ps
 
 docker-build: ## Build and start the Docker Compose stack
-	docker compose up --build -d --remove-orphans
+	BUILD_VERSION=$(VERSION) BUILD_COMMIT=$(BUILD_COMMIT) BUILD_DATE=$(BUILD_DATE) docker compose up --build -d --remove-orphans
 
 logs: ## Follow Docker Compose logs
 	docker compose logs -f
 
 smoke: ## Smoke test API health and web shell
 	curl --max-time 15 -fsS http://localhost:$(API_PORT)/healthz
+	curl --max-time 15 -fsS http://localhost:$(API_PORT)/version
 	curl --max-time 15 -fsS http://localhost:$(API_PORT)/readyz
 	curl --max-time 15 -fsS http://localhost:$(API_PORT)/api/auth/twitch/status
 	curl --max-time 15 -fsS http://localhost:$(API_PORT)/api/obs/status
@@ -68,10 +74,31 @@ smoke: ## Smoke test API health and web shell
 	curl --max-time 15 -fsS http://localhost:$(WEB_PORT)/dashboard >/dev/null
 	curl --max-time 15 -fsS http://localhost:$(WEB_PORT)/dashboard/live >/dev/null
 
+api-data-volume-check: ## Ensure the Compose api-data volume exists before backup
+	@volume=$$(docker volume ls -q \
+		--filter label=com.docker.compose.project=$${COMPOSE_PROJECT_NAME:-$$(basename "$$PWD")} \
+		--filter label=com.docker.compose.volume=api-data); \
+	if [[ -z "$$volume" ]]; then \
+		echo "api-data Compose volume not found; start the stack or check COMPOSE_PROJECT_NAME" >&2; \
+		exit 1; \
+	fi
+
+api-data-backup: api-data-volume-check ## Back up the Compose api-data volume into ./backups
+	mkdir -p "$(BACKUP_DIR)"
+	volume=$$(docker volume ls -q \
+		--filter label=com.docker.compose.project=$${COMPOSE_PROJECT_NAME:-$$(basename "$$PWD")} \
+		--filter label=com.docker.compose.volume=api-data); \
+	docker run --rm \
+		-v "$$volume:/data:ro" \
+		-v "$$PWD/$(BACKUP_DIR):/backup" \
+		alpine:3.22 \
+		sh -c 'tar -czf /backup/api-data-$$(date -u +%Y%m%dT%H%M%SZ).tar.gz -C /data .'
+
 smoke-alert: ## Send a test alert to the running API
-	curl -fsS -X POST http://localhost:$(API_PORT)/api/events/test-alert \
+	@ : "$${OPERATOR_SECRET:?OPERATOR_SECRET must be set}"
+	@curl -fsS -X POST http://localhost:$(API_PORT)/api/events/test-alert \
 		-H 'Content-Type: application/json' \
-		-H 'X-Overlay-Operator-Secret: $(OPERATOR_SECRET)' \
+		-H "X-Overlay-Operator-Secret: $$OPERATOR_SECRET" \
 		-d '{"title":"Make smoke","message":"Overlay pipeline is live","severity":"success"}'
 
 db-shell: ## Open psql inside the Postgres container

@@ -2,7 +2,10 @@ FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod ./
 COPY . ./
-RUN go build -o /out/api ./cmd/app
+ARG BUILD_VERSION=dev
+ARG BUILD_COMMIT=unknown
+ARG BUILD_DATE=unknown
+RUN go build -ldflags "-X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Version=${BUILD_VERSION} -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Commit=${BUILD_COMMIT} -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.BuiltAt=${BUILD_DATE}" -o /out/api ./cmd/app
 
 FROM alpine:3.22
 WORKDIR /app
