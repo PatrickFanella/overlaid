@@ -17,9 +17,27 @@
 
 ## Status
 
-**Status:** Planned  
+**Status:** Complete  
 **Started:** 2026-06-13  
-**Live QA:** Pending after implementation.
+**Completed:** 2026-06-14  
+**Live QA:** Dashboard build-info panel should be checked after the next deployed rebuild.
+
+### Completion Notes
+
+- Added public `/version` endpoint and backend build-info package.
+- Injected local and Docker build metadata with Go `-ldflags`.
+- Added `/version` to `make smoke`.
+- Added ignored `backups/` directory and `make api-data-backup` target with missing-volume guard.
+- Added dashboard overview build-info panel.
+- Added production packaging runbook and README guidance.
+- Verification passed:
+  - `docker compose config --quiet`
+  - `docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --quiet`
+  - `make verify`
+  - `docker compose up -d --build`
+  - `make smoke`
+  - `curl --max-time 15 -fsS http://localhost:8080/version`
+  - `curl --max-time 15 -fsS http://localhost:5173/dashboard >/dev/null`
 
 ---
 
@@ -77,7 +95,7 @@
 - Modify: `backend/internal/http/routes.go`
 - Modify: `backend/internal/http/handlers_test.go`
 
-- [ ] **Step 1: Add buildinfo package**
+- [x] **Step 1: Add buildinfo package**
 
 Create `backend/internal/buildinfo/buildinfo.go`:
 
@@ -122,7 +140,7 @@ func valueOrDefault(value string, fallback string) string {
 }
 ```
 
-- [ ] **Step 2: Add backend tests**
+- [x] **Step 2: Add backend tests**
 
 Create `backend/internal/buildinfo/buildinfo_test.go`:
 
@@ -162,7 +180,7 @@ func TestReportUsesInjectedValues(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Add HTTP handler and route**
+- [x] **Step 3: Add HTTP handler and route**
 
 In `backend/internal/http/handlers.go`, import `git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo` and add:
 
@@ -178,11 +196,11 @@ In `backend/internal/http/routes.go`, register it near health/readiness:
 s.mux.HandleFunc("GET /version", s.version)
 ```
 
-- [ ] **Step 4: Add endpoint tests**
+- [x] **Step 4: Add endpoint tests**
 
 In `backend/internal/http/handlers_test.go`, add a test that requests `/version` and decodes the JSON. Assert `name == "over-laid"`, `version`, `commit`, `builtAt`, `goVersion`, `os`, and `arch` are non-empty. Keep existing `/healthz` tests unchanged.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -208,7 +226,7 @@ git commit -m "feat: add build info endpoint"
 - Modify: `backend/Dockerfile`
 - Modify: `docker-compose.yml`
 
-- [ ] **Step 1: Inject build metadata in local build**
+- [x] **Step 1: Inject build metadata in local build**
 
 In `Makefile`, add metadata variables near the top:
 
@@ -226,7 +244,7 @@ Change the backend build command to:
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/over-laid-api ./cmd/app
 ```
 
-- [ ] **Step 2: Inject Docker build args**
+- [x] **Step 2: Inject Docker build args**
 
 In `backend/Dockerfile`, add build args before `RUN go build`:
 
@@ -253,7 +271,7 @@ In `docker-compose.yml`, pass API build args:
 
 Preserve the existing API service fields.
 
-- [ ] **Step 3: Expand smoke and add backup target**
+- [x] **Step 3: Expand smoke and add backup target**
 
 Add `/version` to `make smoke` after `/healthz`:
 
@@ -293,7 +311,7 @@ api-data-backup: ## Back up the Compose api-data volume into ./backups
 		sh -c 'tar -czf /backup/api-data-$$(date -u +%Y%m%dT%H%M%SZ).tar.gz -C /data .'
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
@@ -320,7 +338,7 @@ git commit -m "chore: inject build metadata"
 - Modify: `web/src/routes/dashboard/Overview.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add frontend API helper**
+- [x] **Step 1: Add frontend API helper**
 
 In `web/src/lib/api.ts`, add:
 
@@ -344,7 +362,7 @@ export async function fetchBuildInfo(explicitBaseUrl?: string) {
 }
 ```
 
-- [ ] **Step 2: Add SSR-safe panel**
+- [x] **Step 2: Add SSR-safe panel**
 
 Create `web/src/routes/dashboard/components/BuildInfoPanel.tsx`:
 
@@ -396,7 +414,7 @@ export function BuildInfoPanel({ apiBaseUrl }: BuildInfoPanelProps) {
 }
 ```
 
-- [ ] **Step 3: Render on overview and test**
+- [x] **Step 3: Render on overview and test**
 
 In `web/src/routes/dashboard/Overview.tsx`, import and render `BuildInfoPanel` below `SystemStatusRail`:
 
@@ -408,7 +426,7 @@ import { BuildInfoPanel } from './components/BuildInfoPanel';
 
 In `web/src/App.test.tsx`, import `BuildInfoPanel`. Update overview route assertion to include `Build info` and `Build report unavailable`. Add a direct SSR test that `BuildInfoPanel` does not fetch during `renderToString` by stubbing global `fetch` and checking it is not called.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
@@ -434,7 +452,7 @@ git commit -m "feat: surface build info in dashboard"
 - Modify: `README.md`
 - Modify: `docs/superpowers/plans/2026-06-13-plan-10-production-packaging.md`
 
-- [ ] **Step 1: Add runbook**
+- [x] **Step 1: Add runbook**
 
 Create `docs/runbooks/production-packaging.md` covering:
 
@@ -446,11 +464,11 @@ Create `docs/runbooks/production-packaging.md` covering:
 - Restore workflow example using an Alpine container and the `api-data` volume, with a warning to stop the API first.
 - Reminder that backup tarballs contain Twitch tokens, retained state, event history, and interaction rules; do not commit or publish them.
 
-- [ ] **Step 2: Update README**
+- [x] **Step 2: Update README**
 
 Add `/version` to route/operator docs and link `docs/runbooks/production-packaging.md`. Document `VERSION`, `BUILD_COMMIT`, `BUILD_DATE`, and `make api-data-backup` near deploy/backup guidance.
 
-- [ ] **Step 3: Review docs and commit**
+- [x] **Step 3: Review docs and commit**
 
 Run:
 
@@ -467,7 +485,7 @@ git add docs/runbooks/production-packaging.md README.md
 git commit -m "docs: add production packaging runbook"
 ```
 
-- [ ] **Step 4: Final integration and completion commit**
+- [x] **Step 4: Final integration and completion commit**
 
 Run:
 
