@@ -13,6 +13,14 @@
 
 **Tech Stack:** Go backend, file-backed JSON config on `/data`, existing EventSub client, existing event bus/history/readiness, React/Vite dashboard, Vitest/Go tests, Docker Compose.
 
+**Status:** Complete.
+
+**Completed:** 2026-06-13.
+
+**Verification:** `make verify`, Docker Compose config checks, `docker compose up -d --build`, `make smoke`, authenticated `/api/twitch/interactions` spot-check, and `/dashboard/config` spot-check passed. `/readyz` returned HTTP 200 with `status: degraded` because Twitch EventSub was not connected; `twitch_interactions` was `ok`.
+
+**Live QA:** Pending next Twitch/off-stream pass for real chat alias and channel point reward redemptions.
+
 ---
 
 ## Current State
@@ -74,7 +82,7 @@
 - Modify: `.env.example`
 - Modify: `docker-compose.yml`
 
-- [ ] **Step 1: Add rules model and normalization**
+- [x] **Step 1: Add rules model and normalization**
 
 Create `backend/internal/interactions/rules.go` with:
 
@@ -124,7 +132,7 @@ Rules:
 - Rule title/message are max 120/180 runes.
 - Duplicate aliases/rewards keep the first valid rule.
 
-- [ ] **Step 2: Add load/save/list helpers**
+- [x] **Step 2: Add load/save/list helpers**
 
 Implement:
 
@@ -145,7 +153,7 @@ Behavior:
 - `Replace` normalizes first, writes JSON atomically if `path` is non-empty, and only then updates memory. If disk write fails, runtime rules remain unchanged and the API returns an error. Empty path is memory-only and can update memory directly.
 - Atomic write: mkdir parent (`0700`), write temp file (`0600`), close, rename.
 
-- [ ] **Step 3: Add tests**
+- [x] **Step 3: Add tests**
 
 In `rules_test.go`, cover:
 - Missing file loads defaults.
@@ -156,7 +164,7 @@ In `rules_test.go`, cover:
 - Replace writes sanitized JSON and reloads.
 - Empty path Replace updates memory without disk writes.
 
-- [ ] **Step 4: Add config/env wiring**
+- [x] **Step 4: Add config/env wiring**
 
 Modify `backend/internal/config/config.go`:
 
@@ -185,7 +193,7 @@ Modify `docker-compose.yml` API env:
 TWITCH_INTERACTIONS_FILE: ${TWITCH_INTERACTIONS_FILE:-/data/twitch-interactions.json}
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -209,7 +217,7 @@ git commit -m "feat: add twitch interaction rules store"
 - Modify: `backend/internal/twitch/commands.go`
 - Modify: `backend/internal/twitch/commands_test.go`
 
-- [ ] **Step 1: Add server fields and load rules**
+- [x] **Step 1: Add server fields and load rules**
 
 In `Server`, add:
 
@@ -230,7 +238,7 @@ processor := twitch.NewCommandProcessor(twitch.CommandProcessorConfig{
 
 If load failed, pass an empty alias map. Store the processor on `s.twitchCommandProcessor`. In `StartBackground`, pass `s.twitchCommandProcessor` into the Twitch client instead of creating a local processor that handlers cannot update.
 
-- [ ] **Step 2: Extend command parser and processor config for aliases**
+- [x] **Step 2: Extend command parser and processor config for aliases**
 
 Change `ParseChatCommand` so it parses any syntactically valid bang command rather than rejecting commands outside the built-in allow-list:
 
@@ -280,7 +288,7 @@ Diagnostics `data` should include:
 "alias": command.Name != resolved.Name,
 ```
 
-- [ ] **Step 3: Add protected API handlers**
+- [x] **Step 3: Add protected API handlers**
 
 Add `GET /api/twitch/interactions` and `PUT /api/twitch/interactions`.
 
@@ -301,7 +309,7 @@ Also update CORS methods in `routes.go` from `GET,POST,OPTIONS` to:
 GET,POST,PUT,OPTIONS
 ```
 
-- [ ] **Step 4: Add readiness check**
+- [x] **Step 4: Add readiness check**
 
 Add `twitch_interactions` readiness check:
 - `ok` when no load error.
@@ -309,7 +317,7 @@ Add `twitch_interactions` readiness check:
 
 This check is independent of Twitch auth/config and must always appear. Add it in `readyz` before `buildTwitchReadinessChecks(...)`, not inside a helper that can return early when Twitch is unconfigured.
 
-- [ ] **Step 5: Add tests**
+- [x] **Step 5: Add tests**
 
 Backend tests must cover:
 - Alias `!panic` -> `clear` emits accepted diagnostic + clear action for moderator.
@@ -322,7 +330,7 @@ Backend tests must cover:
 - PUT writes sanitized rules and clears readiness degradation.
 - Malformed initial rules degrades readyz but does not crash.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 
@@ -344,7 +352,7 @@ git commit -m "feat: add twitch interaction rule endpoints"
 - Modify: `backend/internal/http/server.go`
 - Modify: `backend/internal/http/handlers_test.go`
 
-- [ ] **Step 1: Wire channel point rules into EventSub mapping**
+- [x] **Step 1: Wire channel point rules into EventSub mapping**
 
 Add a runtime rules provider to the Twitch client so PUT updates are reflected without restarting EventSub:
 
@@ -388,7 +396,7 @@ if message.Payload.Subscription.Type == "channel.channel_points_custom_reward_re
 }
 ```
 
-- [ ] **Step 2: Route matched reward actions**
+- [x] **Step 2: Route matched reward actions**
 
 For `channel.channel_points_custom_reward_redemption.add`:
 - Emit the existing redemption alert if no rule matches.
@@ -404,11 +412,11 @@ Template tokens allowed in title/message:
 
 All rendered text must be rune-capped to 180. No nested raw Twitch event should be introduced beyond the base mapped event. Event history sanitization will remove raw `twitchEvent` from persisted history.
 
-- [ ] **Step 3: Preserve retained state behavior**
+- [x] **Step 3: Preserve retained state behavior**
 
 Because EventSub publishes through `s.publishEventSubEvent`, channel point `clear` and `brb` actions must keep the existing retained-state semantics.
 
-- [ ] **Step 4: Add tests**
+- [x] **Step 4: Add tests**
 
 Tests must cover:
 - Unmatched reward still maps to existing alert.
@@ -420,7 +428,7 @@ Tests must cover:
 - Rule matching is case-insensitive exact title match.
 - Runtime rules provider is used per notification, not just startup snapshot.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -442,7 +450,7 @@ git commit -m "feat: route channel point interaction rules"
 - Modify: `web/src/routes/dashboard/Config.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add API client types/helpers**
+- [x] **Step 1: Add API client types/helpers**
 
 In `web/src/lib/api.ts`, add:
 
@@ -463,7 +471,7 @@ async function sendJSON(method: 'POST' | 'PUT', path: string, payload: unknown, 
 
 Then make existing `postJSON` call `sendJSON('POST', ...)` and make `saveTwitchInteractions` call `sendJSON('PUT', ...)`.
 
-- [ ] **Step 2: Create SSR-safe manager component**
+- [x] **Step 2: Create SSR-safe manager component**
 
 `TwitchInteractionsManager` props:
 
@@ -481,7 +489,7 @@ Behavior:
 - Save button calls `saveTwitchInteractions` and shows success/error text.
 - Import/export textareas use backend rule JSON only; operator secret is never included.
 
-- [ ] **Step 3: Mount in Config page**
+- [x] **Step 3: Mount in Config page**
 
 In `Config.tsx`, render after `AutomationProfileManager`:
 
@@ -489,13 +497,13 @@ In `Config.tsx`, render after `AutomationProfileManager`:
 <TwitchInteractionsManager apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} />
 ```
 
-- [ ] **Step 4: Add frontend tests**
+- [x] **Step 4: Add frontend tests**
 
 `App.test.tsx`:
 - `/dashboard/config` SSR contains `Twitch interaction rules`, `Chat aliases`, `Channel point rewards`, `Operator secret required to save`.
 - Direct component SSR fixture renders shell without `window`.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -518,7 +526,7 @@ git commit -m "feat: add twitch interaction rules manager"
 - Modify: `docs/runbooks/production-recovery.md`
 - Modify: `docs/superpowers/plans/2026-06-13-plan-9-viewer-interaction-rules.md`
 
-- [ ] **Step 1: Add runbook**
+- [x] **Step 1: Add runbook**
 
 Create `docs/runbooks/twitch-interaction-rules.md` covering:
 - Rules live in `/data/twitch-interactions.json` on `api-data`.
@@ -529,11 +537,11 @@ Create `docs/runbooks/twitch-interaction-rules.md` covering:
 - Save requires operator secret.
 - Backup/recovery commands.
 
-- [ ] **Step 2: Update README and related runbooks**
+- [x] **Step 2: Update README and related runbooks**
 
 Update README route/config docs and link the new runbook. Update Twitch chat command docs to mention aliases. Update production recovery to include `twitch_interactions` readiness.
 
-- [ ] **Step 3: Run final checks**
+- [x] **Step 3: Run final checks**
 
 Run:
 
@@ -547,7 +555,7 @@ curl --max-time 15 -fsS http://localhost:8080/api/twitch/interactions >/dev/null
 curl --max-time 15 -fsS http://localhost:5173/dashboard/config >/dev/null
 ```
 
-- [ ] **Step 4: Mark plan complete and commit**
+- [x] **Step 4: Mark plan complete and commit**
 
 Update this plan with completion status, verification results, and remaining live QA notes. Check every task box.
 
