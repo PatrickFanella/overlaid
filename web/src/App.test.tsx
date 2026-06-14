@@ -12,6 +12,7 @@ import {
 } from './lib/automationProfiles';
 import { resolveQuickActionSequence, runQuickActionSequence } from './lib/quickActionSequences';
 import { QuickActionRunner } from './routes/dashboard/components/QuickActionRunner';
+import { EventHistoryPanel } from './routes/dashboard/components/EventHistoryPanel';
 import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
 
 describe('App routing', () => {
@@ -55,6 +56,8 @@ describe('App routing', () => {
     expect(html).toContain('Readiness report unavailable');
     expect(html).toContain('Setup checklist summary');
     expect(html).toContain('Recent operator actions');
+    expect(html).toContain('Event history');
+    expect(html).toContain('No persisted events yet.');
     expect(html).toContain('Live preflight');
     expect(html).toContain('Chat commands');
     expect(html).toContain('mods + broadcaster only');
@@ -145,6 +148,42 @@ describe('App routing', () => {
 
     expect(html).toContain('BRB overlay');
     expect(html).toContain('Waiting for intermission command');
+  });
+
+  it('renders the event history panel with optional fields', () => {
+    const html = renderToString(
+      <EventHistoryPanel
+        loading={false}
+        error=""
+        events={[
+          {
+            id: 'evt-2',
+            type: 'custom_command',
+            source: 'twitch-chat',
+            title: 'Mods called a command',
+            message: 'Command /go_live was executed',
+            severity: 'info',
+            createdAt: '2026-06-13T12:00:02Z',
+          },
+          {
+            id: 'evt-1',
+            type: 'service_status',
+            source: 'obs',
+            message: 'OBS connected again',
+            createdAt: '2026-06-13T12:00:01Z',
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Event history');
+    expect(html).toContain('custom command');
+    expect(html).toContain('service status');
+    expect(html).toContain('Mods called a command');
+    expect(html).toContain('OBS connected again');
+    expect(html).toContain('2026-06-13T12:00:02Z');
+    expect(html).toContain('2026-06-13T12:00:01Z');
+    expect(html.indexOf('custom command')).toBeLessThan(html.indexOf('service status'));
   });
 
   it('renders the chat overlay route', () => {

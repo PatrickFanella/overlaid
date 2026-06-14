@@ -1,4 +1,5 @@
 import { getOverlayApiBaseUrl } from './eventStream';
+import type { OverlayEventType, OverlaySeverity } from './events';
 
 export type TwitchStatus = {
   configured: boolean;
@@ -27,6 +28,21 @@ export type AlertPayload = {
   message: string;
   severity: 'info' | 'success' | 'warning' | 'error';
   data?: Record<string, unknown>;
+};
+
+export type EventHistoryItem = {
+  id: string;
+  type: OverlayEventType;
+  source: string;
+  title?: string;
+  message?: string;
+  severity?: OverlaySeverity;
+  data?: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type EventHistoryResponse = {
+  events: EventHistoryItem[];
 };
 
 export type BRBPayload = {
@@ -116,6 +132,15 @@ export async function fetchReadiness(explicitBaseUrl?: string) {
     throw new Error(`Readiness failed: ${response.status}`);
   }
   return (await response.json()) as ReadinessReport;
+}
+
+export async function fetchEventHistory(limit = 24, explicitBaseUrl?: string) {
+  const boundedLimit = Math.max(1, Math.min(limit, 250));
+  const response = await fetch(apiUrl(`/api/events/history?limit=${boundedLimit}`, explicitBaseUrl), { headers: { Accept: 'application/json' } });
+  if (!response.ok) {
+    throw new Error(`Event history failed: ${response.status}`);
+  }
+  return (await response.json()) as EventHistoryResponse;
 }
 
 export async function fetchOBSScenes(explicitBaseUrl?: string) {
