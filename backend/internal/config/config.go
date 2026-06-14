@@ -8,52 +8,54 @@ import (
 )
 
 type Config struct {
-	Addr                string
-	AllowedOrigin       string
-	OperatorSecret      string
-	WebhookSecret       string
-	OverlayStateFile    string
-	EventHistoryFile    string
-	EventHistoryLimit   int
-	PublicWebURL        string
-	OBSWebSocketURL     string
-	OBSWebSocketPass    string
-	TwitchClientID      string
-	TwitchClientSecret  string
-	TwitchChannel       string
-	TwitchRedirectURL   string
-	TwitchTokenFile     string
-	TwitchScopes        []string
-	TwitchEventSub      bool
-	MPRISEnabled        bool
-	MPRISPlayer         string
-	MPRISPlayerPriority []string
-	MPRISPollInterval   time.Duration
+	Addr                   string
+	AllowedOrigin          string
+	OperatorSecret         string
+	WebhookSecret          string
+	OverlayStateFile       string
+	EventHistoryFile       string
+	EventHistoryLimit      int
+	PublicWebURL           string
+	OBSWebSocketURL        string
+	OBSWebSocketPass       string
+	TwitchClientID         string
+	TwitchClientSecret     string
+	TwitchChannel          string
+	TwitchRedirectURL      string
+	TwitchTokenFile        string
+	TwitchInteractionsFile string
+	TwitchScopes           []string
+	TwitchEventSub         bool
+	MPRISEnabled           bool
+	MPRISPlayer            string
+	MPRISPlayerPriority    []string
+	MPRISPollInterval      time.Duration
 }
 
 func Load() Config {
 	return Config{
-		Addr:                env("API_ADDR", ":8080"),
-		AllowedOrigin:       env("CORS_ALLOWED_ORIGIN", "*"),
-		OperatorSecret:      env("OPERATOR_SECRET", ""),
-		WebhookSecret:       env("WEBHOOK_SECRET", ""),
-		OverlayStateFile:    env("OVERLAY_STATE_FILE", "/data/overlay-state.json"),
-		EventHistoryFile:    env("EVENT_HISTORY_FILE", "/data/event-history.jsonl"),
-		EventHistoryLimit:   envInt("EVENT_HISTORY_LIMIT", 250),
-		PublicWebURL:        env("PUBLIC_WEB_URL", "http://localhost:5173"),
-		OBSWebSocketURL:     env("OBS_WEBSOCKET_URL", "ws://localhost:4455"),
-		OBSWebSocketPass:    env("OBS_WEBSOCKET_PASSWORD", ""),
-		TwitchClientID:      env("TWITCH_CLIENT_ID", ""),
-		TwitchClientSecret:  env("TWITCH_CLIENT_SECRET", ""),
-		TwitchChannel:       env("TWITCH_CHANNEL", "patrick__eff"),
-		TwitchRedirectURL:   env("TWITCH_REDIRECT_URL", "http://localhost:8080/api/auth/twitch/callback"),
-		TwitchTokenFile:     env("TWITCH_TOKEN_FILE", "/data/twitch-token.json"),
-		TwitchScopes:        envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers"}),
-		TwitchEventSub:      envBool("TWITCH_EVENTSUB_ENABLED", true),
-		MPRISEnabled:        envBool("MPRIS_ENABLED", false),
-		MPRISPlayer:         env("MPRIS_PLAYER", ""),
-		MPRISPlayerPriority: envSplit("MPRIS_PLAYER_PRIORITY", []string{"Feishin", "mpv", "cliamp", "ferrosonic", "playerctld", "vivaldi"}),
-		MPRISPollInterval:   envDuration("MPRIS_POLL_INTERVAL", 2*time.Second),
+		Addr:                   env("API_ADDR", ":8080"),
+		AllowedOrigin:          env("CORS_ALLOWED_ORIGIN", "*"),
+		OperatorSecret:         env("OPERATOR_SECRET", ""),
+		WebhookSecret:          env("WEBHOOK_SECRET", ""),
+		OverlayStateFile:       env("OVERLAY_STATE_FILE", "/data/overlay-state.json"),
+		EventHistoryFile:       env("EVENT_HISTORY_FILE", "/data/event-history.jsonl"),
+		EventHistoryLimit:      envInt("EVENT_HISTORY_LIMIT", 250),
+		PublicWebURL:           env("PUBLIC_WEB_URL", "http://localhost:5173"),
+		OBSWebSocketURL:        env("OBS_WEBSOCKET_URL", "ws://localhost:4455"),
+		OBSWebSocketPass:       env("OBS_WEBSOCKET_PASSWORD", ""),
+		TwitchClientID:         env("TWITCH_CLIENT_ID", ""),
+		TwitchClientSecret:     env("TWITCH_CLIENT_SECRET", ""),
+		TwitchChannel:          env("TWITCH_CHANNEL", "patrick__eff"),
+		TwitchRedirectURL:      env("TWITCH_REDIRECT_URL", "http://localhost:8080/api/auth/twitch/callback"),
+		TwitchTokenFile:        env("TWITCH_TOKEN_FILE", "/data/twitch-token.json"),
+		TwitchInteractionsFile: env("TWITCH_INTERACTIONS_FILE", "/data/twitch-interactions.json"),
+		TwitchScopes:           envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers"}),
+		TwitchEventSub:         envBool("TWITCH_EVENTSUB_ENABLED", true),
+		MPRISEnabled:           envBool("MPRIS_ENABLED", false),
+		MPRISPlayer:            env("MPRIS_PLAYER", ""),
+		MPRISPlayerPriority:    envSplit("MPRIS_PLAYER_PRIORITY", []string{"Feishin", "mpv", "cliamp", "ferrosonic", "playerctld", "vivaldi"}),
+		MPRISPollInterval:      envDuration("MPRIS_POLL_INTERVAL", 2*time.Second),
 	}
 }
 
