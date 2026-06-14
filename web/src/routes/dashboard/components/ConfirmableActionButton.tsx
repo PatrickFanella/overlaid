@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getConfirmableActionLabel, nextConfirmableActionState } from '../../../lib/controlActions';
 
 export function ConfirmableActionButton({ label, confirm, disabled, onRun }: { label: string; confirm?: boolean; disabled?: boolean; onRun: () => void }) {
   const [armed, setArmed] = useState(false);
@@ -9,15 +10,12 @@ export function ConfirmableActionButton({ label, confirm, disabled, onRun }: { l
       type="button"
       disabled={disabled}
       onClick={() => {
-        if (confirm && !armed) {
-          setArmed(true);
-          return;
-        }
-        setArmed(false);
-        onRun();
+        const next = nextConfirmableActionState({ confirm, armed });
+        setArmed(next.armed);
+        if (next.shouldRun) onRun();
       }}
     >
-      {armed ? `Confirm ${label}` : label}
+      {getConfirmableActionLabel(label, armed)}
     </button>
   );
 }

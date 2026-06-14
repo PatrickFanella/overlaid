@@ -6,6 +6,7 @@ import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
 import { fetchTwitchInteractions } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
 import { defaultDashboardConfig, loadDashboardConfig, normalizeDashboardConfig, type QuickAction } from './lib/dashboardConfig';
+import { formatQuickActionRunResult, getConfirmableActionLabel, getVisibleQuickActions, nextConfirmableActionState } from './lib/controlActions';
 import {
   exportDashboardConfig,
   getActiveAutomationProfile,
@@ -594,6 +595,37 @@ describe('automation profile helpers', () => {
 });
 
 describe('quick action sequence utilities', () => {
+  it('models confirmable action arming without DOM clicks', () => {
+    expect(getConfirmableActionLabel('Clear overlays', false)).toBe('Clear overlays');
+    expect(getConfirmableActionLabel('Clear overlays', true)).toBe('Confirm Clear overlays');
+    expect(nextConfirmableActionState({ confirm: true, armed: false })).toEqual({ armed: true, shouldRun: false });
+    expect(nextConfirmableActionState({ confirm: true, armed: true })).toEqual({ armed: false, shouldRun: true });
+    expect(nextConfirmableActionState({ confirm: false, armed: false })).toEqual({ armed: false, shouldRun: true });
+  });
+
+  it('filters visible quick actions using the full catalog', () => {
+    const actions: QuickAction[] = [
+      { id: 'seq', label: 'Visible sequence', kind: 'sequence', actionIds: ['hidden-child'], stopOnError: true },
+      { id: 'empty', label: 'Empty sequence', kind: 'sequence', actionIds: ['missing'], stopOnError: true },
+      { id: 'alert', label: 'Sample alert', kind: 'sendAlert', title: 'A', message: 'B', severity: 'success' },
+    ];
+    const catalog: QuickAction[] = [{ id: 'hidden-child', label: 'Hidden child', kind: 'setScene', sceneName: 'Main' }, ...actions];
+
+    expect(getVisibleQuickActions(actions, catalog).map((action) => action.id)).toEqual(['seq', 'alert']);
+  });
+
+  it('formats sequence run warnings and failures', () => {
+    expect(formatQuickActionRunResult({ ran: 1, warnings: ['Missing action: old'], failures: [] })).toBe(
+      'Action completed with warnings: Missing action: old',
+    );
+    expect(() => formatQuickActionRunResult({ ran: 0, warnings: ['Missing action: old'], failures: [] })).toThrow(
+      'Sequence has no runnable actions; Missing action: old',
+    );
+    expect(() => formatQuickActionRunResult({ ran: 2, warnings: ['Missing action: old'], failures: ['Go Main: boom'] })).toThrow(
+      'Go Main: boom; Missing action: old',
+    );
+  });
+
   it('hides no-op sequence buttons while keeping runnable actions', () => {
     const actions: QuickAction[] = [
       { id: 'a', label: 'Run Main', kind: 'setScene', sceneName: 'Main' },

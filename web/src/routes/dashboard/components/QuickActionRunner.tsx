@@ -1,6 +1,7 @@
 import { clearOverlays, refreshOBSSource, sendTestAlert, setBRBStatus, setOBSInputMute, setOBSScene } from '../../../lib/api';
+import { formatQuickActionRunResult, getVisibleQuickActions } from '../../../lib/controlActions';
 import type { QuickAction } from '../../../lib/dashboardConfig';
-import { resolveQuickActionSequence, runQuickActionSequence, type AtomicQuickAction } from '../../../lib/quickActionSequences';
+import { runQuickActionSequence, type AtomicQuickAction } from '../../../lib/quickActionSequences';
 import { ConfirmableActionButton } from './ConfirmableActionButton';
 
 type QuickActionRunnerProps = {
@@ -44,19 +45,11 @@ export function QuickActionRunner({ actions, actionCatalog, apiBaseUrl, operator
 
     return runAction(action.label, async () => {
       const result = await runQuickActionSequence(action, sequenceCatalog, executeAtomic);
-      if (result.ran === 0) {
-        throw new Error(['Sequence has no runnable actions', ...result.warnings].join('; '));
-      }
-      if (result.failures.length > 0) {
-        throw new Error([...result.failures, ...result.warnings].join('; '));
-      }
-      if (result.warnings.length > 0) {
-        return `Action completed with warnings: ${result.warnings.join('; ')}`;
-      }
+      return formatQuickActionRunResult(result);
     });
   }
 
-  const visibleActions = actions.filter((action) => action.kind !== 'sequence' || resolveQuickActionSequence(action, sequenceCatalog).steps.length > 0);
+  const visibleActions = getVisibleQuickActions(actions, sequenceCatalog);
 
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
