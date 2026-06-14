@@ -23,6 +23,35 @@ export type TwitchStatus = {
   };
 };
 
+export type ChatAliasRule = {
+  alias: string;
+  command: 'alert' | 'clear' | 'brb' | 'back';
+  enabled: boolean;
+};
+
+export type ChannelPointRule = {
+  rewardTitle: string;
+  action: 'alert' | 'brb' | 'clear' | 'ignore';
+  title?: string;
+  message?: string;
+  enabled: boolean;
+};
+
+export type TwitchInteractionRules = {
+  chatAliases: ChatAliasRule[];
+  channelPointRules: ChannelPointRule[];
+};
+
+export type TwitchInteractionsResponse = {
+  rules: TwitchInteractionRules;
+  loadError?: string;
+};
+
+export type FetchTwitchInteractionsOptions = {
+  baseUrl?: string;
+  operatorSecret?: string;
+};
+
 export type AlertPayload = {
   title: string;
   message: string;
@@ -118,6 +147,27 @@ export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecr
   return (await response.json()) as { authorizeUrl: string };
 }
 
+export async function fetchTwitchInteractions(explicitBaseUrl?: string, operatorSecret?: string): Promise<TwitchInteractionsResponse>;
+export async function fetchTwitchInteractions(options?: FetchTwitchInteractionsOptions): Promise<TwitchInteractionsResponse>;
+export async function fetchTwitchInteractions(
+  explicitBaseUrlOrOptions?: string | FetchTwitchInteractionsOptions,
+  operatorSecret?: string,
+) {
+  const explicitBaseUrl = typeof explicitBaseUrlOrOptions === 'string' ? explicitBaseUrlOrOptions : explicitBaseUrlOrOptions?.baseUrl;
+  const secret = operatorSecret ?? (typeof explicitBaseUrlOrOptions === 'string' ? undefined : explicitBaseUrlOrOptions?.operatorSecret);
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (secret?.trim()) {
+    headers['X-Overlay-Operator-Secret'] = secret.trim();
+  }
+
+  const response = await fetch(apiUrl('/api/twitch/interactions', explicitBaseUrl), { headers });
+  if (!response.ok) {
+    throw new Error(`Twitch interactions failed: ${response.status}`);
+  }
+
+  return (await response.json()) as TwitchInteractionsResponse;
+}
+
 export async function fetchOBSStatus(explicitBaseUrl?: string) {
   const response = await fetch(apiUrl('/api/obs/status', explicitBaseUrl), { headers: { Accept: 'application/json' } });
   if (!response.ok) {
@@ -203,6 +253,11 @@ export async function setBRBStatus(payload: BRBPayload, explicitBaseUrl?: string
   await postJSON('/api/events/brb', payload, explicitBaseUrl, { operatorSecret });
 }
 
+export async function saveTwitchInteractions(payload: TwitchInteractionRules, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await sendJSON('PUT', '/api/twitch/interactions', { rules: payload }, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as TwitchInteractionsResponse;
+}
+
 export async function sendWebhook(source: string, payload: AlertPayload, explicitBaseUrl?: string, webhookSecret?: string) {
   await postJSON(`/api/integrations/webhook/${encodeURIComponent(source)}`, payload, explicitBaseUrl, { webhookSecret });
 }
@@ -213,6 +268,16 @@ type PostJSONOptions = {
 };
 
 async function postJSON(path: string, payload: Record<string, unknown>, explicitBaseUrl?: string, options: PostJSONOptions = {}) {
+  return sendJSON('POST', path, payload, explicitBaseUrl, options);
+}
+
+async function sendJSON(
+  method: 'POST' | 'PUT',
+  path: string,
+  payload: Record<string, unknown>,
+  explicitBaseUrl?: string,
+  options: PostJSONOptions = {},
+) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
   if (options.operatorSecret?.trim()) {
     headers['X-Overlay-Operator-Secret'] = options.operatorSecret.trim();
@@ -222,7 +287,7 @@ async function postJSON(path: string, payload: Record<string, unknown>, explicit
   }
 
   const response = await fetch(apiUrl(path, explicitBaseUrl), {
-    method: 'POST',
+    method,
     headers,
     body: JSON.stringify(payload),
   });

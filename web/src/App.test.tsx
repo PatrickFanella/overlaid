@@ -2,6 +2,7 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
+import { fetchTwitchInteractions } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
 import { defaultDashboardConfig, loadDashboardConfig, normalizeDashboardConfig, type QuickAction } from './lib/dashboardConfig';
 import {
@@ -14,6 +15,7 @@ import { resolveQuickActionSequence, runQuickActionSequence } from './lib/quickA
 import { QuickActionRunner } from './routes/dashboard/components/QuickActionRunner';
 import { EventHistoryPanel } from './routes/dashboard/components/EventHistoryPanel';
 import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
+import { TwitchInteractionsManager } from './routes/dashboard/components/TwitchInteractionsManager';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -100,12 +102,26 @@ describe('App routing', () => {
     expect(html).toContain('Operator config');
     expect(html).toContain('Secret header');
     expect(html).toContain('Automation profiles');
+    expect(html).toContain('Twitch interaction rules');
     expect(html).toContain('Active profile');
     expect(html).toContain('Export dashboard config');
     expect(html).toContain('Import dashboard config');
     expect(html).toContain('operator secret is not exported');
     expect(html).toContain('MPRIS decision');
     expect(html).toContain('Overlay noise controls');
+  });
+
+  it('renders the twitch interactions manager shell on the server without fetching', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = renderToString(<TwitchInteractionsManager apiBaseUrl="http://example.test" operatorSecret="" />);
+
+    expect(html).toContain('Twitch interaction rules');
+    expect(html).toContain('Chat aliases');
+    expect(html).toContain('Channel point rewards');
+    expect(html).toContain('Operator secret required to save');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('renders degraded readiness incidents', () => {
@@ -199,6 +215,10 @@ describe('App routing', () => {
   });
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('overlay event utilities', () => {
   it('builds the SSE URL from the configured API base', () => {
     expect(getOverlayStreamUrl('http://localhost:8080')).toBe('http://localhost:8080/api/events/stream');
@@ -254,6 +274,37 @@ describe('overlay event utilities', () => {
       message: 'Stretch break',
     });
     expect(event?.data).toMatchObject({ active: true, eta: '5 min' });
+  });
+
+  it('fetches twitch interactions with protected GET headers', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ rules: { chatAliases: [], channelPointRules: [] } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchTwitchInteractions({ baseUrl: 'http://example.test', operatorSecret: '  operator-secret  ' });
+    await fetchTwitchInteractions('http://example.test', 'operator-secret');
+    await fetchTwitchInteractions(undefined, 'operator-secret');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://example.test/api/twitch/interactions', {
+      headers: {
+        Accept: 'application/json',
+        'X-Overlay-Operator-Secret': 'operator-secret',
+      },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://example.test/api/twitch/interactions', {
+      headers: {
+        Accept: 'application/json',
+        'X-Overlay-Operator-Secret': 'operator-secret',
+      },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(3, 'http://localhost:8080/api/twitch/interactions', {
+      headers: {
+        Accept: 'application/json',
+        'X-Overlay-Operator-Secret': 'operator-secret',
+      },
+    });
   });
 });
 

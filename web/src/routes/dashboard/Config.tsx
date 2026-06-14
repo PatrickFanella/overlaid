@@ -9,6 +9,7 @@ import {
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { DashboardShell } from './DashboardShell';
 import { AutomationProfileManager } from './components/AutomationProfileManager';
+import { TwitchInteractionsManager } from './components/TwitchInteractionsManager';
 
 export function DashboardConfigPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
@@ -88,6 +89,8 @@ export function DashboardConfigPage() {
       </section>
 
       <AutomationProfileManager config={config} onChange={updateConfig} />
+
+      <TwitchInteractionsManager apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} />
 
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <p className="hud-label">MPRIS decision</p>
