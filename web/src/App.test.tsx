@@ -1,6 +1,7 @@
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { dashboardRoutes } from './lib/dashboardRoutes';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
 import { fetchTwitchInteractions } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
@@ -12,6 +13,7 @@ import {
   selectQuickActionsForProfile,
 } from './lib/automationProfiles';
 import { resolveQuickActionSequence, runQuickActionSequence } from './lib/quickActionSequences';
+import { overlayRoutes } from './lib/overlayRoutes';
 import { BuildInfoPanel } from './routes/dashboard/components/BuildInfoPanel';
 import { QuickActionRunner } from './routes/dashboard/components/QuickActionRunner';
 import { EventHistoryPanel } from './routes/dashboard/components/EventHistoryPanel';
@@ -27,6 +29,28 @@ describe('App routing', () => {
     expect(html).toContain('/overlay/alerts');
     expect(html).toContain('Twitch login');
     expect(html).toContain('patrick__eff');
+  });
+
+  it.each(dashboardRoutes)('renders declared dashboard route $path', (route) => {
+    const html = renderToString(<App pathname={route.path} />);
+
+    expect(html).toContain('Dashboard');
+    expect(html).toContain(route.navLabel);
+    expect(html).toContain(route.landmarkText);
+  });
+
+  it.each(overlayRoutes)('renders declared overlay route $path', (route) => {
+    const html = renderToString(<App pathname={route.path} />);
+
+    expect(html).toContain(route.title);
+  });
+
+  it('renders home fallback for unknown paths', () => {
+    const html = renderToString(<App pathname="/not-a-real-route" />);
+
+    expect(html).toContain('Overlay routes');
+    expect(html).toContain('/not-a-real-route');
+    expect(html).toContain('pick a route below');
   });
 
   it('renders the alerts overlay route', () => {

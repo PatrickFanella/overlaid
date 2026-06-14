@@ -2,15 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { fetchTwitchLoginURL } from '../../lib/api';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { loadOperatorSecret } from '../../lib/dashboardConfig';
-
-const dashboardLinks = [
-  ['/dashboard', 'Overview'],
-  ['/dashboard/live', 'Live'],
-  ['/dashboard/setup', 'Setup'],
-  ['/dashboard/sources', 'Sources'],
-  ['/dashboard/control', 'Stream control'],
-  ['/dashboard/config', 'Config'],
-] as const;
+import { dashboardRoutes } from '../../lib/dashboardRoutes';
 
 type DashboardShellProps = {
   activePath: string;
@@ -43,13 +35,13 @@ export function DashboardShell({ activePath, children }: DashboardShellProps) {
             </div>
 
             <nav className="flex flex-wrap gap-1.5" aria-label="Dashboard sections">
-              {dashboardLinks.map(([href, label]) => (
+              {dashboardRoutes.map((route) => (
                 <a
-                  key={href}
-                  className={`hud-chip hud-chip--square ${activePath === href ? 'border-cyan-200/80 bg-cyan-300/15 text-cyan-50' : ''}`}
-                  href={href}
+                  key={route.path}
+                  className={`hud-chip hud-chip--square ${activePath === route.path ? 'border-cyan-200/80 bg-cyan-300/15 text-cyan-50' : ''}`}
+                  href={route.path}
                 >
-                  {label}
+                  {route.navLabel}
                 </a>
               ))}
             </nav>

@@ -1,30 +1,37 @@
+import { getDashboardRoute } from '../../../lib/dashboardRoutes';
+
 const runbookBaseUrl =
   'https://git.subcult.tv/PatrickFanella/over-laid/src/branch/main/docs/runbooks';
+
+const liveRoute = getDashboardRoute('/dashboard/live');
+const configRoute = getDashboardRoute('/dashboard/config');
+const controlRoute = getDashboardRoute('/dashboard/control');
+const sourcesRoute = getDashboardRoute('/dashboard/sources');
 
 const routeGuides = [
   {
     intent: 'monitor / recover',
-    href: '/dashboard/live',
-    label: 'Live ops cockpit',
-    detail: 'Readiness, incidents, build identity, event history, and recovery runbooks.',
+    href: liveRoute?.path ?? '/dashboard/live',
+    label: liveRoute?.title ?? 'Live ops cockpit',
+    detail: liveRoute?.description ?? 'Readiness, incidents, build identity, event history, and recovery runbooks.',
   },
   {
     intent: 'edit rules / profiles',
-    href: '/dashboard/config',
-    label: 'Config',
-    detail: 'Operator secret, show profiles, Twitch aliases, and channel point reward rules.',
+    href: configRoute?.path ?? '/dashboard/config',
+    label: configRoute?.navLabel ?? 'Config',
+    detail: configRoute?.description ?? 'Operator secret, show profiles, Twitch aliases, and channel point reward rules.',
   },
   {
     intent: 'operate stream',
-    href: '/dashboard/control',
-    label: 'Stream control',
-    detail: 'Quick actions, sequences, OBS controls, rehearsal, and BRB.',
+    href: controlRoute?.path ?? '/dashboard/control',
+    label: controlRoute?.title ?? 'Stream control',
+    detail: controlRoute?.description ?? 'Quick actions, sequences, OBS controls, rehearsal, and BRB.',
   },
   {
     intent: 'wire OBS sources',
-    href: '/dashboard/sources',
-    label: 'Sources',
-    detail: 'Overlay URLs, presets, and custom CSS.',
+    href: sourcesRoute?.path ?? '/dashboard/sources',
+    label: sourcesRoute?.navLabel ?? 'Sources',
+    detail: sourcesRoute?.description ?? 'Overlay URLs, presets, and custom CSS.',
   },
   {
     intent: 'package / backup',

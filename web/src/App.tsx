@@ -13,20 +13,13 @@ import { DashboardLivePage } from './routes/dashboard/Live';
 import { DashboardOverviewPage } from './routes/dashboard/Overview';
 import { DashboardSetupPage } from './routes/dashboard/Setup';
 import { DashboardSourcesPage } from './routes/dashboard/Sources';
+import { overlayRoutes as overlayRouteMetadata } from './lib/overlayRoutes';
 
 type AppProps = {
   pathname?: string;
 };
 
-const overlayRoutes = new Set([
-  '/overlay/alerts',
-  '/overlay/chat',
-  '/overlay/goals',
-  '/overlay/now-playing',
-  '/overlay/ticker',
-  '/overlay/brb',
-  '/overlay/debug',
-]);
+const overlayRoutePaths = new Set(overlayRouteMetadata.map((route) => route.path));
 
 function resolvePathname(pathname?: string) {
   if (pathname) {
@@ -108,7 +101,7 @@ export function getAppRoute(pathname: string) {
     return <OverlayDebugPage />;
   }
 
-  if (overlayRoutes.has(route)) {
+  if (overlayRoutePaths.has(route)) {
     return <OverlayPlaceholderPage pathname={route} />;
   }
 

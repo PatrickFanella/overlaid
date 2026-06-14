@@ -1,15 +1,6 @@
 import { getOverlayApiBaseUrl } from '../lib/eventStream';
-
-const routes = [
-  ['/dashboard', 'Command center', 'Dashboard for Twitch auth, OBS controls, BRB state, test alerts, clear events, and webhook checks.'],
-  ['/overlay/alerts', 'Live alert overlay', 'Fully functional SSE-driven alert browser source.'],
-  ['/overlay/chat', 'Chat overlay', 'Live Twitch chat browser source.'],
-  ['/overlay/goals', 'Goals overlay', 'Live SSE-driven progress widgets.'],
-  ['/overlay/now-playing', 'Now playing', 'Live MPRIS music/media browser source.'],
-  ['/overlay/ticker', 'Ticker overlay', 'Live lower-third ticker from overlay events.'],
-  ['/overlay/brb', 'BRB overlay', 'Dashboard-controlled intermission scene.'],
-  ['/overlay/debug', 'Debug overlay', 'Event inspector for development and QA.'],
-] as const;
+import { dashboardRoutes } from '../lib/dashboardRoutes';
+import { overlayRoutes } from '../lib/overlayRoutes';
 
 type HomePageProps = {
   pathname?: string;
@@ -48,7 +39,10 @@ export function HomePage({ pathname }: HomePageProps = {}) {
         ) : null}
 
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {routes.map(([href, title, description]) => (
+          {[
+            ...dashboardRoutes.map((route) => [route.path, route.title, route.description] as const),
+            ...overlayRoutes.map((route) => [route.path, route.title, route.description] as const),
+          ].map(([href, title, description]) => (
             <a key={href} href={href} className="hud-panel hud-corners hud-home-card rounded-[1.25rem] p-4 transition duration-200 hover:-translate-y-0.5 hover:border-fuchsia-300/40">
               <p className="hud-kicker">{href}</p>
               <h2 className="mt-2 text-lg font-semibold text-white">{title}</h2>
