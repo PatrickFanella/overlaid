@@ -1,6 +1,6 @@
 # Production Recovery Runbook
 
-Use this when live operation degrades because OBS, Twitch, EventSub, retained state, or smoke checks fail.
+Use this when live operation degrades because OBS, Twitch, EventSub, retained state, event history, or smoke checks fail.
 
 ## Fast checks
 
@@ -23,8 +23,8 @@ docker compose logs -f web
 
 - `/healthz` is liveness only. Compose healthchecks use it.
 - `/readyz` is operator diagnostics. It reports dependency status and can return HTTP 200 with `status: degraded`.
-- Use `/readyz` to see whether OBS, Twitch auth, EventSub, or retained state need attention.
-- `/dashboard/live` is the human-readable view of the same readiness data, plus recent operator context.
+- Use `/readyz` to see whether OBS, Twitch auth, EventSub, retained state, or event history need attention.
+- `/dashboard/live` is the human-readable view of the same readiness data, plus recent operator context and the persisted event history panel.
 
 ## OBS recovery
 
@@ -90,11 +90,25 @@ docker compose restart api
 
 Use this when `/readyz` reports retained state degraded or the overlay keeps replaying bad state.
 
+## Event history recovery
+
+`/readyz` reports `event_history` as degraded when the history file failed to load at startup.
+
+If an existing file is malformed or unreadable, back it up, remove the bad file, and restart the API. A missing file is normal on first boot and does not degrade readiness:
+
+```bash
+docker compose exec api sh -c 'cp /data/event-history.jsonl /data/event-history.jsonl.bak'
+docker compose exec api sh -c 'rm /data/event-history.jsonl'
+docker compose restart api
+```
+
+Then recheck `/readyz` and the Event history panel on `/dashboard/live`.
+
 ## Docker volume caution
 
 - `db-reset-postgres` preserves API data, including Twitch token and retained state.
-- `db-reset` destroys API data, including token and state files.
-- Treat `db-reset` as a last resort when you are prepared to re-login and rebuild retained state.
+- `db-reset` destroys API data, including token, retained state, and event history files.
+- Treat `db-reset` as a last resort when you are prepared to re-login, rebuild retained state, and lose recent event history.
 
 ## After recovery
 

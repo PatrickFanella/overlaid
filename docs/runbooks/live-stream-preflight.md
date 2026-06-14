@@ -27,6 +27,8 @@ Expected ready checks:
 
 Open `/dashboard/control` and run `Run rehearsal`.
 
+After the sequence completes, check the Event history panel on `/dashboard/live` to confirm the recent sample event summaries were recorded.
+
 Expected sequence:
 
 1. Alert appears.
@@ -52,6 +54,8 @@ Open `/dashboard/config` and enter `OPERATOR_SECRET`.
 ## Browser sources during stream
 
 Do not rely on OBS browser sources until `/dashboard/live` is clear of readiness incidents. Fix any degraded checks first, then confirm the browser sources are stable before going live.
+
+Use the Event history panel as a quick post-rehearsal audit trail; it should show the latest sanitized stream events newest-first.
 
 
 ## Live QA status

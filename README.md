@@ -22,6 +22,7 @@ docker compose up --build
 - `OPERATOR_SECRET` — optional shared secret for dashboard/operator mutating routes. Send as `X-Overlay-Operator-Secret` or `Authorization: Bearer <secret>`.
 - `WEBHOOK_SECRET` — optional shared secret for `POST /api/integrations/webhook/{source}`. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
 - `OVERLAY_STATE_FILE` — retained overlay state snapshot path. Defaults to `/data/overlay-state.json` in Docker.
+- `EVENT_HISTORY_FILE` / `EVENT_HISTORY_LIMIT` — persisted recent event history path and count limit. Defaults to `/data/event-history.jsonl` and `250` in Docker.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
 - `VITE_API_BASE_URL` — optional build-time API base URL for local Vite builds. If unset, overlays derive the API URL from the browser host on port `8080`.
 - `OBS_WEBSOCKET_URL` — OBS WebSocket v5 endpoint. Docker defaults to `ws://host.docker.internal:4455` to reach OBS on the host desktop; native API runs can use `ws://localhost:4455`.
@@ -41,7 +42,7 @@ Twitch auth routes:
 
 Make sure the Twitch app callback URL matches `TWITCH_REDIRECT_URL`.
 
-If you run the API in Docker, the Twitch token persists in the `api-data` volume at `/data/twitch-token.json`, and retained overlay state persists at `/data/overlay-state.json`.
+If you run the API in Docker, the Twitch token persists in the `api-data` volume at `/data/twitch-token.json`, retained overlay state persists at `/data/overlay-state.json`, and recent event history persists at `/data/event-history.jsonl`.
 
 OAuth callback test flow:
 
@@ -66,7 +67,7 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 
 ### Routes
 
-- `/dashboard/live` — live ops cockpit with preflight checks, `/readyz`, EventSub diagnostics, setup checklist status, and recent operator actions.
+- `/dashboard/live` — live ops cockpit with preflight checks, `/readyz`, EventSub diagnostics, setup checklist status, recent operator actions, and a compact persisted event history panel.
 - `/dashboard` — compact overview and status.
 - `/dashboard/setup` — setup checklist, browser-source URLs, editable stream presets.
 - `/dashboard/sources` — setup/source URL alias.
@@ -82,11 +83,12 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 
 For live operation, start with `/dashboard/live` and follow `docs/runbooks/live-stream-preflight.md`.
 For production recovery, follow `docs/runbooks/production-recovery.md`.
+For persisted recent event history and recovery guidance, follow `docs/runbooks/event-history.md`.
 For OBS automation sequences, follow `docs/runbooks/obs-automation-sequences.md`.
 For moderator or broadcaster Twitch chat controls, use `docs/runbooks/twitch-chat-commands.md`.
 For post-build route checks and styling changes, use `docs/runbooks/visual-qa.md`.
 
-`/healthz` stays the cheap liveness check used by Compose healthchecks. `curl http://localhost:8080/readyz` is the operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, or retained state need attention.
+`/healthz` stays the cheap liveness check used by Compose healthchecks. `curl http://localhost:8080/readyz` is the operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, retained state, or event history need attention.
 
 ### OBS browser source
 
@@ -153,7 +155,7 @@ Public reverse proxy:
 - Put `/dashboard` and API mutating routes behind reverse-proxy authentication in addition to `OPERATOR_SECRET`.
 - Expose only the overlay routes needed by OBS/browser sources when possible.
 - Do not publish the API directly to the internet without auth/rate-limit/reverse-proxy controls.
-- Keep `TWITCH_TOKEN_FILE` and `OVERLAY_STATE_FILE` on the `api-data` volume and include that volume in backups if you want OAuth/state continuity.
+- Keep `TWITCH_TOKEN_FILE`, `OVERLAY_STATE_FILE`, and `EVENT_HISTORY_FILE` on the `api-data` volume and include that volume in backups if you want OAuth/state continuity and recent event history.
 
 Use this for chat:
 
