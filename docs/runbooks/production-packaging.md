@@ -6,6 +6,8 @@ Use this when you are packaging a release, checking build identity, or backing u
 
 `GET /version` is public/unauthenticated and returns only non-secret build/runtime metadata for smoke checks and deploy verification.
 
+The dashboard overview and the live recovery cockpit both surface this same build metadata for operator visibility.
+
 Expected fields:
 
 - `name`
@@ -49,6 +51,8 @@ Plain Compose/Docker defaults are `BUILD_VERSION=dev`, `BUILD_COMMIT=unknown`, a
 ## Smoke checks
 
 `make smoke` includes `GET /version` alongside the existing health, readiness, auth, OBS, and dashboard checks.
+
+`curl /version` and `make smoke` stay scriptable entry points for build verification from the CLI.
 
 Run it after any build or deployment change:
 

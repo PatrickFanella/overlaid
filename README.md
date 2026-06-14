@@ -81,8 +81,8 @@ See `docs/runbooks/twitch-interaction-rules.md` for the editing, backup, and liv
 
 ### Routes
 
-- `/dashboard/live` — live ops cockpit with preflight checks, `/readyz`, EventSub diagnostics, setup checklist status, recent operator actions, and a compact persisted event history panel.
-- `/dashboard` — compact overview and status.
+- `/dashboard/live` — canonical recovery cockpit with preflight checks, `/readyz`, EventSub diagnostics, setup checklist status, recent operator actions, and a compact persisted event history panel.
+- `/dashboard` — overview, status, and route guide for choosing the right runbook or dashboard path.
 - `/dashboard/setup` — setup checklist, browser-source URLs, editable stream presets.
 - `/dashboard/sources` — setup/source URL alias.
 - `/dashboard/control` — stream controls, BRB, OBS controls, sample events, quick actions.
@@ -96,7 +96,7 @@ See `docs/runbooks/twitch-interaction-rules.md` for the editing, backup, and liv
 - `/overlay/brb`
 - `/overlay/debug`
 
-For live operation, start with `/dashboard/live` and follow `docs/runbooks/live-stream-preflight.md`.
+For live operation, open `/dashboard/live` first during degradation, then use `/dashboard` to choose the right route or runbook. Follow `docs/runbooks/live-stream-preflight.md`.
 For Twitch interaction rules, follow `docs/runbooks/twitch-interaction-rules.md`.
 For production recovery, follow `docs/runbooks/production-recovery.md`.
 For persisted recent event history and recovery guidance, follow `docs/runbooks/event-history.md`.

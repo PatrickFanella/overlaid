@@ -10,7 +10,7 @@ curl http://localhost:8080/readyz
 docker compose ps
 ```
 
-Open `http://localhost:5173/dashboard/live` for the human-readable readiness cockpit.
+Open `http://localhost:5173/dashboard/live` for the human-readable readiness cockpit; during incidents, `/dashboard/live` is the recovery console.
 
 Check API and web logs for the failing path:
 
@@ -25,6 +25,7 @@ docker compose logs -f web
 - `/readyz` is operator diagnostics. It reports dependency status and can return HTTP 200 with `status: degraded`.
 - Use `/readyz` to see whether OBS, Twitch auth, EventSub, retained state, event history, or Twitch interaction rules need attention.
 - `/dashboard/live` is the human-readable view of the same readiness data, plus recent operator context and the persisted event history panel.
+- Destructive recovery remains CLI-only; use the dashboard to assess and route, then follow the runbook commands for any backup, restore, delete, or re-authentication steps.
 
 ## OBS recovery
 

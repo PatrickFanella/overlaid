@@ -9,7 +9,7 @@ make smoke
 
 ## Dashboard
 
-Start at:
+Start at `/dashboard/live`; it is both the preflight view and the recovery cockpit.
 
 ```text
 http://localhost:5173/dashboard/live
