@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
 )
 
 const (
@@ -127,6 +128,7 @@ type Client struct {
 	SubscriptionURL  string
 	TokenProvider    TokenProvider
 	CommandProcessor *CommandProcessor
+	InteractionRules func() interactions.Rules
 	Publish          Publisher
 	Diagnostics      *DiagnosticsStore
 	HTTPClient       *http.Client
@@ -332,7 +334,11 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 			}
 			return c.runSessionWithGrace(ctx, token, url)
 		case "notification":
-			for _, event := range EventsForNotification(message, c.CommandProcessor) {
+			rules := interactions.Rules{}
+			if c.InteractionRules != nil {
+				rules = c.InteractionRules()
+			}
+			for _, event := range EventsForNotification(message, c.CommandProcessor, rules) {
 				if c.Diagnostics != nil {
 					c.Diagnostics.MarkEvent()
 				}
@@ -414,7 +420,11 @@ func MapNotification(message EventSubMessage) (events.Event, bool) {
 	return events.Event{}, false
 }
 
-func EventsForNotification(message EventSubMessage, processor *CommandProcessor) []events.Event {
+func EventsForNotification(message EventSubMessage, processor *CommandProcessor, rules interactions.Rules) []events.Event {
+	if message.Payload.Subscription.Type == "channel.channel_points_custom_reward_redemption.add" {
+		return EventsForChannelPointRedemption(message, rules)
+	}
+
 	event, ok := MapNotification(message)
 	if !ok {
 		return nil
@@ -433,6 +443,80 @@ func EventsForNotification(message EventSubMessage, processor *CommandProcessor)
 
 	user := chatCommandUserFromEvent(message.Payload.Event)
 	return append(eventsOut, processor.Handle(command, user)...)
+}
+
+func EventsForChannelPointRedemption(message EventSubMessage, rules interactions.Rules) []events.Event {
+	event := message.Payload.Event
+	rewardTitle := stringValue(nestedMap(event, "reward"), "title")
+	user := firstNonEmpty(stringValue(event, "user_name"), stringValue(event, "user_login"), "Someone")
+	input := stringValue(event, "user_input")
+
+	if rule, ok := interactions.MatchChannelPointRule(rules, rewardTitle); ok {
+		switch rule.Action {
+		case "ignore":
+			return []events.Event{events.NewCommand("twitch", "Channel point reward ignored", "Matched reward ignored", events.SeverityWarning, map[string]any{
+				"action":       "ignore",
+				"reward":       capRunes(firstNonEmpty(rewardTitle, "Unknown reward"), 180),
+				"user":         capRunes(user, 180),
+				"eventsubType": message.Payload.Subscription.Type,
+			})}
+		case "clear":
+			return []events.Event{events.NewClear("twitch")}
+		case "brb":
+			data := map[string]any{"active": true, "eventsubType": message.Payload.Subscription.Type}
+			return []events.Event{events.NewBRB(
+				"twitch",
+				renderChannelPointText(rule.Title, user+" redeemed channel points", user, rewardTitle, input),
+				renderChannelPointText(rule.Message, defaultChannelPointMessage(rewardTitle, input), user, rewardTitle, input),
+				data,
+			)}
+		case "alert":
+			event := events.NewAlert(
+				"twitch",
+				renderChannelPointText(rule.Title, user+" redeemed channel points", user, rewardTitle, input),
+				renderChannelPointText(rule.Message, defaultChannelPointMessage(rewardTitle, input), user, rewardTitle, input),
+				events.SeveritySuccess,
+			)
+			event.Data = map[string]any{"eventsubType": message.Payload.Subscription.Type}
+			return []events.Event{event}
+		}
+	}
+
+	alert, ok := mapChannelPointRedemption(message)
+	if !ok {
+		return nil
+	}
+	return []events.Event{alert}
+}
+
+func renderChannelPointText(template, fallback, user, reward, input string) string {
+	text := strings.TrimSpace(template)
+	if text == "" {
+		text = fallback
+	}
+	text = strings.ReplaceAll(text, "{user}", user)
+	text = strings.ReplaceAll(text, "{reward}", reward)
+	text = strings.ReplaceAll(text, "{input}", input)
+	return capRunes(text, 180)
+}
+
+func defaultChannelPointMessage(rewardTitle, input string) string {
+	text := strings.TrimSpace(rewardTitle)
+	if input != "" {
+		text = strings.TrimSpace(text + ": " + input)
+	}
+	return firstNonEmpty(text, "Channel point redemption")
+}
+
+func capRunes(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit])
 }
 
 func mapChatMessage(message EventSubMessage) (events.Event, bool) {

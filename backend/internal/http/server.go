@@ -120,8 +120,14 @@ func (s *Server) StartBackground(ctx context.Context) {
 			}, true
 		},
 		CommandProcessor: s.twitchCommandProcessor,
-		Publish:          s.publishEventSubEvent,
-		Diagnostics:      s.twitchEventSubDiagnostics,
+		InteractionRules: func() interactions.Rules {
+			if s.interactions == nil || s.interactionsLoadErrorValue() != "" {
+				return interactions.Rules{}
+			}
+			return s.interactions.Rules()
+		},
+		Publish:     s.publishEventSubEvent,
+		Diagnostics: s.twitchEventSubDiagnostics,
 	}
 
 	go func() {
