@@ -55,6 +55,14 @@ Open routes at the deployed web origin, for example `http://<host>:5173`. Check 
 - [ ] Configuration panels stay readable on a standard laptop viewport.
 - [ ] No form controls are clipped by cards or columns.
 
+### Control/config interaction checks
+
+- [ ] On `/dashboard/control`, confirm destructive quick actions show the `Confirm ...` armed state before running.
+- [ ] Confirm quick-action sequences only show when at least one runnable child action is available in the full catalog.
+- [ ] Run a rehearsal off-stream and confirm the session log records success/failure summaries.
+- [ ] On `/dashboard/config`, confirm operator secret text remains session-only and is not present in dashboard config export JSON.
+- [ ] Import a Twitch interaction rules JSON sample and confirm invalid actions are normalized before save.
+
 ## Overlay routes
 
 ### `/overlay/alerts`

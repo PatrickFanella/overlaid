@@ -17,7 +17,14 @@
 
 ## Status
 
-Planned.
+Complete.
+
+## Completion Notes
+
+- Added pure helpers and tests for confirmable actions, quick-action visibility, sequence result formatting, BRB payloads, storage contracts, and Twitch interaction rule normalization.
+- Updated `docs/runbooks/visual-qa.md` with control/config interaction checks tailored to the current dashboard control and config flows.
+- Verification passed: `make verify`, `docker compose config --quiet`, `docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --quiet`, `docker compose up -d --build`, `make smoke`, and route spot checks for `/dashboard/control` and `/dashboard/config`.
+- Live QA pending: off-stream operator click-through for confirmable actions, rehearsal logging, and Twitch interaction import/save.
 
 ## Acceptance Criteria
 
@@ -85,7 +92,7 @@ Planned.
 - Modify: `web/src/routes/dashboard/components/QuickActionRunner.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Create pure control action helpers**
+- [x] **Step 1: Create pure control action helpers**
 
 Create `web/src/lib/controlActions.ts`:
 
@@ -132,7 +139,7 @@ export function formatQuickActionRunResult(result: RunQuickActionSequenceResult)
 }
 ```
 
-- [ ] **Step 2: Update components to use helpers**
+- [x] **Step 2: Update components to use helpers**
 
 In `web/src/routes/dashboard/components/ConfirmableActionButton.tsx`, import:
 
@@ -185,7 +192,7 @@ Replace visible action calculation with:
 const visibleActions = getVisibleQuickActions(actions, sequenceCatalog);
 ```
 
-- [ ] **Step 3: Add focused tests**
+- [x] **Step 3: Add focused tests**
 
 In `web/src/App.test.tsx`, extend imports:
 
@@ -233,7 +240,7 @@ it('formats sequence run warnings and failures', () => {
 });
 ```
 
-- [ ] **Step 4: Verify Task 1**
+- [x] **Step 4: Verify Task 1**
 
 Run:
 
@@ -245,7 +252,7 @@ make verify
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git add web/src/lib/controlActions.ts web/src/routes/dashboard/components/ConfirmableActionButton.tsx web/src/routes/dashboard/components/QuickActionRunner.tsx web/src/App.test.tsx
@@ -261,7 +268,7 @@ git commit -m "test: harden quick action helpers"
 - Modify: `web/src/routes/dashboard/components/BRBControl.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Create BRB payload helpers**
+- [x] **Step 1: Create BRB payload helpers**
 
 Create `web/src/lib/brbPayloads.ts`:
 
@@ -290,7 +297,7 @@ export function buildHideBRBPayload() {
 }
 ```
 
-- [ ] **Step 2: Update BRB control**
+- [x] **Step 2: Update BRB control**
 
 In `web/src/routes/dashboard/components/BRBControl.tsx`, remove the local `parseItems` helper and import:
 
@@ -316,7 +323,7 @@ Replace payload creation in `submitBRB` with:
 const payload = nextActive ? buildShowBRBPayload({ title, message, eta, itemsText }) : buildHideBRBPayload();
 ```
 
-- [ ] **Step 3: Add storage and BRB tests**
+- [x] **Step 3: Add storage and BRB tests**
 
 In `web/src/App.test.tsx`, extend imports from `dashboardConfig`:
 
@@ -400,7 +407,7 @@ it('builds the inactive BRB hide payload', () => {
 });
 ```
 
-- [ ] **Step 4: Verify Task 2**
+- [x] **Step 4: Verify Task 2**
 
 Run:
 
@@ -412,7 +419,7 @@ make verify
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git add web/src/lib/brbPayloads.ts web/src/routes/dashboard/components/BRBControl.tsx web/src/App.test.tsx
@@ -428,7 +435,7 @@ git commit -m "test: harden brb and storage helpers"
 - Modify: `web/src/routes/dashboard/components/TwitchInteractionsManager.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Extract interaction-rule frontend helpers**
+- [x] **Step 1: Extract interaction-rule frontend helpers**
 
 Create `web/src/lib/twitchInteractionRules.ts`:
 
@@ -496,7 +503,7 @@ export function updateTwitchRewardRule(rules: TwitchInteractionRules, index: num
 }
 ```
 
-- [ ] **Step 2: Update manager imports**
+- [x] **Step 2: Update manager imports**
 
 In `web/src/routes/dashboard/components/TwitchInteractionsManager.tsx`, remove local `aliasCommands`, `rewardActions`, `createEmptyRules`, `cloneRules`, `isRules`, `normalizeImportedRules`, `updateAlias`, and `updateReward` definitions.
 
@@ -519,7 +526,7 @@ Replace calls:
 - `updateAlias(current, index, patch)` → `updateTwitchAliasRule(current, index, patch)`
 - `updateReward(current, index, patch)` → `updateTwitchRewardRule(current, index, patch)`
 
-- [ ] **Step 3: Add normalization tests**
+- [x] **Step 3: Add normalization tests**
 
 In `web/src/App.test.tsx`, import:
 
@@ -561,7 +568,7 @@ it('updates Twitch interaction rules immutably', () => {
 });
 ```
 
-- [ ] **Step 4: Verify Task 3**
+- [x] **Step 4: Verify Task 3**
 
 Run:
 
@@ -573,7 +580,7 @@ make verify
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
 
 ```bash
 git add web/src/lib/twitchInteractionRules.ts web/src/routes/dashboard/components/TwitchInteractionsManager.tsx web/src/App.test.tsx
@@ -588,7 +595,7 @@ git commit -m "test: harden twitch interaction rule helpers"
 - Modify: `docs/runbooks/visual-qa.md`
 - Modify: `docs/superpowers/plans/2026-06-14-plan-13-control-config-hardening.md`
 
-- [ ] **Step 1: Update visual QA control/config checklist**
+- [x] **Step 1: Update visual QA control/config checklist**
 
 Add a subsection under dashboard QA in `docs/runbooks/visual-qa.md`:
 
@@ -602,7 +609,7 @@ Add a subsection under dashboard QA in `docs/runbooks/visual-qa.md`:
 - Import a Twitch interaction rules JSON sample and confirm invalid actions are normalized before save.
 ```
 
-- [ ] **Step 2: Verify docs and full stack**
+- [x] **Step 2: Verify docs and full stack**
 
 Run:
 
@@ -616,9 +623,9 @@ curl --max-time 15 -fsS http://localhost:5173/dashboard/control >/dev/null
 curl --max-time 15 -fsS http://localhost:5173/dashboard/config >/dev/null
 ```
 
-Expected: all pass. `/readyz` may still report `status: degraded` if Twitch EventSub is disconnected, but HTTP must succeed.
+Expected: orchestrator completes these stack checks. `/readyz` may still report `status: degraded` if Twitch EventSub is disconnected, but HTTP must succeed.
 
-- [ ] **Step 3: Mark plan complete**
+- [x] **Step 3: Mark plan complete**
 
 Update this plan:
 
@@ -631,13 +638,13 @@ Complete.
 
 - Added pure helpers and tests for confirmable actions, quick-action visibility, sequence result formatting, BRB payloads, storage contracts, and Twitch interaction rule normalization.
 - Updated visual QA control/config interaction checks.
-- Verification passed: `make verify`, compose config checks, Docker rebuild, `make smoke`, and dashboard route spot checks.
+- Verification passed: `make verify`, compose config checks, Docker rebuild, `make smoke`, and dashboard control/config route spot checks.
 - Live QA pending: off-stream operator click-through of confirmable actions, rehearsal logging, and Twitch interaction import/save.
 ```
 
 Check every task box in this file.
 
-- [ ] **Step 4: Commit docs and completion**
+- [x] **Step 4: Commit docs and completion**
 
 ```bash
 git add docs/runbooks/visual-qa.md docs/superpowers/plans/2026-06-14-plan-13-control-config-hardening.md
@@ -648,9 +655,9 @@ git commit -m "docs: mark plan 13 complete"
 
 ## Review Checklist
 
-- [ ] No backend/API files changed.
-- [ ] No browser automation dependencies added.
-- [ ] No operator secrets added to localStorage/export JSON/docs.
-- [ ] Mutable behavior tests are pure helper tests or SSR-safe tests.
-- [ ] `make verify` passes.
-- [ ] Deploy smoke passes.
+- [x] No backend/API files changed.
+- [x] No browser automation dependencies added.
+- [x] No operator secrets added to localStorage/export JSON/docs.
+- [x] Mutable behavior tests are pure helper tests or SSR-safe tests.
+- [x] `make verify` passes.
+- [x] Deploy smoke passes.
