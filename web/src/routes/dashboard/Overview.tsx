@@ -2,6 +2,7 @@ import { DashboardShell } from './DashboardShell';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { loadDashboardConfig, loadOperatorSecret } from '../../lib/dashboardConfig';
 import { BuildInfoPanel } from './components/BuildInfoPanel';
+import { OpsRouteGuide } from './components/OpsRouteGuide';
 import { SystemStatusRail } from './components/SystemStatusRail';
 
 export function DashboardOverviewPage() {
@@ -14,6 +15,8 @@ export function DashboardOverviewPage() {
       <SystemStatusRail apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} config={config} />
 
       <BuildInfoPanel apiBaseUrl={apiBaseUrl} />
+
+      <OpsRouteGuide />
 
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <div className="grid gap-2 md:grid-cols-4">

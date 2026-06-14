@@ -45,6 +45,13 @@ describe('App routing', () => {
     expect(html).toContain('Build info');
     expect(html).toContain('/version');
     expect(html).toContain('Build report unavailable.');
+    expect(html).toContain('Ops route guide');
+    expect(html).toContain('monitor / recover');
+    expect(html).toContain('edit rules / profiles');
+    expect(html).toContain('package / backup');
+    expect(html).toContain(
+      'https://git.subcult.tv/PatrickFanella/over-laid/src/branch/main/docs/runbooks/production-packaging.md',
+    );
   });
 
   it('renders the dashboard setup route', () => {
