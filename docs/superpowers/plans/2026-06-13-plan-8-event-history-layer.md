@@ -9,7 +9,7 @@
 
 **Goal:** Add a lightweight persisted event-history layer so operators can review recent stream events after overlay reconnects, dashboard reloads, or short API restarts.
 
-**Architecture:** Keep the live SSE bus as the real-time transport and add a separate file-backed JSONL event history on the existing `api-data` volume. All backend producers publish through one server helper that records sanitized event summaries before fanout; dashboard clients read recent events via a read-only JSON endpoint.
+**Architecture:** Keep the live SSE bus as the real-time transport and add a separate file-backed JSONL event history on the existing `api-data` volume. All backend producers publish through one server helper that fans out live events first, then records sanitized event summaries when history is writable; dashboard clients read recent events via a read-only JSON endpoint.
 
 **Tech Stack:** Go 1.26 backend, file-backed JSONL persistence, existing HTTP/SSE event model, Vite React TypeScript dashboard, Docker Compose `api-data` volume.
 
@@ -17,7 +17,18 @@
 
 ## Status
 
-Plan status: ready for review.
+Plan status: complete.
+
+Completed on 2026-06-13. Verification completed:
+
+- `make verify`
+- `docker compose config --quiet`
+- `docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --quiet`
+- `docker compose up -d --build`
+- `make smoke`
+- Route spot checks: `/api/events/history?limit=5`, `/dashboard/live`
+
+Live QA note: persisted event-history panel should be checked during the next real stream after actual Twitch/EventSub activity.
 
 ## Acceptance Criteria
 
@@ -27,7 +38,7 @@ Plan status: ready for review.
 - History is bounded by count and disk rewrite behavior; default retention is 250 events.
 - History does not store operator secrets, webhook secrets, Twitch token values, or raw unbounded Twitch payloads.
 - EventSub chat messages and command diagnostics store only the same top-level event fields plus bounded/sanitized `data` fields.
-- If the history file is missing or malformed, the API still boots; `/readyz` reports event history degraded when load failed.
+- If the history file is missing, the API still boots cleanly; if an existing history file fails to load, `/readyz` reports event history degraded.
 - Runtime append errors are logged and skipped for live fanout safety; this sprint reports load-time history health only.
 - `/dashboard/live` includes a compact recent event history panel.
 - `/overlay/debug` keeps its real-time behavior and is documented separately from persisted history.
@@ -98,7 +109,7 @@ Sanitization rules:
 - Modify: `.env.example`
 - Modify: `docker-compose.yml`
 
-- [ ] **Step 1: Add history config fields**
+- [x] **Step 1: Add history config fields**
 
 Add to `backend/internal/config/config.go`:
 
@@ -132,7 +143,7 @@ func envInt(key string, fallback int) int {
 
 Import `strconv`.
 
-- [ ] **Step 2: Wire compose/env examples**
+- [x] **Step 2: Wire compose/env examples**
 
 Add to `docker-compose.yml` API environment:
 
@@ -148,7 +159,7 @@ EVENT_HISTORY_FILE=/data/event-history.jsonl
 EVENT_HISTORY_LIMIT=250
 ```
 
-- [ ] **Step 3: Implement `history.Store`**
+- [x] **Step 3: Implement `history.Store`**
 
 Create `backend/internal/history/history.go` with:
 
@@ -198,7 +209,7 @@ Implementation requirements:
 - `List(limit)` returns newest-first, with `limit <= 0` meaning all retained events.
 - `Sanitize` applies the data contract above and always preserves valid `CreatedAt`; if zero, set `time.Now().UTC()`. String caps are by rune count, not bytes.
 
-- [ ] **Step 4: Add store tests**
+- [x] **Step 4: Add store tests**
 
 Create tests in `backend/internal/history/history_test.go`:
 
@@ -220,7 +231,7 @@ Use `t.TempDir()`, synthetic events, and assert:
 - Go numeric values like `int`, `int64`, and `float64` are retained.
 - empty file path appends to memory and returns nil.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -248,7 +259,7 @@ git commit -m "feat: add event history store"
 - Modify: `backend/internal/http/routes.go`
 - Modify: `backend/internal/http/handlers_test.go`
 
-- [ ] **Step 1: Add history store to server**
+- [x] **Step 1: Add history store to server**
 
 In `backend/internal/http/server.go`, import `internal/history` and add fields:
 
@@ -270,7 +281,7 @@ if err := eventHistory.Load(); err != nil {
 
 Set these fields in `Server`.
 
-- [ ] **Step 2: Centralize event publishing**
+- [x] **Step 2: Centralize event publishing**
 
 Add to `backend/internal/http/handlers.go`:
 
@@ -294,7 +305,7 @@ Replace direct `s.bus.Publish(...)` calls in this file with `s.publishEvent(...)
 
 In `server.go`, change MPRIS poller `Publish` from `s.bus.Publish` to `s.publishEvent`. EventSub already uses `s.publishEventSubEvent`, so no separate change is needed there.
 
-- [ ] **Step 3: Add history endpoint**
+- [x] **Step 3: Add history endpoint**
 
 Add handler to `handlers.go`:
 
@@ -328,7 +339,7 @@ Register in `routes.go`:
 s.mux.HandleFunc("GET /api/events/history", s.eventHistory)
 ```
 
-- [ ] **Step 4: Add readiness check**
+- [x] **Step 4: Add readiness check**
 
 In `readyz`, append after retained state:
 
@@ -342,7 +353,7 @@ if s.historyLoadError != "" {
 
 Update tests expecting the readiness check set to include `event_history`.
 
-- [ ] **Step 5: Add HTTP tests**
+- [x] **Step 5: Add HTTP tests**
 
 In `backend/internal/http/handlers_test.go`, add tests:
 
@@ -355,7 +366,7 @@ func TestReadyzReportsHistoryLoadFailure(t *testing.T)
 
 Use temp `EventHistoryFile` in config. For alert tests, set operator secret empty unless testing auth is needed. Assert endpoint order newest-first and that sensitive `data` keys sent in alert payload are not returned.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 
@@ -383,7 +394,7 @@ git commit -m "feat: expose event history endpoint"
 - Modify: `web/src/routes/dashboard/Live.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Add API helper**
+- [x] **Step 1: Add API helper**
 
 In `web/src/lib/api.ts`, import event-related primitive types from `./events`:
 
@@ -419,7 +430,7 @@ export async function fetchEventHistory(limit = 24, explicitBaseUrl?: string) {
 }
 ```
 
-- [ ] **Step 2: Add panel component**
+- [x] **Step 2: Add panel component**
 
 Create `web/src/routes/dashboard/components/EventHistoryPanel.tsx`:
 
@@ -463,7 +474,7 @@ export function EventHistoryPanel({ events, loading = false, error = '' }: Event
 }
 ```
 
-- [ ] **Step 3: Wire live cockpit**
+- [x] **Step 3: Wire live cockpit**
 
 In `web/src/routes/dashboard/Live.tsx`:
 - import `fetchEventHistory`, `EventHistoryResponse`, and `EventHistoryPanel`.
@@ -491,13 +502,13 @@ type LiveStatus = {
 
 Use `Promise.allSettled` exactly like current Twitch/OBS/readiness calls so history failures do not block the cockpit.
 
-- [ ] **Step 4: Add tests**
+- [x] **Step 4: Add tests**
 
 In `web/src/App.test.tsx`:
 - Update `/dashboard/live` SSR assertions to include `Event history` and `No persisted events yet.`.
 - Add a direct `EventHistoryPanel` SSR fixture test with two events asserting newest labels/titles render.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -526,7 +537,7 @@ git commit -m "feat: add event history cockpit panel"
 - Modify: `docs/runbooks/production-recovery.md`
 - Create: `docs/runbooks/event-history.md`
 
-- [ ] **Step 1: Add event history runbook**
+- [x] **Step 1: Add event history runbook**
 
 Create `docs/runbooks/event-history.md` with these sections:
 - Purpose: persisted recent event history for operators; not an analytics database.
@@ -551,7 +562,7 @@ docker compose restart api
 
 - Explain `/overlay/debug` is live-only while `/api/events/history` is persisted recent history.
 
-- [ ] **Step 2: Link docs**
+- [x] **Step 2: Link docs**
 
 Update README near live operation/runbook links with `docs/runbooks/event-history.md`.
 
@@ -559,7 +570,7 @@ Update `docs/runbooks/live-stream-preflight.md` to mention checking the event hi
 
 Update `docs/runbooks/production-recovery.md` to include event history in API data backup/removal cautions and `/readyz` `event_history` degraded recovery.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
@@ -583,7 +594,7 @@ git commit -m "docs: add event history runbook"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-13-plan-8-event-history-layer.md`
 
-- [ ] **Step 1: Run compose and verification checks**
+- [x] **Step 1: Run compose and verification checks**
 
 Run:
 
@@ -599,7 +610,7 @@ curl --max-time 15 -fsS http://localhost:5173/dashboard/live >/dev/null
 
 Expected: all pass. `/readyz` may still report `status: degraded` when EventSub is not connected; HTTP success is enough for smoke.
 
-- [ ] **Step 2: Update plan completion status**
+- [x] **Step 2: Update plan completion status**
 
 Update this file’s status block:
 
@@ -615,7 +626,7 @@ Live QA note: confirm history entries after the next real rehearsal or stream.
 
 Check all task boxes in this plan.
 
-- [ ] **Step 3: Commit completion**
+- [x] **Step 3: Commit completion**
 
 Run:
 
