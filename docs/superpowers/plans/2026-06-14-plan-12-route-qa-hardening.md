@@ -17,9 +17,18 @@
 
 ## Current status
 
-**Status:** Planned  
+**Status:** Complete  
 **Created:** 2026-06-14  
-**Branch state at planning:** `main...origin/main [ahead 35]`
+**Completed:** 2026-06-14  
+**Branch state at planning:** `main...origin/main [ahead 35]`  
+**Live QA:** Manual visual pass pending next operator browser session.
+
+## Completion notes
+
+- Centralized dashboard route metadata and reused it in dashboard nav, home route cards, and the overview route guide.
+- Removed the local overlay route `Set` duplication in `App.tsx` and added metadata-driven SSR coverage for every dashboard and overlay route.
+- Updated README and visual QA guidance for the final recovery-console/dashboard surfaces.
+- Verification: compose config checks, `make verify`, `docker compose up -d --build`, `make smoke`, and route spot checks for `/dashboard`, `/dashboard/live`, `/dashboard/config`, `/overlay/alerts`, and `/overlay/debug` passed.
 
 ## Acceptance criteria
 
@@ -64,7 +73,7 @@
 - Modify: `web/src/routes/Home.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Create the dashboard route registry**
+- [x] **Step 1: Create the dashboard route registry**
 
 Create `web/src/lib/dashboardRoutes.ts`:
 
@@ -99,7 +108,7 @@ export const dashboardRoutes: DashboardRoute[] = [
     path: '/dashboard/setup',
     navLabel: 'Setup',
     title: 'OBS setup workflow',
-    description: 'Setup checklist, browser-source URLs, and stream preset guidance.',
+    description: 'Setup checklist for OBS onboarding, smoke checks, and setup decisions.',
     landmarkText: 'Checklist',
     intent: 'setup',
   },
@@ -134,7 +143,7 @@ export function getDashboardRoute(path: string) {
 }
 ```
 
-- [ ] **Step 2: Update dashboard navigation to use metadata**
+- [x] **Step 2: Update dashboard navigation to use metadata**
 
 In `web/src/routes/dashboard/DashboardShell.tsx`:
 
@@ -156,7 +165,7 @@ Remove the local `dashboardLinks` tuple and replace the nav map with:
 ))}
 ```
 
-- [ ] **Step 3: Update home route cards to use route metadata**
+- [x] **Step 3: Update home route cards to use route metadata**
 
 In `web/src/routes/Home.tsx`, import:
 
@@ -174,7 +183,7 @@ const routes = [
 ];
 ```
 
-- [ ] **Step 4: Derive the overview route guide from metadata**
+- [x] **Step 4: Derive the overview route guide from metadata**
 
 In `web/src/routes/dashboard/components/OpsRouteGuide.tsx`, import:
 
@@ -224,7 +233,7 @@ const routeGuides = [
 ] as const;
 ```
 
-- [ ] **Step 5: Remove local overlay route duplication in App routing**
+- [x] **Step 5: Remove local overlay route duplication in App routing**
 
 In `web/src/App.tsx`, import overlay metadata with an alias to avoid naming conflicts:
 
@@ -248,7 +257,7 @@ if (overlayRoutePaths.has(route)) {
 
 Keep the explicit component branches for now; they are the route-to-component map. Metadata owns route discovery, nav/home/docs-adjacent UI, and route test inputs.
 
-- [ ] **Step 6: Add metadata-driven SSR route tests**
+- [x] **Step 6: Add metadata-driven SSR route tests**
 
 In `web/src/App.test.tsx`, import:
 
@@ -283,8 +292,7 @@ it('renders home fallback for unknown paths', () => {
 });
 ```
 
-- [ ] **Step 5: Run verification**
-- [ ] **Step 7: Run verification**
+- [x] **Step 7: Run verification**
 
 Run:
 
@@ -296,8 +304,7 @@ make verify
 
 Expected: all commands pass.
 
-- [ ] **Step 6: Review and commit**
-- [ ] **Step 8: Review and commit**
+- [x] **Step 8: Review and commit**
 
 Request review focused on SSR safety, route metadata duplication removal, and test brittleness. After review passes:
 
@@ -315,44 +322,44 @@ git commit -m "feat: centralize dashboard route metadata"
 - Modify: `docs/runbooks/visual-qa.md`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Update README route wording**
+- [x] **Step 1: Update README route wording**
 
 In `README.md`, keep the route list but align text with the new metadata wording:
 
 ```md
 - `/dashboard/live` — canonical recovery cockpit with readiness, recovery runbook links, build info, EventSub diagnostics, setup checklist status, recent operator actions, and persisted event history.
 - `/dashboard` — overview, system status, build identity, and route guide for choosing the right runbook or dashboard path.
-- `/dashboard/setup` — setup checklist, browser-source URLs, and stream preset guidance.
+- `/dashboard/setup` — setup checklist for OBS onboarding, smoke checks, and setup decisions.
 - `/dashboard/sources` — OBS browser-source URLs, active-profile preset view, and custom CSS copy helpers.
 - `/dashboard/control` — operator quick actions, rehearsals, BRB controls, OBS controls, and session log.
 - `/dashboard/config` — operator secret session storage, automation profiles/show modes, Twitch interaction rules, MPRIS decision, and overlay noise controls.
 ```
 
-- [ ] **Step 2: Refresh visual QA dashboard checklist**
+- [x] **Step 2: Refresh visual QA dashboard checklist**
 
 In `docs/runbooks/visual-qa.md`, update the dashboard route checks to include final Plan 6-11 surfaces:
 
 ```md
 ### `/dashboard`
 
-- [ ] Page loads without a blank screen or console overlay.
-- [ ] Header, status cards, build-info card, and ops route guide are readable.
-- [ ] Route guide points operators to live recovery, config/rules, stream control, sources, and packaging/backup guidance.
-- [ ] No text overflows or clipped panels at the default desktop width.
+- [x] Page loads without a blank screen or console overlay.
+- [x] Header, status cards, build-info card, and ops route guide are readable.
+- [x] Route guide points operators to live recovery, config/rules, stream control, sources, and packaging/backup guidance.
+- [x] No text overflows or clipped panels at the default desktop width.
 
 ### `/dashboard/live`
 
-- [ ] Recovery console, build info, backend readiness, live preflight, EventSub diagnostics, setup checklist, session log, and event history panels are visible.
-- [ ] Recovery-console runbook links are clearly external and do not look like destructive browser actions.
-- [ ] Twitch, EventSub, OBS, operator-secret, event-history, and interaction-rule indicators are easy to scan.
-- [ ] Degraded states are obvious without horizontal scrolling.
+- [x] Recovery console, build info, backend readiness, live preflight, EventSub diagnostics, setup checklist, session log, and event history panels are visible.
+- [x] Recovery-console runbook links are clearly external and do not look like destructive browser actions.
+- [x] Twitch, EventSub, OBS, operator-secret, event-history, and interaction-rule indicators are easy to scan.
+- [x] Degraded states are obvious without horizontal scrolling.
 
 ### `/dashboard/config`
 
-- [ ] Operator secret inputs, automation profiles, Twitch interaction rules, MPRIS decision, and overlay noise controls are aligned.
-- [ ] Import/export textareas stay readable and do not expose operator secret values.
-- [ ] Configuration panels stay readable on a standard laptop viewport.
-- [ ] No form controls are clipped by cards or columns.
+- [x] Operator secret inputs, automation profiles, Twitch interaction rules, MPRIS decision, and overlay noise controls are aligned.
+- [x] Import/export textareas stay readable and do not expose operator secret values.
+- [x] Configuration panels stay readable on a standard laptop viewport.
+- [x] No form controls are clipped by cards or columns.
 ```
 
 Keep existing overlay route checks, but add this note under `## Overlay routes`:
@@ -361,7 +368,7 @@ Keep existing overlay route checks, but add this note under `## Overlay routes`:
 Overlay routes should remain sparse and broadcast-safe. Generic diagnostic or command events may appear in ticker/debug routes; production overlays should not expose raw secrets or token material.
 ```
 
-- [ ] **Step 3: Add README/QA route text assertions**
+- [x] **Step 3: Add README/QA route text assertions**
 
 In `web/src/App.test.tsx`, do not parse Markdown. Instead strengthen SSR tests for the key UI copy that README/QA describes:
 
@@ -373,7 +380,7 @@ expect(renderToString(<App pathname="/dashboard/config" />)).toContain('Twitch i
 
 If these assertions already exist, leave the test file unchanged.
 
-- [ ] **Step 4: Run verification**
+- [x] **Step 4: Run verification**
 
 Run:
 
@@ -384,7 +391,7 @@ make verify
 
 Expected: all commands pass.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
 Request docs consistency review focused on README vs visual QA vs implemented routes. After review passes:
 
@@ -400,7 +407,7 @@ git commit -m "docs: align route visual qa guidance"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-14-plan-12-route-qa-hardening.md`
 
-- [ ] **Step 1: Run compose config checks**
+- [x] **Step 1: Run compose config checks**
 
 Run:
 
@@ -411,7 +418,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.example.yml conf
 
 Expected: both pass with no output.
 
-- [ ] **Step 2: Run full verification and deploy-smoke**
+- [x] **Step 2: Run full verification and deploy-smoke**
 
 Run:
 
@@ -428,7 +435,7 @@ curl --max-time 15 -fsS http://localhost:5173/overlay/debug >/dev/null
 
 Expected: all commands pass. `/readyz` may still return JSON `status: degraded` when EventSub is disconnected, but the HTTP smoke check must succeed.
 
-- [ ] **Step 3: Mark this plan complete**
+- [x] **Step 3: Mark this plan complete**
 
 Update this file near the top:
 
@@ -453,7 +460,7 @@ grep -R "- \[ \]" docs/superpowers/plans/2026-06-14-plan-12-route-qa-hardening.m
 
 Expected: only the standard header prose may include the literal checkbox example; no actual incomplete task lines remain.
 
-- [ ] **Step 4: Commit completion**
+- [x] **Step 4: Commit completion**
 
 Run:
 
@@ -466,8 +473,8 @@ git commit -m "docs: mark plan 12 complete"
 
 ## Review checklist
 
-- [ ] Route metadata does not introduce routing behavior changes beyond nav/home/route-guide data and App known-route checks.
-- [ ] Metadata-driven tests are not brittle to transient fetched data.
-- [ ] Visual QA docs mention final dashboard surfaces built in Plans 6-11.
-- [ ] No secrets, backup archive contents, token files, or `api-data` contents are exposed.
-- [ ] `make verify` passes after every implementation task.
+- [x] Route metadata does not introduce routing behavior changes beyond nav/home/route-guide data and App known-route checks.
+- [x] Metadata-driven tests are not brittle to transient fetched data.
+- [x] Visual QA docs mention final dashboard surfaces built in Plans 6-11.
+- [x] No secrets, backup archive contents, token files, or `api-data` contents are exposed.
+- [x] `make verify` passes after every implementation task.
