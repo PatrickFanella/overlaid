@@ -17,9 +17,16 @@
 
 ## Status
 
-- **Status:** Planned
+- **Status:** Complete
 - **Created:** 2026-06-14
-- **Live QA:** Pending after implementation. Verify `/dashboard/live` as the single recovery cockpit during the next real stream incident/rehearsal.
+- **Completed:** 2026-06-14
+- **Live QA:** Pending next real stream incident/rehearsal. Verify `/dashboard/live` as the single recovery cockpit.
+
+## Completion Notes
+
+- **Implemented:** Live recovery console panel, dashboard ops route guide, and recovery-console docs.
+- **Verification:** `make verify`, compose config checks, `docker compose up -d --build`, `make smoke`, `/dashboard/live` and `/dashboard` route spot-checks.
+- **Deploy smoke:** Passed. `/readyz` returned HTTP 200 with `status: degraded` only because `twitch_eventsub` was not connected; recovery-console routes loaded successfully.
 
 ---
 
@@ -73,7 +80,7 @@
 - Modify: `web/src/routes/dashboard/Live.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Create the recovery console component**
+- [x] **Step 1: Create the recovery console component**
 
 Create `web/src/routes/dashboard/components/RecoveryConsolePanel.tsx`:
 
@@ -145,7 +152,7 @@ export function RecoveryConsolePanel() {
 }
 ```
 
-- [ ] **Step 2: Wire it into `/dashboard/live` with build identity**
+- [x] **Step 2: Wire it into `/dashboard/live` with build identity**
 
 Modify `web/src/routes/dashboard/Live.tsx` imports:
 
@@ -162,7 +169,7 @@ Render after the opening Live header and before readiness:
 <ReadinessPanel report={status.readiness} loading={status.loading} error={status.readinessError} />
 ```
 
-- [ ] **Step 3: Add SSR route assertions**
+- [x] **Step 3: Add SSR route assertions**
 
 Modify the `/dashboard/live` test in `web/src/App.test.tsx` to assert:
 
@@ -190,7 +197,7 @@ it('renders the recovery console without browser APIs', () => {
 
 Remember to import `RecoveryConsolePanel` in `App.test.tsx` if adding the direct test.
 
-- [ ] **Step 4: Verify Task 1**
+- [x] **Step 4: Verify Task 1**
 
 Run:
 
@@ -202,7 +209,7 @@ make verify
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git add web/src/routes/dashboard/components/RecoveryConsolePanel.tsx web/src/routes/dashboard/Live.tsx web/src/App.test.tsx
@@ -218,7 +225,7 @@ git commit -m "feat: add live recovery console"
 - Modify: `web/src/routes/dashboard/Overview.tsx`
 - Modify: `web/src/App.test.tsx`
 
-- [ ] **Step 1: Create route guide component**
+- [x] **Step 1: Create route guide component**
 
 Create `web/src/routes/dashboard/components/OpsRouteGuide.tsx`:
 
@@ -257,7 +264,7 @@ export function OpsRouteGuide() {
 }
 ```
 
-- [ ] **Step 2: Render route guide on overview**
+- [x] **Step 2: Render route guide on overview**
 
 Modify `web/src/routes/dashboard/Overview.tsx` imports:
 
@@ -272,7 +279,7 @@ Render after `BuildInfoPanel` and before existing route buttons:
 <OpsRouteGuide />
 ```
 
-- [ ] **Step 3: Update overview SSR assertions**
+- [x] **Step 3: Update overview SSR assertions**
 
 Modify the `/dashboard` test in `web/src/App.test.tsx`:
 
@@ -284,7 +291,7 @@ expect(html).toContain('package / backup');
 expect(html).toContain('https://git.subcult.tv/PatrickFanella/over-laid/src/branch/main/docs/runbooks/production-packaging.md');
 ```
 
-- [ ] **Step 4: Verify Task 2**
+- [x] **Step 4: Verify Task 2**
 
 Run:
 
@@ -296,7 +303,7 @@ make verify
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git add web/src/routes/dashboard/components/OpsRouteGuide.tsx web/src/routes/dashboard/Overview.tsx web/src/App.test.tsx
@@ -313,7 +320,7 @@ git commit -m "feat: add dashboard ops route guide"
 - Modify: `docs/runbooks/production-packaging.md`
 - Modify: `docs/runbooks/live-stream-preflight.md`
 
-- [ ] **Step 1: Update README route guidance**
+- [x] **Step 1: Update README route guidance**
 
 Patch `README.md` route/runbook section so it states:
 
@@ -328,7 +335,7 @@ Also add one sentence near runbook links:
 When something degrades during a stream, open `/dashboard/live` first; use `/dashboard` when you need to choose the right operator route or runbook.
 ```
 
-- [ ] **Step 2: Update production recovery runbook**
+- [x] **Step 2: Update production recovery runbook**
 
 Patch `docs/runbooks/production-recovery.md` after the fast checks section:
 
@@ -336,7 +343,7 @@ Patch `docs/runbooks/production-recovery.md` after the fast checks section:
 Use `/dashboard/live` as the recovery console during an incident. It combines readiness incidents, build identity, EventSub diagnostics, recent persisted events, and links to recovery runbooks. Destructive recovery actions such as token/state/history/rules removal and `api-data` restore remain CLI-only.
 ```
 
-- [ ] **Step 3: Update production packaging runbook**
+- [x] **Step 3: Update production packaging runbook**
 
 Patch `docs/runbooks/production-packaging.md` near `/version` guidance:
 
@@ -346,7 +353,7 @@ The dashboard overview and live recovery cockpit both surface build metadata fro
 
 Keep existing backup sensitivity warnings intact.
 
-- [ ] **Step 4: Update live preflight runbook**
+- [x] **Step 4: Update live preflight runbook**
 
 Patch `docs/runbooks/live-stream-preflight.md` near the first dashboard step:
 
@@ -354,7 +361,7 @@ Patch `docs/runbooks/live-stream-preflight.md` near the first dashboard step:
 `/dashboard/live` is both the preflight page and the recovery cockpit. During setup, read the preflight cards first; during incidents, use the recovery console and readiness incidents first.
 ```
 
-- [ ] **Step 5: Verify docs**
+- [x] **Step 5: Verify docs**
 
 Run:
 
@@ -364,7 +371,7 @@ make verify
 
 Expected: passes.
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 ```bash
 git add README.md docs/runbooks/production-recovery.md docs/runbooks/production-packaging.md docs/runbooks/live-stream-preflight.md
@@ -378,7 +385,7 @@ git commit -m "docs: document recovery console workflow"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-14-plan-11-recovery-console.md`
 
-- [ ] **Step 1: Run compose config checks**
+- [x] **Step 1: Run compose config checks**
 
 Run:
 
@@ -389,7 +396,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.example.yml conf
 
 Expected: both pass.
 
-- [ ] **Step 2: Run full verify, rebuild, smoke, and route checks**
+- [x] **Step 2: Run full verify, rebuild, smoke, and route checks**
 
 Run:
 
@@ -403,7 +410,7 @@ curl --max-time 15 -fsS http://localhost:5173/dashboard >/dev/null
 
 Expected: all pass. `/readyz` may still return JSON `status: degraded` if EventSub is not connected; smoke only requires HTTP success.
 
-- [ ] **Step 3: Update this plan completion block**
+- [x] **Step 3: Update this plan completion block**
 
 At the top of this file, change status to complete and add:
 
@@ -418,7 +425,7 @@ At the top of this file, change status to complete and add:
 
 Check every task box.
 
-- [ ] **Step 4: Commit completion**
+- [x] **Step 4: Commit completion**
 
 ```bash
 git add docs/superpowers/plans/2026-06-14-plan-11-recovery-console.md
@@ -429,9 +436,9 @@ git commit -m "docs: mark plan 11 complete"
 
 ## Review Checklist
 
-- [ ] No browser backup/restore automation was introduced.
-- [ ] No secrets, tokens, state archives, or raw `api-data` contents are displayed.
-- [ ] `/dashboard/live` remains SSR-safe and fetch failures remain non-blocking.
-- [ ] `/dashboard` still renders without requiring API calls during server render.
-- [ ] All new UI copy points to existing runbooks and does not invent unsupported recovery actions.
-- [ ] `make verify` passes before each implementation commit.
+- [x] No browser backup/restore automation was introduced.
+- [x] No secrets, tokens, state archives, or raw `api-data` contents are displayed.
+- [x] `/dashboard/live` remains SSR-safe and fetch failures remain non-blocking.
+- [x] `/dashboard` still renders without requiring API calls during server render.
+- [x] All new UI copy points to existing runbooks and does not invent unsupported recovery actions.
+- [x] `make verify` passes before each implementation commit.
