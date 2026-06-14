@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
 )
 
@@ -55,6 +57,11 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 		checks = append(checks, readinessCheck{Name: "retained_state", Status: "degraded", Hint: "overlay state file could not be loaded; back it up, inspect JSON, or clear retained overlay state"})
 	} else {
 		checks = append(checks, readinessCheck{Name: "retained_state", Status: "ok"})
+	}
+	if s.historyLoadError != "" {
+		checks = append(checks, readinessCheck{Name: "event_history", Status: "degraded", Hint: "event history file could not be loaded; back it up or clear malformed JSONL"})
+	} else {
+		checks = append(checks, readinessCheck{Name: "event_history", Status: "ok"})
 	}
 
 	checks = append(checks, s.buildTwitchReadinessChecks(r.Context())...)
@@ -176,7 +183,7 @@ func (s *Server) testAlert(w http.ResponseWriter, r *http.Request) {
 	if !s.rememberOverlayState(w, event) {
 		return
 	}
-	s.bus.Publish(event)
+	s.publishEvent(event)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -185,7 +192,7 @@ func (s *Server) clearEvents(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "unable to clear overlay state", http.StatusInternalServerError)
 		return
 	}
-	s.bus.Publish(events.NewClear("manual"))
+	s.publishEvent(events.NewClear("manual"))
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -208,7 +215,7 @@ func (s *Server) brbStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to persist brb state", http.StatusInternalServerError)
 		return
 	}
-	s.bus.Publish(event)
+	s.publishEvent(event)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -225,7 +232,38 @@ func (s *Server) publishEventSubEvent(event events.Event) {
 			return
 		}
 	}
-	s.bus.Publish(event)
+	s.publishEvent(event)
+}
+
+func (s *Server) publishEvent(event events.Event) {
+	if s.bus != nil {
+		s.bus.Publish(event)
+	}
+	if s.history != nil && s.historyWritable {
+		if err := s.history.Append(event); err != nil {
+			log.Printf("failed to append event history: %v", err)
+		}
+	}
+}
+
+func (s *Server) eventHistory(w http.ResponseWriter, r *http.Request) {
+	limit := 50
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			http.Error(w, "limit must be a positive integer", http.StatusBadRequest)
+			return
+		}
+		if parsed > 250 {
+			parsed = 250
+		}
+		limit = parsed
+	}
+	items := []events.Event{}
+	if s.history != nil {
+		items = s.history.List(limit)
+	}
+	writeJSON(w, history.Response{Events: items})
 }
 
 func writeSSEEvent(w http.ResponseWriter, event events.Event) bool {
@@ -259,7 +297,7 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 	if !s.rememberOverlayState(w, event) {
 		return
 	}
-	s.bus.Publish(event)
+	s.publishEvent(event)
 	w.WriteHeader(http.StatusAccepted)
 }
 

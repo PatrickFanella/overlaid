@@ -10,6 +10,7 @@ import (
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/mpris"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/state"
@@ -19,6 +20,9 @@ import (
 type Server struct {
 	config                    config.Config
 	bus                       *events.Bus
+	history                   *history.Store
+	historyLoadError          string
+	historyWritable           bool
 	obs                       obsws.Client
 	state                     *state.Store
 	stateLoadError            string
@@ -29,13 +33,21 @@ type Server struct {
 }
 
 func NewServer(cfg config.Config, bus *events.Bus) *Server {
+	eventHistory := history.New(cfg.EventHistoryFile, cfg.EventHistoryLimit)
+	historyLoadError := ""
+	historyWritable := true
+	if err := eventHistory.Load(); err != nil {
+		historyLoadError = err.Error()
+		historyWritable = false
+		log.Printf("failed to load event history: %v", err)
+	}
 	store := state.New(cfg.OverlayStateFile)
 	stateLoadError := ""
 	if err := store.Load(); err != nil {
 		stateLoadError = err.Error()
 		log.Printf("failed to load overlay state: %v", err)
 	}
-	server := &Server{config: cfg, bus: bus, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, stateLoadError: stateLoadError, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
+	server := &Server{config: cfg, bus: bus, history: eventHistory, historyLoadError: historyLoadError, historyWritable: historyWritable, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, stateLoadError: stateLoadError, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
 	if err := server.twitch.loadPersistedToken(); err != nil {
 		server.twitchTokenLoadError = err.Error()
 		log.Printf("failed to load twitch token: %v", err)
@@ -56,7 +68,7 @@ func (s *Server) StartBackground(ctx context.Context) {
 			poller := mpris.Poller{
 				Reader:   mpris.DBusReader{Player: s.config.MPRISPlayer, PlayerPriority: s.config.MPRISPlayerPriority},
 				Interval: s.config.MPRISPollInterval,
-				Publish:  s.bus.Publish,
+				Publish:  s.publishEvent,
 			}
 			go func() {
 				log.Printf("MPRIS now-playing background worker enabled")

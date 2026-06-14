@@ -10,6 +10,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/auth/twitch/callback", s.twitchCallback)
 	s.mux.HandleFunc("GET /api/auth/twitch/status", s.twitchStatus)
 	s.mux.HandleFunc("GET /api/events/stream", s.streamEvents)
+	s.mux.HandleFunc("GET /api/events/history", s.eventHistory)
 	s.mux.HandleFunc("POST /api/events/test-alert", s.requireOperator(s.testAlert))
 	s.mux.HandleFunc("POST /api/events/clear", s.requireOperator(s.clearEvents))
 	s.mux.HandleFunc("POST /api/events/brb", s.requireOperator(s.brbStatus))

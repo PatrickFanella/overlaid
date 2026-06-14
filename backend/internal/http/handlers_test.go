@@ -14,6 +14,7 @@ import (
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 	"github.com/gorilla/websocket"
 )
 
@@ -73,6 +74,7 @@ func TestReadyzReportsProcessAndOptionalDependencies(t *testing.T) {
 	assertReadyzCheckSet(t, body.Checks, map[string]string{
 		"process":         "ok",
 		"retained_state":  "ok",
+		"event_history":   "ok",
 		"twitch_config":   "degraded",
 		"twitch_auth":     "degraded",
 		"twitch_eventsub": "degraded",
@@ -109,6 +111,36 @@ func TestReadyzReportsStateLoadFailure(t *testing.T) {
 	}
 	if !readyzHasCheck(body.Checks, "retained_state", "degraded") {
 		t.Fatalf("expected retained_state degraded check, got %#v", body.Checks)
+	}
+	if !readyzHasCheck(body.Checks, "event_history", "ok") {
+		t.Fatalf("expected event_history ok check, got %#v", body.Checks)
+	}
+}
+
+func TestReadyzReportsHistoryLoadFailure(t *testing.T) {
+	historyPath := filepath.Join(t.TempDir(), "event-history.jsonl")
+	if err := os.WriteFile(historyPath, []byte("not-json"), 0o600); err != nil {
+		t.Fatalf("write corrupt history: %v", err)
+	}
+	server := NewServer(config.Config{AllowedOrigin: "*", EventHistoryFile: historyPath}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 degraded report, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body readyzResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode readyz: %v", err)
+	}
+	if body.Status != "degraded" {
+		t.Fatalf("expected degraded status, got %#v", body)
+	}
+	if !readyzHasCheck(body.Checks, "event_history", "degraded") {
+		t.Fatalf("expected event_history degraded check, got %#v", body.Checks)
 	}
 }
 
@@ -175,6 +207,7 @@ func TestReadyzReturnsDegradedWhenOBSHelloStalls(t *testing.T) {
 	assertReadyzCheckSet(t, body.Checks, map[string]string{
 		"process":         "ok",
 		"retained_state":  "ok",
+		"event_history":   "ok",
 		"twitch_config":   "degraded",
 		"twitch_auth":     "degraded",
 		"twitch_eventsub": "degraded",
@@ -219,6 +252,9 @@ func TestReadyzReportsOBSAuthFailureSeparately(t *testing.T) {
 	}
 	if !readyzHasCheck(body.Checks, "obs_reachable", "ok") || !readyzHasCheck(body.Checks, "obs_auth", "degraded") {
 		t.Fatalf("expected obs reachable ok and obs auth degraded, got %#v", body.Checks)
+	}
+	if !readyzHasCheck(body.Checks, "event_history", "ok") {
+		t.Fatalf("expected event_history ok check, got %#v", body.Checks)
 	}
 	if body.Status != "degraded" {
 		t.Fatalf("expected degraded overall status, got %#v", body)
@@ -996,5 +1032,219 @@ func TestStreamEventsWritesSSE(t *testing.T) {
 	}
 	if got := rec.Body.String(); got == "" || !bytes.Contains([]byte(got), []byte("event: alert")) {
 		t.Fatalf("expected SSE alert payload, got %q", got)
+	}
+}
+
+func TestEventHistoryEndpointRecordsAndSanitizes(t *testing.T) {
+	historyFile := filepath.Join(t.TempDir(), "event-history.jsonl")
+	stateFile := filepath.Join(t.TempDir(), "overlay-state.json")
+	server := NewServer(config.Config{AllowedOrigin: "*", OverlayStateFile: stateFile, EventHistoryFile: historyFile, EventHistoryLimit: 10}, events.NewBus(4))
+
+	manualReq := httptest.NewRequest(http.MethodPost, "/api/events/test-alert", bytes.NewBufferString(`{"title":"Manual alert","message":"Welcome back","severity":"success","data":{"safe":"keep","operatorSecret":"hide","access_token":"hide","password":"hide","authorization":"hide","twitchEvent":{"raw":true},"items":["one","two"],"count":2,"ratio":1.5}}`))
+	manualRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(manualRec, manualReq)
+	if manualRec.Code != http.StatusAccepted {
+		t.Fatalf("expected manual alert 202, got %d: %s", manualRec.Code, manualRec.Body.String())
+	}
+
+	clearReq := httptest.NewRequest(http.MethodPost, "/api/events/clear", nil)
+	clearRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(clearRec, clearReq)
+	if clearRec.Code != http.StatusAccepted {
+		t.Fatalf("expected clear 202, got %d: %s", clearRec.Code, clearRec.Body.String())
+	}
+
+	webhookReq := httptest.NewRequest(http.MethodPost, "/api/integrations/webhook/gitea", bytes.NewBufferString(`{"title":"Webhook alert","message":"Incoming","severity":"warning"}`))
+	webhookRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(webhookRec, webhookReq)
+	if webhookRec.Code != http.StatusAccepted {
+		t.Fatalf("expected webhook 202, got %d: %s", webhookRec.Code, webhookRec.Body.String())
+	}
+
+	server.publishEventSubEvent(events.NewBRB("eventsub", "BRB", "Intermission", map[string]any{"active": true, "retainedStateKey": "ignore"}))
+	server.publishEvent(events.NewNowPlaying("mpris", "Track title", "Artist name", map[string]any{"player": "Feishin", "secretToken": "hidden"}))
+
+	queryReq := httptest.NewRequest(http.MethodGet, "/api/events/history?limit=10", nil)
+	queryRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(queryRec, queryReq)
+	if queryRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", queryRec.Code, queryRec.Body.String())
+	}
+
+	var body history.Response
+	if err := json.Unmarshal(queryRec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode history response: %v", err)
+	}
+	if len(body.Events) != 5 {
+		t.Fatalf("expected 5 events, got %#v", body.Events)
+	}
+	if body.Events[0].Type != events.EventTypeNowPlaying || body.Events[0].Source != "mpris" {
+		t.Fatalf("unexpected newest event: %#v", body.Events[0])
+	}
+	if body.Events[1].Type != events.EventTypeBRB || body.Events[1].Source != "eventsub" {
+		t.Fatalf("unexpected eventsub event: %#v", body.Events[1])
+	}
+	if body.Events[2].Type != events.EventTypeAlert || body.Events[2].Source != "gitea" {
+		t.Fatalf("unexpected webhook event: %#v", body.Events[2])
+	}
+	if body.Events[3].Type != events.EventTypeClear || body.Events[3].Source != "manual" {
+		t.Fatalf("unexpected clear event: %#v", body.Events[3])
+	}
+	if body.Events[4].Type != events.EventTypeAlert || body.Events[4].Source != "manual" {
+		t.Fatalf("unexpected manual event: %#v", body.Events[4])
+	}
+	manualEvent := body.Events[4]
+	for _, key := range []string{"operatorSecret", "access_token", "password", "authorization", "twitchEvent"} {
+		if _, ok := manualEvent.Data[key]; ok {
+			t.Fatalf("expected %s to be removed: %#v", key, manualEvent.Data)
+		}
+	}
+	items, ok := manualEvent.Data["items"].([]any)
+	if !ok || len(items) != 2 || items[0] != "one" {
+		t.Fatalf("expected capped string list, got %#v", manualEvent.Data["items"])
+	}
+	if manualEvent.Data["count"] != float64(2) || manualEvent.Data["ratio"] != 1.5 {
+		t.Fatalf("expected numeric values to be preserved, got %#v", manualEvent.Data)
+	}
+	if _, ok := body.Events[0].Data["secretToken"]; ok {
+		t.Fatalf("expected MPRIS secretToken to be removed: %#v", body.Events[0].Data)
+	}
+}
+
+func TestEventHistoryEndpointValidationAndNilSafety(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+	server.history = nil
+
+	validReq := httptest.NewRequest(http.MethodGet, "/api/events/history", nil)
+	validRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(validRec, validReq)
+	if validRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", validRec.Code, validRec.Body.String())
+	}
+	var body history.Response
+	if err := json.Unmarshal(validRec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode empty history response: %v", err)
+	}
+	if len(body.Events) != 0 {
+		t.Fatalf("expected empty events, got %#v", body.Events)
+	}
+
+	invalidReq := httptest.NewRequest(http.MethodGet, "/api/events/history?limit=bad", nil)
+	invalidRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(invalidRec, invalidReq)
+	if invalidRec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", invalidRec.Code, invalidRec.Body.String())
+	}
+}
+
+func TestEventHistoryPersistsAcrossServerRestart(t *testing.T) {
+	historyFile := filepath.Join(t.TempDir(), "event-history.jsonl")
+	stateFile := filepath.Join(t.TempDir(), "overlay-state.json")
+	server := NewServer(config.Config{AllowedOrigin: "*", OverlayStateFile: stateFile, EventHistoryFile: historyFile, EventHistoryLimit: 10}, events.NewBus(4))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/events/test-alert", bytes.NewBufferString(`{"title":"Persisted","message":"Across restarts"}`))
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	restarted := NewServer(config.Config{AllowedOrigin: "*", OverlayStateFile: stateFile, EventHistoryFile: historyFile, EventHistoryLimit: 10}, events.NewBus(4))
+	query := httptest.NewRequest(http.MethodGet, "/api/events/history", nil)
+	queryRec := httptest.NewRecorder()
+	restarted.Handler().ServeHTTP(queryRec, query)
+	if queryRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", queryRec.Code, queryRec.Body.String())
+	}
+	var persisted history.Response
+	if err := json.Unmarshal(queryRec.Body.Bytes(), &persisted); err != nil {
+		t.Fatalf("decode history response: %v", err)
+	}
+	if len(persisted.Events) != 1 || persisted.Events[0].Title != "Persisted" {
+		t.Fatalf("expected persisted event, got %#v", persisted.Events)
+	}
+}
+
+func TestMalformedHistoryDisablesWritesAndKeepsReadyzDegraded(t *testing.T) {
+	historyFile := filepath.Join(t.TempDir(), "event-history.jsonl")
+	if err := os.WriteFile(historyFile, []byte("{\"id\":\"ok\"}\n{\"id\":"), 0o600); err != nil {
+		t.Fatalf("write malformed history: %v", err)
+	}
+
+	server := NewServer(config.Config{AllowedOrigin: "*", EventHistoryFile: historyFile}, events.NewBus(4))
+	if server.historyWritable {
+		t.Fatal("expected history writes to be disabled after load failure")
+	}
+
+	readyReq := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	readyRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(readyRec, readyReq)
+	if readyRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 readyz response, got %d: %s", readyRec.Code, readyRec.Body.String())
+	}
+	var readyBody readyzResponse
+	if err := json.Unmarshal(readyRec.Body.Bytes(), &readyBody); err != nil {
+		t.Fatalf("decode readyz: %v", err)
+	}
+	if readyBody.Status != "degraded" || !readyzHasCheck(readyBody.Checks, "event_history", "degraded") {
+		t.Fatalf("expected degraded event_history readiness, got %#v", readyBody)
+	}
+
+	before, err := os.ReadFile(historyFile)
+	if err != nil {
+		t.Fatalf("read malformed history before publish: %v", err)
+	}
+
+	client := server.bus.Subscribe()
+	defer server.bus.Unsubscribe(client.ID)
+
+	server.publishEvent(events.NewAlert("manual", "Recovered", "Still online", events.SeverityInfo))
+
+	select {
+	case got := <-client.Events:
+		if got.Title != "Recovered" || got.Source != "manual" {
+			t.Fatalf("unexpected published event: %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for published event")
+	}
+
+	after, err := os.ReadFile(historyFile)
+	if err != nil {
+		t.Fatalf("read malformed history after publish: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatalf("expected malformed history file to remain unchanged, before=%q after=%q", before, after)
+	}
+}
+
+func TestPublishEventPublishesBeforeHistoryAppendFailure(t *testing.T) {
+	historyDir := filepath.Join(t.TempDir(), "history")
+	if err := os.Mkdir(historyDir, 0o700); err != nil {
+		t.Fatalf("mkdir history dir: %v", err)
+	}
+	if err := os.Chmod(historyDir, 0o500); err != nil {
+		t.Fatalf("chmod history dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(historyDir, 0o700) })
+
+	historyFile := filepath.Join(historyDir, "event-history.jsonl")
+	server := NewServer(config.Config{AllowedOrigin: "*", EventHistoryFile: historyFile}, events.NewBus(4))
+	client := server.bus.Subscribe()
+	defer server.bus.Unsubscribe(client.ID)
+
+	server.publishEvent(events.NewAlert("manual", "Fanout", "Before write", events.SeverityInfo))
+
+	select {
+	case got := <-client.Events:
+		if got.Title != "Fanout" || got.Source != "manual" {
+			t.Fatalf("unexpected published event: %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for published event")
+	}
+
+	if _, err := os.Stat(historyFile); err == nil {
+		t.Fatalf("expected history append to fail, but file exists at %s", historyFile)
 	}
 }
