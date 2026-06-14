@@ -12,6 +12,7 @@ import {
   selectQuickActionsForProfile,
 } from './lib/automationProfiles';
 import { resolveQuickActionSequence, runQuickActionSequence } from './lib/quickActionSequences';
+import { BuildInfoPanel } from './routes/dashboard/components/BuildInfoPanel';
 import { QuickActionRunner } from './routes/dashboard/components/QuickActionRunner';
 import { EventHistoryPanel } from './routes/dashboard/components/EventHistoryPanel';
 import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
@@ -40,6 +41,9 @@ describe('App routing', () => {
     expect(html).toContain('over-laid command center');
     expect(html).toContain('System status');
     expect(html).toContain('Twitch login');
+    expect(html).toContain('Build info');
+    expect(html).toContain('/version');
+    expect(html).toContain('Build report unavailable.');
   });
 
   it('renders the dashboard setup route', () => {
@@ -121,6 +125,18 @@ describe('App routing', () => {
     expect(html).toContain('Chat aliases');
     expect(html).toContain('Channel point rewards');
     expect(html).toContain('Operator secret required to save');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('renders the build info panel on the server without fetching', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = renderToString(<BuildInfoPanel apiBaseUrl="http://example.test" />);
+
+    expect(html).toContain('Build info');
+    expect(html).toContain('/version');
+    expect(html).toContain('Build report unavailable.');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

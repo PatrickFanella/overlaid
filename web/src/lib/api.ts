@@ -130,6 +130,16 @@ export type OBSSceneList = {
   scenes: OBSScene[];
 };
 
+export type BuildInfo = {
+  name: string;
+  version: string;
+  commit: string;
+  builtAt: string;
+  goVersion: string;
+  os: string;
+  arch: string;
+};
+
 export function apiUrl(path: string, explicitBaseUrl?: string) {
   return new URL(path, getOverlayApiBaseUrl(explicitBaseUrl)).toString();
 }
@@ -182,6 +192,14 @@ export async function fetchReadiness(explicitBaseUrl?: string) {
     throw new Error(`Readiness failed: ${response.status}`);
   }
   return (await response.json()) as ReadinessReport;
+}
+
+export async function fetchBuildInfo(explicitBaseUrl?: string) {
+  const response = await fetch(apiUrl('/version', explicitBaseUrl), { headers: { Accept: 'application/json' } });
+  if (!response.ok) {
+    throw new Error(`Build info failed: ${response.status}`);
+  }
+  return (await response.json()) as BuildInfo;
 }
 
 export async function fetchEventHistory(limit = 24, explicitBaseUrl?: string) {
