@@ -5,8 +5,17 @@ import { dashboardRoutes } from './lib/dashboardRoutes';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
 import { fetchTwitchInteractions } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
-import { defaultDashboardConfig, loadDashboardConfig, normalizeDashboardConfig, type QuickAction } from './lib/dashboardConfig';
+import {
+  defaultDashboardConfig,
+  loadDashboardConfig,
+  loadOperatorSecret,
+  normalizeDashboardConfig,
+  saveDashboardConfig,
+  saveOperatorSecret,
+  type QuickAction,
+} from './lib/dashboardConfig';
 import { formatQuickActionRunResult, getConfirmableActionLabel, getVisibleQuickActions, nextConfirmableActionState } from './lib/controlActions';
+import { buildHideBRBPayload, buildShowBRBPayload, parseBRBItems } from './lib/brbPayloads';
 import {
   exportDashboardConfig,
   getActiveAutomationProfile,
@@ -377,6 +386,70 @@ describe('overlay event utilities', () => {
 describe('dashboard config loading', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('round-trips dashboard config through localStorage', () => {
+    const localStorage = new Map<string, string>();
+    const sessionStorage = new Map<string, string>();
+
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => localStorage.get(key) ?? null,
+        setItem: (key: string, value: string) => localStorage.set(key, value),
+        removeItem: (key: string) => localStorage.delete(key),
+      },
+      sessionStorage: {
+        getItem: (key: string) => sessionStorage.get(key) ?? null,
+        setItem: (key: string, value: string) => sessionStorage.set(key, value),
+        removeItem: (key: string) => sessionStorage.delete(key),
+      },
+    });
+
+    const config = normalizeDashboardConfig({ ...defaultDashboardConfig, activeAutomationProfileId: 'main-live' });
+    saveDashboardConfig(config);
+
+    expect(loadDashboardConfig().activeAutomationProfileId).toBe('main-live');
+  });
+
+  it('stores operator secret in sessionStorage only', () => {
+    const localStorageSet = vi.fn();
+    const sessionStorageSet = vi.fn();
+
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: () => null,
+        setItem: localStorageSet,
+        removeItem: vi.fn(),
+      },
+      sessionStorage: {
+        getItem: () => 'operator-secret',
+        setItem: sessionStorageSet,
+        removeItem: vi.fn(),
+      },
+    });
+
+    saveOperatorSecret('operator-secret');
+
+    expect(loadOperatorSecret()).toBe('operator-secret');
+    expect(localStorageSet).not.toHaveBeenCalled();
+    expect(sessionStorageSet).toHaveBeenCalledWith('overlaid.operatorSecret.session.v1', 'operator-secret');
+  });
+
+  it('falls back to defaults for malformed dashboard config JSON', () => {
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: () => '{not-json',
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      },
+      sessionStorage: {
+        getItem: () => null,
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      },
+    });
+
+    expect(loadDashboardConfig().activeAutomationProfileId).toBe(defaultDashboardConfig.activeAutomationProfileId);
   });
 
   it('adds default automation profiles to old local storage configs', () => {
@@ -757,5 +830,32 @@ describe('quick action sequence utilities', () => {
 
     expect(calls).toEqual(['a', 'b']);
     expect(result.failures).toEqual(['Go Main: boom', 'Refresh Alerts: boom']);
+  });
+});
+
+describe('BRB payload helpers', () => {
+  it('parses and trims BRB items', () => {
+    expect(parseBRBItems(' Hydrate \n\n Stretch \n')).toEqual(['Hydrate', 'Stretch']);
+  });
+
+  it('builds trimmed BRB show payloads with fallbacks', () => {
+    expect(buildShowBRBPayload({ title: ' ', message: ' ', eta: ' 5 min ', itemsText: ' A \n B ' })).toEqual({
+      active: true,
+      title: 'Be right back',
+      message: 'Short intermission. Stream resumes soon.',
+      eta: '5 min',
+      items: ['A', 'B'],
+    });
+  });
+
+  it('builds the inactive BRB hide payload', () => {
+    expect(buildHideBRBPayload()).toEqual({
+      active: false,
+      title: 'Be right back',
+      message: 'Short intermission. Stream resumes soon.',
+      eta: '5 min',
+      items: ['Hydrate', 'Stretch', 'Chat stays live'],
+      data: { preset: 'sample-hide' },
+    });
   });
 });

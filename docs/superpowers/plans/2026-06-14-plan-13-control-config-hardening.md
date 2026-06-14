@@ -266,7 +266,7 @@ git commit -m "test: harden quick action helpers"
 Create `web/src/lib/brbPayloads.ts`:
 
 ```ts
-import { sampleBRBShow } from './dashboardSamples';
+import { sampleBRBHide, sampleBRBShow } from './dashboardSamples';
 
 export function parseBRBItems(value: string) {
   return value
@@ -286,13 +286,7 @@ export function buildShowBRBPayload({ title, message, eta, itemsText }: { title:
 }
 
 export function buildHideBRBPayload() {
-  return {
-    active: false,
-    title: 'BRB overlay',
-    message: 'Waiting for intermission command',
-    eta: '',
-    items: [],
-  };
+  return { ...sampleBRBHide, active: false };
 }
 ```
 
@@ -395,12 +389,13 @@ it('builds trimmed BRB show payloads with fallbacks', () => {
 });
 
 it('builds the inactive BRB hide payload', () => {
-  expect(buildHideBRBPayload()).toMatchObject({
+  expect(buildHideBRBPayload()).toEqual({
     active: false,
-    title: 'BRB overlay',
-    message: 'Waiting for intermission command',
-    eta: '',
-    items: [],
+    title: 'Be right back',
+    message: 'Short intermission. Stream resumes soon.',
+    eta: '5 min',
+    items: ['Hydrate', 'Stretch', 'Chat stays live'],
+    data: { preset: 'sample-hide' },
   });
 });
 ```

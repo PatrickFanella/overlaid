@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { setBRBStatus } from '../../../lib/api';
-import { sampleBRBHide, sampleBRBShow } from '../../../lib/dashboardSamples';
+import { buildHideBRBPayload, buildShowBRBPayload } from '../../../lib/brbPayloads';
+import { sampleBRBShow } from '../../../lib/dashboardSamples';
 
 type BRBControlProps = {
   apiBaseUrl: string;
@@ -17,17 +18,8 @@ export function BRBControl({ apiBaseUrl, operatorSecret, isRunning, compact = fa
   const [eta, setEta] = useState(sampleBRBShow.eta);
   const [itemsText, setItemsText] = useState(sampleBRBShow.items.join('\n'));
 
-  function parseItems(value: string) {
-    return value
-      .split('\n')
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
   function submitBRB(nextActive = active) {
-    const payload = nextActive
-      ? { active: true, title: title.trim() || sampleBRBShow.title, message: message.trim() || sampleBRBShow.message, eta: eta.trim(), items: parseItems(itemsText) }
-      : { ...sampleBRBHide, active: false };
+    const payload = nextActive ? buildShowBRBPayload({ title, message, eta, itemsText }) : buildHideBRBPayload();
 
     runAction(nextActive ? 'Show BRB' : 'Hide BRB', async () => {
       await setBRBStatus(payload, apiBaseUrl, operatorSecret);
