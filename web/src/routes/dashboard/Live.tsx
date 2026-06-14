@@ -17,8 +17,10 @@ import { EventSubDiagnostics } from './components/EventSubDiagnostics';
 import { EventHistoryPanel } from './components/EventHistoryPanel';
 import { LivePreflight } from './components/LivePreflight';
 import { LiveChecklistSummary } from './components/LiveChecklistSummary';
+import { RecoveryConsolePanel } from './components/RecoveryConsolePanel';
 import { ReadinessPanel } from './components/ReadinessPanel';
 import { SessionLogPanel } from './components/SessionLogPanel';
+import { BuildInfoPanel } from './components/BuildInfoPanel';
 
 type LiveStatus = {
   twitch: TwitchStatus | null;
@@ -91,6 +93,8 @@ export function DashboardLivePage() {
         </div>
       </section>
 
+      <RecoveryConsolePanel />
+      <BuildInfoPanel apiBaseUrl={apiBaseUrl} />
       <ReadinessPanel report={status.readiness} loading={status.loading} error={status.readinessError} />
       <LivePreflight twitch={status.twitch} obs={status.obs} config={config} operatorSecret={operatorSecret} />
       <EventSubDiagnostics status={status.twitch} />

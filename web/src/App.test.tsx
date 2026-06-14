@@ -17,6 +17,7 @@ import { QuickActionRunner } from './routes/dashboard/components/QuickActionRunn
 import { EventHistoryPanel } from './routes/dashboard/components/EventHistoryPanel';
 import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
 import { TwitchInteractionsManager } from './routes/dashboard/components/TwitchInteractionsManager';
+import { RecoveryConsolePanel } from './routes/dashboard/components/RecoveryConsolePanel';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -58,6 +59,12 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/dashboard/live" />);
 
     expect(html).toContain('Live ops cockpit');
+    expect(html).toContain('Recovery console');
+    expect(html).toContain('no destructive browser actions');
+    expect(html).toContain('Production recovery');
+    expect(html).toContain('Packaging + backups');
+    expect(html).toContain('Build info');
+    expect(html).toContain('Build report unavailable.');
     expect(html).toContain('Backend readiness');
     expect(html).toContain('Readiness report unavailable');
     expect(html).toContain('Setup checklist summary');
@@ -67,6 +74,17 @@ describe('App routing', () => {
     expect(html).toContain('Live preflight');
     expect(html).toContain('Chat commands');
     expect(html).toContain('mods + broadcaster only');
+  });
+
+  it('renders the recovery console on the server without browser APIs', () => {
+    const html = renderToString(<RecoveryConsolePanel />);
+
+    expect(html).toContain('Recovery console');
+    expect(html).toContain('no destructive browser actions');
+    expect(html).toContain('Production recovery');
+    expect(html).toContain(
+      'https://git.subcult.tv/PatrickFanella/over-laid/src/branch/main/docs/runbooks/production-recovery.md',
+    );
   });
 
   it('renders the dashboard sources route', () => {
