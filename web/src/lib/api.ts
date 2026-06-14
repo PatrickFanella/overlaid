@@ -87,9 +87,19 @@ export type StreamSessionResponse = {
   loadError?: string;
 };
 
+export type StreamSessionReadinessSnapshot = {
+  id: string;
+  sessionId: string;
+  phase: string;
+  status: ReadinessStatus | string;
+  checks: ReadinessCheck[];
+  capturedAt: string;
+};
+
 export type StreamSessionReport = {
   session: StreamSession;
   events: EventHistoryItem[];
+  snapshots: StreamSessionReadinessSnapshot[];
 };
 
 export type EventHistoryResponse = {

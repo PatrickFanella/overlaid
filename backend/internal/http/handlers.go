@@ -89,6 +89,10 @@ func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.buildReadinessReport(r.Context()))
+}
+
+func (s *Server) buildReadinessReport(ctx context.Context) readinessResponse {
 	checks := []readinessCheck{{Name: "process", Status: "ok"}}
 
 	if s.stateLoadError != "" {
@@ -122,9 +126,9 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 	}
 
 	checks = append(checks, s.buildTwitchInteractionReadinessChecks()...)
-	checks = append(checks, s.buildTwitchReadinessChecks(r.Context())...)
+	checks = append(checks, s.buildTwitchReadinessChecks(ctx)...)
 
-	obsCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	obsCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	checks = append(checks, buildOBSReadinessChecks(s.obs.Status(obsCtx))...)
 
@@ -136,7 +140,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, readinessResponse{Status: status, Checks: checks})
+	return readinessResponse{Status: status, Checks: checks}
 }
 
 func (s *Server) buildTwitchInteractionReadinessChecks() []readinessCheck {
@@ -291,6 +295,7 @@ func (s *Server) streamSessionStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setActiveSessionID(session.ID)
+	s.captureSessionReadinessSnapshot(r.Context(), session.ID, "start")
 	writeJSON(w, session)
 }
 
@@ -326,7 +331,18 @@ func (s *Server) streamSessionEnd(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, streamSessionResponse{Recent: []sessions.Session{}})
 		return
 	}
+	s.captureSessionReadinessSnapshot(r.Context(), session.ID, "end")
 	writeJSON(w, session)
+}
+
+func (s *Server) captureSessionReadinessSnapshot(ctx context.Context, sessionID, phase string) {
+	if s.sessions == nil || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	report := s.buildReadinessReport(ctx)
+	if err := s.sessions.AddReadinessSnapshot(ctx, sessionID, phase, report.Status, report.Checks); err != nil {
+		log.Printf("failed to capture stream session readiness snapshot: %v", err)
+	}
 }
 
 func buildOBSReadinessChecks(status obsws.Status) []readinessCheck {

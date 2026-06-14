@@ -22,8 +22,18 @@ type Session struct {
 }
 
 type Report struct {
-	Session Session        `json:"session"`
-	Events  []events.Event `json:"events"`
+	Session   Session             `json:"session"`
+	Events    []events.Event      `json:"events"`
+	Snapshots []ReadinessSnapshot `json:"snapshots"`
+}
+
+type ReadinessSnapshot struct {
+	ID         string          `json:"id"`
+	SessionID  string          `json:"sessionId"`
+	Phase      string          `json:"phase"`
+	Status     string          `json:"status"`
+	Checks     json.RawMessage `json:"checks"`
+	CapturedAt time.Time       `json:"capturedAt"`
 }
 
 type Store struct {
@@ -187,7 +197,68 @@ func (s *Store) Report(ctx context.Context, id string, limit int) (Report, error
 		}
 		items = append(items, item)
 	}
-	return Report{Session: session, Events: items}, rows.Err()
+	if err := rows.Err(); err != nil {
+		return Report{}, err
+	}
+	snapshots, err := s.ReadinessSnapshots(ctx, id)
+	if err != nil {
+		return Report{}, err
+	}
+	return Report{Session: session, Events: items, Snapshots: snapshots}, nil
+}
+
+func (s *Store) AddReadinessSnapshot(ctx context.Context, sessionID, phase, status string, checks any) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return sql.ErrNoRows
+	}
+	phase = strings.TrimSpace(strings.ToLower(phase))
+	if phase == "" {
+		phase = "manual"
+	}
+	status = strings.TrimSpace(strings.ToLower(status))
+	if status == "" {
+		status = "unknown"
+	}
+	payload, err := json.Marshal(checks)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO stream_session_readiness_snapshots (session_id, phase, status, checks)
+		VALUES ($1, $2, $3, $4)
+	`, sessionID, phase, status, payload)
+	return err
+}
+
+func (s *Store) ReadinessSnapshots(ctx context.Context, sessionID string) ([]ReadinessSnapshot, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return []ReadinessSnapshot{}, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, session_id, phase, status, checks, captured_at
+		FROM stream_session_readiness_snapshots
+		WHERE session_id = $1
+		ORDER BY captured_at ASC
+	`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReadinessSnapshot{}
+	for rows.Next() {
+		var item ReadinessSnapshot
+		if err := rows.Scan(&item.ID, &item.SessionID, &item.Phase, &item.Status, &item.Checks, &item.CapturedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (s *Store) Close() error {
@@ -248,4 +319,15 @@ CREATE TABLE IF NOT EXISTS stream_sessions (
 ALTER TABLE stream_events ADD COLUMN IF NOT EXISTS session_id text REFERENCES stream_sessions(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS stream_sessions_started_at_idx ON stream_sessions (started_at DESC);
 CREATE INDEX IF NOT EXISTS stream_events_session_id_idx ON stream_events (session_id);
+
+CREATE TABLE IF NOT EXISTS stream_session_readiness_snapshots (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  session_id text NOT NULL REFERENCES stream_sessions(id) ON DELETE CASCADE,
+  phase text NOT NULL,
+  status text NOT NULL,
+  checks jsonb NOT NULL,
+  captured_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS stream_session_readiness_snapshots_session_idx ON stream_session_readiness_snapshots (session_id, captured_at ASC);
 `

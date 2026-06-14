@@ -46,3 +46,14 @@ CREATE TABLE IF NOT EXISTS stream_sessions (
 ALTER TABLE stream_events ADD COLUMN IF NOT EXISTS session_id text REFERENCES stream_sessions(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS stream_sessions_started_at_idx ON stream_sessions (started_at DESC);
 CREATE INDEX IF NOT EXISTS stream_events_session_id_idx ON stream_events (session_id);
+
+CREATE TABLE IF NOT EXISTS stream_session_readiness_snapshots (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  session_id text NOT NULL REFERENCES stream_sessions(id) ON DELETE CASCADE,
+  phase text NOT NULL,
+  status text NOT NULL,
+  checks jsonb NOT NULL,
+  captured_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS stream_session_readiness_snapshots_session_idx ON stream_session_readiness_snapshots (session_id, captured_at ASC);

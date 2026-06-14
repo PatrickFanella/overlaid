@@ -29,7 +29,7 @@ Files on `api-data` remain valid for token material, transitional fallback, expo
 - `/readyz` should report Postgres health once `DATABASE_URL` is configured.
 - Migrations become part of release and recovery discipline.
 - Event history can become searchable/filterable without changing overlay SSE behavior.
-- Rehearsal/live sessions can be reviewed after a stream without changing overlay SSE behavior.
+- Rehearsal/live sessions can be reviewed after a stream, including tagged events and start/end readiness snapshots, without changing overlay SSE behavior.
 - Operator secrets must never be stored in dashboard config rows, exports, or event payloads.
 - Shared dashboard config API writes are operator-protected and reject secret-looking keys such as `secret`, `token`, `password`, `authorization`, and `cookie`.
 - The migration must stay staged so live-stream reliability is not blocked by a large storage rewrite.

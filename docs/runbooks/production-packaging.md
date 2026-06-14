@@ -70,7 +70,7 @@ make api-data-backup
 
 ## Back up Postgres
 
-Use `make postgres-backup` to create a timestamped custom-format `pg_dump` of the Compose Postgres database. Event history, Twitch interaction rules, shared dashboard config, and stream session audit records live in Postgres when `DATABASE_URL` is configured, so this is part of the production backup set.
+Use `make postgres-backup` to create a timestamped custom-format `pg_dump` of the Compose Postgres database. Event history, Twitch interaction rules, shared dashboard config, stream session audit records, and session readiness snapshots live in Postgres when `DATABASE_URL` is configured, so this is part of the production backup set.
 
 ```bash
 make postgres-backup
@@ -87,7 +87,7 @@ The backup lands in `$(BACKUP_DIR)`, which defaults to `backups/`.
 
 ### Sensitivity warning
 
-The backup artifacts are sensitive. `api-data` tarballs can contain Twitch tokens, retained overlay state, JSONL fallback history, and fallback Twitch interaction rules. Postgres dumps can contain sanitized event history, Twitch interaction rules, shared dashboard configuration, and stream session audit records. Treat both as secret-bearing artifacts:
+The backup artifacts are sensitive. `api-data` tarballs can contain Twitch tokens, retained overlay state, JSONL fallback history, and fallback Twitch interaction rules. Postgres dumps can contain sanitized event history, Twitch interaction rules, shared dashboard configuration, stream session audit records, and session readiness snapshots. Treat both as secret-bearing artifacts:
 
 - keep it private
 - do not commit it

@@ -112,8 +112,9 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
           <div className="hud-panel hud-corners hud-panel--flat hud-compact-card">
             <p className="hud-kicker">Session report · {report.session.id.slice(0, 8)}</p>
             <p className="mt-1 text-sm font-bold text-white">{report.session.title}</p>
-            <p className="mt-1 text-xs text-zinc-400">{report.events.length} visible events · {report.session.eventCount} total tagged events</p>
+            <p className="mt-1 text-xs text-zinc-400">{report.events.length} visible events · {report.session.eventCount} total tagged events · {report.snapshots.length} readiness snapshots</p>
           </div>
+          {report.snapshots.length > 0 ? <ReadinessSnapshotGrid snapshots={report.snapshots} /> : null}
           <EventHistoryPanel events={report.events} />
         </div>
       ) : null}
@@ -130,6 +131,31 @@ function SessionCard({ session, label }: { session: StreamSession; label: string
       {session.endedAt ? <p className="mt-1 text-xs text-zinc-400">Ended {new Date(session.endedAt).toLocaleString()}</p> : null}
       <span className="hud-badge mt-2 inline-flex">{session.eventCount} events</span>
     </article>
+  );
+}
+
+function ReadinessSnapshotGrid({ snapshots }: { snapshots: StreamSessionReport['snapshots'] }) {
+  return (
+    <div className="grid gap-2 md:grid-cols-2">
+      {snapshots.map((snapshot) => {
+        const degraded = snapshot.checks.filter((check) => check.status !== 'ok');
+        return (
+          <article key={snapshot.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card">
+            <p className="hud-kicker">{snapshot.phase} readiness · {snapshot.status}</p>
+            <p className="mt-1 text-xs text-zinc-400">Captured {new Date(snapshot.capturedAt).toLocaleString()}</p>
+            {degraded.length > 0 ? (
+              <ul className="mt-2 grid gap-1 text-xs text-amber-200">
+                {degraded.slice(0, 4).map((check) => (
+                  <li key={`${snapshot.id}-${check.name}`}>{check.name}: {check.hint || check.status}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-emerald-200">All checks OK.</p>
+            )}
+          </article>
+        );
+      })}
+    </div>
   );
 }
 

@@ -24,7 +24,7 @@ docker compose logs -f web
 - `/healthz` is liveness only. Compose healthchecks use it.
 - `/readyz` is operator diagnostics. It reports dependency status and can return HTTP 200 with `status: degraded`.
 - Use `/readyz` to see whether OBS, Twitch auth, EventSub, retained state, event history, or Twitch interaction rules need attention.
-- When `DATABASE_URL` is set, `/readyz` includes `postgres`, `dashboard_config`, and `stream_sessions` checks; event history, Twitch interaction rules, shared dashboard config, and stream session audit records depend on the database.
+- When `DATABASE_URL` is set, `/readyz` includes `postgres`, `dashboard_config`, and `stream_sessions` checks; event history, Twitch interaction rules, shared dashboard config, stream session audit records, and session readiness snapshots depend on the database.
 - `/dashboard/live` is the human-readable view of the same readiness data, plus recent operator context and the persisted event history panel.
 - Destructive recovery remains CLI-only; use the dashboard to assess and route, then follow the runbook commands for any backup, restore, delete, or re-authentication steps.
 
@@ -154,7 +154,7 @@ Then recheck `/readyz` and the Event history panel on `/dashboard/live`.
 ## Docker volume caution
 
 - `db-reset-postgres` preserves API data, including Twitch token, retained state, event history, and Twitch interaction rules.
-- `db-reset-postgres` destroys Postgres-backed event history, Twitch interaction rules, shared dashboard config rows, and stream session audit records, but preserves API data files.
+- `db-reset-postgres` destroys Postgres-backed event history, Twitch interaction rules, shared dashboard config rows, stream session audit records, and session readiness snapshots, but preserves API data files.
 - `db-reset` destroys API data and Postgres data, including token files, retained state, JSONL fallback history, Postgres event history, Postgres interaction rules, shared dashboard config, stream sessions, and `/data/twitch-interactions.json`.
 - Treat `db-reset` as a last resort when you are prepared to re-login, rebuild retained state, lose recent event history, and recreate Twitch interaction rules.
 
