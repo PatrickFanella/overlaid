@@ -9,7 +9,7 @@ BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GO_LDFLAGS := -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Version=$(VERSION) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Commit=$(BUILD_COMMIT) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.BuiltAt=$(BUILD_DATE)
 BACKUP_DIR ?= backups
 
-.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build smoke smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup
+.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build smoke smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup postgres-backup
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -93,6 +93,10 @@ api-data-backup: api-data-volume-check ## Back up the Compose api-data volume in
 		-v "$$PWD/$(BACKUP_DIR):/backup" \
 		alpine:3.22 \
 		sh -c 'tar -czf /backup/api-data-$$(date -u +%Y%m%dT%H%M%SZ).tar.gz -C /data .'
+
+postgres-backup: ## Back up the Compose Postgres database into ./backups
+	mkdir -p "$(BACKUP_DIR)"
+	docker compose exec -T postgres sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" --format=custom --file=-' > "$(BACKUP_DIR)/postgres-$$(date -u +%Y%m%dT%H%M%SZ).dump"
 
 smoke-alert: ## Send a test alert to the running API
 	@ : "$${OPERATOR_SECRET:?OPERATOR_SECRET must be set}"

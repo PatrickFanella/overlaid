@@ -16,6 +16,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/sessions"
 )
 
 const maxJSONBodyBytes = 1 << 20
@@ -43,6 +44,28 @@ type twitchInteractionsResponse struct {
 
 type twitchInteractionsRequest struct {
 	Rules interactions.Rules `json:"rules"`
+}
+
+type dashboardConfigResponse struct {
+	Config    json.RawMessage `json:"config,omitempty"`
+	UpdatedAt time.Time       `json:"updatedAt,omitempty"`
+	LoadError string          `json:"loadError,omitempty"`
+}
+
+type dashboardConfigRequest struct {
+	Config json.RawMessage `json:"config"`
+}
+
+type streamSessionResponse struct {
+	Current   *sessions.Session  `json:"current,omitempty"`
+	Recent    []sessions.Session `json:"recent"`
+	LoadError string             `json:"loadError,omitempty"`
+}
+
+type streamSessionStartRequest struct {
+	Title string `json:"title"`
+	Kind  string `json:"kind"`
+	Notes string `json:"notes"`
 }
 
 type readinessResponse struct {
@@ -74,9 +97,28 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 		checks = append(checks, readinessCheck{Name: "retained_state", Status: "ok"})
 	}
 	if s.historyLoadError != "" {
-		checks = append(checks, readinessCheck{Name: "event_history", Status: "degraded", Hint: "event history file could not be loaded; back it up or clear malformed JSONL"})
+		checks = append(checks, readinessCheck{Name: "event_history", Status: "degraded", Hint: "event history storage could not be loaded; check Postgres readiness or repair the JSONL fallback"})
 	} else {
 		checks = append(checks, readinessCheck{Name: "event_history", Status: "ok"})
+	}
+	if strings.TrimSpace(s.config.DatabaseURL) != "" {
+		status := "ok"
+		hint := ""
+		if s.historyLoadError != "" {
+			status = "degraded"
+			hint = "Postgres event-history storage is unavailable; check DATABASE_URL, migrations, and postgres service health"
+		}
+		checks = append(checks, readinessCheck{Name: "postgres", Status: status, Hint: hint})
+		if s.dashboardConfigLoadError != "" {
+			checks = append(checks, readinessCheck{Name: "dashboard_config", Status: "degraded", Hint: "Postgres dashboard config storage is unavailable; check DATABASE_URL, migrations, and postgres service health"})
+		} else {
+			checks = append(checks, readinessCheck{Name: "dashboard_config", Status: "ok"})
+		}
+		if s.sessionsLoadError != "" {
+			checks = append(checks, readinessCheck{Name: "stream_sessions", Status: "degraded", Hint: "Postgres stream session storage is unavailable; check DATABASE_URL, migrations, and postgres service health"})
+		} else {
+			checks = append(checks, readinessCheck{Name: "stream_sessions", Status: "ok"})
+		}
 	}
 
 	checks = append(checks, s.buildTwitchInteractionReadinessChecks()...)
@@ -99,7 +141,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) buildTwitchInteractionReadinessChecks() []readinessCheck {
 	if s.interactions == nil || s.interactionsLoadErrorValue() != "" {
-		return []readinessCheck{{Name: "twitch_interactions", Status: "degraded", Hint: "Repair TWITCH_INTERACTIONS_FILE or save valid interaction rules."}}
+		return []readinessCheck{{Name: "twitch_interactions", Status: "degraded", Hint: "Check Postgres interaction rules storage or repair TWITCH_INTERACTIONS_FILE, then save valid interaction rules."}}
 	}
 	return []readinessCheck{{Name: "twitch_interactions", Status: "ok"}}
 }
@@ -165,6 +207,126 @@ func (s *Server) putTwitchInteractions(w http.ResponseWriter, r *http.Request) {
 		s.twitchCommandProcessor.SetAliases(interactions.AliasMap(savedRules))
 	}
 	writeJSON(w, twitchInteractionsResponse{Rules: savedRules})
+}
+
+func (s *Server) dashboardConfigGet(w http.ResponseWriter, r *http.Request) {
+	if s.dashboardConfig == nil {
+		if s.dashboardConfigLoadError != "" {
+			writeJSON(w, dashboardConfigResponse{LoadError: s.dashboardConfigLoadError})
+			return
+		}
+		writeJSON(w, dashboardConfigResponse{})
+		return
+	}
+	doc, ok, err := s.dashboardConfig.Get(r.Context())
+	if err != nil {
+		http.Error(w, "dashboard config unavailable", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		writeJSON(w, dashboardConfigResponse{})
+		return
+	}
+	writeJSON(w, dashboardConfigResponse{Config: doc.Config, UpdatedAt: doc.UpdatedAt})
+}
+
+func (s *Server) dashboardConfigPut(w http.ResponseWriter, r *http.Request) {
+	if s.dashboardConfig == nil {
+		http.Error(w, "dashboard config store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+	defer r.Body.Close()
+	var request dashboardConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	if len(request.Config) == 0 {
+		http.Error(w, "config is required", http.StatusBadRequest)
+		return
+	}
+	doc, err := s.dashboardConfig.Replace(r.Context(), request.Config)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, dashboardConfigResponse{Config: doc.Config, UpdatedAt: doc.UpdatedAt})
+}
+
+func (s *Server) streamSessionStatus(w http.ResponseWriter, r *http.Request) {
+	if s.sessions == nil {
+		writeJSON(w, streamSessionResponse{Recent: []sessions.Session{}, LoadError: s.sessionsLoadError})
+		return
+	}
+	current, hasCurrent, err := s.sessions.Current(r.Context())
+	if err != nil {
+		http.Error(w, "stream session status unavailable", http.StatusInternalServerError)
+		return
+	}
+	recent, err := s.sessions.Recent(r.Context(), 8)
+	if err != nil {
+		http.Error(w, "stream session status unavailable", http.StatusInternalServerError)
+		return
+	}
+	response := streamSessionResponse{Recent: recent}
+	if hasCurrent {
+		response.Current = &current
+	}
+	writeJSON(w, response)
+}
+
+func (s *Server) streamSessionStart(w http.ResponseWriter, r *http.Request) {
+	if s.sessions == nil {
+		http.Error(w, "stream sessions store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var request streamSessionStartRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	session, err := s.sessions.Start(r.Context(), request.Title, request.Kind, request.Notes)
+	if err != nil {
+		http.Error(w, "unable to start stream session", http.StatusInternalServerError)
+		return
+	}
+	s.setActiveSessionID(session.ID)
+	writeJSON(w, session)
+}
+
+func (s *Server) streamSessionReport(w http.ResponseWriter, r *http.Request) {
+	if s.sessions == nil {
+		http.Error(w, "stream sessions store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	limit, ok := parsePositiveLimit(w, r, 100, 250)
+	if !ok {
+		return
+	}
+	report, err := s.sessions.Report(r.Context(), r.PathValue("id"), limit)
+	if err != nil {
+		http.Error(w, "stream session report unavailable", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, report)
+}
+
+func (s *Server) streamSessionEnd(w http.ResponseWriter, r *http.Request) {
+	if s.sessions == nil {
+		http.Error(w, "stream sessions store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	session, ok, err := s.sessions.End(r.Context())
+	if err != nil {
+		http.Error(w, "unable to end stream session", http.StatusInternalServerError)
+		return
+	}
+	s.setActiveSessionID("")
+	if !ok {
+		writeJSON(w, streamSessionResponse{Recent: []sessions.Session{}})
+		return
+	}
+	writeJSON(w, session)
 }
 
 func buildOBSReadinessChecks(status obsws.Status) []readinessCheck {
@@ -301,23 +463,31 @@ func (s *Server) publishEvent(event events.Event) {
 }
 
 func (s *Server) eventHistory(w http.ResponseWriter, r *http.Request) {
-	limit := 50
-	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed <= 0 {
-			http.Error(w, "limit must be a positive integer", http.StatusBadRequest)
-			return
-		}
-		if parsed > 250 {
-			parsed = 250
-		}
-		limit = parsed
+	limit, ok := parsePositiveLimit(w, r, 50, 250)
+	if !ok {
+		return
 	}
 	items := []events.Event{}
 	if s.history != nil {
 		items = s.history.List(limit)
 	}
 	writeJSON(w, history.Response{Events: items})
+}
+
+func parsePositiveLimit(w http.ResponseWriter, r *http.Request, fallback, max int) (int, bool) {
+	limit := fallback
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			http.Error(w, "limit must be a positive integer", http.StatusBadRequest)
+			return 0, false
+		}
+		if max > 0 && parsed > max {
+			parsed = max
+		}
+		limit = parsed
+	}
+	return limit, true
 }
 
 func writeSSEEvent(w http.ResponseWriter, event events.Event) bool {

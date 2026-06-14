@@ -1,4 +1,5 @@
 import { getOverlayApiBaseUrl } from './eventStream';
+import type { DashboardConfig } from './dashboardConfig';
 import type { OverlayEventType, OverlaySeverity } from './events';
 
 export type TwitchStatus = {
@@ -70,8 +71,35 @@ export type EventHistoryItem = {
   createdAt: string;
 };
 
+export type StreamSession = {
+  id: string;
+  title: string;
+  kind: 'rehearsal' | 'live' | string;
+  notes?: string;
+  startedAt: string;
+  endedAt?: string;
+  eventCount: number;
+};
+
+export type StreamSessionResponse = {
+  current?: StreamSession;
+  recent: StreamSession[];
+  loadError?: string;
+};
+
+export type StreamSessionReport = {
+  session: StreamSession;
+  events: EventHistoryItem[];
+};
+
 export type EventHistoryResponse = {
   events: EventHistoryItem[];
+};
+
+export type DashboardConfigResponse = {
+  config?: DashboardConfig;
+  updatedAt?: string;
+  loadError?: string;
 };
 
 export type BRBPayload = {
@@ -211,6 +239,49 @@ export async function fetchEventHistory(limit = 24, explicitBaseUrl?: string) {
   return (await response.json()) as EventHistoryResponse;
 }
 
+export async function fetchStreamSession(explicitBaseUrl?: string, operatorSecret?: string) {
+  const headers = operatorHeaders(operatorSecret);
+  const response = await fetch(apiUrl('/api/stream/session', explicitBaseUrl), { headers });
+  if (!response.ok) {
+    throw new Error(`Stream session status failed: ${response.status}`);
+  }
+  return (await response.json()) as StreamSessionResponse;
+}
+
+export async function fetchStreamSessionReport(sessionId: string, limit = 100, explicitBaseUrl?: string, operatorSecret?: string) {
+  const boundedLimit = Math.max(1, Math.min(limit, 250));
+  const headers = operatorHeaders(operatorSecret);
+  const response = await fetch(apiUrl(`/api/stream/session/${encodeURIComponent(sessionId)}?limit=${boundedLimit}`, explicitBaseUrl), { headers });
+  if (!response.ok) {
+    throw new Error(`Stream session report failed: ${response.status}`);
+  }
+  return (await response.json()) as StreamSessionReport;
+}
+
+export async function startStreamSession(payload: { title: string; kind: 'rehearsal' | 'live'; notes?: string }, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/stream/session/start', payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as StreamSession;
+}
+
+export async function endStreamSession(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/stream/session/end', {}, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as StreamSession | StreamSessionResponse;
+}
+
+export async function fetchDashboardConfig(explicitBaseUrl?: string, operatorSecret?: string) {
+  const headers = operatorHeaders(operatorSecret);
+  const response = await fetch(apiUrl('/api/dashboard/config', explicitBaseUrl), { headers });
+  if (!response.ok) {
+    throw new Error(`Dashboard config fetch failed: ${response.status}`);
+  }
+  return (await response.json()) as DashboardConfigResponse;
+}
+
+export async function saveSharedDashboardConfig(config: DashboardConfig, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await sendJSON('PUT', '/api/dashboard/config', { config }, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as DashboardConfigResponse;
+}
+
 export async function fetchOBSScenes(explicitBaseUrl?: string) {
   const response = await fetch(apiUrl('/api/obs/scenes', explicitBaseUrl), { headers: { Accept: 'application/json' } });
   if (!response.ok) {
@@ -284,6 +355,14 @@ type PostJSONOptions = {
   operatorSecret?: string;
   webhookSecret?: string;
 };
+
+function operatorHeaders(operatorSecret?: string) {
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (operatorSecret?.trim()) {
+    headers['X-Overlay-Operator-Secret'] = operatorSecret.trim();
+  }
+  return headers;
+}
 
 async function postJSON(path: string, payload: Record<string, unknown>, explicitBaseUrl?: string, options: PostJSONOptions = {}) {
   return sendJSON('POST', path, payload, explicitBaseUrl, options);

@@ -15,6 +15,7 @@ type Config struct {
 	OverlayStateFile       string
 	EventHistoryFile       string
 	EventHistoryLimit      int
+	DatabaseURL            string
 	PublicWebURL           string
 	OBSWebSocketURL        string
 	OBSWebSocketPass       string
@@ -41,6 +42,7 @@ func Load() Config {
 		OverlayStateFile:       env("OVERLAY_STATE_FILE", "/data/overlay-state.json"),
 		EventHistoryFile:       env("EVENT_HISTORY_FILE", "/data/event-history.jsonl"),
 		EventHistoryLimit:      envInt("EVENT_HISTORY_LIMIT", 250),
+		DatabaseURL:            env("DATABASE_URL", ""),
 		PublicWebURL:           env("PUBLIC_WEB_URL", "http://localhost:5173"),
 		OBSWebSocketURL:        env("OBS_WEBSOCKET_URL", "ws://localhost:4455"),
 		OBSWebSocketPass:       env("OBS_WEBSOCKET_PASSWORD", ""),

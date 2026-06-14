@@ -38,6 +38,12 @@ export function EventHistoryPanel({ events, loading = false, error = '' }: Event
               <span className="hud-terminal-key">source</span>
               <span className="hud-terminal-value">{event.source}</span>
             </div>
+            {typeof event.data?.sessionId === 'string' ? (
+              <div className="hud-terminal-line">
+                <span className="hud-terminal-key">session</span>
+                <span className="hud-terminal-value">{event.data.sessionId.slice(0, 8)}</span>
+              </div>
+            ) : null}
             {event.title ? (
               <div className="hud-terminal-line">
                 <span className="hud-terminal-key">title</span>

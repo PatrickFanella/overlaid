@@ -4,15 +4,17 @@ Use this when editing backend Twitch chat aliases or channel point reward rules.
 
 ## What lives where
 
-- Rules are stored on `api-data` at `/data/twitch-interactions.json`.
-- `TWITCH_INTERACTIONS_FILE` defaults to `/data/twitch-interactions.json` in Docker.
+- Rules are stored in Postgres table `twitch_interaction_rules` when `DATABASE_URL` is set.
+- If `DATABASE_URL` is unset, rules fall back to `api-data` at `/data/twitch-interactions.json`.
+- `TWITCH_INTERACTIONS_FILE` controls the JSON fallback path and defaults to `/data/twitch-interactions.json` in Docker.
 - The dashboard `Config` manager is the normal editing surface.
 - `GET /api/twitch/interactions` and `PUT /api/twitch/interactions` are operator-protected.
 
 ## Readiness behavior
 
-- Missing `/data/twitch-interactions.json` is normal on first boot.
-- If the file is malformed or unreadable, `/readyz` reports `twitch_interactions: degraded`.
+- With Postgres enabled, a missing row is normal on first boot; saving rules creates/updates the singleton `default` row.
+- With JSON fallback, missing `/data/twitch-interactions.json` is normal on first boot.
+- If Postgres is unreachable or the fallback file is malformed/unreadable, `/readyz` reports `twitch_interactions: degraded`.
 - When that happens, custom Twitch interaction rules are disabled until you save valid rules or repair the file and restart/reload.
 
 ## Chat aliases
@@ -42,12 +44,23 @@ Examples:
 
 ## Backup and recovery
 
-1. Back up the file before making large edits.
-2. If the file is corrupt, save a copy and replace it with valid JSON.
-3. Re-save the rules from the dashboard Config manager to clear the degraded state.
-4. Include `/data/twitch-interactions.json` in `api-data` backups if you want the rules to survive restores.
+1. Back up Postgres with `make postgres-backup` before making large edits when `DATABASE_URL` is set.
+2. Back up the JSON file before making large edits when using fallback storage.
+3. If Postgres-backed rules are unavailable, check `docker compose ps postgres`, run `make db-migrate`, and restart the API after Postgres is healthy.
+4. If the fallback file is corrupt, save a copy and replace it with valid JSON.
+5. Re-save the rules from the dashboard Config manager to clear the degraded state.
+6. Include `/data/twitch-interactions.json` in `api-data` backups only when using JSON fallback storage.
 
-Example recovery flow:
+Postgres recovery checks:
+
+```bash
+docker compose ps postgres
+make db-migrate
+make db-tables
+docker compose restart api
+```
+
+JSON fallback recovery flow:
 
 ```bash
 docker compose exec api sh -c 'cp /data/twitch-interactions.json /data/twitch-interactions.json.bak'

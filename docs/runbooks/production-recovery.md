@@ -24,6 +24,7 @@ docker compose logs -f web
 - `/healthz` is liveness only. Compose healthchecks use it.
 - `/readyz` is operator diagnostics. It reports dependency status and can return HTTP 200 with `status: degraded`.
 - Use `/readyz` to see whether OBS, Twitch auth, EventSub, retained state, event history, or Twitch interaction rules need attention.
+- When `DATABASE_URL` is set, `/readyz` includes `postgres`, `dashboard_config`, and `stream_sessions` checks; event history, Twitch interaction rules, shared dashboard config, and stream session audit records depend on the database.
 - `/dashboard/live` is the human-readable view of the same readiness data, plus recent operator context and the persisted event history panel.
 - Destructive recovery remains CLI-only; use the dashboard to assess and route, then follow the runbook commands for any backup, restore, delete, or re-authentication steps.
 
@@ -110,7 +111,35 @@ Use this when `/readyz` reports retained state degraded or the overlay keeps rep
 
 ## Event history recovery
 
-`/readyz` reports `event_history` as degraded when the history file failed to load at startup.
+`/readyz` reports `event_history` as degraded when event-history storage failed to load at startup. With `DATABASE_URL` set, also check the `postgres` readiness item.
+
+### Postgres-backed history
+
+If `postgres` or `event_history` is degraded:
+
+1. Check the database container and logs:
+
+```bash
+docker compose ps postgres
+docker compose logs postgres
+```
+
+2. Confirm migrations/table shape:
+
+```bash
+make db-migrate
+make db-tables
+```
+
+3. Restart the API after Postgres is healthy:
+
+```bash
+docker compose restart api
+```
+
+4. Recheck `/readyz` and the Event history panel on `/dashboard/live`.
+
+### JSONL fallback history
 
 If an existing file is malformed or unreadable, back it up, remove the bad file, and restart the API. A missing file is normal on first boot and does not degrade readiness:
 
@@ -125,7 +154,8 @@ Then recheck `/readyz` and the Event history panel on `/dashboard/live`.
 ## Docker volume caution
 
 - `db-reset-postgres` preserves API data, including Twitch token, retained state, event history, and Twitch interaction rules.
-- `db-reset` destroys API data, including token, retained state, event history, and `/data/twitch-interactions.json`.
+- `db-reset-postgres` destroys Postgres-backed event history, Twitch interaction rules, shared dashboard config rows, and stream session audit records, but preserves API data files.
+- `db-reset` destroys API data and Postgres data, including token files, retained state, JSONL fallback history, Postgres event history, Postgres interaction rules, shared dashboard config, stream sessions, and `/data/twitch-interactions.json`.
 - Treat `db-reset` as a last resort when you are prepared to re-login, rebuild retained state, lose recent event history, and recreate Twitch interaction rules.
 
 ## After recovery

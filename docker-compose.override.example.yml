@@ -6,11 +6,14 @@ services:
     # For local OBS on Linux, host networking is the simplest way for the API
     # container to reach OBS WebSocket on localhost:4455.
     # Copy this file to docker-compose.override.yml, uncomment these lines, and
-    # set OBS_WEBSOCKET_URL=ws://localhost:4455 in .env or below.
+    # set OBS_WEBSOCKET_URL=ws://localhost:4455 in .env or below. When host
+    # networking is enabled, also point DATABASE_URL at the host-published
+    # Postgres port because the Compose DNS name `postgres` is unavailable.
     # network_mode: host
     # ports: []
     # environment:
     #   OBS_WEBSOCKET_URL: ws://localhost:4455
+    #   DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@localhost:${POSTGRES_PORT:-55432}/${POSTGRES_DB:-app}?sslmode=disable
 
     # MPRIS runs on the host user session bus. Enable this only when the API
     # container should read now-playing data from the same Linux desktop user.

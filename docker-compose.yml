@@ -32,7 +32,7 @@ services:
       OVERLAY_STATE_FILE: ${OVERLAY_STATE_FILE:-/data/overlay-state.json}
       EVENT_HISTORY_FILE: ${EVENT_HISTORY_FILE:-/data/event-history.jsonl}
       EVENT_HISTORY_LIMIT: ${EVENT_HISTORY_LIMIT:-250}
-      DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable}
       OBS_WEBSOCKET_URL: ${OBS_WEBSOCKET_URL:-ws://host.docker.internal:4455}
       OBS_WEBSOCKET_PASSWORD: ${OBS_WEBSOCKET_PASSWORD:-}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:5173}

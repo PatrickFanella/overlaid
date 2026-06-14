@@ -3,10 +3,12 @@ import {
   fetchEventHistory,
   fetchOBSStatus,
   fetchReadiness,
+  fetchStreamSession,
   fetchTwitchStatus,
   type EventHistoryResponse,
   type OBSStatus,
   type ReadinessReport,
+  type StreamSessionResponse,
   type TwitchStatus,
 } from '../../lib/api';
 import { loadDashboardConfig, loadOperatorSecret } from '../../lib/dashboardConfig';
@@ -21,16 +23,19 @@ import { RecoveryConsolePanel } from './components/RecoveryConsolePanel';
 import { ReadinessPanel } from './components/ReadinessPanel';
 import { SessionLogPanel } from './components/SessionLogPanel';
 import { BuildInfoPanel } from './components/BuildInfoPanel';
+import { StreamSessionPanel } from './components/StreamSessionPanel';
 
 type LiveStatus = {
   twitch: TwitchStatus | null;
   obs: OBSStatus | null;
   readiness: ReadinessReport | null;
   history: EventHistoryResponse | null;
+  session: StreamSessionResponse | null;
   loading: boolean;
   error: string;
   readinessError: string;
   historyError: string;
+  sessionError: string;
 };
 
 export function DashboardLivePage() {
@@ -43,23 +48,26 @@ export function DashboardLivePage() {
     obs: null,
     readiness: null,
     history: null,
+    session: null,
     loading: false,
     error: '',
     readinessError: '',
     historyError: '',
+    sessionError: '',
   });
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      setStatus((current) => ({ ...current, loading: true, error: '', readinessError: '', historyError: '' }));
+      setStatus((current) => ({ ...current, loading: true, error: '', readinessError: '', historyError: '', sessionError: '' }));
 
-      const [twitchResult, obsResult, readinessResult, historyResult] = await Promise.allSettled([
+      const [twitchResult, obsResult, readinessResult, historyResult, sessionResult] = await Promise.allSettled([
         fetchTwitchStatus(apiBaseUrl),
         fetchOBSStatus(apiBaseUrl),
         fetchReadiness(apiBaseUrl),
         fetchEventHistory(24, apiBaseUrl),
+        fetchStreamSession(apiBaseUrl, operatorSecret),
       ]);
       if (cancelled) return;
 
@@ -68,10 +76,12 @@ export function DashboardLivePage() {
         obs: obsResult.status === 'fulfilled' ? obsResult.value : null,
         readiness: readinessResult.status === 'fulfilled' ? readinessResult.value : null,
         history: historyResult.status === 'fulfilled' ? historyResult.value : null,
+        session: sessionResult.status === 'fulfilled' ? sessionResult.value : null,
         loading: false,
         error: twitchResult.status === 'rejected' || obsResult.status === 'rejected' ? 'Some live status checks are unavailable.' : '',
         readinessError: readinessResult.status === 'rejected' ? 'Readiness check unavailable.' : '',
         historyError: historyResult.status === 'rejected' ? 'Event history unavailable.' : '',
+        sessionError: sessionResult.status === 'rejected' ? 'Stream session status unavailable.' : '',
       });
     }
 
@@ -79,7 +89,7 @@ export function DashboardLivePage() {
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, operatorSecret]);
 
   return (
     <DashboardShell activePath="/dashboard/live">
@@ -96,6 +106,7 @@ export function DashboardLivePage() {
       <RecoveryConsolePanel />
       <BuildInfoPanel apiBaseUrl={apiBaseUrl} />
       <ReadinessPanel report={status.readiness} loading={status.loading} error={status.readinessError} />
+      <StreamSessionPanel apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} status={status.session} loading={status.loading} error={status.sessionError} onChange={(session) => setStatus((current) => ({ ...current, session }))} />
       <LivePreflight twitch={status.twitch} obs={status.obs} config={config} operatorSecret={operatorSecret} />
       <EventSubDiagnostics status={status.twitch} />
       <LiveChecklistSummary items={config.setupChecklist} />

@@ -23,6 +23,9 @@ docker compose up --build
 - `WEBHOOK_SECRET` — optional shared secret for `POST /api/integrations/webhook/{source}`. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
 - `OVERLAY_STATE_FILE` — retained overlay state snapshot path. Defaults to `/data/overlay-state.json` in Docker.
 - `EVENT_HISTORY_FILE` / `EVENT_HISTORY_LIMIT` — persisted recent event history path and count limit. Defaults to `/data/event-history.jsonl` and `250` in Docker.
+- `DATABASE_URL` — Postgres connection string. When set, event history is stored in Postgres `stream_events`; when unset, the API uses the JSONL file fallback.
+- Shared dashboard config is stored in Postgres through operator-protected `/api/dashboard/config` when `DATABASE_URL` is set. The browser still keeps a local config cache; secrets remain session-only.
+- Stream/rehearsal sessions are stored in Postgres through operator-protected `/api/stream/session*` endpoints when `DATABASE_URL` is set. Active sessions tag new event-history rows with `sessionId`; `/api/stream/session/{id}` returns a review report.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
 - `VITE_API_BASE_URL` — optional build-time API base URL for local Vite builds. If unset, overlays derive the API URL from the browser host on port `8080`.
 - `OBS_WEBSOCKET_URL` — OBS WebSocket v5 endpoint. Docker defaults to `ws://host.docker.internal:4455` to reach OBS on the host desktop; native API runs can use `ws://localhost:4455`.
@@ -43,7 +46,7 @@ Twitch auth routes:
 
 Make sure the Twitch app callback URL matches `TWITCH_REDIRECT_URL`.
 
-If you run the API in Docker, the Twitch token persists in the `api-data` volume at `/data/twitch-token.json`, retained overlay state persists at `/data/overlay-state.json`, and recent event history persists at `/data/event-history.jsonl`.
+If you run the API in Docker, the Twitch token persists in the `api-data` volume at `/data/twitch-token.json`, retained overlay state persists at `/data/overlay-state.json`, and recent event history persists in Postgres when `DATABASE_URL` is set. If `DATABASE_URL` is unset, recent event history falls back to `/data/event-history.jsonl`.
 Twitch interaction rules also persist on `api-data` at `/data/twitch-interactions.json`.
 
 OAuth callback test flow:
@@ -127,6 +130,7 @@ OBS WebSocket notes:
 - Docker default OBS WebSocket v5 URL is `ws://host.docker.internal:4455`, with a Compose `host-gateway` mapping for Linux.
 - Native API runs can use `ws://localhost:4455`.
 - If Docker cannot reach OBS through the bridge network, use a local `docker-compose.override.yml` with API host networking and `OBS_WEBSOCKET_URL=ws://localhost:4455`.
+- If API host networking is enabled, set `DATABASE_URL` to the host-published Postgres port, for example `postgres://<user>:<password>@localhost:55432/<db>?sslmode=disable`, because the Compose DNS name `postgres` is not available from the host network namespace.
 - If OBS runs on another machine, set `OBS_WEBSOCKET_URL=ws://<obs-host>:4455` for the API container/host.
 - If OBS WebSocket auth is enabled, set `OBS_WEBSOCKET_PASSWORD` in `.env`.
 
@@ -179,8 +183,8 @@ Use `docs/runbooks/production-packaging.md` for the full packaging, smoke, backu
 
 - `/version` returns `name`, `version`, `commit`, `builtAt`, `goVersion`, `os`, and `arch` without exposing secrets.
 - Local `make build` uses `VERSION`, `BUILD_COMMIT`, and `BUILD_DATE`; `make docker-build` passes those values as Docker `BUILD_VERSION`, `BUILD_COMMIT`, and `BUILD_DATE`. Plain `docker compose up --build` uses `BUILD_VERSION`, `BUILD_COMMIT`, and `BUILD_DATE` from the shell or `.env`, defaulting to `dev`/`unknown`/`unknown`.
-- Run `make api-data-backup` to snapshot the Compose `api-data` volume.
-- The backup tarball can contain Twitch tokens, retained state, event history, and Twitch interaction rules, so keep `BACKUP_DIR` private and ignored.
+- Run `make postgres-backup` to snapshot Postgres and `make api-data-backup` to snapshot the Compose `api-data` volume.
+- Backup artifacts can contain Twitch tokens, retained state, event history, and Twitch interaction rules, so keep `BACKUP_DIR` private and ignored.
 - Restore with the API stopped before unpacking a backup back into `api-data`.
 
 Use this for chat:

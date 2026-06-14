@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/dashboardconfig"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/mpris"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/sessions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/state"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 )
@@ -22,9 +24,13 @@ import (
 type Server struct {
 	config                    config.Config
 	bus                       *events.Bus
-	history                   *history.Store
+	history                   eventHistoryStore
 	historyLoadError          string
 	historyWritable           bool
+	dashboardConfig           *dashboardconfig.Store
+	dashboardConfigLoadError  string
+	sessions                  *sessions.Store
+	sessionsLoadError         string
 	obs                       obsws.Client
 	state                     *state.Store
 	stateLoadError            string
@@ -38,15 +44,18 @@ type Server struct {
 	mux                       *http.ServeMux
 }
 
+type eventHistoryStore interface {
+	Load() error
+	Append(events.Event) error
+	List(limit int) []events.Event
+}
+
+type sessionAwareHistoryStore interface {
+	SetActiveSessionID(string)
+}
+
 func NewServer(cfg config.Config, bus *events.Bus) *Server {
-	eventHistory := history.New(cfg.EventHistoryFile, cfg.EventHistoryLimit)
-	historyLoadError := ""
-	historyWritable := true
-	if err := eventHistory.Load(); err != nil {
-		historyLoadError = err.Error()
-		historyWritable = false
-		log.Printf("failed to load event history: %v", err)
-	}
+	eventHistory, historyLoadError, historyWritable := newEventHistoryStore(cfg)
 	store := state.New(cfg.OverlayStateFile)
 	stateLoadError := ""
 	if err := store.Load(); err != nil {
@@ -54,18 +63,105 @@ func NewServer(cfg config.Config, bus *events.Bus) *Server {
 		log.Printf("failed to load overlay state: %v", err)
 	}
 	server := &Server{config: cfg, bus: bus, history: eventHistory, historyLoadError: historyLoadError, historyWritable: historyWritable, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, stateLoadError: stateLoadError, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
-	server.interactions = interactions.New(cfg.TwitchInteractionsFile)
-	if err := server.interactions.Load(); err != nil {
-		server.setInteractionsLoadError(err.Error())
-		log.Printf("failed to load twitch interactions: %v", err)
+	server.dashboardConfig, server.dashboardConfigLoadError = newDashboardConfigStore(cfg)
+	server.sessions, server.sessionsLoadError = newSessionStore(cfg)
+	server.refreshActiveSession(context.Background())
+	server.interactions, server.interactionsLoadError = newInteractionStore(cfg)
+	rules := interactions.Rules{}
+	if server.interactions != nil {
+		rules = server.interactions.Rules()
 	}
-	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(server.interactions.Rules())})
+	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(rules)})
 	if err := server.twitch.loadPersistedToken(); err != nil {
 		server.twitchTokenLoadError = err.Error()
 		log.Printf("failed to load twitch token: %v", err)
 	}
 	server.routes()
 	return server
+}
+
+func newSessionStore(cfg config.Config) (*sessions.Store, string) {
+	if strings.TrimSpace(cfg.DatabaseURL) == "" {
+		return nil, ""
+	}
+	store, err := sessions.NewPostgres(cfg.DatabaseURL)
+	if err != nil {
+		log.Printf("failed to initialize stream sessions store: %v", err)
+		return nil, err.Error()
+	}
+	return store, ""
+}
+
+func (s *Server) setActiveSessionID(sessionID string) {
+	if history, ok := s.history.(sessionAwareHistoryStore); ok {
+		history.SetActiveSessionID(sessionID)
+	}
+}
+
+func (s *Server) refreshActiveSession(ctx context.Context) {
+	if s.sessions == nil {
+		s.setActiveSessionID("")
+		return
+	}
+	session, ok, err := s.sessions.Current(ctx)
+	if err != nil || !ok {
+		s.setActiveSessionID("")
+		return
+	}
+	s.setActiveSessionID(session.ID)
+}
+
+func newDashboardConfigStore(cfg config.Config) (*dashboardconfig.Store, string) {
+	if strings.TrimSpace(cfg.DatabaseURL) == "" {
+		return nil, ""
+	}
+	store, err := dashboardconfig.NewPostgres(cfg.DatabaseURL)
+	if err != nil {
+		log.Printf("failed to initialize dashboard config store: %v", err)
+		return nil, err.Error()
+	}
+	return store, ""
+}
+
+func newEventHistoryStore(cfg config.Config) (eventHistoryStore, string, bool) {
+	historyLoadError := ""
+	historyWritable := true
+	if strings.TrimSpace(cfg.DatabaseURL) != "" {
+		eventHistory, err := history.NewPostgres(cfg.DatabaseURL, cfg.EventHistoryLimit)
+		if err != nil {
+			historyLoadError = err.Error()
+			historyWritable = false
+			log.Printf("failed to initialize postgres event history: %v", err)
+			return nil, historyLoadError, historyWritable
+		}
+		return eventHistory, historyLoadError, historyWritable
+	}
+
+	eventHistory := history.New(cfg.EventHistoryFile, cfg.EventHistoryLimit)
+	if err := eventHistory.Load(); err != nil {
+		historyLoadError = err.Error()
+		historyWritable = false
+		log.Printf("failed to load event history: %v", err)
+	}
+	return eventHistory, historyLoadError, historyWritable
+}
+
+func newInteractionStore(cfg config.Config) (*interactions.Store, string) {
+	if strings.TrimSpace(cfg.DatabaseURL) != "" {
+		store, err := interactions.NewPostgres(cfg.DatabaseURL)
+		if err != nil {
+			log.Printf("failed to initialize postgres twitch interactions: %v", err)
+			return nil, err.Error()
+		}
+		return store, ""
+	}
+
+	store := interactions.New(cfg.TwitchInteractionsFile)
+	if err := store.Load(); err != nil {
+		log.Printf("failed to load twitch interactions: %v", err)
+		return store, err.Error()
+	}
+	return store, ""
 }
 
 func (s *Server) interactionsLoadErrorValue() string {

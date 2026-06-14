@@ -1,12 +1,17 @@
 package interactions
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 const (
@@ -45,6 +50,7 @@ type Rules struct {
 type Store struct {
 	mu    sync.RWMutex
 	path  string
+	db    *sql.DB
 	rules Rules
 }
 
@@ -52,8 +58,27 @@ func New(path string) *Store {
 	return &Store{path: path, rules: emptyRules()}
 }
 
+func NewPostgres(databaseURL string) (*Store, error) {
+	db, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	store := &Store{db: db, rules: emptyRules()}
+	if err := store.Load(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return store, nil
+}
+
 func (s *Store) Load() error {
-	if s == nil || s.path == "" {
+	if s == nil {
+		return nil
+	}
+	if s.db != nil {
+		return s.loadPostgres()
+	}
+	if s.path == "" {
 		return nil
 	}
 
@@ -90,7 +115,19 @@ func (s *Store) Rules() Rules {
 
 func (s *Store) Replace(rules Rules) (Rules, error) {
 	normalized := Normalize(rules)
-	if s == nil || s.path == "" {
+	if s == nil {
+		return normalized, nil
+	}
+	if s.db != nil {
+		if err := s.writePostgres(normalized); err != nil {
+			return s.Rules(), err
+		}
+		s.mu.Lock()
+		s.rules = cloneRules(normalized)
+		s.mu.Unlock()
+		return normalized, nil
+	}
+	if s.path == "" {
 		if s != nil {
 			s.mu.Lock()
 			s.rules = cloneRules(normalized)
@@ -108,6 +145,68 @@ func (s *Store) Replace(rules Rules) (Rules, error) {
 	s.mu.Unlock()
 	return normalized, nil
 }
+
+func (s *Store) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
+func (s *Store) loadPostgres() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.db.PingContext(ctx); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, createInteractionRulesTableSQL); err != nil {
+		return err
+	}
+
+	var payload []byte
+	err := s.db.QueryRowContext(ctx, `SELECT rules FROM twitch_interaction_rules WHERE id = $1`, "default").Scan(&payload)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			s.mu.Lock()
+			s.rules = emptyRules()
+			s.mu.Unlock()
+			return nil
+		}
+		return err
+	}
+
+	var loaded Rules
+	if err := json.Unmarshal(payload, &loaded); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.rules = Normalize(loaded)
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *Store) writePostgres(rules Rules) error {
+	payload, err := json.Marshal(rules)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO twitch_interaction_rules (id, rules, updated_at)
+		VALUES ($1, $2, now())
+		ON CONFLICT (id) DO UPDATE SET rules = EXCLUDED.rules, updated_at = now()
+	`, "default", payload)
+	return err
+}
+
+const createInteractionRulesTableSQL = `
+CREATE TABLE IF NOT EXISTS twitch_interaction_rules (
+  id text PRIMARY KEY,
+  rules jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+`
 
 func Normalize(rules Rules) Rules {
 	return Rules{

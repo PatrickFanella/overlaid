@@ -5,13 +5,14 @@ Use this when you need to inspect recent persisted stream events after a restart
 ## Purpose
 
 - This is a lightweight persisted event history for operators.
-- It is not an analytics database and does not replay into overlays.
+- It is not a full analytics system yet and does not replay into overlays.
 
 ## Storage
 
-- Default file: `/data/event-history.jsonl`
-- Docker volume: `api-data`
+- Primary store when `DATABASE_URL` is set: Postgres table `stream_events`
+- JSONL fallback when `DATABASE_URL` is unset: `/data/event-history.jsonl` on the `api-data` volume
 - Controlled by:
+  - `DATABASE_URL`
   - `EVENT_HISTORY_FILE`
   - `EVENT_HISTORY_LIMIT`
 - Default retention: `250` events
@@ -22,6 +23,7 @@ Use this when you need to inspect recent persisted stream events after a restart
 - Sanitized top-level event fields
 - Bounded scalar `data` values
 - Recent chat, alert, BRB, clear, webhook, EventSub, and now-playing summaries
+- `sessionId` on events emitted while a stream/rehearsal session is active
 
 ## What is not stored
 
@@ -45,10 +47,31 @@ curl -fsS 'http://localhost:8080/api/events/history?limit=5' | jq .
 
 Open `http://localhost:5173/dashboard/live` and check the Event history panel.
 It shows recent persisted events alongside readiness and preflight status.
+Start a session in the Rehearsal audit panel before a rehearsal/live pass to tag new events.
 
 ## Recovery
 
-If `/readyz` reports `event_history` as degraded, the file failed to load at startup, usually because an existing JSONL file is malformed or unreadable. A missing file is normal on first boot and does not degrade readiness.
+If `/readyz` reports `event_history` as degraded, event-history storage failed to load at startup. With `DATABASE_URL` set, also inspect the `postgres` readiness check.
+
+### Postgres-backed history
+
+Check Postgres first:
+
+```bash
+docker compose ps postgres
+make db-migrate
+make db-tables
+docker compose restart api
+```
+
+After restart, recheck:
+
+```bash
+curl http://localhost:8080/readyz
+curl -fsS http://localhost:8080/api/events/history | jq .
+```
+
+### JSONL fallback history
 
 If an existing file is malformed or unreadable, back it up, remove it, and restart the API:
 

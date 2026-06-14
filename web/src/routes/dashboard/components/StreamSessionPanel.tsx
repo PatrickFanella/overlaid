@@ -1,0 +1,138 @@
+import { useState } from 'react';
+import { endStreamSession, fetchStreamSessionReport, startStreamSession, type StreamSession, type StreamSessionReport, type StreamSessionResponse } from '../../../lib/api';
+import { EventHistoryPanel } from './EventHistoryPanel';
+
+type StreamSessionPanelProps = {
+  apiBaseUrl: string;
+  operatorSecret: string;
+  status: StreamSessionResponse | null;
+  loading?: boolean;
+  error?: string;
+  onChange: (status: StreamSessionResponse) => void;
+};
+
+export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading = false, error = '', onChange }: StreamSessionPanelProps) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [report, setReport] = useState<StreamSessionReport | null>(null);
+  const [reportError, setReportError] = useState('');
+
+  async function start(kind: 'rehearsal' | 'live') {
+    setBusy(true);
+    setMessage('Starting session…');
+    try {
+      const session = await startStreamSession({ title: kind === 'live' ? 'Live stream' : 'Rehearsal', kind }, apiBaseUrl, operatorSecret);
+      onChange({ current: session, recent: [session, ...(status?.recent ?? []).filter((item) => item.id !== session.id)].slice(0, 8) });
+      setReport(null);
+      setMessage(`${session.title} started.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Unable to start session.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function end() {
+    setBusy(true);
+    setMessage('Ending session…');
+    try {
+      const ended = await endStreamSession(apiBaseUrl, operatorSecret);
+      const endedSession = isStreamSession(ended) ? ended : undefined;
+      const recent = endedSession ? [endedSession, ...(status?.recent ?? []).filter((item) => item.id !== endedSession.id)].slice(0, 8) : status?.recent ?? [];
+      onChange({ recent });
+      if (endedSession) {
+        void loadReport(endedSession.id);
+      }
+      setMessage(endedSession ? `${endedSession.title} ended.` : 'No active session to end.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Unable to end session.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadReport(sessionId: string) {
+    setBusy(true);
+    setReportError('');
+    setMessage('Loading session report…');
+    try {
+      const next = await fetchStreamSessionReport(sessionId, 100, apiBaseUrl, operatorSecret);
+      setReport(next);
+      setMessage(`${next.session.title} report loaded.`);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'Unable to load session report.');
+      setMessage('');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const current = status?.current;
+  const recent = status?.recent ?? [];
+
+  return (
+    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="hud-label">stream session</p>
+          <h2 className="hud-section-title">Rehearsal audit</h2>
+          <p className="hud-copy mt-1 text-xs text-zinc-300">Start a rehearsal/live session so new events are tagged for post-stream review.</p>
+        </div>
+        <span className="hud-chip hud-chip--square">{loading ? 'loading' : current ? 'active' : 'idle'}</span>
+      </div>
+
+      {error || status?.loadError ? <p className="mt-3 text-sm text-rose-300">{error || status?.loadError}</p> : null}
+      {current ? <SessionCard session={current} label="Current" /> : <p className="mt-3 text-sm text-zinc-400">No active session. Start one before rehearsal or going live.</p>}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy || !!current} onClick={() => void start('rehearsal')}>
+          Start rehearsal
+        </button>
+        <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy || !!current} onClick={() => void start('live')}>
+          Start live
+        </button>
+        <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy || !current} onClick={() => void end()}>
+          End session
+        </button>
+      </div>
+      {message ? <p className="mt-3 text-xs text-zinc-300">{message}</p> : null}
+
+      {recent.length > 0 ? (
+        <div className="mt-4 grid gap-2 md:grid-cols-2">
+          {recent.slice(0, 4).map((session) => (
+            <button key={session.id} className="text-left" type="button" disabled={busy} onClick={() => void loadReport(session.id)}>
+              <SessionCard session={session} label={session.endedAt ? 'Recent' : 'Open'} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {reportError ? <p className="mt-3 text-sm text-rose-300">{reportError}</p> : null}
+      {report ? (
+        <div className="mt-4 grid gap-3">
+          <div className="hud-panel hud-corners hud-panel--flat hud-compact-card">
+            <p className="hud-kicker">Session report · {report.session.id.slice(0, 8)}</p>
+            <p className="mt-1 text-sm font-bold text-white">{report.session.title}</p>
+            <p className="mt-1 text-xs text-zinc-400">{report.events.length} visible events · {report.session.eventCount} total tagged events</p>
+          </div>
+          <EventHistoryPanel events={report.events} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SessionCard({ session, label }: { session: StreamSession; label: string }) {
+  return (
+    <article className="hud-panel hud-corners hud-panel--flat hud-compact-card">
+      <p className="hud-kicker">{label} · {session.kind}</p>
+      <p className="mt-1 text-sm font-bold text-white">{session.title}</p>
+      <p className="mt-1 text-xs text-zinc-400">Started {new Date(session.startedAt).toLocaleString()}</p>
+      {session.endedAt ? <p className="mt-1 text-xs text-zinc-400">Ended {new Date(session.endedAt).toLocaleString()}</p> : null}
+      <span className="hud-badge mt-2 inline-flex">{session.eventCount} events</span>
+    </article>
+  );
+}
+
+function isStreamSession(value: StreamSession | StreamSessionResponse): value is StreamSession {
+  return 'id' in value;
+}

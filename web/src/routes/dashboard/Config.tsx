@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { fetchDashboardConfig, saveSharedDashboardConfig } from '../../lib/api';
 import {
   loadDashboardConfig,
   loadOperatorSecret,
   saveDashboardConfig,
   saveOperatorSecret,
   type DashboardConfig,
+  normalizeDashboardConfig,
 } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { DashboardShell } from './DashboardShell';
@@ -16,6 +18,7 @@ export function DashboardConfigPage() {
   const [operatorSecret, setOperatorSecret] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [config, setConfig] = useState<DashboardConfig>(() => loadDashboardConfig());
+  const [sharedConfigStatus, setSharedConfigStatus] = useState('');
 
   useEffect(() => {
     setOperatorSecret(loadOperatorSecret());
@@ -29,6 +32,36 @@ export function DashboardConfigPage() {
   function updateConfig(next: DashboardConfig) {
     setConfig(next);
     saveDashboardConfig(next);
+  }
+
+  async function loadSharedConfig() {
+    setSharedConfigStatus('Loading shared config…');
+    try {
+      const response = await fetchDashboardConfig(apiBaseUrl, operatorSecret);
+      if (response.loadError) {
+        setSharedConfigStatus(`Shared config unavailable: ${response.loadError}`);
+        return;
+      }
+      if (!response.config) {
+        setSharedConfigStatus('No shared config saved yet.');
+        return;
+      }
+      const next = normalizeDashboardConfig(response.config);
+      updateConfig(next);
+      setSharedConfigStatus(response.updatedAt ? `Loaded shared config from ${new Date(response.updatedAt).toLocaleString()}.` : 'Loaded shared config.');
+    } catch (error) {
+      setSharedConfigStatus(error instanceof Error ? error.message : 'Failed to load shared config.');
+    }
+  }
+
+  async function saveSharedConfig() {
+    setSharedConfigStatus('Saving shared config…');
+    try {
+      const response = await saveSharedDashboardConfig(config, apiBaseUrl, operatorSecret);
+      setSharedConfigStatus(response.updatedAt ? `Saved shared config at ${new Date(response.updatedAt).toLocaleString()}.` : 'Saved shared config.');
+    } catch (error) {
+      setSharedConfigStatus(error instanceof Error ? error.message : 'Failed to save shared config.');
+    }
   }
 
   function setMprisDecision(mprisDecision: DashboardConfig['mprisDecision']) {
@@ -75,6 +108,24 @@ export function DashboardConfigPage() {
             <p className="mt-2 text-xs text-zinc-400">{webhookSecret ? 'Webhook secret ready.' : 'Webhook secret empty.'}</p>
           </div>
         </div>
+      </section>
+
+      <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="hud-label">Shared dashboard config</p>
+            <p className="hud-copy mt-1 text-xs text-zinc-300">Push or pull non-secret dashboard preferences through the API. Operator and webhook secrets stay out of shared config.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => void loadSharedConfig()}>
+              Load shared
+            </button>
+            <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => void saveSharedConfig()}>
+              Save shared
+            </button>
+          </div>
+        </div>
+        {sharedConfigStatus ? <p className="mt-3 text-xs text-zinc-300">{sharedConfigStatus}</p> : null}
       </section>
 
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">

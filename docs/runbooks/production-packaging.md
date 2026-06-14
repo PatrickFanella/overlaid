@@ -1,6 +1,6 @@
 # Production Packaging Runbook
 
-Use this when you are packaging a release, checking build identity, or backing up and restoring `api-data` before live use.
+Use this when you are packaging a release, checking build identity, or backing up and restoring Postgres plus `api-data` before live use.
 
 ## `/version`
 
@@ -62,9 +62,24 @@ make smoke
 
 ## Back up `api-data`
 
-Use `make api-data-backup` to create a timestamped tarball of the Compose `api-data` volume.
+Use `make api-data-backup` to create a timestamped tarball of the Compose `api-data` volume. This preserves token/state files and file-backed fallback data.
 
 ```bash
+make api-data-backup
+```
+
+## Back up Postgres
+
+Use `make postgres-backup` to create a timestamped custom-format `pg_dump` of the Compose Postgres database. Event history, Twitch interaction rules, shared dashboard config, and stream session audit records live in Postgres when `DATABASE_URL` is configured, so this is part of the production backup set.
+
+```bash
+make postgres-backup
+```
+
+Run both backup targets before destructive maintenance or host migration:
+
+```bash
+make postgres-backup
 make api-data-backup
 ```
 
@@ -72,14 +87,14 @@ The backup lands in `$(BACKUP_DIR)`, which defaults to `backups/`.
 
 ### Sensitivity warning
 
-The tarball is sensitive. It can contain Twitch tokens, retained overlay state, event history, and Twitch interaction rules. Treat it like a secret-bearing artifact:
+The backup artifacts are sensitive. `api-data` tarballs can contain Twitch tokens, retained overlay state, JSONL fallback history, and fallback Twitch interaction rules. Postgres dumps can contain sanitized event history, Twitch interaction rules, shared dashboard configuration, and stream session audit records. Treat both as secret-bearing artifacts:
 
 - keep it private
 - do not commit it
 - do not upload it to shared or public storage
 - keep `BACKUP_DIR` pointed at an ignored local path
 
-## Restore workflow
+## Restore `api-data`
 
 Restore with the API stopped so the app cannot write to the volume while you unpack the archive.
 
@@ -112,3 +127,26 @@ make smoke
 ```
 
 If the restored data is stale or unexpected, stop the API again and repeat with a different archive.
+
+## Restore Postgres
+
+Restore Postgres with the API stopped so event-history writes cannot race the restore.
+
+1. Stop the API:
+
+```bash
+docker compose stop api
+```
+
+2. Restore a selected dump into the Compose database:
+
+```bash
+docker compose exec -T postgres sh -c 'pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "${BACKUP_DIR:-backups}/<postgres-backup>.dump"
+```
+
+3. Restart the API and re-run smoke checks:
+
+```bash
+docker compose up -d api
+make smoke
+```
