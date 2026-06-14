@@ -81,12 +81,12 @@ See `docs/runbooks/twitch-interaction-rules.md` for the editing, backup, and liv
 
 ### Routes
 
-- `/dashboard/live` — canonical recovery cockpit with preflight checks, `/readyz`, EventSub diagnostics, setup checklist status, recent operator actions, and a compact persisted event history panel.
-- `/dashboard` — overview, status, and route guide for choosing the right runbook or dashboard path.
-- `/dashboard/setup` — setup checklist, browser-source URLs, editable stream presets.
-- `/dashboard/sources` — setup/source URL alias.
-- `/dashboard/control` — stream controls, BRB, OBS controls, sample events, quick actions.
-- `/dashboard/config` — operator secret session storage, MPRIS decision, local console preferences, local automation profiles/show modes, and Twitch interaction rules.
+- `/dashboard/live` — canonical recovery console with readiness, recovery runbook links, build info, EventSub diagnostics, setup checklist status, session log, and persisted event history.
+- `/dashboard` — overview, system status, build identity, and route guide for choosing the right runbook or dashboard path.
+- `/dashboard/setup` — setup checklist for OBS onboarding, smoke checks, and setup decisions.
+- `/dashboard/sources` — OBS browser-source URLs, active-profile preset view, and custom CSS copy helpers.
+- `/dashboard/control` — operator quick actions, rehearsals, BRB controls, OBS controls, and session log.
+- `/dashboard/config` — operator secret session storage, automation profiles, Twitch interaction rules, MPRIS decision, and overlay noise controls.
 - `/version` — public, unauthenticated non-secret build/runtime metadata for smoke checks and deploy verification.
 - `/overlay/alerts`
 - `/overlay/chat`

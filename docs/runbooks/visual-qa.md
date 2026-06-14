@@ -17,25 +17,29 @@ Open routes at the deployed web origin, for example `http://<host>:5173`. Check 
 ### `/dashboard`
 
 - [ ] Page loads without a blank screen or console overlay.
-- [ ] Header, status cards, and quick access links are readable.
+- [ ] Header, status cards, build-info card, and ops route guide are readable.
+- [ ] Route guide points operators to live recovery, config/rules, stream control, sources, and packaging/backup guidance.
 - [ ] No text overflows or clipped panels at the default desktop width.
 
 ### `/dashboard/live`
 
-- [ ] Live status cards are visible and aligned.
-- [ ] Twitch, EventSub, OBS, and operator-secret indicators are easy to scan.
-- [ ] Ready states are obvious without horizontal scrolling.
+- [ ] Recovery console, build info, backend readiness, live preflight, EventSub diagnostics, setup checklist, session log, and event history panels are visible.
+- [ ] Recovery-console runbook links are clearly external and do not look like destructive browser actions.
+- [ ] Twitch, EventSub, OBS, operator-secret, event-history, and interaction-rule indicators are easy to scan.
+- [ ] Degraded states are obvious without horizontal scrolling.
 
 ### `/dashboard/setup`
 
 - [ ] Setup checklist is readable from top to bottom.
-- [ ] Browser-source URLs render as copyable text blocks.
-- [ ] Preset cards and guidance sections do not overlap.
+- [ ] Completed/open setup decisions are visually distinct.
+- [ ] Checklist hiding or completion states do not leave empty-looking panels.
 
 ### `/dashboard/sources`
 
 - [ ] Source URL helpers and any alias content are legible.
 - [ ] Layout still works with long hostnames and URLs.
+- [ ] Browser-source URLs render as copyable text blocks.
+- [ ] Stream preset cards and guidance sections do not overlap.
 
 ### `/dashboard/control`
 
@@ -46,7 +50,8 @@ Open routes at the deployed web origin, for example `http://<host>:5173`. Check 
 
 ### `/dashboard/config`
 
-- [ ] Operator secret inputs, toggles, and help text are aligned.
+- [ ] Operator secret inputs, automation profiles, Twitch interaction rules, MPRIS decision, and overlay noise controls are aligned.
+- [ ] Import/export textareas stay readable and do not expose operator secret values.
 - [ ] Configuration panels stay readable on a standard laptop viewport.
 - [ ] No form controls are clipped by cards or columns.
 
@@ -93,6 +98,8 @@ Open routes at the deployed web origin, for example `http://<host>:5173`. Check 
 - [ ] Debug content is clearly secondary to production overlays.
 - [ ] Raw state, diagnostics, or test data remain contained.
 - [ ] Nothing spills outside the viewport.
+
+Overlay routes should remain sparse and broadcast-safe. Generic diagnostic or command events may appear in ticker/debug routes; production overlays should not expose raw secrets or token material.
 
 ## Finish
 
