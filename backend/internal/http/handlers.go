@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
@@ -58,6 +59,10 @@ type readinessCheck struct {
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = fmt.Fprintln(w, "ok")
+}
+
+func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, buildinfo.Report())
 }
 
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {

@@ -3,6 +3,7 @@ package httpapi
 import "net/http"
 
 func (s *Server) routes() {
+	s.mux.HandleFunc("GET /version", s.version)
 	s.mux.HandleFunc("GET /healthz", s.healthz)
 	s.mux.HandleFunc("GET /readyz", s.readyz)
 	s.mux.HandleFunc("GET /api/auth/twitch/login", s.twitchLogin)

@@ -30,6 +30,16 @@ type readyzResponse struct {
 	Checks []readyzCheck `json:"checks"`
 }
 
+type versionResponse struct {
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuiltAt   string `json:"builtAt"`
+	GoVersion string `json:"goVersion"`
+	OS        string `json:"os"`
+	Arch      string `json:"arch"`
+}
+
 type readyzCheck struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
@@ -52,6 +62,29 @@ func TestHealthz(t *testing.T) {
 	}
 	if rec.Body.String() != "ok\n" {
 		t.Fatalf("expected ok body, got %q", rec.Body.String())
+	}
+}
+
+func TestVersion(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body versionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode version: %v", err)
+	}
+	if body.Name != "over-laid" {
+		t.Fatalf("expected over-laid, got %q", body.Name)
+	}
+	if body.Version == "" || body.Commit == "" || body.BuiltAt == "" || body.GoVersion == "" || body.OS == "" || body.Arch == "" {
+		t.Fatalf("expected non-empty version metadata, got %#v", body)
 	}
 }
 
