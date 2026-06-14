@@ -13,6 +13,7 @@ import (
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
 )
 
@@ -32,6 +33,15 @@ type brbRequest struct {
 	ETA     string         `json:"eta"`
 	Items   []string       `json:"items"`
 	Data    map[string]any `json:"data"`
+}
+
+type twitchInteractionsResponse struct {
+	Rules     interactions.Rules `json:"rules"`
+	LoadError string             `json:"loadError,omitempty"`
+}
+
+type twitchInteractionsRequest struct {
+	Rules interactions.Rules `json:"rules"`
 }
 
 type readinessResponse struct {
@@ -64,6 +74,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 		checks = append(checks, readinessCheck{Name: "event_history", Status: "ok"})
 	}
 
+	checks = append(checks, s.buildTwitchInteractionReadinessChecks()...)
 	checks = append(checks, s.buildTwitchReadinessChecks(r.Context())...)
 
 	obsCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
@@ -79,6 +90,13 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, readinessResponse{Status: status, Checks: checks})
+}
+
+func (s *Server) buildTwitchInteractionReadinessChecks() []readinessCheck {
+	if s.interactions == nil || s.interactionsLoadErrorValue() != "" {
+		return []readinessCheck{{Name: "twitch_interactions", Status: "degraded", Hint: "Repair TWITCH_INTERACTIONS_FILE or save valid interaction rules."}}
+	}
+	return []readinessCheck{{Name: "twitch_interactions", Status: "ok"}}
 }
 
 func (s *Server) buildTwitchReadinessChecks(ctx context.Context) []readinessCheck {
@@ -111,6 +129,37 @@ func (s *Server) buildTwitchReadinessChecks(ctx context.Context) []readinessChec
 		return append(checks, readinessCheck{Name: "twitch_eventsub", Status: "degraded", Hint: "EventSub is enabled but not connected; check token scopes and API logs"})
 	}
 	return append(checks, readinessCheck{Name: "twitch_eventsub", Status: "ok"})
+}
+
+func (s *Server) twitchInteractions(w http.ResponseWriter, _ *http.Request) {
+	if s.interactions == nil {
+		writeJSON(w, twitchInteractionsResponse{Rules: interactions.Rules{ChatAliases: []interactions.ChatAliasRule{}, ChannelPointRules: []interactions.ChannelPointRule{}}})
+		return
+	}
+	writeJSON(w, twitchInteractionsResponse{Rules: s.interactions.Rules(), LoadError: s.interactionsLoadErrorValue()})
+}
+
+func (s *Server) putTwitchInteractions(w http.ResponseWriter, r *http.Request) {
+	var request twitchInteractionsRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+
+	if s.interactions == nil {
+		http.Error(w, "interaction rules store unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	savedRules, err := s.interactions.Replace(request.Rules)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.setInteractionsLoadError("")
+	if s.twitchCommandProcessor != nil {
+		s.twitchCommandProcessor.SetAliases(interactions.AliasMap(savedRules))
+	}
+	writeJSON(w, twitchInteractionsResponse{Rules: savedRules})
 }
 
 func buildOBSReadinessChecks(status obsws.Status) []readinessCheck {

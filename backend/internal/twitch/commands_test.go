@@ -20,7 +20,8 @@ func TestParseChatCommand(t *testing.T) {
 		{name: "clear", text: " !clear ", want: ChatCommand{Name: "clear"}, ok: true},
 		{name: "brb", text: "!brb coffee refill", want: ChatCommand{Name: "brb", Args: "coffee refill"}, ok: true},
 		{name: "back", text: "!back", want: ChatCommand{Name: "back"}, ok: true},
-		{name: "unsupported", text: "!dance party", ok: false},
+		{name: "unknown syntactic command", text: "!dance party", want: ChatCommand{Name: "dance", Args: "party"}, ok: true},
+		{name: "bang only", text: "!", ok: false},
 	}
 
 	for _, test := range tests {
@@ -61,6 +62,9 @@ func TestCommandProcessorPermissionWarning(t *testing.T) {
 	if got[0].Type != events.EventTypeCommand || got[0].Severity != events.SeverityWarning {
 		t.Fatalf("unexpected event: %#v", got[0])
 	}
+	if got[0].Data["command"] != "alert" || got[0].Data["originalCommand"] != "alert" || got[0].Data["alias"] != false {
+		t.Fatalf("unexpected diagnostics: %#v", got[0].Data)
+	}
 	args, ok := got[0].Data["args"].(string)
 	if !ok {
 		t.Fatalf("diagnostic args type=%T, want string", got[0].Data["args"])
@@ -70,6 +74,68 @@ func TestCommandProcessorPermissionWarning(t *testing.T) {
 	}
 	if len([]rune(args)) != 180 {
 		t.Fatalf("diagnostic args rune length=%d, want 180", len([]rune(args)))
+	}
+}
+
+func TestCommandProcessorAliasResolution(t *testing.T) {
+	current := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	processor := NewCommandProcessor(CommandProcessorConfig{
+		Cooldown: 0,
+		Now:      func() time.Time { return current },
+		Aliases:  map[string]string{"panic": "clear", "hydrate": "alert"},
+	})
+	user := ChatCommandUser{Name: "mod", IsModerator: true}
+
+	cleared := processor.Handle(ChatCommand{Name: "panic"}, user)
+	if len(cleared) != 2 || cleared[1].Type != events.EventTypeClear {
+		t.Fatalf("panic alias unexpected: %#v", cleared)
+	}
+	if cleared[0].Data["command"] != "clear" || cleared[0].Data["originalCommand"] != "panic" || cleared[0].Data["alias"] != true {
+		t.Fatalf("panic diagnostics unexpected: %#v", cleared[0].Data)
+	}
+
+	alerted := processor.Handle(ChatCommand{Name: "hydrate", Args: "now please"}, user)
+	if len(alerted) != 2 || alerted[1].Type != events.EventTypeAlert || alerted[1].Message != "now please" {
+		t.Fatalf("hydrate alias unexpected: %#v", alerted)
+	}
+	if alerted[0].Data["command"] != "alert" || alerted[0].Data["originalCommand"] != "hydrate" || alerted[0].Data["alias"] != true {
+		t.Fatalf("hydrate diagnostics unexpected: %#v", alerted[0].Data)
+	}
+}
+
+func TestCommandProcessorSetAliasesReplacesAliasesLive(t *testing.T) {
+	current := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Now: func() time.Time { return current }, Aliases: map[string]string{"panic": "clear"}})
+	user := ChatCommandUser{Name: "mod", IsModerator: true}
+
+	if got := processor.Handle(ChatCommand{Name: "panic"}, user); len(got) != 2 || got[1].Type != events.EventTypeClear {
+		t.Fatalf("initial alias unexpected: %#v", got)
+	}
+
+	aliases := map[string]string{"panic": "brb"}
+	processor.SetAliases(aliases)
+	aliases["panic"] = "clear"
+
+	got := processor.Handle(ChatCommand{Name: "panic", Args: "coffee"}, user)
+	if len(got) != 2 || got[1].Type != events.EventTypeBRB || got[1].Message != "coffee" {
+		t.Fatalf("updated alias unexpected: %#v", got)
+	}
+	if got[0].Data["command"] != "brb" || got[0].Data["originalCommand"] != "panic" || got[0].Data["alias"] != true {
+		t.Fatalf("updated diagnostics unexpected: %#v", got[0].Data)
+	}
+}
+
+func TestCommandProcessorAliasDoesNotBypassPermission(t *testing.T) {
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Now: func() time.Time {
+		return time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	}, Aliases: map[string]string{"panic": "clear"}})
+
+	got := processor.Handle(ChatCommand{Name: "panic"}, ChatCommandUser{Name: "viewer"})
+	if len(got) != 1 || got[0].Severity != events.SeverityWarning || got[0].Message != "Permission denied" {
+		t.Fatalf("alias permission unexpected: %#v", got)
+	}
+	if got[0].Data["command"] != "clear" || got[0].Data["originalCommand"] != "panic" || got[0].Data["alias"] != true {
+		t.Fatalf("alias permission diagnostics unexpected: %#v", got[0].Data)
 	}
 }
 
@@ -92,6 +158,23 @@ func TestCommandProcessorCooldownGlobalPerCommand(t *testing.T) {
 	third := processor.Handle(ChatCommand{Name: "alert", Args: "third"}, ChatCommandUser{Name: "mod", IsModerator: true})
 	if len(third) != 2 || third[1].Type != events.EventTypeAlert {
 		t.Fatalf("third alert unexpected: %#v", third)
+	}
+}
+
+func TestCommandProcessorAliasSharesCooldownWithResolvedCommand(t *testing.T) {
+	current := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 10 * time.Second, Now: func() time.Time { return current }, Aliases: map[string]string{"panic": "clear"}})
+	user := ChatCommandUser{Name: "mod", IsModerator: true}
+
+	first := processor.Handle(ChatCommand{Name: "panic"}, user)
+	if len(first) != 2 || first[1].Type != events.EventTypeClear {
+		t.Fatalf("first alias unexpected: %#v", first)
+	}
+
+	current = current.Add(5 * time.Second)
+	second := processor.Handle(ChatCommand{Name: "clear"}, user)
+	if len(second) != 1 || second[0].Message != "Command cooling down" {
+		t.Fatalf("shared cooldown unexpected: %#v", second)
 	}
 }
 

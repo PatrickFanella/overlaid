@@ -9,6 +9,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/auth/twitch/login-url", s.requireOperator(s.twitchLoginURL))
 	s.mux.HandleFunc("GET /api/auth/twitch/callback", s.twitchCallback)
 	s.mux.HandleFunc("GET /api/auth/twitch/status", s.twitchStatus)
+	s.mux.HandleFunc("GET /api/twitch/interactions", s.requireOperator(s.twitchInteractions))
+	s.mux.HandleFunc("PUT /api/twitch/interactions", s.requireOperator(s.putTwitchInteractions))
 	s.mux.HandleFunc("GET /api/events/stream", s.streamEvents)
 	s.mux.HandleFunc("GET /api/events/history", s.eventHistory)
 	s.mux.HandleFunc("POST /api/events/test-alert", s.requireOperator(s.testAlert))
@@ -29,7 +31,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", s.config.AllowedOrigin)
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Overlay-Operator-Secret,X-Overlay-Webhook-Secret")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

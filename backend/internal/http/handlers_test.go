@@ -15,6 +15,8 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 	"github.com/gorilla/websocket"
 )
 
@@ -72,15 +74,16 @@ func TestReadyzReportsProcessAndOptionalDependencies(t *testing.T) {
 		t.Fatalf("expected readiness status and checks, got %#v", body)
 	}
 	assertReadyzCheckSet(t, body.Checks, map[string]string{
-		"process":         "ok",
-		"retained_state":  "ok",
-		"event_history":   "ok",
-		"twitch_config":   "degraded",
-		"twitch_auth":     "degraded",
-		"twitch_eventsub": "degraded",
-		"obs_config":      "degraded",
-		"obs_reachable":   "degraded",
-		"obs_auth":        "degraded",
+		"process":             "ok",
+		"retained_state":      "ok",
+		"event_history":       "ok",
+		"twitch_interactions": "ok",
+		"twitch_config":       "degraded",
+		"twitch_auth":         "degraded",
+		"twitch_eventsub":     "degraded",
+		"obs_config":          "degraded",
+		"obs_reachable":       "degraded",
+		"obs_auth":            "degraded",
 	})
 	if body.Status != "degraded" {
 		t.Fatalf("expected degraded overall status, got %#v", body)
@@ -144,6 +147,119 @@ func TestReadyzReportsHistoryLoadFailure(t *testing.T) {
 	}
 }
 
+func TestTwitchInteractionsEndpointsAndReadiness(t *testing.T) {
+	interactionsPath := filepath.Join(t.TempDir(), "twitch-interactions.json")
+	if err := os.WriteFile(interactionsPath, []byte("{invalid"), 0o600); err != nil {
+		t.Fatalf("write corrupt interactions: %v", err)
+	}
+
+	server := NewServer(config.Config{AllowedOrigin: "*", OperatorSecret: "operator-secret", TwitchInteractionsFile: interactionsPath}, events.NewBus(4))
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/twitch/interactions", nil)
+	getRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", getRec.Code, getRec.Body.String())
+	}
+
+	getReq = httptest.NewRequest(http.MethodGet, "/api/twitch/interactions", nil)
+	getReq.Header.Set("X-Overlay-Operator-Secret", "operator-secret")
+	getRec = httptest.NewRecorder()
+	server.Handler().ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", getRec.Code, getRec.Body.String())
+	}
+	var got twitchInteractionsResponse
+	if err := json.Unmarshal(getRec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode interactions get: %v", err)
+	}
+	if got.LoadError == "" {
+		t.Fatalf("expected load error, got %#v", got)
+	}
+
+	readyReq := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	readyRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(readyRec, readyReq)
+	if readyRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", readyRec.Code, readyRec.Body.String())
+	}
+	var ready readyzResponse
+	if err := json.Unmarshal(readyRec.Body.Bytes(), &ready); err != nil {
+		t.Fatalf("decode readyz: %v", err)
+	}
+	if !readyzHasCheck(ready.Checks, "twitch_interactions", "degraded") {
+		t.Fatalf("expected twitch_interactions degraded, got %#v", ready.Checks)
+	}
+	if idx := readyzCheckIndex(ready.Checks, "twitch_interactions"); idx == -1 || idx > readyzCheckIndex(ready.Checks, "twitch_config") {
+		t.Fatalf("expected twitch_interactions check before twitch auth checks, got %#v", ready.Checks)
+	}
+
+	putReq := httptest.NewRequest(http.MethodPut, "/api/twitch/interactions", bytes.NewBufferString(`{"rules":{"chatAliases":[{"alias":"!panic","command":"clear","enabled":true},{"alias":"!clear","command":"back","enabled":true}]}}`))
+	putRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(putRec, putReq)
+	if putRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", putRec.Code, putRec.Body.String())
+	}
+
+	putReq = httptest.NewRequest(http.MethodPut, "/api/twitch/interactions", bytes.NewBufferString(`{"rules":{"chatAliases":[{"alias":"!panic","command":"clear","enabled":true},{"alias":"!clear","command":"back","enabled":true}]}}`))
+	putReq.Header.Set("X-Overlay-Operator-Secret", "operator-secret")
+	putRec = httptest.NewRecorder()
+	server.Handler().ServeHTTP(putRec, putReq)
+	if putRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", putRec.Code, putRec.Body.String())
+	}
+	var saved twitchInteractionsResponse
+	if err := json.Unmarshal(putRec.Body.Bytes(), &saved); err != nil {
+		t.Fatalf("decode interactions put: %v", err)
+	}
+	if saved.LoadError != "" {
+		t.Fatalf("expected cleared load error, got %#v", saved)
+	}
+	wantRules := interactions.Rules{ChatAliases: []interactions.ChatAliasRule{{Alias: "panic", Command: "clear", Enabled: true}}}
+	if len(saved.Rules.ChatAliases) != len(wantRules.ChatAliases) || saved.Rules.ChatAliases[0] != wantRules.ChatAliases[0] {
+		t.Fatalf("expected sanitized alias rule, got %#v", saved.Rules.ChatAliases)
+	}
+
+	commandEvents := server.twitchCommandProcessor.Handle(twitch.ChatCommand{Name: "panic", Args: "hydrate now"}, twitch.ChatCommandUser{Name: "Mod", IsModerator: true})
+	if len(commandEvents) != 2 || commandEvents[1].Type != events.EventTypeClear {
+		t.Fatalf("expected live alias update, got %#v", commandEvents)
+	}
+	if commandEvents[0].Data["command"] != "clear" || commandEvents[0].Data["originalCommand"] != "panic" || commandEvents[0].Data["alias"] != true {
+		t.Fatalf("unexpected live alias diagnostics: %#v", commandEvents[0].Data)
+	}
+
+	getReq = httptest.NewRequest(http.MethodGet, "/api/twitch/interactions", nil)
+	getReq.Header.Set("X-Overlay-Operator-Secret", "operator-secret")
+	getRec = httptest.NewRecorder()
+	server.Handler().ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", getRec.Code, getRec.Body.String())
+	}
+	got = twitchInteractionsResponse{}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode interactions get after put: %v", err)
+	}
+	if got.LoadError != "" {
+		t.Fatalf("expected cleared load error on GET, got %#v", got)
+	}
+
+	readyRec = httptest.NewRecorder()
+	server.Handler().ServeHTTP(readyRec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if err := json.Unmarshal(readyRec.Body.Bytes(), &ready); err != nil {
+		t.Fatalf("decode readyz after put: %v", err)
+	}
+	if !readyzHasCheck(ready.Checks, "twitch_interactions", "ok") {
+		t.Fatalf("expected twitch_interactions ok after put, got %#v", ready.Checks)
+	}
+
+	optionsReq := httptest.NewRequest(http.MethodOptions, "/api/twitch/interactions", nil)
+	optionsRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(optionsRec, optionsReq)
+	if got := optionsRec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "PUT") {
+		t.Fatalf("expected PUT in CORS methods, got %q", got)
+	}
+}
+
 func readyzHasCheck(checks []readyzCheck, name, status string) bool {
 	for _, check := range checks {
 		if check.Name == name && check.Status == status {
@@ -151,6 +267,15 @@ func readyzHasCheck(checks []readyzCheck, name, status string) bool {
 		}
 	}
 	return false
+}
+
+func readyzCheckIndex(checks []readyzCheck, name string) int {
+	for i, check := range checks {
+		if check.Name == name {
+			return i
+		}
+	}
+	return -1
 }
 
 func assertReadyzCheckSet(t *testing.T, checks []readyzCheck, expected map[string]string) {
@@ -205,15 +330,16 @@ func TestReadyzReturnsDegradedWhenOBSHelloStalls(t *testing.T) {
 		t.Fatalf("decode readyz: %v", err)
 	}
 	assertReadyzCheckSet(t, body.Checks, map[string]string{
-		"process":         "ok",
-		"retained_state":  "ok",
-		"event_history":   "ok",
-		"twitch_config":   "degraded",
-		"twitch_auth":     "degraded",
-		"twitch_eventsub": "degraded",
-		"obs_config":      "ok",
-		"obs_reachable":   "degraded",
-		"obs_auth":        "degraded",
+		"process":             "ok",
+		"retained_state":      "ok",
+		"event_history":       "ok",
+		"twitch_interactions": "ok",
+		"twitch_config":       "degraded",
+		"twitch_auth":         "degraded",
+		"twitch_eventsub":     "degraded",
+		"obs_config":          "ok",
+		"obs_reachable":       "degraded",
+		"obs_auth":            "degraded",
 	})
 	if body.Status != "degraded" {
 		t.Fatalf("expected degraded overall status, got %#v", body)

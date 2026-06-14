@@ -23,13 +23,15 @@ type ChatCommandUser struct {
 type CommandProcessorConfig struct {
 	Cooldown time.Duration
 	Now      func() time.Time
+	Aliases  map[string]string
 }
 
 type CommandProcessor struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	cooldown time.Duration
 	now      func() time.Time
 	lastRun  map[string]time.Time
+	aliases  map[string]string
 }
 
 func ParseChatCommand(text string) (ChatCommand, bool) {
@@ -47,13 +49,7 @@ func ParseChatCommand(text string) (ChatCommand, bool) {
 	if len(parts) > 1 {
 		command.Args = strings.TrimSpace(strings.Join(parts[1:], " "))
 	}
-
-	switch command.Name {
-	case "alert", "clear", "brb", "back":
-		return command, true
-	default:
-		return ChatCommand{}, false
-	}
+	return command, true
 }
 
 func CanRunChatCommand(user ChatCommandUser) bool {
@@ -69,7 +65,7 @@ func NewCommandProcessor(config CommandProcessorConfig) *CommandProcessor {
 	if cooldown < 0 {
 		cooldown = 0
 	}
-	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time)}
+	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases)}
 }
 
 func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []events.Event {
@@ -77,22 +73,51 @@ func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []e
 		return nil
 	}
 
-	if !isSupportedChatCommand(command.Name) {
-		return []events.Event{p.commandEvent(command, user, events.SeverityWarning, "Unsupported command")}
+	original := command
+	resolved, aliased := p.resolveCommand(command)
+
+	if !isSupportedChatCommand(resolved.Name) {
+		return []events.Event{p.commandEvent(original, resolved, aliased, user, events.SeverityWarning, "Unsupported command")}
 	}
 	if !CanRunChatCommand(user) {
-		return []events.Event{p.commandEvent(command, user, events.SeverityWarning, "Permission denied")}
+		return []events.Event{p.commandEvent(original, resolved, aliased, user, events.SeverityWarning, "Permission denied")}
 	}
 
-	action, ok := p.actionEvent(command, user)
+	action, ok := p.actionEvent(resolved, user)
 	if !ok {
-		return []events.Event{p.commandEvent(command, user, events.SeverityWarning, "Command ignored")}
+		return []events.Event{p.commandEvent(original, resolved, aliased, user, events.SeverityWarning, "Command ignored")}
 	}
-	if p.onCooldown(command.Name) {
-		return []events.Event{p.commandEvent(command, user, events.SeverityWarning, "Command cooling down")}
+	if p.onCooldown(resolved.Name) {
+		return []events.Event{p.commandEvent(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down")}
 	}
 
-	return []events.Event{p.commandEvent(command, user, events.SeveritySuccess, "Command accepted"), action}
+	return []events.Event{p.commandEvent(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted"), action}
+}
+
+func (p *CommandProcessor) SetAliases(aliases map[string]string) {
+	if p == nil {
+		return
+	}
+
+	p.mu.Lock()
+	p.aliases = cloneAliases(aliases)
+	p.mu.Unlock()
+}
+
+func (p *CommandProcessor) resolveCommand(command ChatCommand) (ChatCommand, bool) {
+	if p == nil {
+		return command, false
+	}
+
+	p.mu.RLock()
+	resolvedName, ok := p.aliases[command.Name]
+	p.mu.RUnlock()
+	if !ok || resolvedName == "" {
+		return command, false
+	}
+	resolved := command
+	resolved.Name = resolvedName
+	return resolved, resolved.Name != command.Name
 }
 
 func (p *CommandProcessor) onCooldown(name string) bool {
@@ -111,14 +136,16 @@ func (p *CommandProcessor) onCooldown(name string) bool {
 	return false
 }
 
-func (p *CommandProcessor) commandEvent(command ChatCommand, user ChatCommandUser, severity events.Severity, message string) events.Event {
-	return events.NewCommand("twitch", "Chat command: !"+command.Name, message, severity, map[string]any{
-		"command":       command.Name,
-		"args":          truncateCommandText(command.Args, 180),
-		"user":          user.Name,
-		"login":         user.Login,
-		"isBroadcaster": user.IsBroadcaster,
-		"isModerator":   user.IsModerator,
+func (p *CommandProcessor) commandEvent(original ChatCommand, command ChatCommand, aliased bool, user ChatCommandUser, severity events.Severity, message string) events.Event {
+	return events.NewCommand("twitch", "Chat command: !"+original.Name, message, severity, map[string]any{
+		"command":         command.Name,
+		"originalCommand": original.Name,
+		"alias":           aliased,
+		"args":            truncateCommandText(original.Args, 180),
+		"user":            user.Name,
+		"login":           user.Login,
+		"isBroadcaster":   user.IsBroadcaster,
+		"isModerator":     user.IsModerator,
 	})
 }
 
@@ -164,4 +191,15 @@ func truncateCommandText(text string, limit int) string {
 		return text
 	}
 	return strings.TrimSpace(string(runes[:limit]))
+}
+
+func cloneAliases(aliases map[string]string) map[string]string {
+	if len(aliases) == 0 {
+		return make(map[string]string)
+	}
+	cloned := make(map[string]string, len(aliases))
+	for alias, command := range aliases {
+		cloned[alias] = command
+	}
+	return cloned
 }

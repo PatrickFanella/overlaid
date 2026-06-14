@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/mpris"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/state"
@@ -26,8 +28,12 @@ type Server struct {
 	obs                       obsws.Client
 	state                     *state.Store
 	stateLoadError            string
+	interactions              *interactions.Store
+	interactionsLoadErrorMu   sync.RWMutex
+	interactionsLoadError     string
 	twitch                    *twitchAuthStore
 	twitchTokenLoadError      string
+	twitchCommandProcessor    *twitch.CommandProcessor
 	twitchEventSubDiagnostics *twitch.DiagnosticsStore
 	mux                       *http.ServeMux
 }
@@ -48,12 +54,30 @@ func NewServer(cfg config.Config, bus *events.Bus) *Server {
 		log.Printf("failed to load overlay state: %v", err)
 	}
 	server := &Server{config: cfg, bus: bus, history: eventHistory, historyLoadError: historyLoadError, historyWritable: historyWritable, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, stateLoadError: stateLoadError, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
+	server.interactions = interactions.New(cfg.TwitchInteractionsFile)
+	if err := server.interactions.Load(); err != nil {
+		server.setInteractionsLoadError(err.Error())
+		log.Printf("failed to load twitch interactions: %v", err)
+	}
+	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(server.interactions.Rules())})
 	if err := server.twitch.loadPersistedToken(); err != nil {
 		server.twitchTokenLoadError = err.Error()
 		log.Printf("failed to load twitch token: %v", err)
 	}
 	server.routes()
 	return server
+}
+
+func (s *Server) interactionsLoadErrorValue() string {
+	s.interactionsLoadErrorMu.RLock()
+	defer s.interactionsLoadErrorMu.RUnlock()
+	return s.interactionsLoadError
+}
+
+func (s *Server) setInteractionsLoadError(value string) {
+	s.interactionsLoadErrorMu.Lock()
+	defer s.interactionsLoadErrorMu.Unlock()
+	s.interactionsLoadError = value
 }
 
 func (s *Server) Handler() http.Handler {
@@ -95,7 +119,7 @@ func (s *Server) StartBackground(ctx context.Context) {
 				Scopes:      append([]string(nil), token.Scope...),
 			}, true
 		},
-		CommandProcessor: twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second}),
+		CommandProcessor: s.twitchCommandProcessor,
 		Publish:          s.publishEventSubEvent,
 		Diagnostics:      s.twitchEventSubDiagnostics,
 	}
