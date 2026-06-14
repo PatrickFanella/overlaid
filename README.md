@@ -87,6 +87,7 @@ See `docs/runbooks/twitch-interaction-rules.md` for the editing, backup, and liv
 - `/dashboard/sources` — setup/source URL alias.
 - `/dashboard/control` — stream controls, BRB, OBS controls, sample events, quick actions.
 - `/dashboard/config` — operator secret session storage, MPRIS decision, local console preferences, local automation profiles/show modes, and Twitch interaction rules.
+- `/version` — public, unauthenticated non-secret build/runtime metadata for smoke checks and deploy verification.
 - `/overlay/alerts`
 - `/overlay/chat`
 - `/overlay/goals`
@@ -171,6 +172,16 @@ Public reverse proxy:
 - Expose only the overlay routes needed by OBS/browser sources when possible.
 - Do not publish the API directly to the internet without auth/rate-limit/reverse-proxy controls.
 - Keep `TWITCH_TOKEN_FILE`, `OVERLAY_STATE_FILE`, and `EVENT_HISTORY_FILE` on the `api-data` volume and include that volume in backups if you want OAuth/state continuity and recent event history.
+
+### Production packaging and backups
+
+Use `docs/runbooks/production-packaging.md` for the full packaging, smoke, backup, and restore flow.
+
+- `/version` returns `name`, `version`, `commit`, `builtAt`, `goVersion`, `os`, and `arch` without exposing secrets.
+- Local `make build` uses `VERSION`, `BUILD_COMMIT`, and `BUILD_DATE`; `make docker-build` passes those values as Docker `BUILD_VERSION`, `BUILD_COMMIT`, and `BUILD_DATE`. Plain `docker compose up --build` uses `BUILD_VERSION`, `BUILD_COMMIT`, and `BUILD_DATE` from the shell or `.env`, defaulting to `dev`/`unknown`/`unknown`.
+- Run `make api-data-backup` to snapshot the Compose `api-data` volume.
+- The backup tarball can contain Twitch tokens, retained state, event history, and Twitch interaction rules, so keep `BACKUP_DIR` private and ignored.
+- Restore with the API stopped before unpacking a backup back into `api-data`.
 
 Use this for chat:
 
