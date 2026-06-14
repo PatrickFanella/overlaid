@@ -30,6 +30,7 @@ docker compose up --build
 - `TWITCH_CHANNEL` — default Twitch channel: `patrick__eff`.
 - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_REDIRECT_URL` — Twitch OAuth Code flow settings.
 - `TWITCH_TOKEN_FILE` — durable OAuth token path. Defaults to `/data/twitch-token.json` in Docker.
+- `TWITCH_INTERACTIONS_FILE` — durable Twitch interaction-rules path. Defaults to `/data/twitch-interactions.json` in Docker.
 - `TWITCH_EVENTSUB_ENABLED` — starts the Twitch EventSub WebSocket worker when OAuth is configured. Defaults to `true`.
 - `TWITCH_SCOPES` — space-delimited scopes used for the login redirect. Defaults to `user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers`.
 
@@ -43,6 +44,7 @@ Twitch auth routes:
 Make sure the Twitch app callback URL matches `TWITCH_REDIRECT_URL`.
 
 If you run the API in Docker, the Twitch token persists in the `api-data` volume at `/data/twitch-token.json`, retained overlay state persists at `/data/overlay-state.json`, and recent event history persists at `/data/event-history.jsonl`.
+Twitch interaction rules also persist on `api-data` at `/data/twitch-interactions.json`.
 
 OAuth callback test flow:
 
@@ -65,6 +67,18 @@ Current mappings:
 
 If you added `moderator:read:followers` after an earlier login, re-run `/api/auth/twitch/login` so the saved token includes the new follow scope.
 
+### Twitch interactions
+
+The dashboard `Config` manager includes Twitch interaction rules for backend-side chat aliases and channel point rewards. The API reads and writes them from `/data/twitch-interactions.json` via `TWITCH_INTERACTIONS_FILE`.
+
+- Missing `/data/twitch-interactions.json` is normal on first boot.
+- A malformed or unreadable rules file degrades `/readyz` at `twitch_interactions` and disables custom rules until the file is repaired or valid rules are saved again.
+- `GET /api/twitch/interactions` and `PUT /api/twitch/interactions` are operator-protected.
+- Chat aliases only resolve to the safe built-in commands `alert`, `clear`, `brb`, and `back`.
+- Channel point reward rules match reward titles case-insensitively and can `alert`, `brb`, `clear`, or `ignore`.
+
+See `docs/runbooks/twitch-interaction-rules.md` for the editing, backup, and live-QA flow.
+
 ### Routes
 
 - `/dashboard/live` — live ops cockpit with preflight checks, `/readyz`, EventSub diagnostics, setup checklist status, recent operator actions, and a compact persisted event history panel.
@@ -72,7 +86,7 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 - `/dashboard/setup` — setup checklist, browser-source URLs, editable stream presets.
 - `/dashboard/sources` — setup/source URL alias.
 - `/dashboard/control` — stream controls, BRB, OBS controls, sample events, quick actions.
-- `/dashboard/config` — operator secret session storage, MPRIS decision, local console preferences, and local automation profiles/show modes.
+- `/dashboard/config` — operator secret session storage, MPRIS decision, local console preferences, local automation profiles/show modes, and Twitch interaction rules.
 - `/overlay/alerts`
 - `/overlay/chat`
 - `/overlay/goals`
@@ -82,13 +96,14 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 - `/overlay/debug`
 
 For live operation, start with `/dashboard/live` and follow `docs/runbooks/live-stream-preflight.md`.
+For Twitch interaction rules, follow `docs/runbooks/twitch-interaction-rules.md`.
 For production recovery, follow `docs/runbooks/production-recovery.md`.
 For persisted recent event history and recovery guidance, follow `docs/runbooks/event-history.md`.
 For OBS automation sequences, follow `docs/runbooks/obs-automation-sequences.md`.
 For moderator or broadcaster Twitch chat controls, use `docs/runbooks/twitch-chat-commands.md`.
 For post-build route checks and styling changes, use `docs/runbooks/visual-qa.md`.
 
-`/healthz` stays the cheap liveness check used by Compose healthchecks. `curl http://localhost:8080/readyz` is the operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, retained state, or event history need attention.
+`/healthz` stays the cheap liveness check used by Compose healthchecks. `curl http://localhost:8080/readyz` is the operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, retained state, event history, or Twitch interaction rules need attention.
 
 ### OBS browser source
 

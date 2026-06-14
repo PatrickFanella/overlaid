@@ -1,6 +1,6 @@
 # Production Recovery Runbook
 
-Use this when live operation degrades because OBS, Twitch, EventSub, retained state, event history, or smoke checks fail.
+Use this when live operation degrades because OBS, Twitch, EventSub, retained state, event history, Twitch interaction rules, or smoke checks fail.
 
 ## Fast checks
 
@@ -23,7 +23,7 @@ docker compose logs -f web
 
 - `/healthz` is liveness only. Compose healthchecks use it.
 - `/readyz` is operator diagnostics. It reports dependency status and can return HTTP 200 with `status: degraded`.
-- Use `/readyz` to see whether OBS, Twitch auth, EventSub, retained state, or event history need attention.
+- Use `/readyz` to see whether OBS, Twitch auth, EventSub, retained state, event history, or Twitch interaction rules need attention.
 - `/dashboard/live` is the human-readable view of the same readiness data, plus recent operator context and the persisted event history panel.
 
 ## OBS recovery
@@ -61,6 +61,23 @@ docker compose restart api
 Then open the dashboard and run Twitch login again.
 
 If scopes changed, re-consent with the new scopes.
+
+## Twitch interaction rules recovery
+
+Twitch interaction rules live in `/data/twitch-interactions.json` on the `api-data` volume.
+
+- A missing file is normal on first boot.
+- A malformed or unreadable file degrades `/readyz` at `twitch_interactions` and disables custom rules until you repair or replace it.
+
+If the file is corrupt, back it up, remove it, restart the API, and then repopulate valid rules from `/dashboard/config`:
+
+```bash
+docker compose exec api sh -c 'cp /data/twitch-interactions.json /data/twitch-interactions.json.bak'
+docker compose exec api sh -c 'rm /data/twitch-interactions.json'
+docker compose restart api
+```
+
+After recovery, use the Config manager to re-save the rules and confirm `twitch_interactions` returns to `ok`.
 
 ## EventSub recovery
 
@@ -106,10 +123,10 @@ Then recheck `/readyz` and the Event history panel on `/dashboard/live`.
 
 ## Docker volume caution
 
-- `db-reset-postgres` preserves API data, including Twitch token and retained state.
-- `db-reset` destroys API data, including token, retained state, and event history files.
-- Treat `db-reset` as a last resort when you are prepared to re-login, rebuild retained state, and lose recent event history.
+- `db-reset-postgres` preserves API data, including Twitch token, retained state, event history, and Twitch interaction rules.
+- `db-reset` destroys API data, including token, retained state, event history, and `/data/twitch-interactions.json`.
+- Treat `db-reset` as a last resort when you are prepared to re-login, rebuild retained state, lose recent event history, and recreate Twitch interaction rules.
 
 ## After recovery
 
-Run `make smoke` again and confirm `/readyz` returns healthy checks.
+Run `make smoke` again and confirm `/readyz` returns healthy checks, including `twitch_interactions`.

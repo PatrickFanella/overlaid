@@ -1,6 +1,6 @@
 # Twitch Chat Commands Runbook
 
-Plan 3 adds a small Twitch chat command layer on top of EventSub chat messages.
+Plan 9 keeps Twitch chat commands server-side and limited to safe built-in overlay actions.
 
 ## Requirements
 
@@ -8,6 +8,7 @@ Plan 3 adds a small Twitch chat command layer on top of EventSub chat messages.
 - EventSub diagnostics show connected subscriptions.
 - `channel.chat.message` events are arriving.
 - The sender is the broadcaster or has a Twitch moderator badge in the EventSub payload.
+- Chat aliases are configured in the dashboard `Config` manager and saved to `/data/twitch-interactions.json` on the `api-data` volume.
 
 ## Supported commands
 
@@ -20,14 +21,18 @@ Plan 3 adds a small Twitch chat command layer on top of EventSub chat messages.
 
 `!alert` requires a message. Empty `!alert` attempts emit a warning diagnostic and do not show an alert.
 
+The parser only accepts `!`-prefixed commands, lowercases the command name, and strips the leading bang before alias lookup. Aliases are stored as bare names, so `!panic` and `panic` both normalize to the same alias entry.
+
 ## Safety model
 
 - The trust model is broadcaster OR moderator; viewers without either badge cannot trigger overlay-changing actions.
 - Command attempts emit `custom_command` diagnostic events visible in `/overlay/debug`.
 - Cooldowns are global per command, apply to all trusted users, last 10 seconds, live in memory, and reset when the API process restarts.
 - `!clear`, `!brb`, and `!back` update retained overlay state so OBS browser-source reconnects do not replay stale BRB/overlay state.
-- Commands do not execute arbitrary dashboard quick actions.
+- Commands do not execute arbitrary OBS actions or dashboard quick actions.
 - Commands do not send outbound Twitch chat replies.
+
+If you add chat aliases, they can only point to `alert`, `clear`, `brb`, or `back`. The alias layer is intentionally small and cannot trigger custom commands.
 
 ## Pre-stream check
 
@@ -43,3 +48,4 @@ Plan 3 adds a small Twitch chat command layer on top of EventSub chat messages.
 - If commands work once and then stop briefly, wait for the cooldown window.
 - If `!alert` does nothing, make sure a non-empty message was supplied.
 - If no chat appears, check Twitch auth, scopes, EventSub diagnostics, and API logs.
+- If alias behavior looks wrong, open `/dashboard/config`, inspect the Twitch interaction rules manager, and re-save valid JSON.
