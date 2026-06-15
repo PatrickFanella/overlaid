@@ -101,6 +101,11 @@ export type BotCountersResponse = { counters: BotCounter[]; loadError?: string }
 export type BotQuotesResponse = { quotes: BotQuote[]; loadError?: string };
 export type BotCounterPayload = { id?: string; name: string; value: number };
 export type BotQuotePayload = { id?: string; text: string; author?: string };
+export type BotModerationRule = { id: string; name: string; enabled: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both' | string; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban' | string; reason?: string; createdAt: string; updatedAt: string };
+export type BotModerationRulesResponse = { rules: BotModerationRule[]; loadError?: string };
+export type BotModerationRulePayload = { id?: string; name: string; enabled: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both'; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban'; reason?: string };
+export type BotModerationMatch = { ruleId: string; ruleName: string; pattern: string; matchTarget: string; action: string; reason?: string };
+export type BotModerationDryRunResponse = { matches: BotModerationMatch[]; loadError?: string };
 
 export type BotCommandPayload = {
   id?: string;
@@ -388,6 +393,27 @@ export async function saveBotQuote(payload: BotQuotePayload, explicitBaseUrl?: s
 export async function deleteBotQuote(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
   const response = await fetch(apiUrl(`/api/bot/quotes/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
   if (!response.ok) throw new Error(`delete bot quote failed: ${response.status}`);
+}
+
+export async function fetchBotModerationRules(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl('/api/bot/moderation/rules', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) throw new Error(`bot moderation rules failed: ${response.status}`);
+  return (await response.json()) as BotModerationRulesResponse;
+}
+
+export async function saveBotModerationRule(payload: BotModerationRulePayload, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/bot/moderation/rules', payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotModerationRule;
+}
+
+export async function deleteBotModerationRule(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl(`/api/bot/moderation/rules/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) throw new Error(`bot moderation rule delete failed: ${response.status}`);
+}
+
+export async function dryRunBotModeration(payload: { message: string; username: string }, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/bot/moderation/dry-run', payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotModerationDryRunResponse;
 }
 
 export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {

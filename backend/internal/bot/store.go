@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -72,6 +73,29 @@ type Quote struct {
 	Author    string    `json:"author,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type ModerationRule struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Enabled       bool      `json:"enabled"`
+	Pattern       string    `json:"pattern"`
+	MatchTarget   string    `json:"matchTarget"`
+	CaseSensitive bool      `json:"caseSensitive"`
+	Regex         bool      `json:"regex"`
+	Action        string    `json:"action"`
+	Reason        string    `json:"reason,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
+type ModerationMatch struct {
+	RuleID      string `json:"ruleId"`
+	RuleName    string `json:"ruleName"`
+	Pattern     string `json:"pattern"`
+	MatchTarget string `json:"matchTarget"`
+	Action      string `json:"action"`
+	Reason      string `json:"reason,omitempty"`
 }
 
 func NewPostgres(databaseURL string) (*Store, error) {
@@ -241,6 +265,50 @@ func (s *Store) ListQuotes(ctx context.Context) ([]Quote, error) {
 		out = append(out, item)
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) ListModerationRules(ctx context.Context) ([]ModerationRule, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at FROM bot_moderation_rules ORDER BY name ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ModerationRule{}
+	for rows.Next() {
+		item, err := scanModerationRule(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SaveModerationRule(ctx context.Context, rule ModerationRule) (ModerationRule, error) {
+	rule, err := NormalizeModerationRule(rule)
+	if err != nil {
+		return ModerationRule{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if strings.TrimSpace(rule.ID) == "" {
+		return scanModerationRule(s.db.QueryRowContext(ctx, `INSERT INTO bot_moderation_rules (name, enabled, pattern, match_target, case_sensitive, regex, action, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, name, enabled, pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at`, rule.Name, rule.Enabled, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason))
+	}
+	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET name=$2, enabled=$3, pattern=$4, match_target=$5, case_sensitive=$6, regex=$7, action=$8, reason=$9, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at`, rule.ID, rule.Name, rule.Enabled, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason))
+}
+
+func (s *Store) DeleteModerationRule(ctx context.Context, id string) error {
+	return s.deleteByID(ctx, "bot_moderation_rules", id, "moderation rule id is required")
+}
+
+func (s *Store) DryRunModeration(ctx context.Context, message, username string) ([]ModerationMatch, error) {
+	rules, err := s.ListModerationRules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return MatchModerationRules(rules, message, username)
 }
 
 func (s *Store) SaveQuote(ctx context.Context, quote Quote) (Quote, error) {
@@ -520,6 +588,7 @@ func scanCommand(row commandScanner) (Command, error) {
 
 type counterScanner interface{ Scan(dest ...any) error }
 type quoteScanner interface{ Scan(dest ...any) error }
+type moderationRuleScanner interface{ Scan(dest ...any) error }
 
 func scanCounter(row counterScanner) (Counter, error) {
 	var counter Counter
@@ -535,6 +604,14 @@ func scanQuote(row quoteScanner) (Quote, error) {
 		return Quote{}, err
 	}
 	return quote, nil
+}
+
+func scanModerationRule(row moderationRuleScanner) (ModerationRule, error) {
+	var rule ModerationRule
+	if err := row.Scan(&rule.ID, &rule.Name, &rule.Enabled, &rule.Pattern, &rule.MatchTarget, &rule.CaseSensitive, &rule.Regex, &rule.Action, &rule.Reason, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+		return ModerationRule{}, err
+	}
+	return rule, nil
 }
 
 func NormalizeCounter(counter Counter) (Counter, error) {
@@ -563,6 +640,96 @@ func NormalizeQuote(quote Quote) (Quote, error) {
 		return Quote{}, errors.New("quote author must be 80 characters or less")
 	}
 	return quote, nil
+}
+
+func NormalizeModerationRule(rule ModerationRule) (ModerationRule, error) {
+	rule.ID = strings.TrimSpace(rule.ID)
+	rule.Name = strings.ToLower(strings.TrimSpace(rule.Name))
+	rule.Pattern = strings.TrimSpace(rule.Pattern)
+	rule.MatchTarget = normalizeToken(rule.MatchTarget, "message")
+	rule.Action = normalizeToken(rule.Action, "flag")
+	rule.Reason = strings.TrimSpace(rule.Reason)
+	if rule.Name == "" {
+		return ModerationRule{}, errors.New("moderation rule name is required")
+	}
+	if !isSafeBotName(rule.Name) {
+		return ModerationRule{}, errors.New("moderation rule name must use lowercase letters, numbers, dash, or underscore")
+	}
+	if rule.Pattern == "" {
+		return ModerationRule{}, errors.New("moderation rule pattern is required")
+	}
+	if len(rule.Pattern) > 200 {
+		return ModerationRule{}, errors.New("moderation rule pattern must be 200 characters or less")
+	}
+	if len(rule.Reason) > 180 {
+		return ModerationRule{}, errors.New("moderation rule reason must be 180 characters or less")
+	}
+	switch rule.MatchTarget {
+	case "message", "username", "both":
+	default:
+		return ModerationRule{}, fmt.Errorf("unsupported moderation match target %q", rule.MatchTarget)
+	}
+	switch rule.Action {
+	case "flag", "delete", "timeout", "ban":
+	default:
+		return ModerationRule{}, fmt.Errorf("unsupported moderation action %q", rule.Action)
+	}
+	if rule.Regex {
+		if _, err := regexp.Compile(rule.Pattern); err != nil {
+			return ModerationRule{}, fmt.Errorf("invalid moderation regex: %w", err)
+		}
+	}
+	return rule, nil
+}
+
+func MatchModerationRules(rules []ModerationRule, message, username string) ([]ModerationMatch, error) {
+	matches := []ModerationMatch{}
+	for _, rule := range rules {
+		rule, err := NormalizeModerationRule(rule)
+		if err != nil {
+			return nil, err
+		}
+		if !rule.Enabled {
+			continue
+		}
+		if moderationRuleMatches(rule, message, username) {
+			matches = append(matches, ModerationMatch{RuleID: rule.ID, RuleName: rule.Name, Pattern: rule.Pattern, MatchTarget: rule.MatchTarget, Action: rule.Action, Reason: rule.Reason})
+		}
+	}
+	return matches, nil
+}
+
+func moderationRuleMatches(rule ModerationRule, message, username string) bool {
+	switch rule.MatchTarget {
+	case "username":
+		return textMatchesModerationRule(rule, username)
+	case "both":
+		return textMatchesModerationRule(rule, message) || textMatchesModerationRule(rule, username)
+	default:
+		return textMatchesModerationRule(rule, message)
+	}
+}
+
+func textMatchesModerationRule(rule ModerationRule, value string) bool {
+	if !rule.CaseSensitive {
+		value = strings.ToLower(value)
+	}
+	pattern := rule.Pattern
+	if !rule.CaseSensitive && !rule.Regex {
+		pattern = strings.ToLower(pattern)
+	}
+	if !rule.Regex {
+		return strings.Contains(value, pattern)
+	}
+	compiledPattern := pattern
+	if !rule.CaseSensitive {
+		compiledPattern = "(?i)" + pattern
+	}
+	compiled, err := regexp.Compile(compiledPattern)
+	if err != nil {
+		return false
+	}
+	return compiled.MatchString(value)
 }
 
 func (s *Store) deleteByID(ctx context.Context, table, id, emptyMessage string) error {
@@ -832,4 +999,20 @@ CREATE TABLE IF NOT EXISTS bot_quotes (
 );
 
 CREATE INDEX IF NOT EXISTS bot_quotes_created_at_idx ON bot_quotes (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS bot_moderation_rules (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  name text NOT NULL UNIQUE,
+  enabled boolean NOT NULL DEFAULT true,
+  pattern text NOT NULL,
+  match_target text NOT NULL DEFAULT 'message',
+  case_sensitive boolean NOT NULL DEFAULT false,
+  regex boolean NOT NULL DEFAULT false,
+  action text NOT NULL DEFAULT 'flag',
+  reason text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS bot_moderation_rules_enabled_idx ON bot_moderation_rules (enabled);
 `

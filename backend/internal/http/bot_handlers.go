@@ -54,6 +54,30 @@ type botQuoteRequest struct {
 	Author string `json:"author"`
 }
 
+type botModerationRulesResponse struct {
+	Rules     []bot.ModerationRule `json:"rules"`
+	LoadError string               `json:"loadError,omitempty"`
+}
+type botModerationRuleRequest struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Enabled       bool   `json:"enabled"`
+	Pattern       string `json:"pattern"`
+	MatchTarget   string `json:"matchTarget"`
+	CaseSensitive bool   `json:"caseSensitive"`
+	Regex         bool   `json:"regex"`
+	Action        string `json:"action"`
+	Reason        string `json:"reason"`
+}
+type botModerationDryRunRequest struct {
+	Message  string `json:"message"`
+	Username string `json:"username"`
+}
+type botModerationDryRunResponse struct {
+	Matches   []bot.ModerationMatch `json:"matches"`
+	LoadError string                `json:"loadError,omitempty"`
+}
+
 type botCommandRequest struct {
 	ID              string `json:"id"`
 	Name            string `json:"name"`
@@ -166,6 +190,73 @@ func (s *Server) botQuotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, botQuotesResponse{Quotes: quotes})
+}
+
+func (s *Server) botModerationRules(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		writeJSON(w, botModerationRulesResponse{Rules: []bot.ModerationRule{}, LoadError: s.botLoadError})
+		return
+	}
+	rules, err := s.botStore.ListModerationRules(r.Context())
+	if err != nil {
+		http.Error(w, "bot moderation rules unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, botModerationRulesResponse{Rules: rules})
+}
+
+func (s *Server) botModerationRuleSave(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot moderation unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var request botModerationRuleRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	rule, err := s.botStore.SaveModerationRule(r.Context(), bot.ModerationRule{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Pattern: request.Pattern, MatchTarget: request.MatchTarget, CaseSensitive: request.CaseSensitive, Regex: request.Regex, Action: request.Action, Reason: request.Reason})
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, rule)
+}
+
+func (s *Server) botModerationRuleDelete(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot moderation unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := s.botStore.DeleteModerationRule(r.Context(), r.PathValue("id")); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) botModerationDryRun(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		writeJSON(w, botModerationDryRunResponse{Matches: []bot.ModerationMatch{}, LoadError: s.botLoadError})
+		return
+	}
+	var request botModerationDryRunRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	matches, err := s.botStore.DryRunModeration(r.Context(), request.Message, request.Username)
+	if err != nil {
+		http.Error(w, "bot moderation dry-run unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, botModerationDryRunResponse{Matches: matches})
 }
 
 func (s *Server) botQuoteSave(w http.ResponseWriter, r *http.Request) {

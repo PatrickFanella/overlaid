@@ -13,14 +13,15 @@ Implemented now:
 - Operator-protected timer list/create/toggle/delete at `/api/bot/timers`.
 - Operator-protected counter list/create/delete at `/api/bot/counters`.
 - Operator-protected quote list/create/delete at `/api/bot/quotes`.
+- Operator-protected moderation rule list/create/delete and dry-run matching at `/api/bot/moderation/*`.
 - Enabled timers publish safe ticker or alert overlay events when due.
-- `/dashboard/bot` overview, command manager, counters/quotes manager, timer manager, and audit panel.
+- `/dashboard/bot` overview, command manager, counters/quotes manager, moderation dry-run panel, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
 - Custom Twitch commands can publish safe ticker or alert overlay responses with bounded template variables.
 
 Not implemented yet:
 
-- Twitch moderation actions and nuke-style workflows.
+- Live Twitch moderation actions and nuke-style workflows.
 - Twitch reward creation/fulfillment through Helix management APIs.
 
 ## Fast checks
@@ -32,6 +33,7 @@ curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhos
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/timers | jq .
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/counters | jq .
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/quotes | jq .
+curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/moderation/rules | jq .
 ```
 
 Expected status:
@@ -54,8 +56,10 @@ Expected status:
 8. Toggle the timer paused/enabled and delete it if it was only for verification.
 9. Confirm Bot counters and quotes shows existing entries or the empty state.
 10. Create a safe `hype` counter and a short quote, then delete them if verification-only.
-11. Confirm Bot audit shows either recent events or the empty state.
-12. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/config`.
+11. Confirm Bot moderation dry-run shows existing rules or the empty state.
+12. Create a safe `spam_link` rule matching message text `buy now`; dry-run a sample message; delete it if verification-only.
+13. Confirm Bot audit shows either recent events or the empty state.
+14. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/config`.
 
 ## Custom command behavior
 
@@ -111,6 +115,19 @@ Counters and quotes are intentionally safe community tools:
 - `!delquote <id>` deletes a quote by id for broadcaster/moderator users.
 - Quote text is required and capped at 500 characters; author is capped at 80 characters.
 - Counter and quote commands do not send outbound chat, call external APIs, run OBS actions, or moderate users.
+
+## Moderation dry-run behavior
+
+Moderation rules are a safe foundation for future Twitch moderation tools. They currently do not call Twitch delete, timeout, or ban APIs.
+
+- Rule names use lowercase letters, numbers, dash, or underscore.
+- Patterns match message text, username, or both.
+- Patterns can be plain contains matches or Go/RE2 regular expressions.
+- Matching is case-insensitive unless `case sensitive` is enabled.
+- Actions `flag`, `delete`, `timeout`, and `ban` are labels only in this milestone.
+- Dry-run requests return the rules that would match a sample username/message.
+
+Before enabling real Twitch moderation actions, verify OAuth scopes, broadcaster/moderator identity requirements, dry-run output, audit logging, and rollback/operator controls.
 
 ## Command audit check
 

@@ -124,3 +124,19 @@ CREATE TABLE IF NOT EXISTS bot_quotes (
 );
 
 CREATE INDEX IF NOT EXISTS bot_quotes_created_at_idx ON bot_quotes (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS bot_moderation_rules (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  name text NOT NULL UNIQUE,
+  enabled boolean NOT NULL DEFAULT true,
+  pattern text NOT NULL,
+  match_target text NOT NULL DEFAULT 'message',
+  case_sensitive boolean NOT NULL DEFAULT false,
+  regex boolean NOT NULL DEFAULT false,
+  action text NOT NULL DEFAULT 'flag',
+  reason text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS bot_moderation_rules_enabled_idx ON bot_moderation_rules (enabled);

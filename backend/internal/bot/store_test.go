@@ -97,6 +97,47 @@ func TestNormalizeCommandRejectsUnsafeValues(t *testing.T) {
 	}
 }
 
+func TestNormalizeModerationRule(t *testing.T) {
+	rule, err := NormalizeModerationRule(ModerationRule{Name: "  Spam_Link ", Pattern: "  buy now  ", MatchTarget: "BOTH", Action: "DELETE", Reason: "  spam  ", Enabled: true})
+	if err != nil {
+		t.Fatalf("normalize rule: %v", err)
+	}
+	if rule.Name != "spam_link" || rule.Pattern != "buy now" || rule.MatchTarget != "both" || rule.Action != "delete" || rule.Reason != "spam" {
+		t.Fatalf("unexpected normalized rule: %#v", rule)
+	}
+}
+
+func TestNormalizeModerationRuleRejectsUnsafeValues(t *testing.T) {
+	cases := []ModerationRule{
+		{Name: "", Pattern: "spam"},
+		{Name: "bad name", Pattern: "spam"},
+		{Name: "spam", Pattern: ""},
+		{Name: "spam", Pattern: "[", Regex: true},
+		{Name: "spam", Pattern: "spam", MatchTarget: "title"},
+		{Name: "spam", Pattern: "spam", Action: "nuke"},
+	}
+	for _, tc := range cases {
+		if _, err := NormalizeModerationRule(tc); err == nil {
+			t.Fatalf("expected moderation rule validation error for %#v", tc)
+		}
+	}
+}
+
+func TestMatchModerationRules(t *testing.T) {
+	rules := []ModerationRule{
+		{Name: "spam", Enabled: true, Pattern: "buy now", MatchTarget: "message", Action: "flag"},
+		{Name: "botname", Enabled: true, Pattern: `^bot_`, MatchTarget: "username", Regex: true, Action: "flag"},
+		{Name: "disabled", Enabled: false, Pattern: "hello", Action: "flag"},
+	}
+	matches, err := MatchModerationRules(rules, "Please BUY NOW", "bot_viewer")
+	if err != nil {
+		t.Fatalf("match rules: %v", err)
+	}
+	if len(matches) != 2 || matches[0].RuleName != "spam" || matches[1].RuleName != "botname" {
+		t.Fatalf("unexpected matches: %#v", matches)
+	}
+}
+
 func TestNormalizeCounter(t *testing.T) {
 	counter, err := NormalizeCounter(Counter{Name: " !Hype_Count ", Value: 7})
 	if err != nil {

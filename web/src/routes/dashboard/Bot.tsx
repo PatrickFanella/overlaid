@@ -2,16 +2,20 @@ import { useEffect, useState } from 'react';
 import {
   deleteBotCommand,
   deleteBotCounter,
+  deleteBotModerationRule,
   deleteBotQuote,
   deleteBotTimer,
+  dryRunBotModeration,
   fetchBotAudit,
   fetchBotCommands,
   fetchBotCounters,
+  fetchBotModerationRules,
   fetchBotQuotes,
   fetchBotStatus,
   fetchBotTimers,
   saveBotCommand,
   saveBotCounter,
+  saveBotModerationRule,
   saveBotQuote,
   saveBotTimer,
   setBotCommandEnabled,
@@ -21,6 +25,9 @@ import {
   type BotCommandsResponse,
   type BotCounter,
   type BotCountersResponse,
+  type BotModerationDryRunResponse,
+  type BotModerationRule,
+  type BotModerationRulesResponse,
   type BotQuote,
   type BotQuotesResponse,
   type BotStatus,
@@ -37,6 +44,8 @@ type BotPageState = {
   commands: BotCommandsResponse | null;
   counters: BotCountersResponse | null;
   quotes: BotQuotesResponse | null;
+  moderation: BotModerationRulesResponse | null;
+  moderationDryRun: BotModerationDryRunResponse | null;
   timers: BotTimersResponse | null;
   loading: boolean;
   error: string;
@@ -59,30 +68,45 @@ type TimerDraft = {
   enabled: boolean;
 };
 
+type ModerationDraft = {
+  name: string;
+  enabled: boolean;
+  pattern: string;
+  matchTarget: 'message' | 'username' | 'both';
+  caseSensitive: boolean;
+  regex: boolean;
+  action: 'flag' | 'delete' | 'timeout' | 'ban';
+  reason: string;
+};
+
 const defaultTimerDraft: TimerDraft = { name: '', intervalSeconds: 300, response: '', action: 'ticker', enabled: true };
 const defaultCommandDraft: CommandDraft = { name: '', response: '', action: 'ticker', roleRequired: 'viewer', cooldownSeconds: 10, enabled: true };
 const defaultCounterDraft = { name: '', value: 0 };
 const defaultQuoteDraft = { text: '', author: '' };
+const defaultModerationDraft: ModerationDraft = { name: '', enabled: true, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
+const defaultModerationTest = { username: '', message: '' };
 
 export function DashboardBotPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const operatorSecret = loadOperatorSecret();
-  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, counters: null, quotes: null, timers: null, loading: false, error: '' });
+  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, counters: null, quotes: null, moderation: null, moderationDryRun: null, timers: null, loading: false, error: '' });
   const [commandDraft, setCommandDraft] = useState<CommandDraft>(defaultCommandDraft);
   const [draft, setDraft] = useState<TimerDraft>(defaultTimerDraft);
   const [savingCommand, setSavingCommand] = useState(false);
   const [savingTimer, setSavingTimer] = useState(false);
   const [counterDraft, setCounterDraft] = useState(defaultCounterDraft);
   const [quoteDraft, setQuoteDraft] = useState(defaultQuoteDraft);
+  const [moderationDraft, setModerationDraft] = useState<ModerationDraft>(defaultModerationDraft);
+  const [moderationTest, setModerationTest] = useState(defaultModerationTest);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setState((current) => ({ ...current, loading: true, error: '' }));
       try {
-        const [status, audit, commands, counters, quotes, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
+        const [status, audit, commands, counters, quotes, moderation, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotModerationRules(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
         if (!cancelled) {
-          setState({ status, audit, commands, counters, quotes, timers, loading: false, error: '' });
+          setState({ status, audit, commands, counters, quotes, moderation, moderationDryRun: null, timers, loading: false, error: '' });
         }
       } catch (error) {
         if (!cancelled) {
@@ -109,6 +133,26 @@ export function DashboardBotPage() {
   async function refreshCommunity() {
     const [status, counters, quotes] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret)]);
     setState((current) => ({ ...current, status, counters, quotes }));
+  }
+
+  async function refreshModeration() {
+    const moderation = await fetchBotModerationRules(apiBaseUrl, operatorSecret);
+    setState((current) => ({ ...current, moderation }));
+  }
+
+  async function handleSaveModerationRule() {
+    try { await saveBotModerationRule(moderationDraft, apiBaseUrl, operatorSecret); setModerationDraft(defaultModerationDraft); await refreshModeration(); }
+    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'moderation rule save failed' })); }
+  }
+
+  async function handleDeleteModerationRule(rule: BotModerationRule) {
+    try { await deleteBotModerationRule(rule.id, apiBaseUrl, operatorSecret); await refreshModeration(); }
+    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'moderation rule delete failed' })); }
+  }
+
+  async function handleModerationDryRun() {
+    try { const moderationDryRun = await dryRunBotModeration(moderationTest, apiBaseUrl, operatorSecret); setState((current) => ({ ...current, moderationDryRun, error: '' })); }
+    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'moderation dry-run failed' })); }
   }
 
   async function handleSaveCounter() {
@@ -235,6 +279,18 @@ export function DashboardBotPage() {
         onDeleteCounter={handleDeleteCounter}
         onSaveQuote={handleSaveQuote}
         onDeleteQuote={handleDeleteQuote}
+      />
+
+      <BotModerationPanel
+        rules={state.moderation}
+        draft={moderationDraft}
+        test={moderationTest}
+        dryRun={state.moderationDryRun}
+        onDraftChange={setModerationDraft}
+        onTestChange={setModerationTest}
+        onSave={handleSaveModerationRule}
+        onDelete={handleDeleteModerationRule}
+        onDryRun={handleModerationDryRun}
       />
 
       <BotTimersPanel
@@ -424,6 +480,70 @@ function BotCommunityPanel({
             {(quotes?.quotes ?? []).map((quote) => <article key={quote.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><p className="text-zinc-300">{quote.text}</p><div className="mt-1 flex items-center justify-between"><span className="text-zinc-500">{quote.author || 'unknown'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDeleteQuote(quote)}>Delete</button></div></article>)}
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function BotModerationPanel({
+  rules,
+  draft,
+  test,
+  dryRun,
+  onDraftChange,
+  onTestChange,
+  onSave,
+  onDelete,
+  onDryRun,
+}: {
+  rules: BotModerationRulesResponse | null;
+  draft: ModerationDraft;
+  test: { username: string; message: string };
+  dryRun: BotModerationDryRunResponse | null;
+  onDraftChange: (draft: ModerationDraft) => void;
+  onTestChange: (test: { username: string; message: string }) => void;
+  onSave: () => void;
+  onDelete: (rule: BotModerationRule) => void;
+  onDryRun: () => void;
+}) {
+  const items = rules?.rules ?? [];
+  const canSave = draft.name.trim() !== '' && draft.pattern.trim() !== '';
+  return (
+    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+      <p className="hud-label">Bot moderation dry-run</p>
+      <p className="mt-1 text-sm text-zinc-300">Blocked-term rules are stored and testable here. Actions are audit/planning labels only for now; no Twitch delete, timeout, or ban calls are sent.</p>
+      {rules?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">moderation unavailable :: {rules.loadError}</p> : null}
+      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_9rem_8rem]">
+        <input className="hud-input" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="spam_link" />
+        <input className="hud-input" value={draft.pattern} onChange={(event) => onDraftChange({ ...draft, pattern: event.target.value })} placeholder="buy now" />
+        <select className="hud-input" value={draft.matchTarget} onChange={(event) => onDraftChange({ ...draft, matchTarget: event.target.value as ModerationDraft['matchTarget'] })}>
+          <option value="message">Message</option>
+          <option value="username">Username</option>
+          <option value="both">Both</option>
+        </select>
+        <select className="hud-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as ModerationDraft['action'] })}>
+          <option value="flag">Flag</option>
+          <option value="delete">Delete label</option>
+          <option value="timeout">Timeout label</option>
+          <option value="ban">Ban label</option>
+        </select>
+      </div>
+      <input className="hud-input mt-2" value={draft.reason} onChange={(event) => onDraftChange({ ...draft, reason: event.target.value })} placeholder="reason shown in audit/planning" />
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-300">
+        <label className="flex items-center gap-2"><input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} /> enabled</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={draft.regex} onChange={(event) => onDraftChange({ ...draft, regex: event.target.checked })} /> regex</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={draft.caseSensitive} onChange={(event) => onDraftChange({ ...draft, caseSensitive: event.target.checked })} /> case sensitive</label>
+        <button className="hud-button" type="button" disabled={!canSave} onClick={onSave}>Save rule</button>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-[10rem_1fr_auto]">
+        <input className="hud-input" value={test.username} onChange={(event) => onTestChange({ ...test, username: event.target.value })} placeholder="username" />
+        <input className="hud-input" value={test.message} onChange={(event) => onTestChange({ ...test, message: event.target.value })} placeholder="message to test" />
+        <button className="hud-button" type="button" onClick={onDryRun}>Dry run</button>
+      </div>
+      {dryRun ? <p className="mt-2 text-xs text-zinc-300">matches :: {dryRun.matches.length ? dryRun.matches.map((match) => `${match.ruleName}:${match.action}`).join(', ') : 'none'}</p> : null}
+      {items.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No moderation rules configured yet.</p> : null}
+      <div className="mt-3 grid gap-2">
+        {items.map((rule) => <article key={rule.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><div className="flex items-center justify-between gap-2"><strong className="text-cyan-100">{rule.name}</strong><span className="hud-chip hud-chip--square">{rule.enabled ? 'enabled' : 'paused'}</span></div><p className="mt-1 text-zinc-300">{rule.matchTarget} · {rule.regex ? 'regex' : 'contains'} · {rule.action}</p><p className="mt-1 text-zinc-400">{rule.pattern}</p><div className="mt-2 flex justify-between gap-2"><span className="text-zinc-500">{rule.reason || 'no reason'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDelete(rule)}>Delete</button></div></article>)}
       </div>
     </section>
   );
