@@ -84,7 +84,9 @@ func newSessionStore(cfg config.Config) (*sessions.Store, string) {
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		return nil, ""
 	}
-	store, err := sessions.NewPostgres(cfg.DatabaseURL)
+	store, err := retryStartupStore("stream sessions store", func() (*sessions.Store, error) {
+		return sessions.NewPostgres(cfg.DatabaseURL)
+	})
 	if err != nil {
 		log.Printf("failed to initialize stream sessions store: %v", err)
 		return nil, err.Error()
@@ -115,7 +117,9 @@ func newDashboardConfigStore(cfg config.Config) (*dashboardconfig.Store, string)
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		return nil, ""
 	}
-	store, err := dashboardconfig.NewPostgres(cfg.DatabaseURL)
+	store, err := retryStartupStore("dashboard config store", func() (*dashboardconfig.Store, error) {
+		return dashboardconfig.NewPostgres(cfg.DatabaseURL)
+	})
 	if err != nil {
 		log.Printf("failed to initialize dashboard config store: %v", err)
 		return nil, err.Error()
@@ -127,7 +131,9 @@ func newEventHistoryStore(cfg config.Config) (eventHistoryStore, string, bool) {
 	historyLoadError := ""
 	historyWritable := true
 	if strings.TrimSpace(cfg.DatabaseURL) != "" {
-		eventHistory, err := history.NewPostgres(cfg.DatabaseURL, cfg.EventHistoryLimit)
+		eventHistory, err := retryStartupStore("postgres event history", func() (*history.PostgresStore, error) {
+			return history.NewPostgres(cfg.DatabaseURL, cfg.EventHistoryLimit)
+		})
 		if err != nil {
 			historyLoadError = err.Error()
 			historyWritable = false
@@ -148,7 +154,9 @@ func newEventHistoryStore(cfg config.Config) (eventHistoryStore, string, bool) {
 
 func newInteractionStore(cfg config.Config) (*interactions.Store, string) {
 	if strings.TrimSpace(cfg.DatabaseURL) != "" {
-		store, err := interactions.NewPostgres(cfg.DatabaseURL)
+		store, err := retryStartupStore("postgres twitch interactions", func() (*interactions.Store, error) {
+			return interactions.NewPostgres(cfg.DatabaseURL)
+		})
 		if err != nil {
 			log.Printf("failed to initialize postgres twitch interactions: %v", err)
 			return nil, err.Error()
@@ -162,6 +170,28 @@ func newInteractionStore(cfg config.Config) (*interactions.Store, string) {
 		return store, err.Error()
 	}
 	return store, ""
+}
+
+func retryStartupStore[T any](name string, open func() (T, error)) (T, error) {
+	const attempts = 8
+	const delay = 750 * time.Millisecond
+	var zero T
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		store, err := open()
+		if err == nil {
+			if attempt > 1 {
+				log.Printf("initialized %s after %d attempts", name, attempt)
+			}
+			return store, nil
+		}
+		lastErr = err
+		if attempt < attempts {
+			log.Printf("waiting for %s initialization: attempt %d/%d failed: %v", name, attempt, attempts, err)
+			time.Sleep(delay)
+		}
+	}
+	return zero, lastErr
 }
 
 func (s *Server) interactionsLoadErrorValue() string {

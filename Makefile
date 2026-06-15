@@ -9,7 +9,7 @@ BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GO_LDFLAGS := -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Version=$(VERSION) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Commit=$(BUILD_COMMIT) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.BuiltAt=$(BUILD_DATE)
 BACKUP_DIR ?= backups
 
-.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build smoke smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup postgres-backup
+.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build wait-api smoke smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup postgres-backup
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -64,7 +64,18 @@ docker-build: ## Build and start the Docker Compose stack
 logs: ## Follow Docker Compose logs
 	docker compose logs -f
 
-smoke: ## Smoke test API health and web shell
+wait-api: ## Wait for API health endpoint after deploy/restart
+	@for attempt in {1..30}; do \
+		if curl --max-time 2 -fsS http://localhost:$(API_PORT)/healthz >/dev/null; then \
+			echo "API ready"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "API did not become ready on localhost:$(API_PORT)" >&2; \
+	exit 1
+
+smoke: wait-api ## Smoke test API health and web shell
 	curl --max-time 15 -fsS http://localhost:$(API_PORT)/healthz
 	curl --max-time 15 -fsS http://localhost:$(API_PORT)/version
 	curl --max-time 15 -fsS http://localhost:$(API_PORT)/readyz
