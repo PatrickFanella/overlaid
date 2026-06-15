@@ -1,6 +1,7 @@
 package twitch
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,22 +31,30 @@ type CustomCommand struct {
 	CooldownSeconds int
 }
 
+type CommunityStore interface {
+	IncrementCounter(name string, delta int) (bot.Counter, error)
+	RandomQuote() (bot.Quote, bool, error)
+	AddQuote(text string, author string) (bot.Quote, error)
+}
+
 type CommandProcessorConfig struct {
-	Cooldown time.Duration
-	Now      func() time.Time
-	Aliases  map[string]string
-	Custom   []CustomCommand
-	Channel  string
+	Cooldown  time.Duration
+	Now       func() time.Time
+	Aliases   map[string]string
+	Custom    []CustomCommand
+	Channel   string
+	Community CommunityStore
 }
 
 type CommandProcessor struct {
-	mu       sync.RWMutex
-	cooldown time.Duration
-	now      func() time.Time
-	lastRun  map[string]time.Time
-	aliases  map[string]string
-	custom   map[string]CustomCommand
-	channel  string
+	mu        sync.RWMutex
+	cooldown  time.Duration
+	now       func() time.Time
+	lastRun   map[string]time.Time
+	aliases   map[string]string
+	custom    map[string]CustomCommand
+	channel   string
+	community CommunityStore
 }
 
 func ParseChatCommand(text string) (ChatCommand, bool) {
@@ -79,7 +88,7 @@ func NewCommandProcessor(config CommandProcessorConfig) *CommandProcessor {
 	if cooldown < 0 {
 		cooldown = 0
 	}
-	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases), custom: customCommandMap(config.Custom), channel: strings.TrimSpace(config.Channel)}
+	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases), custom: customCommandMap(config.Custom), channel: strings.TrimSpace(config.Channel), community: config.Community}
 }
 
 func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []events.Event {
@@ -89,6 +98,9 @@ func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []e
 
 	original := command
 	resolved, aliased := p.resolveCommand(command)
+	if events, ok := p.handleCommunityCommand(original, resolved, aliased, user); ok {
+		return events
+	}
 
 	if custom, ok := p.customCommand(resolved.Name); ok {
 		return p.handleCustomCommand(original, resolved, aliased, custom, user)
@@ -110,6 +122,67 @@ func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []e
 	}
 
 	return []events.Event{p.commandEvent(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted"), action}
+}
+
+func (p *CommandProcessor) handleCommunityCommand(original ChatCommand, resolved ChatCommand, aliased bool, user ChatCommandUser) ([]events.Event, bool) {
+	switch resolved.Name {
+	case "count":
+		return p.handleCountCommand(original, resolved, aliased, user), true
+	case "quote":
+		return p.handleQuoteCommand(original, resolved, aliased, user), true
+	default:
+		return nil, false
+	}
+}
+
+func (p *CommandProcessor) handleCountCommand(original ChatCommand, resolved ChatCommand, aliased bool, user ChatCommandUser) []events.Event {
+	name := strings.ToLower(strings.TrimSpace(resolved.Args))
+	if name == "" {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Counter name required", map[string]any{"action": "counter"})}
+	}
+	if p.community == nil {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Counter storage unavailable", map[string]any{"action": "counter"})}
+	}
+	if !CanRunChatCommand(user) {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"action": "counter", "roleRequired": "moderator"})}
+	}
+	counter, err := p.community.IncrementCounter(name, 1)
+	if err != nil {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Counter failed", map[string]any{"action": "counter", "error": err.Error()})}
+	}
+	message := "Counter " + counter.Name + " is now " + strconv.Itoa(counter.Value)
+	return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"action": "counter", "counter": counter.Name, "value": counter.Value}), events.NewCommand("twitch", "Counter: "+counter.Name, message, events.SeverityInfo, map[string]any{"command": "count", "action": "counter", "counter": counter.Name, "value": counter.Value, "ticker": map[string]any{"label": "!count", "message": message}})}
+}
+
+func (p *CommandProcessor) handleQuoteCommand(original ChatCommand, resolved ChatCommand, aliased bool, user ChatCommandUser) []events.Event {
+	if p.community == nil {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Quote storage unavailable", map[string]any{"action": "quote"})}
+	}
+	args := strings.TrimSpace(resolved.Args)
+	if strings.HasPrefix(strings.ToLower(args), "add ") {
+		if !CanRunChatCommand(user) {
+			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"action": "quote", "roleRequired": "moderator"})}
+		}
+		text := strings.TrimSpace(args[4:])
+		quote, err := p.community.AddQuote(text, firstNonEmpty(user.Name, user.Login))
+		if err != nil {
+			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Quote add failed", map[string]any{"action": "quote", "error": err.Error()})}
+		}
+		message := "Quote added: " + truncateCommandText(quote.Text, 180)
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"action": "quote", "quoteId": quote.ID}), events.NewCommand("twitch", "Quote added", message, events.SeverityInfo, map[string]any{"command": "quote", "action": "quote", "quoteId": quote.ID})}
+	}
+	quote, ok, err := p.community.RandomQuote()
+	if err != nil {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Quote failed", map[string]any{"action": "quote", "error": err.Error()})}
+	}
+	if !ok {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "No quotes configured", map[string]any{"action": "quote"})}
+	}
+	message := quote.Text
+	if quote.Author != "" {
+		message += " — " + quote.Author
+	}
+	return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"action": "quote", "quoteId": quote.ID}), events.NewCommand("twitch", "Quote", truncateCommandText(message, 400), events.SeverityInfo, map[string]any{"command": "quote", "action": "quote", "quoteId": quote.ID, "ticker": map[string]any{"label": "!quote", "message": truncateCommandText(message, 400)}})}
 }
 
 func (p *CommandProcessor) SetAliases(aliases map[string]string) {

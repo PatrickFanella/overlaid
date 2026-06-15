@@ -5,8 +5,29 @@ import (
 	"testing"
 	"time"
 
+	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 )
+
+type fakeCommunityStore struct {
+	counter bot.Counter
+	quote   bot.Quote
+}
+
+func (f *fakeCommunityStore) IncrementCounter(name string, delta int) (bot.Counter, error) {
+	f.counter = bot.Counter{Name: name, Value: f.counter.Value + delta}
+	return f.counter, nil
+}
+func (f *fakeCommunityStore) RandomQuote() (bot.Quote, bool, error) {
+	if f.quote.Text == "" {
+		return bot.Quote{}, false, nil
+	}
+	return f.quote, true, nil
+}
+func (f *fakeCommunityStore) AddQuote(text string, author string) (bot.Quote, error) {
+	f.quote = bot.Quote{ID: "quote-1", Text: text, Author: author}
+	return f.quote, nil
+}
 
 func TestParseChatCommand(t *testing.T) {
 	tests := []struct {
@@ -173,6 +194,31 @@ func TestCommandProcessorCustomCommandPermissionAndCooldown(t *testing.T) {
 	second := processor.Handle(ChatCommand{Name: "so"}, ChatCommandUser{Name: "mod", IsModerator: true})
 	if len(second) != 1 || second[0].Message != "Command cooling down" {
 		t.Fatalf("expected cooldown warning, got %#v", second)
+	}
+}
+
+func TestCommandProcessorCounterCommand(t *testing.T) {
+	community := &fakeCommunityStore{}
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Community: community})
+	got := processor.Handle(ChatCommand{Name: "count", Args: "hype"}, ChatCommandUser{Name: "mod", IsModerator: true})
+	if len(got) != 2 || got[0].Severity != events.SeveritySuccess || got[1].Message != "Counter hype is now 1" {
+		t.Fatalf("unexpected count events: %#v", got)
+	}
+	if got[0].Data["action"] != "counter" || got[0].Data["value"] != 1 {
+		t.Fatalf("unexpected count diagnostics: %#v", got[0].Data)
+	}
+}
+
+func TestCommandProcessorQuoteCommands(t *testing.T) {
+	community := &fakeCommunityStore{}
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Community: community})
+	added := processor.Handle(ChatCommand{Name: "quote", Args: "add never tell me the odds"}, ChatCommandUser{Name: "Mod", IsModerator: true})
+	if len(added) != 2 || added[0].Severity != events.SeveritySuccess || community.quote.Text != "never tell me the odds" {
+		t.Fatalf("unexpected quote add: %#v", added)
+	}
+	shown := processor.Handle(ChatCommand{Name: "quote"}, ChatCommandUser{Name: "Viewer"})
+	if len(shown) != 2 || shown[1].Message != "never tell me the odds — Mod" {
+		t.Fatalf("unexpected quote show: %#v", shown)
 	}
 }
 

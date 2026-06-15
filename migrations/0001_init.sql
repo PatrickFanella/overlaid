@@ -106,3 +106,21 @@ CREATE TABLE IF NOT EXISTS bot_timers (
   updated_at timestamptz NOT NULL DEFAULT now(),
   last_run_at timestamptz
 );
+
+CREATE TABLE IF NOT EXISTS bot_counters (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  name text NOT NULL UNIQUE,
+  value integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS bot_quotes (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  text text NOT NULL,
+  author text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS bot_quotes_created_at_idx ON bot_quotes (created_at DESC);

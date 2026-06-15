@@ -96,3 +96,43 @@ func TestNormalizeCommandRejectsUnsafeValues(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeCounter(t *testing.T) {
+	counter, err := NormalizeCounter(Counter{Name: " !Hype_Count ", Value: 7})
+	if err != nil {
+		t.Fatalf("expected valid counter, got %v", err)
+	}
+	if counter.Name != "hype_count" || counter.Value != 7 {
+		t.Fatalf("unexpected normalized counter: %#v", counter)
+	}
+}
+
+func TestNormalizeCounterRejectsUnsafeValues(t *testing.T) {
+	for _, counter := range []Counter{{}, {Name: "bad name"}} {
+		if _, err := NormalizeCounter(counter); err == nil {
+			t.Fatalf("expected counter validation error for %#v", counter)
+		}
+	}
+}
+
+func TestNormalizeQuote(t *testing.T) {
+	quote, err := NormalizeQuote(Quote{Text: "  hello stream  ", Author: "  chat  "})
+	if err != nil {
+		t.Fatalf("expected valid quote, got %v", err)
+	}
+	if quote.Text != "hello stream" || quote.Author != "chat" {
+		t.Fatalf("unexpected normalized quote: %#v", quote)
+	}
+}
+
+func TestNormalizeQuoteRejectsUnsafeValues(t *testing.T) {
+	if _, err := NormalizeQuote(Quote{}); err == nil {
+		t.Fatal("expected empty quote rejection")
+	}
+	if _, err := NormalizeQuote(Quote{Text: strings.Repeat("x", 501)}); err == nil {
+		t.Fatal("expected long quote rejection")
+	}
+	if _, err := NormalizeQuote(Quote{Text: "ok", Author: strings.Repeat("x", 81)}); err == nil {
+		t.Fatal("expected long author rejection")
+	}
+}

@@ -1,18 +1,28 @@
 import { useEffect, useState } from 'react';
 import {
   deleteBotCommand,
+  deleteBotCounter,
+  deleteBotQuote,
   deleteBotTimer,
   fetchBotAudit,
   fetchBotCommands,
+  fetchBotCounters,
+  fetchBotQuotes,
   fetchBotStatus,
   fetchBotTimers,
   saveBotCommand,
+  saveBotCounter,
+  saveBotQuote,
   saveBotTimer,
   setBotCommandEnabled,
   setBotTimerEnabled,
   type BotAuditResponse,
   type BotCommand,
   type BotCommandsResponse,
+  type BotCounter,
+  type BotCountersResponse,
+  type BotQuote,
+  type BotQuotesResponse,
   type BotStatus,
   type BotTimer,
   type BotTimersResponse,
@@ -25,6 +35,8 @@ type BotPageState = {
   status: BotStatus | null;
   audit: BotAuditResponse | null;
   commands: BotCommandsResponse | null;
+  counters: BotCountersResponse | null;
+  quotes: BotQuotesResponse | null;
   timers: BotTimersResponse | null;
   loading: boolean;
   error: string;
@@ -49,24 +61,28 @@ type TimerDraft = {
 
 const defaultTimerDraft: TimerDraft = { name: '', intervalSeconds: 300, response: '', action: 'ticker', enabled: true };
 const defaultCommandDraft: CommandDraft = { name: '', response: '', action: 'ticker', roleRequired: 'viewer', cooldownSeconds: 10, enabled: true };
+const defaultCounterDraft = { name: '', value: 0 };
+const defaultQuoteDraft = { text: '', author: '' };
 
 export function DashboardBotPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const operatorSecret = loadOperatorSecret();
-  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, timers: null, loading: false, error: '' });
+  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, counters: null, quotes: null, timers: null, loading: false, error: '' });
   const [commandDraft, setCommandDraft] = useState<CommandDraft>(defaultCommandDraft);
   const [draft, setDraft] = useState<TimerDraft>(defaultTimerDraft);
   const [savingCommand, setSavingCommand] = useState(false);
   const [savingTimer, setSavingTimer] = useState(false);
+  const [counterDraft, setCounterDraft] = useState(defaultCounterDraft);
+  const [quoteDraft, setQuoteDraft] = useState(defaultQuoteDraft);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setState((current) => ({ ...current, loading: true, error: '' }));
       try {
-        const [status, audit, commands, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
+        const [status, audit, commands, counters, quotes, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
         if (!cancelled) {
-          setState({ status, audit, commands, timers, loading: false, error: '' });
+          setState({ status, audit, commands, counters, quotes, timers, loading: false, error: '' });
         }
       } catch (error) {
         if (!cancelled) {
@@ -88,6 +104,31 @@ export function DashboardBotPage() {
   async function refreshCommands() {
     const [status, commands] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret)]);
     setState((current) => ({ ...current, status, commands }));
+  }
+
+  async function refreshCommunity() {
+    const [status, counters, quotes] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret)]);
+    setState((current) => ({ ...current, status, counters, quotes }));
+  }
+
+  async function handleSaveCounter() {
+    try { await saveBotCounter(counterDraft, apiBaseUrl, operatorSecret); setCounterDraft(defaultCounterDraft); await refreshCommunity(); }
+    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'counter save failed' })); }
+  }
+
+  async function handleDeleteCounter(counter: BotCounter) {
+    try { await deleteBotCounter(counter.id, apiBaseUrl, operatorSecret); await refreshCommunity(); }
+    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'counter delete failed' })); }
+  }
+
+  async function handleSaveQuote() {
+    try { await saveBotQuote(quoteDraft, apiBaseUrl, operatorSecret); setQuoteDraft(defaultQuoteDraft); await refreshCommunity(); }
+    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'quote save failed' })); }
+  }
+
+  async function handleDeleteQuote(quote: BotQuote) {
+    try { await deleteBotQuote(quote.id, apiBaseUrl, operatorSecret); await refreshCommunity(); }
+    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'quote delete failed' })); }
   }
 
   async function handleSaveCommand() {
@@ -183,6 +224,19 @@ export function DashboardBotPage() {
         onDelete={handleDeleteCommand}
       />
 
+      <BotCommunityPanel
+        counters={state.counters}
+        quotes={state.quotes}
+        counterDraft={counterDraft}
+        quoteDraft={quoteDraft}
+        onCounterDraftChange={setCounterDraft}
+        onQuoteDraftChange={setQuoteDraft}
+        onSaveCounter={handleSaveCounter}
+        onDeleteCounter={handleDeleteCounter}
+        onSaveQuote={handleSaveQuote}
+        onDeleteQuote={handleDeleteQuote}
+      />
+
       <BotTimersPanel
         draft={draft}
         timers={state.timers}
@@ -204,6 +258,8 @@ function BotStatusPanel({ status }: { status: BotStatus | null }) {
         <Line label="storage" value={status ? (status.available ? 'available' : 'unavailable') : 'unknown'} />
         <Line label="commands" value={String(status?.commandCount ?? 0)} />
         <Line label="timers" value={String(status?.timerCount ?? 0)} />
+        <Line label="counters" value={String(status?.counterCount ?? 0)} />
+        <Line label="quotes" value={String(status?.quoteCount ?? 0)} />
         <Line label="audit events" value={String(status?.auditCount ?? 0)} />
       </div>
       {status?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">load error :: {status.loadError}</p> : null}
@@ -313,6 +369,61 @@ function BotCommandsPanel({
             </div>
           </article>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function BotCommunityPanel({
+  counters,
+  quotes,
+  counterDraft,
+  quoteDraft,
+  onCounterDraftChange,
+  onQuoteDraftChange,
+  onSaveCounter,
+  onDeleteCounter,
+  onSaveQuote,
+  onDeleteQuote,
+}: {
+  counters: BotCountersResponse | null;
+  quotes: BotQuotesResponse | null;
+  counterDraft: { name: string; value: number };
+  quoteDraft: { text: string; author: string };
+  onCounterDraftChange: (draft: { name: string; value: number }) => void;
+  onQuoteDraftChange: (draft: { text: string; author: string }) => void;
+  onSaveCounter: () => void;
+  onDeleteCounter: (counter: BotCounter) => void;
+  onSaveQuote: () => void;
+  onDeleteQuote: (quote: BotQuote) => void;
+}) {
+  return (
+    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+      <p className="hud-label">Bot counters and quotes</p>
+      <p className="mt-1 text-sm text-zinc-300">Community tools for `!count name`, `!quote`, and moderator `!quote add text`.</p>
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-zinc-500">Counters</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-[1fr_7rem_auto]">
+            <input className="hud-input" value={counterDraft.name} onChange={(event) => onCounterDraftChange({ ...counterDraft, name: event.target.value })} placeholder="hype" />
+            <input className="hud-input" type="number" value={counterDraft.value} onChange={(event) => onCounterDraftChange({ ...counterDraft, value: Number(event.target.value) })} />
+            <button className="hud-button" type="button" disabled={counterDraft.name.trim() === ''} onClick={onSaveCounter}>Save counter</button>
+          </div>
+          {(counters?.counters ?? []).length === 0 ? <p className="mt-2 text-sm text-zinc-400">No counters yet.</p> : null}
+          <div className="mt-2 grid gap-2">
+            {(counters?.counters ?? []).map((counter) => <article key={counter.id} className="flex items-center justify-between border border-zinc-700 bg-black/40 p-2 text-xs"><span><strong className="text-cyan-100">{counter.name}</strong> · {counter.value}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDeleteCounter(counter)}>Delete</button></article>)}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-zinc-500">Quotes</p>
+          <input className="hud-input mt-2" value={quoteDraft.author} onChange={(event) => onQuoteDraftChange({ ...quoteDraft, author: event.target.value })} placeholder="author optional" />
+          <textarea className="hud-input mt-2 min-h-20" value={quoteDraft.text} onChange={(event) => onQuoteDraftChange({ ...quoteDraft, text: event.target.value })} placeholder="quote text" />
+          <button className="hud-button mt-2" type="button" disabled={quoteDraft.text.trim() === ''} onClick={onSaveQuote}>Save quote</button>
+          {(quotes?.quotes ?? []).length === 0 ? <p className="mt-2 text-sm text-zinc-400">No quotes yet.</p> : null}
+          <div className="mt-2 grid gap-2">
+            {(quotes?.quotes ?? []).map((quote) => <article key={quote.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><p className="text-zinc-300">{quote.text}</p><div className="mt-1 flex items-center justify-between"><span className="text-zinc-500">{quote.author || 'unknown'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDeleteQuote(quote)}>Delete</button></div></article>)}
+          </div>
+        </div>
       </div>
     </section>
   );

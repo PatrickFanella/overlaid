@@ -15,6 +15,8 @@ type botStatusResponse struct {
 	LastAuditError string `json:"lastAuditError,omitempty"`
 	CommandCount   int    `json:"commandCount"`
 	TimerCount     int    `json:"timerCount"`
+	CounterCount   int    `json:"counterCount"`
+	QuoteCount     int    `json:"quoteCount"`
 	AuditCount     int    `json:"auditCount"`
 }
 
@@ -31,6 +33,25 @@ type botTimersResponse struct {
 type botCommandsResponse struct {
 	Commands  []bot.Command `json:"commands"`
 	LoadError string        `json:"loadError,omitempty"`
+}
+
+type botCountersResponse struct {
+	Counters  []bot.Counter `json:"counters"`
+	LoadError string        `json:"loadError,omitempty"`
+}
+type botQuotesResponse struct {
+	Quotes    []bot.Quote `json:"quotes"`
+	LoadError string      `json:"loadError,omitempty"`
+}
+type botCounterRequest struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Value int    `json:"value"`
+}
+type botQuoteRequest struct {
+	ID     string `json:"id"`
+	Text   string `json:"text"`
+	Author string `json:"author"`
 }
 
 type botCommandRequest struct {
@@ -74,8 +95,114 @@ func (s *Server) botStatus(w http.ResponseWriter, r *http.Request) {
 			status.TimerCount = timerCount
 			status.AuditCount = auditCount
 		}
+		if counters, err := s.botStore.ListCounters(r.Context()); err == nil {
+			status.CounterCount = len(counters)
+		}
+		if quotes, err := s.botStore.ListQuotes(r.Context()); err == nil {
+			status.QuoteCount = len(quotes)
+		}
 	}
 	writeJSON(w, status)
+}
+
+func (s *Server) botCounters(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		writeJSON(w, botCountersResponse{Counters: []bot.Counter{}, LoadError: s.botLoadError})
+		return
+	}
+	counters, err := s.botStore.ListCounters(r.Context())
+	if err != nil {
+		http.Error(w, "bot counters unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, botCountersResponse{Counters: counters})
+}
+
+func (s *Server) botCounterSave(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot counters unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var request botCounterRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	counter, err := s.botStore.SaveCounter(r.Context(), bot.Counter{ID: request.ID, Name: request.Name, Value: request.Value})
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, counter)
+}
+
+func (s *Server) botCounterDelete(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot counters unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := s.botStore.DeleteCounter(r.Context(), r.PathValue("id")); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) botQuotes(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		writeJSON(w, botQuotesResponse{Quotes: []bot.Quote{}, LoadError: s.botLoadError})
+		return
+	}
+	quotes, err := s.botStore.ListQuotes(r.Context())
+	if err != nil {
+		http.Error(w, "bot quotes unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, botQuotesResponse{Quotes: quotes})
+}
+
+func (s *Server) botQuoteSave(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot quotes unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var request botQuoteRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	quote, err := s.botStore.SaveQuote(r.Context(), bot.Quote{ID: request.ID, Text: request.Text, Author: request.Author})
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, quote)
+}
+
+func (s *Server) botQuoteDelete(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot quotes unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := s.botStore.DeleteQuote(r.Context(), r.PathValue("id")); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) botAudit(w http.ResponseWriter, r *http.Request) {

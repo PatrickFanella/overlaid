@@ -58,6 +58,22 @@ type Command struct {
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
+type Counter struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Value     int       `json:"value"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type Quote struct {
+	ID        string    `json:"id"`
+	Text      string    `json:"text"`
+	Author    string    `json:"author,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
 func NewPostgres(databaseURL string) (*Store, error) {
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
@@ -136,6 +152,108 @@ func (s *Store) Counts(ctx context.Context) (commandCount, timerCount, auditCoun
 			(SELECT count(*) FROM bot_audit_events)
 	`).Scan(&commandCount, &timerCount, &auditCount)
 	return commandCount, timerCount, auditCount, err
+}
+
+func (s *Store) ListCounters(ctx context.Context) ([]Counter, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, value, created_at, updated_at FROM bot_counters ORDER BY name ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Counter{}
+	for rows.Next() {
+		item, err := scanCounter(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SaveCounter(ctx context.Context, counter Counter) (Counter, error) {
+	counter, err := NormalizeCounter(counter)
+	if err != nil {
+		return Counter{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if strings.TrimSpace(counter.ID) == "" {
+		return scanCounter(s.db.QueryRowContext(ctx, `INSERT INTO bot_counters (name, value) VALUES ($1,$2) RETURNING id, name, value, created_at, updated_at`, counter.Name, counter.Value))
+	}
+	return scanCounter(s.db.QueryRowContext(ctx, `UPDATE bot_counters SET name=$2, value=$3, updated_at=now() WHERE id=$1 RETURNING id, name, value, created_at, updated_at`, counter.ID, counter.Name, counter.Value))
+}
+
+func (s *Store) IncrementCounter(ctx context.Context, name string, delta int) (Counter, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return Counter{}, errors.New("counter name is required")
+	}
+	if !isSafeBotName(name) {
+		return Counter{}, errors.New("counter name must use lowercase letters, numbers, dash, or underscore")
+	}
+	if delta == 0 {
+		delta = 1
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return scanCounter(s.db.QueryRowContext(ctx, `
+		INSERT INTO bot_counters (name, value) VALUES ($1,$2)
+		ON CONFLICT (name) DO UPDATE SET value = bot_counters.value + EXCLUDED.value, updated_at = now()
+		RETURNING id, name, value, created_at, updated_at
+	`, name, delta))
+}
+
+func (s *Store) DeleteCounter(ctx context.Context, id string) error {
+	return s.deleteByID(ctx, "bot_counters", id, "counter id is required")
+}
+
+func (s *Store) ListQuotes(ctx context.Context) ([]Quote, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `SELECT id, text, author, created_at, updated_at FROM bot_quotes ORDER BY created_at DESC, id DESC LIMIT 250`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Quote{}
+	for rows.Next() {
+		item, err := scanQuote(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SaveQuote(ctx context.Context, quote Quote) (Quote, error) {
+	quote, err := NormalizeQuote(quote)
+	if err != nil {
+		return Quote{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if strings.TrimSpace(quote.ID) == "" {
+		return scanQuote(s.db.QueryRowContext(ctx, `INSERT INTO bot_quotes (text, author) VALUES ($1,$2) RETURNING id, text, author, created_at, updated_at`, quote.Text, quote.Author))
+	}
+	return scanQuote(s.db.QueryRowContext(ctx, `UPDATE bot_quotes SET text=$2, author=$3, updated_at=now() WHERE id=$1 RETURNING id, text, author, created_at, updated_at`, quote.ID, quote.Text, quote.Author))
+}
+
+func (s *Store) RandomQuote(ctx context.Context) (Quote, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	quote, err := scanQuote(s.db.QueryRowContext(ctx, `SELECT id, text, author, created_at, updated_at FROM bot_quotes ORDER BY random() LIMIT 1`))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Quote{}, false, nil
+	}
+	return quote, err == nil, err
+}
+
+func (s *Store) DeleteQuote(ctx context.Context, id string) error {
+	return s.deleteByID(ctx, "bot_quotes", id, "quote id is required")
 }
 
 func (s *Store) ListTimers(ctx context.Context) ([]Timer, error) {
@@ -386,6 +504,70 @@ func scanCommand(row commandScanner) (Command, error) {
 	return command, nil
 }
 
+type counterScanner interface{ Scan(dest ...any) error }
+type quoteScanner interface{ Scan(dest ...any) error }
+
+func scanCounter(row counterScanner) (Counter, error) {
+	var counter Counter
+	if err := row.Scan(&counter.ID, &counter.Name, &counter.Value, &counter.CreatedAt, &counter.UpdatedAt); err != nil {
+		return Counter{}, err
+	}
+	return counter, nil
+}
+
+func scanQuote(row quoteScanner) (Quote, error) {
+	var quote Quote
+	if err := row.Scan(&quote.ID, &quote.Text, &quote.Author, &quote.CreatedAt, &quote.UpdatedAt); err != nil {
+		return Quote{}, err
+	}
+	return quote, nil
+}
+
+func NormalizeCounter(counter Counter) (Counter, error) {
+	counter.ID = strings.TrimSpace(counter.ID)
+	counter.Name = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(counter.Name), "!")))
+	if counter.Name == "" {
+		return Counter{}, errors.New("counter name is required")
+	}
+	if !isSafeBotName(counter.Name) {
+		return Counter{}, errors.New("counter name must use lowercase letters, numbers, dash, or underscore")
+	}
+	return counter, nil
+}
+
+func NormalizeQuote(quote Quote) (Quote, error) {
+	quote.ID = strings.TrimSpace(quote.ID)
+	quote.Text = strings.TrimSpace(quote.Text)
+	quote.Author = strings.TrimSpace(quote.Author)
+	if quote.Text == "" {
+		return Quote{}, errors.New("quote text is required")
+	}
+	if len(quote.Text) > 500 {
+		return Quote{}, errors.New("quote text must be 500 characters or less")
+	}
+	if len(quote.Author) > 80 {
+		return Quote{}, errors.New("quote author must be 80 characters or less")
+	}
+	return quote, nil
+}
+
+func (s *Store) deleteByID(ctx context.Context, table, id, emptyMessage string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errors.New(emptyMessage)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	result, err := s.db.ExecContext(ctx, `DELETE FROM `+table+` WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if affected, err := result.RowsAffected(); err == nil && affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func NormalizeCommand(command Command) (Command, error) {
 	command.ID = strings.TrimSpace(command.ID)
 	command.Name = strings.TrimSpace(command.Name)
@@ -618,4 +800,22 @@ CREATE TABLE IF NOT EXISTS bot_timers (
   updated_at timestamptz NOT NULL DEFAULT now(),
   last_run_at timestamptz
 );
+
+CREATE TABLE IF NOT EXISTS bot_counters (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  name text NOT NULL UNIQUE,
+  value integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS bot_quotes (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  text text NOT NULL,
+  author text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS bot_quotes_created_at_idx ON bot_quotes (created_at DESC);
 `

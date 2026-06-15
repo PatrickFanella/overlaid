@@ -1,6 +1,6 @@
 # Bot Ops Runbook
 
-Use this runbook when checking over-laid's FossaBot-parity bot runtime: audit storage, future commands, timers, channel-point workflows, and moderation.
+Use this runbook when checking over-laid's FossaBot-parity bot runtime: audit storage, commands, timers, counters, quotes, future channel-point workflows, and moderation.
 
 ## Current scope
 
@@ -11,14 +11,15 @@ Implemented now:
 - Operator-protected recent audit events at `GET /api/bot/audit`.
 - Operator-protected custom command list/create/toggle/delete at `/api/bot/commands`.
 - Operator-protected timer list/create/toggle/delete at `/api/bot/timers`.
+- Operator-protected counter list/create/delete at `/api/bot/counters`.
+- Operator-protected quote list/create/delete at `/api/bot/quotes`.
 - Enabled timers publish safe ticker or alert overlay events when due.
-- `/dashboard/bot` overview, command manager, timer manager, and audit panel.
+- `/dashboard/bot` overview, command manager, counters/quotes manager, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
 - Custom Twitch commands can publish safe ticker or alert overlay responses with bounded template variables.
 
 Not implemented yet:
 
-- Counters, quotes, and community utilities.
 - Twitch moderation actions and nuke-style workflows.
 
 ## Fast checks
@@ -28,6 +29,8 @@ curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhos
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' 'http://localhost:8080/api/bot/audit?limit=10' | jq .
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/commands | jq .
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/timers | jq .
+curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/counters | jq .
+curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/quotes | jq .
 ```
 
 Expected status:
@@ -36,6 +39,7 @@ Expected status:
 - `bot_runtime` readiness is `ok`.
 - `commandCount` reflects configured custom commands, including disabled commands.
 - `timerCount` reflects configured bot timers, including disabled timers.
+- `counterCount` and `quoteCount` reflect configured community tools.
 
 ## Dashboard check
 
@@ -47,8 +51,10 @@ Expected status:
 6. Confirm Bot timers shows existing timers or the empty state.
 7. Create a safe test timer with name `stream_hype`, interval `300`, action `Ticker`, and a short response.
 8. Toggle the timer paused/enabled and delete it if it was only for verification.
-9. Confirm Bot audit shows either recent events or the empty state.
-10. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/config`.
+9. Confirm Bot counters and quotes shows existing entries or the empty state.
+10. Create a safe `hype` counter and a short quote, then delete them if verification-only.
+11. Confirm Bot audit shows either recent events or the empty state.
+12. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/config`.
 
 ## Custom command behavior
 
@@ -90,6 +96,17 @@ Timer validation:
 - Actions are currently `ticker` or `alert`.
 - Responses are required and capped at 500 characters.
 - Template variables use the same renderer as custom commands. `{channel}` and `{command}` are useful for timers; user/args variables render empty for timer-triggered messages.
+
+## Counters and quotes behavior
+
+Counters and quotes are intentionally safe community tools:
+
+- `!count name` increments a named counter by one. Broadcaster/moderator is required because this mutates persistent state.
+- Counter names use lowercase letters, numbers, dash, or underscore.
+- `!quote` displays a random stored quote as a ticker-style command event.
+- `!quote add text` stores a quote with the broadcaster/moderator display name as author.
+- Quote text is required and capped at 500 characters; author is capped at 80 characters.
+- Counter and quote commands do not send outbound chat, call external APIs, run OBS actions, or moderate users.
 
 ## Command audit check
 
