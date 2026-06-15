@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
@@ -100,14 +102,15 @@ type botModerationDryRunResponse struct {
 	LoadError string                `json:"loadError,omitempty"`
 }
 type botNukeDryRunRequest struct {
-	Pattern         string `json:"pattern"`
-	Regex           bool   `json:"regex"`
-	CaseSensitive   bool   `json:"caseSensitive"`
-	LookbackMinutes int    `json:"lookbackMinutes"`
-	Limit           int    `json:"limit"`
-	Action          string `json:"action"`
-	DurationSeconds int    `json:"durationSeconds"`
-	Confirm         bool   `json:"confirm"`
+	Pattern          string `json:"pattern"`
+	Regex            bool   `json:"regex"`
+	CaseSensitive    bool   `json:"caseSensitive"`
+	LookbackMinutes  int    `json:"lookbackMinutes"`
+	Limit            int    `json:"limit"`
+	Action           string `json:"action"`
+	DurationSeconds  int    `json:"durationSeconds"`
+	Confirm          bool   `json:"confirm"`
+	RadiationMinutes int    `json:"radiationMinutes"`
 }
 type botNukeDryRunMatch struct {
 	EventID   string `json:"eventId"`
@@ -124,11 +127,21 @@ type botNukeDryRunResponse struct {
 }
 
 type botNukeExecuteResponse struct {
-	Matches   []botNukeDryRunMatch `json:"matches"`
-	Attempted int                  `json:"attempted"`
-	Succeeded int                  `json:"succeeded"`
-	Failed    int                  `json:"failed"`
-	Action    string               `json:"action"`
+	Matches       []botNukeDryRunMatch `json:"matches"`
+	Attempted     int                  `json:"attempted"`
+	Succeeded     int                  `json:"succeeded"`
+	Failed        int                  `json:"failed"`
+	Action        string               `json:"action"`
+	RadiationRule *bot.ModerationRule  `json:"radiationRule,omitempty"`
+}
+
+type botNukeRollbackRequest struct {
+	RuleID  string `json:"ruleId"`
+	Confirm bool   `json:"confirm"`
+}
+
+type botNukeRollbackResponse struct {
+	Rule bot.ModerationRule `json:"rule"`
 }
 
 type botCommandRequest struct {
@@ -343,6 +356,10 @@ func (s *Server) botModerationNukeExecute(w http.ResponseWriter, r *http.Request
 		http.Error(w, "nuke action must be delete or timeout", http.StatusBadRequest)
 		return
 	}
+	if err := s.validateNukeRadiationRequest(request); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	matches, err := s.planNukeDryRun(request)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -352,6 +369,14 @@ func (s *Server) botModerationNukeExecute(w http.ResponseWriter, r *http.Request
 		matches = matches[:50]
 	}
 	response := botNukeExecuteResponse{Matches: matches, Attempted: len(matches), Action: action}
+	if request.RadiationMinutes > 0 {
+		rule, err := s.createNukeRadiationRule(r.Context(), request, action)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		response.RadiationRule = &rule
+	}
 	for _, match := range matches {
 		mod := botModerationActionRequest{Action: action, TargetUserID: match.UserID, TargetUserLogin: match.User, MessageID: match.MessageID, DurationSeconds: request.DurationSeconds, Reason: "nuke:" + strings.TrimSpace(request.Pattern)}
 		if action == "timeout" && mod.DurationSeconds == 0 {
@@ -366,6 +391,78 @@ func (s *Server) botModerationNukeExecute(w http.ResponseWriter, r *http.Request
 		s.recordModerationActionAudit(r.Context(), mod, "allowed", "nuke_execute")
 	}
 	writeJSON(w, response)
+}
+
+func (s *Server) botModerationNukeRollback(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot moderation unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var request botNukeRollbackRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if !request.Confirm {
+		http.Error(w, "confirm is required", http.StatusBadRequest)
+		return
+	}
+	rule, err := s.botStore.DisableNukeRadiationRule(r.Context(), request.RuleID)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	s.recordNukeWorkflowAudit(r.Context(), "nuke_rollback", "allowed", "radiation_disabled", map[string]any{"ruleId": rule.ID, "ruleName": rule.Name, "pattern": rule.Pattern})
+	writeJSON(w, botNukeRollbackResponse{Rule: rule})
+}
+
+func (s *Server) validateNukeRadiationRequest(request botNukeDryRunRequest) error {
+	if request.RadiationMinutes == 0 {
+		return nil
+	}
+	if s.botStore == nil {
+		return errors.New("bot moderation unavailable")
+	}
+	if request.RadiationMinutes < 1 || request.RadiationMinutes > 120 {
+		return errors.New("radiation window must be between 1 and 120 minutes")
+	}
+	return nil
+}
+
+func (s *Server) createNukeRadiationRule(ctx context.Context, request botNukeDryRunRequest, action string) (bot.ModerationRule, error) {
+	if err := s.validateNukeRadiationRequest(request); err != nil {
+		return bot.ModerationRule{}, err
+	}
+	expiresAt := time.Now().UTC().Add(time.Duration(request.RadiationMinutes) * time.Minute)
+	rule, err := s.botStore.SaveModerationRule(ctx, bot.ModerationRule{
+		Name:          "nuke_radiation_" + strconv.FormatInt(time.Now().UTC().UnixNano(), 10),
+		Enabled:       true,
+		Enforce:       true,
+		Pattern:       request.Pattern,
+		MatchTarget:   "message",
+		CaseSensitive: request.CaseSensitive,
+		Regex:         request.Regex,
+		Action:        action,
+		Reason:        "radiation:nuke:" + strings.TrimSpace(request.Pattern),
+		Source:        "nuke_radiation",
+		ExpiresAt:     &expiresAt,
+	})
+	if err != nil {
+		return bot.ModerationRule{}, err
+	}
+	s.recordNukeWorkflowAudit(ctx, "nuke_radiation", "allowed", "radiation_created", map[string]any{"ruleId": rule.ID, "ruleName": rule.Name, "pattern": rule.Pattern, "action": rule.Action, "expiresAt": rule.ExpiresAt})
+	return rule, nil
+}
+
+func (s *Server) recordNukeWorkflowAudit(ctx context.Context, action, result, reason string, data map[string]any) {
+	if s.botRuntime == nil {
+		return
+	}
+	encoded, _ := json.Marshal(data)
+	s.botRuntime.Record(ctx, bot.AuditEvent{Source: string(bot.SourceDashboard), ActorRole: string(bot.RoleOperator), Trigger: "nuke_workflow", Command: action, Action: action, Result: result, Reason: reason, StreamSessionID: s.activeSessionID(), Data: encoded})
 }
 
 func (s *Server) planNukeDryRun(request botNukeDryRunRequest) ([]botNukeDryRunMatch, error) {

@@ -43,6 +43,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/bot/moderation/action", s.requireOperator(s.botModerationAction))
 	s.mux.HandleFunc("POST /api/bot/moderation/nuke/dry-run", s.requireOperator(s.botModerationNukeDryRun))
 	s.mux.HandleFunc("POST /api/bot/moderation/nuke/execute", s.requireOperator(s.botModerationNukeExecute))
+	s.mux.HandleFunc("POST /api/bot/moderation/nuke/radiation/rollback", s.requireOperator(s.botModerationNukeRollback))
 	s.mux.HandleFunc("GET /api/stream/session", s.requireOperator(s.streamSessionStatus))
 	s.mux.HandleFunc("GET /api/stream/session/{id}", s.requireOperator(s.streamSessionReport))
 	s.mux.HandleFunc("POST /api/stream/session/start", s.requireOperator(s.streamSessionStart))

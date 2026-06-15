@@ -18,6 +18,7 @@ import {
   fetchBotQuotes,
   fetchBotStatus,
   fetchBotTimers,
+  rollbackBotNukeRadiation,
   saveBotCommand,
   saveBotCounter,
   saveBotAPIVariable,
@@ -101,6 +102,7 @@ type NukeDraft = {
   action: 'delete' | 'timeout';
   durationSeconds: number;
   confirm: boolean;
+  radiationMinutes: number;
 };
 
 const defaultTimerDraft: TimerDraft = { name: '', intervalSeconds: 300, response: '', action: 'ticker', enabled: true };
@@ -111,7 +113,7 @@ const defaultAPIVariableDraft = { name: '', enabled: true, url: '', responseSele
 const defaultModerationDraft: ModerationDraft = { name: '', enabled: true, enforce: false, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
 const defaultModerationTest = { username: '', message: '' };
 const defaultModerationAction = { action: 'timeout' as const, targetUserId: '', targetUserLogin: '', messageId: '', durationSeconds: 60, reason: '' };
-const defaultNukeDraft: NukeDraft = { pattern: '', regex: false, caseSensitive: false, lookbackMinutes: 30, limit: 100, action: 'delete', durationSeconds: 60, confirm: false };
+const defaultNukeDraft: NukeDraft = { pattern: '', regex: false, caseSensitive: false, lookbackMinutes: 30, limit: 100, action: 'delete', durationSeconds: 60, confirm: false, radiationMinutes: 0 };
 
 export function DashboardBotPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
@@ -131,6 +133,7 @@ export function DashboardBotPage() {
   const [nukeDraft, setNukeDraft] = useState(defaultNukeDraft);
   const [nukeResult, setNukeResult] = useState<BotNukeDryRunResponse | null>(null);
   const [nukeExecuteResult, setNukeExecuteResult] = useState<BotNukeExecuteResponse | null>(null);
+  const [nukeRollbackResult, setNukeRollbackResult] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -204,6 +207,7 @@ export function DashboardBotPage() {
       const result = await dryRunBotNuke(nukeDraft, apiBaseUrl, operatorSecret);
       setNukeResult(result);
       setNukeExecuteResult(null);
+      setNukeRollbackResult('');
       setNukeDraft((current) => ({ ...current, confirm: false }));
       setState((current) => ({ ...current, error: '' }));
     } catch (error) {
@@ -216,11 +220,25 @@ export function DashboardBotPage() {
     try {
       const result = await executeBotNuke(nukeDraft, apiBaseUrl, operatorSecret);
       setNukeExecuteResult(result);
+      setNukeRollbackResult('');
       setNukeDraft((current) => ({ ...current, confirm: false }));
+      await refreshModeration();
       setState((current) => ({ ...current, error: '' }));
     } catch (error) {
       setNukeExecuteResult(null);
       setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'nuke execute failed' }));
+    }
+  }
+
+  async function handleNukeRollback(rule: BotModerationRule) {
+    try {
+      const result = await rollbackBotNukeRadiation(rule.id, apiBaseUrl, operatorSecret);
+      setNukeRollbackResult(`disabled ${result.rule.name}`);
+      await refreshModeration();
+      setState((current) => ({ ...current, error: '' }));
+    } catch (error) {
+      setNukeRollbackResult('');
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'nuke rollback failed' }));
     }
   }
 
@@ -378,6 +396,7 @@ export function DashboardBotPage() {
         nukeDraft={nukeDraft}
         nukeResult={nukeResult}
         nukeExecuteResult={nukeExecuteResult}
+        nukeRollbackResult={nukeRollbackResult}
         onDraftChange={setModerationDraft}
         onTestChange={setModerationTest}
         onActionChange={setModerationAction}
@@ -388,6 +407,7 @@ export function DashboardBotPage() {
         onAction={handleModerationAction}
         onNukeDryRun={handleNukeDryRun}
         onNukeExecute={handleNukeExecute}
+        onNukeRollback={handleNukeRollback}
       />
 
       <BotTimersPanel
@@ -660,6 +680,7 @@ function BotModerationPanel({
   nukeDraft,
   nukeResult,
   nukeExecuteResult,
+  nukeRollbackResult,
   onDraftChange,
   onTestChange,
   onActionChange,
@@ -670,6 +691,7 @@ function BotModerationPanel({
   onAction,
   onNukeDryRun,
   onNukeExecute,
+  onNukeRollback,
 }: {
   rules: BotModerationRulesResponse | null;
   draft: ModerationDraft;
@@ -680,6 +702,7 @@ function BotModerationPanel({
   nukeDraft: typeof defaultNukeDraft;
   nukeResult: BotNukeDryRunResponse | null;
   nukeExecuteResult: BotNukeExecuteResponse | null;
+  nukeRollbackResult: string;
   onDraftChange: (draft: ModerationDraft) => void;
   onTestChange: (test: { username: string; message: string }) => void;
   onActionChange: (draft: typeof defaultModerationAction) => void;
@@ -690,10 +713,12 @@ function BotModerationPanel({
   onAction: () => void;
   onNukeDryRun: () => void;
   onNukeExecute: () => void;
+  onNukeRollback: (rule: BotModerationRule) => void;
 }) {
   const items = rules?.rules ?? [];
   const canSave = draft.name.trim() !== '' && draft.pattern.trim() !== '';
   const canExecuteNuke = Boolean(nukeResult && nukeResult.matches.length > 0 && nukeDraft.confirm);
+  const activeRadiationRules = items.filter((rule) => rule.enabled && rule.source === 'nuke_radiation' && (!rule.expiresAt || new Date(rule.expiresAt).getTime() > Date.now()));
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
       <p className="hud-label">Bot moderation dry-run</p>
@@ -764,16 +789,20 @@ function BotModerationPanel({
           <label className="flex items-center gap-2"><input type="checkbox" checked={nukeDraft.caseSensitive} onChange={(event) => onNukeDraftChange({ ...nukeDraft, caseSensitive: event.target.checked, confirm: false })} /> case sensitive</label>
           <label className="flex items-center gap-2 text-amber-100"><input type="checkbox" checked={nukeDraft.confirm} onChange={(event) => onNukeDraftChange({ ...nukeDraft, confirm: event.target.checked })} /> I reviewed this dry-run plan</label>
         </div>
-        <div className="mt-2 grid gap-2 md:grid-cols-[8rem_8rem_auto]">
+        <div className="mt-2 grid gap-2 md:grid-cols-[8rem_8rem_9rem_auto]">
           <select className="hud-input" value={nukeDraft.action} onChange={(event) => onNukeDraftChange({ ...nukeDraft, action: event.target.value as NukeDraft['action'], confirm: false })}>
             <option value="delete">Delete</option>
             <option value="timeout">Timeout</option>
           </select>
           <input className="hud-input" type="number" min={1} value={nukeDraft.durationSeconds} onChange={(event) => onNukeDraftChange({ ...nukeDraft, durationSeconds: Number(event.target.value), confirm: false })} />
+          <input className="hud-input" type="number" min={0} max={120} value={nukeDraft.radiationMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, radiationMinutes: Number(event.target.value), confirm: false })} placeholder="radiation min" />
           <button className="hud-button" type="button" disabled={!canExecuteNuke} onClick={onNukeExecute}>Execute planned nuke</button>
         </div>
+        <p className="mt-1 text-xs text-zinc-500">Radiation minutes optionally enforces this pattern for future messages for up to 120 minutes. Future timeout radiation uses the standard 60-second timeout.</p>
         {nukeResult ? <p className="mt-2 text-xs text-zinc-300">planned matches :: {nukeResult.matches.length}</p> : null}
-        {nukeExecuteResult ? <p className="mt-2 text-xs text-amber-100">executed {nukeExecuteResult.action} :: {nukeExecuteResult.succeeded}/{nukeExecuteResult.attempted} succeeded · {nukeExecuteResult.failed} failed</p> : null}
+        {nukeExecuteResult ? <p className="mt-2 text-xs text-amber-100">executed {nukeExecuteResult.action} :: {nukeExecuteResult.succeeded}/{nukeExecuteResult.attempted} succeeded · {nukeExecuteResult.failed} failed{nukeExecuteResult.radiationRule ? ` · radiation until ${nukeExecuteResult.radiationRule.expiresAt ?? 'expiry'}` : ''}</p> : null}
+        {nukeRollbackResult ? <p className="mt-2 text-xs text-emerald-200">rollback :: {nukeRollbackResult}</p> : null}
+        {activeRadiationRules.length > 0 ? <div className="mt-2 grid gap-1 border border-amber-400/20 p-2 text-xs"><p className="uppercase tracking-wide text-amber-100">Active radiation windows</p>{activeRadiationRules.map((rule) => <div key={rule.id} className="flex flex-wrap items-center justify-between gap-2"><span className="text-zinc-300">{rule.pattern} · {rule.action} until {rule.expiresAt}</span><button className="hud-button hud-button--small" type="button" onClick={() => onNukeRollback(rule)}>Rollback window</button></div>)}</div> : null}
         <div className="mt-2 grid gap-1">
           {(nukeResult?.matches ?? []).slice(0, 5).map((match) => <div key={match.eventId} className="hud-terminal-line"><span className="hud-terminal-key">{match.user}</span><span className="hud-terminal-value">{match.message}</span></div>)}
         </div>
@@ -781,7 +810,7 @@ function BotModerationPanel({
 
       {items.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No moderation rules configured yet.</p> : null}
       <div className="mt-3 grid gap-2">
-        {items.map((rule) => <article key={rule.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><div className="flex items-center justify-between gap-2"><strong className="text-cyan-100">{rule.name}</strong><span className="hud-chip hud-chip--square">{rule.enabled ? (rule.enforce ? 'enforced' : 'dry-run') : 'paused'}</span></div><p className="mt-1 text-zinc-300">{rule.matchTarget} · {rule.regex ? 'regex' : 'contains'} · {rule.action}</p><p className="mt-1 text-zinc-400">{rule.pattern}</p><div className="mt-2 flex justify-between gap-2"><span className="text-zinc-500">{rule.reason || 'no reason'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDelete(rule)}>Delete</button></div></article>)}
+        {items.map((rule) => <article key={rule.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><div className="flex items-center justify-between gap-2"><strong className="text-cyan-100">{rule.name}</strong><span className="hud-chip hud-chip--square">{rule.expiresAt && new Date(rule.expiresAt).getTime() <= Date.now() ? 'expired' : rule.enabled ? (rule.enforce ? 'enforced' : 'dry-run') : 'paused'}</span></div><p className="mt-1 text-zinc-300">{rule.matchTarget} · {rule.regex ? 'regex' : 'contains'} · {rule.action}</p><p className="mt-1 text-zinc-400">{rule.pattern}</p><div className="mt-2 flex justify-between gap-2"><span className="text-zinc-500">{rule.reason || 'no reason'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDelete(rule)}>Delete</button></div></article>)}
       </div>
     </section>
   );

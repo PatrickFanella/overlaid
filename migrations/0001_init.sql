@@ -138,12 +138,17 @@ CREATE TABLE IF NOT EXISTS bot_moderation_rules (
   regex boolean NOT NULL DEFAULT false,
   action text NOT NULL DEFAULT 'flag',
   reason text NOT NULL DEFAULT '',
+  source text NOT NULL DEFAULT 'manual',
+  expires_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS bot_moderation_rules_enabled_idx ON bot_moderation_rules (enabled);
 ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS enforce boolean NOT NULL DEFAULT false;
+ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual';
+ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+CREATE INDEX IF NOT EXISTS bot_moderation_rules_expires_at_idx ON bot_moderation_rules (expires_at);
 
 CREATE TABLE IF NOT EXISTS bot_api_variables (
     id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),

@@ -80,18 +80,20 @@ type Quote struct {
 }
 
 type ModerationRule struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Enabled       bool      `json:"enabled"`
-	Enforce       bool      `json:"enforce"`
-	Pattern       string    `json:"pattern"`
-	MatchTarget   string    `json:"matchTarget"`
-	CaseSensitive bool      `json:"caseSensitive"`
-	Regex         bool      `json:"regex"`
-	Action        string    `json:"action"`
-	Reason        string    `json:"reason,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	Enabled       bool       `json:"enabled"`
+	Enforce       bool       `json:"enforce"`
+	Pattern       string     `json:"pattern"`
+	MatchTarget   string     `json:"matchTarget"`
+	CaseSensitive bool       `json:"caseSensitive"`
+	Regex         bool       `json:"regex"`
+	Action        string     `json:"action"`
+	Reason        string     `json:"reason,omitempty"`
+	Source        string     `json:"source,omitempty"`
+	ExpiresAt     *time.Time `json:"expiresAt,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
 }
 
 type ModerationMatch struct {
@@ -275,7 +277,7 @@ func (s *Store) ListQuotes(ctx context.Context) ([]Quote, error) {
 func (s *Store) ListModerationRules(ctx context.Context) ([]ModerationRule, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at FROM bot_moderation_rules ORDER BY name ASC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at FROM bot_moderation_rules ORDER BY name ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -299,9 +301,19 @@ func (s *Store) SaveModerationRule(ctx context.Context, rule ModerationRule) (Mo
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if strings.TrimSpace(rule.ID) == "" {
-		return scanModerationRule(s.db.QueryRowContext(ctx, `INSERT INTO bot_moderation_rules (name, enabled, enforce, pattern, match_target, case_sensitive, regex, action, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at`, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason))
+		return scanModerationRule(s.db.QueryRowContext(ctx, `INSERT INTO bot_moderation_rules (name, enabled, enforce, pattern, match_target, case_sensitive, regex, action, reason, source, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at`, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt))
 	}
-	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET name=$2, enabled=$3, enforce=$4, pattern=$5, match_target=$6, case_sensitive=$7, regex=$8, action=$9, reason=$10, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at`, rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason))
+	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET name=$2, enabled=$3, enforce=$4, pattern=$5, match_target=$6, case_sensitive=$7, regex=$8, action=$9, reason=$10, source=CASE WHEN $11 = 'manual' THEN source ELSE $11 END, expires_at=COALESCE($12, expires_at), updated_at=now() WHERE id=$1 RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at`, rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt))
+}
+
+func (s *Store) DisableNukeRadiationRule(ctx context.Context, id string) (ModerationRule, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ModerationRule{}, errors.New("moderation rule id is required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET enabled=false, enforce=false, updated_at=now() WHERE id=$1 AND source='nuke_radiation' RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at`, id))
 }
 
 func (s *Store) DeleteModerationRule(ctx context.Context, id string) error {
@@ -613,8 +625,12 @@ func scanQuote(row quoteScanner) (Quote, error) {
 
 func scanModerationRule(row moderationRuleScanner) (ModerationRule, error) {
 	var rule ModerationRule
-	if err := row.Scan(&rule.ID, &rule.Name, &rule.Enabled, &rule.Enforce, &rule.Pattern, &rule.MatchTarget, &rule.CaseSensitive, &rule.Regex, &rule.Action, &rule.Reason, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+	var expiresAt sql.NullTime
+	if err := row.Scan(&rule.ID, &rule.Name, &rule.Enabled, &rule.Enforce, &rule.Pattern, &rule.MatchTarget, &rule.CaseSensitive, &rule.Regex, &rule.Action, &rule.Reason, &rule.Source, &expiresAt, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
 		return ModerationRule{}, err
+	}
+	if expiresAt.Valid {
+		rule.ExpiresAt = &expiresAt.Time
 	}
 	return rule, nil
 }
@@ -653,6 +669,7 @@ func NormalizeModerationRule(rule ModerationRule) (ModerationRule, error) {
 	rule.Pattern = strings.TrimSpace(rule.Pattern)
 	rule.MatchTarget = normalizeToken(rule.MatchTarget, "message")
 	rule.Action = normalizeToken(rule.Action, "flag")
+	rule.Source = normalizeToken(rule.Source, "manual")
 	rule.Reason = strings.TrimSpace(rule.Reason)
 	if rule.Name == "" {
 		return ModerationRule{}, errors.New("moderation rule name is required")
@@ -668,6 +685,9 @@ func NormalizeModerationRule(rule ModerationRule) (ModerationRule, error) {
 	}
 	if len(rule.Reason) > 180 {
 		return ModerationRule{}, errors.New("moderation rule reason must be 180 characters or less")
+	}
+	if len(rule.Source) > 40 {
+		return ModerationRule{}, errors.New("moderation rule source must be 40 characters or less")
 	}
 	switch rule.MatchTarget {
 	case "message", "username", "both":
@@ -695,6 +715,9 @@ func MatchModerationRules(rules []ModerationRule, message, username string) ([]M
 			return nil, err
 		}
 		if !rule.Enabled {
+			continue
+		}
+		if rule.ExpiresAt != nil && !rule.ExpiresAt.After(time.Now().UTC()) {
 			continue
 		}
 		if moderationRuleMatches(rule, message, username) {
@@ -1024,12 +1047,17 @@ CREATE TABLE IF NOT EXISTS bot_moderation_rules (
   regex boolean NOT NULL DEFAULT false,
   action text NOT NULL DEFAULT 'flag',
   reason text NOT NULL DEFAULT '',
+  source text NOT NULL DEFAULT 'manual',
+  expires_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS bot_moderation_rules_enabled_idx ON bot_moderation_rules (enabled);
 ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS enforce boolean NOT NULL DEFAULT false;
+ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual';
+ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+CREATE INDEX IF NOT EXISTS bot_moderation_rules_expires_at_idx ON bot_moderation_rules (expires_at);
 
 CREATE TABLE IF NOT EXISTS bot_api_variables (
   id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),

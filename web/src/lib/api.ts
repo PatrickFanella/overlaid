@@ -105,17 +105,18 @@ export type BotAPIVariablesResponse = { variables: BotAPIVariable[]; loadError?:
 export type BotCounterPayload = { id?: string; name: string; value: number };
 export type BotQuotePayload = { id?: string; text: string; author?: string };
 export type BotAPIVariablePayload = { id?: string; name: string; enabled: boolean; url: string; responseSelector?: string; fallback?: string; cacheTtlSeconds: number; timeoutMs: number };
-export type BotModerationRule = { id: string; name: string; enabled: boolean; enforce?: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both' | string; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban' | string; reason?: string; createdAt: string; updatedAt: string };
+export type BotModerationRule = { id: string; name: string; enabled: boolean; enforce?: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both' | string; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban' | string; reason?: string; source?: string; expiresAt?: string; createdAt: string; updatedAt: string };
 export type BotModerationRulesResponse = { rules: BotModerationRule[]; loadError?: string };
 export type BotModerationRulePayload = { id?: string; name: string; enabled: boolean; enforce?: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both'; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban'; reason?: string };
 export type BotModerationMatch = { ruleId: string; ruleName: string; pattern: string; matchTarget: string; action: string; reason?: string };
 export type BotModerationDryRunResponse = { matches: BotModerationMatch[]; loadError?: string };
 export type BotModerationActionPayload = { action: 'delete' | 'timeout' | 'ban' | 'unban'; targetUserId?: string; targetUserLogin?: string; messageId?: string; durationSeconds?: number; reason?: string };
 export type BotModerationActionResponse = { action: string; result: string; reason?: string };
-export type BotNukeDryRunPayload = { pattern: string; regex: boolean; caseSensitive: boolean; lookbackMinutes: number; limit: number; action?: 'delete' | 'timeout'; durationSeconds?: number; confirm?: boolean };
+export type BotNukeDryRunPayload = { pattern: string; regex: boolean; caseSensitive: boolean; lookbackMinutes: number; limit: number; action?: 'delete' | 'timeout'; durationSeconds?: number; confirm?: boolean; radiationMinutes?: number };
 export type BotNukeDryRunMatch = { eventId: string; messageId?: string; userId?: string; user: string; message: string; createdAt: string };
 export type BotNukeDryRunResponse = { matches: BotNukeDryRunMatch[]; pattern: string; action: string };
-export type BotNukeExecuteResponse = { matches: BotNukeDryRunMatch[]; attempted: number; succeeded: number; failed: number; action: string };
+export type BotNukeExecuteResponse = { matches: BotNukeDryRunMatch[]; attempted: number; succeeded: number; failed: number; action: string; radiationRule?: BotModerationRule };
+export type BotNukeRollbackResponse = { rule: BotModerationRule };
 
 export type BotCommandPayload = {
   id?: string;
@@ -461,6 +462,11 @@ export async function dryRunBotNuke(payload: BotNukeDryRunPayload, explicitBaseU
 export async function executeBotNuke(payload: BotNukeDryRunPayload, explicitBaseUrl?: string, operatorSecret?: string) {
   const response = await postJSON('/api/bot/moderation/nuke/execute', payload, explicitBaseUrl, { operatorSecret });
   return (await response.json()) as BotNukeExecuteResponse;
+}
+
+export async function rollbackBotNukeRadiation(ruleId: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/bot/moderation/nuke/radiation/rollback', { ruleId, confirm: true }, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotNukeRollbackResponse;
 }
 
 export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {

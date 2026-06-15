@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestValidateAuditDataAllowsObjectPayload(t *testing.T) {
@@ -135,6 +136,21 @@ func TestMatchModerationRules(t *testing.T) {
 		t.Fatalf("match rules: %v", err)
 	}
 	if len(matches) != 2 || matches[0].RuleName != "spam" || matches[1].RuleName != "botname" {
+		t.Fatalf("unexpected matches: %#v", matches)
+	}
+}
+
+func TestMatchModerationRulesSkipsExpiredRules(t *testing.T) {
+	expired := time.Now().UTC().Add(-time.Minute)
+	rules := []ModerationRule{
+		{Name: "expired", Enabled: true, Pattern: "buy now", MatchTarget: "message", Action: "flag", ExpiresAt: &expired},
+		{Name: "active", Enabled: true, Pattern: "buy now", MatchTarget: "message", Action: "flag"},
+	}
+	matches, err := MatchModerationRules(rules, "please buy now", "viewer")
+	if err != nil {
+		t.Fatalf("match rules: %v", err)
+	}
+	if len(matches) != 1 || matches[0].RuleName != "active" {
 		t.Fatalf("unexpected matches: %#v", matches)
 	}
 }
