@@ -15,9 +15,10 @@ func (s *Server) recordBotAuditForEvent(ctx context.Context, event events.Event)
 	}
 	data := event.Data
 	command := stringData(data, "command")
-	if command == "" {
+	if command == "" || stringData(data, "originalCommand") == "" {
 		return
 	}
+	action := firstNonEmptyString(stringData(data, "action"), command)
 	actorRole := bot.RoleViewer
 	if boolData(data, "isModerator") {
 		actorRole = bot.RoleModerator
@@ -29,6 +30,7 @@ func (s *Server) recordBotAuditForEvent(ctx context.Context, event events.Event)
 		"originalCommand": stringData(data, "originalCommand"),
 		"args":            stringData(data, "args"),
 		"alias":           boolData(data, "alias"),
+		"custom":          boolData(data, "custom"),
 		"eventSeverity":   string(event.Severity),
 	})
 	if err != nil {
@@ -41,7 +43,7 @@ func (s *Server) recordBotAuditForEvent(ctx context.Context, event events.Event)
 		ActorRole:        string(actorRole),
 		Trigger:          "!" + firstNonEmptyString(stringData(data, "originalCommand"), command),
 		Command:          command,
-		Action:           command,
+		Action:           action,
 		Result:           botResultForCommandEvent(event),
 		Reason:           botReasonForCommandEvent(event),
 		EventID:          event.ID,

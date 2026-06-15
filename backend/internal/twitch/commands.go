@@ -20,10 +20,20 @@ type ChatCommandUser struct {
 	IsModerator   bool
 }
 
+type CustomCommand struct {
+	Name            string
+	Enabled         bool
+	Response        string
+	Action          string
+	RoleRequired    string
+	CooldownSeconds int
+}
+
 type CommandProcessorConfig struct {
 	Cooldown time.Duration
 	Now      func() time.Time
 	Aliases  map[string]string
+	Custom   []CustomCommand
 }
 
 type CommandProcessor struct {
@@ -32,6 +42,7 @@ type CommandProcessor struct {
 	now      func() time.Time
 	lastRun  map[string]time.Time
 	aliases  map[string]string
+	custom   map[string]CustomCommand
 }
 
 func ParseChatCommand(text string) (ChatCommand, bool) {
@@ -65,7 +76,7 @@ func NewCommandProcessor(config CommandProcessorConfig) *CommandProcessor {
 	if cooldown < 0 {
 		cooldown = 0
 	}
-	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases)}
+	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases), custom: customCommandMap(config.Custom)}
 }
 
 func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []events.Event {
@@ -75,6 +86,10 @@ func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []e
 
 	original := command
 	resolved, aliased := p.resolveCommand(command)
+
+	if custom, ok := p.customCommand(resolved.Name); ok {
+		return p.handleCustomCommand(original, resolved, aliased, custom, user)
+	}
 
 	if !isSupportedChatCommand(resolved.Name) {
 		return []events.Event{p.commandEvent(original, resolved, aliased, user, events.SeverityWarning, "Unsupported command")}
@@ -104,6 +119,42 @@ func (p *CommandProcessor) SetAliases(aliases map[string]string) {
 	p.mu.Unlock()
 }
 
+func (p *CommandProcessor) SetCustomCommands(commands []CustomCommand) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.custom = customCommandMap(commands)
+	p.mu.Unlock()
+}
+
+func (p *CommandProcessor) customCommand(name string) (CustomCommand, bool) {
+	if p == nil {
+		return CustomCommand{}, false
+	}
+	p.mu.RLock()
+	command, ok := p.custom[name]
+	p.mu.RUnlock()
+	return command, ok
+}
+
+func (p *CommandProcessor) handleCustomCommand(original ChatCommand, resolved ChatCommand, aliased bool, custom CustomCommand, user ChatCommandUser) []events.Event {
+	if !custom.Enabled {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command disabled", map[string]any{"custom": true, "action": custom.Action})}
+	}
+	if !roleAllows(chatCommandRole(user), custom.RoleRequired) {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"custom": true, "action": custom.Action, "roleRequired": custom.RoleRequired})}
+	}
+	if p.onNamedCooldown("custom:"+custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
+	}
+	action, ok := customActionEvent(custom, user)
+	if !ok {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command ignored", map[string]any{"custom": true, "action": custom.Action})}
+	}
+	return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"custom": true, "action": custom.Action}), action}
+}
+
 func (p *CommandProcessor) resolveCommand(command ChatCommand) (ChatCommand, bool) {
 	if p == nil {
 		return command, false
@@ -121,7 +172,11 @@ func (p *CommandProcessor) resolveCommand(command ChatCommand) (ChatCommand, boo
 }
 
 func (p *CommandProcessor) onCooldown(name string) bool {
-	if p.cooldown == 0 {
+	return p.onNamedCooldown(name, p.cooldown)
+}
+
+func (p *CommandProcessor) onNamedCooldown(name string, cooldown time.Duration) bool {
+	if cooldown == 0 {
 		return false
 	}
 
@@ -129,7 +184,7 @@ func (p *CommandProcessor) onCooldown(name string) bool {
 	defer p.mu.Unlock()
 
 	now := p.now().UTC()
-	if last, ok := p.lastRun[name]; ok && now.Sub(last) < p.cooldown {
+	if last, ok := p.lastRun[name]; ok && now.Sub(last) < cooldown {
 		return true
 	}
 	p.lastRun[name] = now
@@ -137,7 +192,11 @@ func (p *CommandProcessor) onCooldown(name string) bool {
 }
 
 func (p *CommandProcessor) commandEvent(original ChatCommand, command ChatCommand, aliased bool, user ChatCommandUser, severity events.Severity, message string) events.Event {
-	return events.NewCommand("twitch", "Chat command: !"+original.Name, message, severity, map[string]any{
+	return p.commandEventWithData(original, command, aliased, user, severity, message, nil)
+}
+
+func (p *CommandProcessor) commandEventWithData(original ChatCommand, command ChatCommand, aliased bool, user ChatCommandUser, severity events.Severity, message string, extra map[string]any) events.Event {
+	data := map[string]any{
 		"command":         command.Name,
 		"originalCommand": original.Name,
 		"alias":           aliased,
@@ -146,7 +205,11 @@ func (p *CommandProcessor) commandEvent(original ChatCommand, command ChatComman
 		"login":           user.Login,
 		"isBroadcaster":   user.IsBroadcaster,
 		"isModerator":     user.IsModerator,
-	})
+	}
+	for key, value := range extra {
+		data[key] = value
+	}
+	return events.NewCommand("twitch", "Chat command: !"+original.Name, message, severity, data)
 }
 
 func (p *CommandProcessor) actionEvent(command ChatCommand, user ChatCommandUser) (events.Event, bool) {
@@ -181,6 +244,59 @@ func isSupportedChatCommand(name string) bool {
 	}
 }
 
+func customActionEvent(command CustomCommand, user ChatCommandUser) (events.Event, bool) {
+	message := truncateCommandText(command.Response, 500)
+	if message == "" {
+		return events.Event{}, false
+	}
+	switch command.Action {
+	case "alert":
+		return events.NewAlert("twitch", firstNonEmpty(user.Name, user.Login, "Twitch chat"), message, events.SeverityInfo), true
+	case "ticker":
+		event := events.NewCommand("twitch", "Bot response: !"+command.Name, message, events.SeverityInfo, map[string]any{
+			"command": command.Name,
+			"custom":  true,
+			"action":  "ticker",
+			"ticker": map[string]any{
+				"label":   "!" + command.Name,
+				"message": message,
+			},
+		})
+		return event, true
+	default:
+		return events.Event{}, false
+	}
+}
+
+func chatCommandRole(user ChatCommandUser) string {
+	if user.IsBroadcaster {
+		return "broadcaster"
+	}
+	if user.IsModerator {
+		return "moderator"
+	}
+	return "viewer"
+}
+
+func roleAllows(actual, required string) bool {
+	return roleRank(actual) >= roleRank(required)
+}
+
+func roleRank(role string) int {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "system":
+		return 5
+	case "operator":
+		return 4
+	case "broadcaster":
+		return 3
+	case "moderator":
+		return 2
+	default:
+		return 1
+	}
+}
+
 func truncateCommandText(text string, limit int) string {
 	text = strings.TrimSpace(text)
 	if limit <= 0 {
@@ -202,4 +318,24 @@ func cloneAliases(aliases map[string]string) map[string]string {
 		cloned[alias] = command
 	}
 	return cloned
+}
+
+func customCommandMap(commands []CustomCommand) map[string]CustomCommand {
+	items := make(map[string]CustomCommand, len(commands))
+	for _, command := range commands {
+		command.Name = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(command.Name, "!")))
+		command.Action = strings.ToLower(strings.TrimSpace(command.Action))
+		if command.Action == "" {
+			command.Action = "ticker"
+		}
+		command.RoleRequired = strings.ToLower(strings.TrimSpace(command.RoleRequired))
+		if command.RoleRequired == "" {
+			command.RoleRequired = "viewer"
+		}
+		if command.Name == "" {
+			continue
+		}
+		items[command.Name] = command
+	}
+	return items
 }

@@ -9,14 +9,15 @@ Implemented now:
 - Bot audit storage in Postgres when `DATABASE_URL` is set.
 - Operator-protected bot status at `GET /api/bot/status`.
 - Operator-protected recent audit events at `GET /api/bot/audit`.
+- Operator-protected custom command list/create/toggle/delete at `/api/bot/commands`.
 - Operator-protected timer list/create/toggle/delete at `/api/bot/timers`.
-- `/dashboard/bot` overview, timer manager, and audit panel.
+- `/dashboard/bot` overview, command manager, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
+- Custom Twitch commands can publish safe ticker or alert overlay responses.
 
 Not implemented yet:
 
 - Timer firing/runtime dispatch.
-- General custom response commands.
 - Counters, quotes, and community utilities.
 - Twitch moderation actions and nuke-style workflows.
 
@@ -25,6 +26,7 @@ Not implemented yet:
 ```bash
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/status | jq .
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' 'http://localhost:8080/api/bot/audit?limit=10' | jq .
+curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/commands | jq .
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/timers | jq .
 ```
 
@@ -32,22 +34,46 @@ Expected status:
 
 - `available: true` when Postgres is configured.
 - `bot_runtime` readiness is `ok`.
-- `commandCount` can be `0` until custom commands land.
+- `commandCount` reflects configured custom commands, including disabled commands.
 - `timerCount` reflects configured bot timers, including disabled timers.
 
 ## Dashboard check
 
 1. Open `/dashboard/bot`.
 2. Confirm Bot runtime shows storage availability.
-3. Confirm Bot timers shows existing timers or the empty state.
-4. Create a safe test timer with name `stream_hype`, interval `300`, action `Ticker`, and a short response.
-5. Toggle the timer paused/enabled and delete it if it was only for verification.
-6. Confirm Bot audit shows either recent events or the empty state.
-7. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/config`.
+3. Confirm Bot commands shows existing commands or the empty state.
+4. Create a safe test command with name `discord`, action `Ticker`, role `Viewer`, cooldown `10`, and a short response.
+5. Toggle the command paused/enabled and delete it if it was only for verification.
+6. Confirm Bot timers shows existing timers or the empty state.
+7. Create a safe test timer with name `stream_hype`, interval `300`, action `Ticker`, and a short response.
+8. Toggle the timer paused/enabled and delete it if it was only for verification.
+9. Confirm Bot audit shows either recent events or the empty state.
+10. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/config`.
+
+## Custom command behavior
+
+Custom commands are intentionally safer and smaller than FossaBot's full command language in this milestone:
+
+- Names use lowercase letters, numbers, dash, or underscore. Built-ins `alert`, `clear`, `brb`, and `back` are reserved.
+- Responses are required and capped at 500 characters.
+- Actions are `ticker` or `alert` only.
+- Required roles are `viewer`, `moderator`, or `broadcaster`.
+- Cooldowns are per custom command and live in memory until API restart.
+- Commands do not execute scripts, send outbound chat, call external APIs, or run OBS actions.
+- Command saves refresh the in-memory Twitch command processor immediately.
+
+To test a custom command:
+
+1. Create `!discord` in `/dashboard/bot`.
+2. Send `!discord` in Twitch chat.
+3. Confirm `/overlay/ticker` or `/overlay/alerts` shows the configured response.
+4. Confirm `/dashboard/bot` audit records the command with result `allowed`.
 
 ## Timer behavior
 
 Timers are persisted now so operator configuration survives browser/session changes. Runtime dispatch is intentionally held until custom response commands/templates land; otherwise timers would need a separate response language that would be replaced in the next milestone.
+
+Now that custom commands exist, the next timer milestone can route enabled timers through the same safe ticker/alert response pipeline.
 
 Timer validation:
 

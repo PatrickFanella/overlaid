@@ -19,6 +19,7 @@ test.describe('operator browser smoke', () => {
 
     await page.goto('/dashboard/bot');
     await expect(page.getByText('Bot operations')).toBeVisible();
+    await expect(page.getByText('Bot commands', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot timers', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot audit', { exact: true })).toBeVisible();
 

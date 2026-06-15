@@ -46,6 +46,18 @@ type Timer struct {
 	LastRunAt       *time.Time `json:"lastRunAt,omitempty"`
 }
 
+type Command struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Enabled         bool      `json:"enabled"`
+	Response        string    `json:"response"`
+	Action          string    `json:"action"`
+	RoleRequired    string    `json:"roleRequired"`
+	CooldownSeconds int       `json:"cooldownSeconds"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+}
+
 func NewPostgres(databaseURL string) (*Store, error) {
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
@@ -149,6 +161,74 @@ func (s *Store) ListTimers(ctx context.Context) ([]Timer, error) {
 	return timers, rows.Err()
 }
 
+func (s *Store) ListCommands(ctx context.Context) ([]Command, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at
+		FROM bot_commands
+		ORDER BY name ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	commands := []Command{}
+	for rows.Next() {
+		command, err := scanCommand(rows)
+		if err != nil {
+			return nil, err
+		}
+		commands = append(commands, command)
+	}
+	return commands, rows.Err()
+}
+
+func (s *Store) SaveCommand(ctx context.Context, command Command) (Command, error) {
+	command, err := NormalizeCommand(command)
+	if err != nil {
+		return Command{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if strings.TrimSpace(command.ID) == "" {
+		return s.insertCommand(ctx, command)
+	}
+	return s.updateCommand(ctx, command)
+}
+
+func (s *Store) SetCommandEnabled(ctx context.Context, id string, enabled bool) (Command, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Command{}, errors.New("command id is required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	row := s.db.QueryRowContext(ctx, `
+		UPDATE bot_commands SET enabled = $2, updated_at = now()
+		WHERE id = $1
+		RETURNING id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at
+	`, id, enabled)
+	return scanCommand(row)
+}
+
+func (s *Store) DeleteCommand(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errors.New("command id is required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	result, err := s.db.ExecContext(ctx, `DELETE FROM bot_commands WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if affected, err := result.RowsAffected(); err == nil && affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *Store) SaveTimer(ctx context.Context, timer Timer) (Timer, error) {
 	timer, err := NormalizeTimer(timer)
 	if err != nil {
@@ -203,6 +283,25 @@ func (s *Store) insertTimer(ctx context.Context, timer Timer) (Timer, error) {
 	return scanTimer(row)
 }
 
+func (s *Store) insertCommand(ctx context.Context, command Command) (Command, error) {
+	row := s.db.QueryRowContext(ctx, `
+		INSERT INTO bot_commands (name, enabled, response, action, role_required, cooldown_seconds)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at
+	`, command.Name, command.Enabled, command.Response, command.Action, command.RoleRequired, command.CooldownSeconds)
+	return scanCommand(row)
+}
+
+func (s *Store) updateCommand(ctx context.Context, command Command) (Command, error) {
+	row := s.db.QueryRowContext(ctx, `
+		UPDATE bot_commands
+		SET name = $2, enabled = $3, response = $4, action = $5, role_required = $6, cooldown_seconds = $7, updated_at = now()
+		WHERE id = $1
+		RETURNING id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at
+	`, strings.TrimSpace(command.ID), command.Name, command.Enabled, command.Response, command.Action, command.RoleRequired, command.CooldownSeconds)
+	return scanCommand(row)
+}
+
 func (s *Store) updateTimer(ctx context.Context, timer Timer) (Timer, error) {
 	row := s.db.QueryRowContext(ctx, `
 		UPDATE bot_timers
@@ -229,6 +328,56 @@ func scanTimer(row timerScanner) (Timer, error) {
 	return timer, nil
 }
 
+type commandScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanCommand(row commandScanner) (Command, error) {
+	var command Command
+	if err := row.Scan(&command.ID, &command.Name, &command.Enabled, &command.Response, &command.Action, &command.RoleRequired, &command.CooldownSeconds, &command.CreatedAt, &command.UpdatedAt); err != nil {
+		return Command{}, err
+	}
+	return command, nil
+}
+
+func NormalizeCommand(command Command) (Command, error) {
+	command.ID = strings.TrimSpace(command.ID)
+	command.Name = strings.TrimSpace(command.Name)
+	command.Name = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(command.Name, "!")))
+	command.Response = strings.TrimSpace(command.Response)
+	command.Action = normalizeToken(command.Action, "ticker")
+	command.RoleRequired = normalizeToken(command.RoleRequired, "viewer")
+	if command.Name == "" {
+		return Command{}, errors.New("command name is required")
+	}
+	if !isSafeBotName(command.Name) {
+		return Command{}, errors.New("command name must use lowercase letters, numbers, dash, or underscore")
+	}
+	if isReservedCommandName(command.Name) {
+		return Command{}, fmt.Errorf("command name %q is reserved", command.Name)
+	}
+	if command.Response == "" {
+		return Command{}, errors.New("command response is required")
+	}
+	if len(command.Response) > 500 {
+		return Command{}, errors.New("command response must be 500 characters or less")
+	}
+	switch command.Action {
+	case "ticker", "alert":
+	default:
+		return Command{}, fmt.Errorf("unsupported command action %q", command.Action)
+	}
+	switch command.RoleRequired {
+	case "viewer", "moderator", "broadcaster", "operator", "system":
+	default:
+		return Command{}, fmt.Errorf("unsupported command role %q", command.RoleRequired)
+	}
+	if command.CooldownSeconds < 0 || command.CooldownSeconds > 3600 {
+		return Command{}, errors.New("command cooldown must be between 0 and 3600 seconds")
+	}
+	return command, nil
+}
+
 func NormalizeTimer(timer Timer) (Timer, error) {
 	timer.ID = strings.TrimSpace(timer.ID)
 	timer.Name = strings.ToLower(strings.TrimSpace(timer.Name))
@@ -237,7 +386,7 @@ func NormalizeTimer(timer Timer) (Timer, error) {
 	if timer.Name == "" {
 		return Timer{}, errors.New("timer name is required")
 	}
-	if !isSafeTimerName(timer.Name) {
+	if !isSafeBotName(timer.Name) {
 		return Timer{}, errors.New("timer name must use lowercase letters, numbers, dash, or underscore")
 	}
 	if timer.IntervalSeconds < 30 || timer.IntervalSeconds > 86400 {
@@ -257,7 +406,7 @@ func NormalizeTimer(timer Timer) (Timer, error) {
 	return timer, nil
 }
 
-func isSafeTimerName(name string) bool {
+func isSafeBotName(name string) bool {
 	for _, r := range name {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
 			continue
@@ -265,6 +414,15 @@ func isSafeTimerName(name string) bool {
 		return false
 	}
 	return true
+}
+
+func isReservedCommandName(name string) bool {
+	switch name {
+	case "alert", "clear", "brb", "back":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Store) Close() error {
@@ -400,6 +558,8 @@ CREATE TABLE IF NOT EXISTS bot_commands (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE bot_commands ALTER COLUMN action SET DEFAULT 'ticker';
 
 CREATE TABLE IF NOT EXISTS bot_timers (
   id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),

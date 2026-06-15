@@ -64,3 +64,35 @@ func TestNormalizeTimerRejectsUnsafeValues(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeCommand(t *testing.T) {
+	command, err := NormalizeCommand(Command{Name: " !Shout_Out ", Enabled: true, Response: "  Follow the channel  ", Action: " ALERT ", RoleRequired: " MODERATOR ", CooldownSeconds: 30})
+	if err != nil {
+		t.Fatalf("expected valid command, got %v", err)
+	}
+	if command.Name != "shout_out" || command.Response != "Follow the channel" || command.Action != "alert" || command.RoleRequired != "moderator" || command.CooldownSeconds != 30 {
+		t.Fatalf("unexpected normalized command: %#v", command)
+	}
+}
+
+func TestNormalizeCommandRejectsUnsafeValues(t *testing.T) {
+	tests := []struct {
+		name    string
+		command Command
+	}{
+		{name: "empty name", command: Command{Response: "ok", Action: "ticker", RoleRequired: "viewer"}},
+		{name: "unsafe name", command: Command{Name: "bad name", Response: "ok", Action: "ticker", RoleRequired: "viewer"}},
+		{name: "reserved name", command: Command{Name: "alert", Response: "ok", Action: "ticker", RoleRequired: "viewer"}},
+		{name: "empty response", command: Command{Name: "hello", Action: "ticker", RoleRequired: "viewer"}},
+		{name: "unsupported action", command: Command{Name: "hello", Response: "ok", Action: "ban", RoleRequired: "viewer"}},
+		{name: "unsupported role", command: Command{Name: "hello", Response: "ok", Action: "ticker", RoleRequired: "admin"}},
+		{name: "bad cooldown", command: Command{Name: "hello", Response: "ok", Action: "ticker", RoleRequired: "viewer", CooldownSeconds: 4000}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := NormalizeCommand(tt.command); err == nil {
+				t.Fatal("expected command validation error")
+			}
+		})
+	}
+}

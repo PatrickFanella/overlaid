@@ -28,6 +28,25 @@ type botTimersResponse struct {
 	LoadError string      `json:"loadError,omitempty"`
 }
 
+type botCommandsResponse struct {
+	Commands  []bot.Command `json:"commands"`
+	LoadError string        `json:"loadError,omitempty"`
+}
+
+type botCommandRequest struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Enabled         bool   `json:"enabled"`
+	Response        string `json:"response"`
+	Action          string `json:"action"`
+	RoleRequired    string `json:"roleRequired"`
+	CooldownSeconds int    `json:"cooldownSeconds"`
+}
+
+type botCommandEnabledRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
 type botTimerRequest struct {
 	ID              string `json:"id"`
 	Name            string `json:"name"`
@@ -89,6 +108,80 @@ func (s *Server) botTimers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, botTimersResponse{Timers: timers})
+}
+
+func (s *Server) botCommands(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		writeJSON(w, botCommandsResponse{Commands: []bot.Command{}, LoadError: s.botLoadError})
+		return
+	}
+	commands, err := s.botStore.ListCommands(r.Context())
+	if err != nil {
+		http.Error(w, "bot commands unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, botCommandsResponse{Commands: commands})
+}
+
+func (s *Server) botCommandSave(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot commands unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var request botCommandRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	command, err := s.botStore.SaveCommand(r.Context(), bot.Command{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Response: request.Response, Action: request.Action, RoleRequired: request.RoleRequired, CooldownSeconds: request.CooldownSeconds})
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	s.refreshTwitchCustomCommands(r.Context())
+	writeJSON(w, command)
+}
+
+func (s *Server) botCommandSetEnabled(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot commands unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var request botCommandEnabledRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	command, err := s.botStore.SetCommandEnabled(r.Context(), r.PathValue("id"), request.Enabled)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	s.refreshTwitchCustomCommands(r.Context())
+	writeJSON(w, command)
+}
+
+func (s *Server) botCommandDelete(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot commands unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := s.botStore.DeleteCommand(r.Context(), r.PathValue("id")); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	s.refreshTwitchCustomCommands(r.Context())
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) botTimerSave(w http.ResponseWriter, r *http.Request) {

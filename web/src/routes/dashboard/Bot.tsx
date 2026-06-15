@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
 import {
+  deleteBotCommand,
   deleteBotTimer,
   fetchBotAudit,
+  fetchBotCommands,
   fetchBotStatus,
   fetchBotTimers,
+  saveBotCommand,
   saveBotTimer,
+  setBotCommandEnabled,
   setBotTimerEnabled,
   type BotAuditResponse,
+  type BotCommand,
+  type BotCommandsResponse,
   type BotStatus,
   type BotTimer,
   type BotTimersResponse,
@@ -18,9 +24,19 @@ import { DashboardShell } from './DashboardShell';
 type BotPageState = {
   status: BotStatus | null;
   audit: BotAuditResponse | null;
+  commands: BotCommandsResponse | null;
   timers: BotTimersResponse | null;
   loading: boolean;
   error: string;
+};
+
+type CommandDraft = {
+  name: string;
+  response: string;
+  action: 'ticker' | 'alert';
+  roleRequired: 'viewer' | 'moderator' | 'broadcaster';
+  cooldownSeconds: number;
+  enabled: boolean;
 };
 
 type TimerDraft = {
@@ -32,12 +48,15 @@ type TimerDraft = {
 };
 
 const defaultTimerDraft: TimerDraft = { name: '', intervalSeconds: 300, response: '', action: 'ticker', enabled: true };
+const defaultCommandDraft: CommandDraft = { name: '', response: '', action: 'ticker', roleRequired: 'viewer', cooldownSeconds: 10, enabled: true };
 
 export function DashboardBotPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const operatorSecret = loadOperatorSecret();
-  const [state, setState] = useState<BotPageState>({ status: null, audit: null, timers: null, loading: false, error: '' });
+  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, timers: null, loading: false, error: '' });
+  const [commandDraft, setCommandDraft] = useState<CommandDraft>(defaultCommandDraft);
   const [draft, setDraft] = useState<TimerDraft>(defaultTimerDraft);
+  const [savingCommand, setSavingCommand] = useState(false);
   const [savingTimer, setSavingTimer] = useState(false);
 
   useEffect(() => {
@@ -45,9 +64,9 @@ export function DashboardBotPage() {
     async function load() {
       setState((current) => ({ ...current, loading: true, error: '' }));
       try {
-        const [status, audit, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
+        const [status, audit, commands, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
         if (!cancelled) {
-          setState({ status, audit, timers, loading: false, error: '' });
+          setState({ status, audit, commands, timers, loading: false, error: '' });
         }
       } catch (error) {
         if (!cancelled) {
@@ -64,6 +83,45 @@ export function DashboardBotPage() {
   async function refreshTimers() {
     const [status, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
     setState((current) => ({ ...current, status, timers }));
+  }
+
+  async function refreshCommands() {
+    const [status, commands] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret)]);
+    setState((current) => ({ ...current, status, commands }));
+  }
+
+  async function handleSaveCommand() {
+    setSavingCommand(true);
+    setState((current) => ({ ...current, error: '' }));
+    try {
+      await saveBotCommand(commandDraft, apiBaseUrl, operatorSecret);
+      setCommandDraft(defaultCommandDraft);
+      await refreshCommands();
+    } catch (error) {
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'command save failed' }));
+    } finally {
+      setSavingCommand(false);
+    }
+  }
+
+  async function handleToggleCommand(command: BotCommand) {
+    setState((current) => ({ ...current, error: '' }));
+    try {
+      await setBotCommandEnabled(command.id, !command.enabled, apiBaseUrl, operatorSecret);
+      await refreshCommands();
+    } catch (error) {
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'command update failed' }));
+    }
+  }
+
+  async function handleDeleteCommand(command: BotCommand) {
+    setState((current) => ({ ...current, error: '' }));
+    try {
+      await deleteBotCommand(command.id, apiBaseUrl, operatorSecret);
+      await refreshCommands();
+    } catch (error) {
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'command delete failed' }));
+    }
   }
 
   async function handleSaveTimer() {
@@ -115,6 +173,16 @@ export function DashboardBotPage() {
         <BotAuditPanel audit={state.audit} />
       </section>
 
+      <BotCommandsPanel
+        draft={commandDraft}
+        commands={state.commands}
+        saving={savingCommand}
+        onDraftChange={setCommandDraft}
+        onSave={handleSaveCommand}
+        onToggle={handleToggleCommand}
+        onDelete={handleDeleteCommand}
+      />
+
       <BotTimersPanel
         draft={draft}
         timers={state.timers}
@@ -160,6 +228,89 @@ function BotAuditPanel({ audit }: { audit: BotAuditResponse | null }) {
             </div>
             <p className="mt-1 text-zinc-300">{event.actorDisplayName || event.actorLogin || event.source} · {event.reason || 'no reason'}</p>
             <p className="mt-1 text-zinc-500">{event.createdAt}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function BotCommandsPanel({
+  draft,
+  commands,
+  saving,
+  onDraftChange,
+  onSave,
+  onToggle,
+  onDelete,
+}: {
+  draft: CommandDraft;
+  commands: BotCommandsResponse | null;
+  saving: boolean;
+  onDraftChange: (draft: CommandDraft) => void;
+  onSave: () => void;
+  onToggle: (command: BotCommand) => void;
+  onDelete: (command: BotCommand) => void;
+}) {
+  const items = commands?.commands ?? [];
+  const canSave = draft.name.trim() !== '' && draft.response.trim() !== '' && draft.cooldownSeconds >= 0;
+  return (
+    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+      <p className="hud-label">Bot commands</p>
+      <p className="mt-1 text-sm text-zinc-300">Create safe Twitch chat responses. Custom commands can only publish ticker or alert overlays; they do not run scripts, call APIs, or send outbound chat.</p>
+      {commands?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">commands unavailable :: {commands.loadError}</p> : null}
+
+      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_8rem_10rem_8rem]">
+        <label className="grid gap-1 text-xs text-zinc-300">
+          Command name
+          <input className="hud-input" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="discord" />
+        </label>
+        <label className="grid gap-1 text-xs text-zinc-300">
+          Action
+          <select className="hud-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as CommandDraft['action'] })}>
+            <option value="ticker">Ticker</option>
+            <option value="alert">Alert</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs text-zinc-300">
+          Required role
+          <select className="hud-input" value={draft.roleRequired} onChange={(event) => onDraftChange({ ...draft, roleRequired: event.target.value as CommandDraft['roleRequired'] })}>
+            <option value="viewer">Viewer</option>
+            <option value="moderator">Moderator</option>
+            <option value="broadcaster">Broadcaster</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs text-zinc-300">
+          Cooldown
+          <input className="hud-input" type="number" min={0} value={draft.cooldownSeconds} onChange={(event) => onDraftChange({ ...draft, cooldownSeconds: Number(event.target.value) })} />
+        </label>
+      </div>
+      <label className="mt-2 grid gap-1 text-xs text-zinc-300">
+        Response
+        <textarea className="hud-input min-h-20" value={draft.response} onChange={(event) => onDraftChange({ ...draft, response: event.target.value })} placeholder="Join the Discord: https://example.test" />
+      </label>
+      <div className="mt-2 flex items-center gap-3">
+        <label className="flex items-center gap-2 text-xs text-zinc-300">
+          <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
+          enabled
+        </label>
+        <button className="hud-button" type="button" disabled={!canSave || saving} onClick={onSave}>{saving ? 'Saving…' : 'Save command'}</button>
+      </div>
+
+      {items.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No bot commands configured yet.</p> : null}
+      <div className="mt-3 grid gap-2">
+        {items.map((command) => (
+          <article key={command.id} className="border border-zinc-700 bg-black/40 p-2 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className="text-cyan-100">!{command.name}</strong>
+              <span className="hud-chip hud-chip--square">{command.enabled ? 'enabled' : 'paused'}</span>
+            </div>
+            <p className="mt-1 text-zinc-300">{command.action} · {command.roleRequired}+ · {command.cooldownSeconds}s cooldown</p>
+            <p className="mt-1 text-zinc-400">{command.response}</p>
+            <div className="mt-2 flex gap-2">
+              <button className="hud-button hud-button--small" type="button" onClick={() => onToggle(command)}>{command.enabled ? 'Pause' : 'Enable'}</button>
+              <button className="hud-button hud-button--small" type="button" onClick={() => onDelete(command)}>Delete</button>
+            </div>
           </article>
         ))}
       </div>

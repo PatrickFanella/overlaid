@@ -125,6 +125,44 @@ func TestCommandProcessorSetAliasesReplacesAliasesLive(t *testing.T) {
 	}
 }
 
+func TestCommandProcessorCustomTickerCommand(t *testing.T) {
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Custom: []CustomCommand{{Name: "discord", Enabled: true, Response: "Join the Discord", Action: "ticker", RoleRequired: "viewer"}}})
+
+	got := processor.Handle(ChatCommand{Name: "discord"}, ChatCommandUser{Name: "viewer"})
+	if len(got) != 2 {
+		t.Fatalf("event count=%d, want 2: %#v", len(got), got)
+	}
+	if got[0].Type != events.EventTypeCommand || got[0].Severity != events.SeveritySuccess || got[0].Data["custom"] != true || got[0].Data["action"] != "ticker" {
+		t.Fatalf("unexpected diagnostic event: %#v", got[0])
+	}
+	if got[1].Type != events.EventTypeCommand || got[1].Message != "Join the Discord" {
+		t.Fatalf("unexpected ticker response: %#v", got[1])
+	}
+	ticker, ok := got[1].Data["ticker"].(map[string]any)
+	if !ok || ticker["label"] != "!discord" || ticker["message"] != "Join the Discord" {
+		t.Fatalf("unexpected ticker payload: %#v", got[1].Data)
+	}
+}
+
+func TestCommandProcessorCustomCommandPermissionAndCooldown(t *testing.T) {
+	current := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	processor := NewCommandProcessor(CommandProcessorConfig{Now: func() time.Time { return current }, Custom: []CustomCommand{{Name: "so", Enabled: true, Response: "Follow them", Action: "alert", RoleRequired: "moderator", CooldownSeconds: 30}}})
+
+	denied := processor.Handle(ChatCommand{Name: "so"}, ChatCommandUser{Name: "viewer"})
+	if len(denied) != 1 || denied[0].Severity != events.SeverityWarning || denied[0].Message != "Permission denied" {
+		t.Fatalf("expected permission warning, got %#v", denied)
+	}
+
+	first := processor.Handle(ChatCommand{Name: "so"}, ChatCommandUser{Name: "mod", IsModerator: true})
+	if len(first) != 2 || first[1].Type != events.EventTypeAlert || first[1].Message != "Follow them" {
+		t.Fatalf("expected custom alert response, got %#v", first)
+	}
+	second := processor.Handle(ChatCommand{Name: "so"}, ChatCommandUser{Name: "mod", IsModerator: true})
+	if len(second) != 1 || second[0].Message != "Command cooling down" {
+		t.Fatalf("expected cooldown warning, got %#v", second)
+	}
+}
+
 func TestCommandProcessorAliasDoesNotBypassPermission(t *testing.T) {
 	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Now: func() time.Time {
 		return time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)

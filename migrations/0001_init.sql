@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS bot_commands (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE bot_commands ALTER COLUMN action SET DEFAULT 'ticker';
+
 CREATE TABLE IF NOT EXISTS bot_timers (
   id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
   name text NOT NULL UNIQUE,

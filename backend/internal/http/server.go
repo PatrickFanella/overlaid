@@ -81,13 +81,36 @@ func NewServer(cfg config.Config, bus *events.Bus) *Server {
 	if server.interactions != nil {
 		rules = server.interactions.Rules()
 	}
-	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(rules)})
+	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(rules), Custom: server.customTwitchCommands(context.Background())})
 	if err := server.twitch.loadPersistedToken(); err != nil {
 		server.twitchTokenLoadError = err.Error()
 		log.Printf("failed to load twitch token: %v", err)
 	}
 	server.routes()
 	return server
+}
+
+func (s *Server) refreshTwitchCustomCommands(ctx context.Context) {
+	if s == nil || s.twitchCommandProcessor == nil {
+		return
+	}
+	s.twitchCommandProcessor.SetCustomCommands(s.customTwitchCommands(ctx))
+}
+
+func (s *Server) customTwitchCommands(ctx context.Context) []twitch.CustomCommand {
+	if s == nil || s.botStore == nil {
+		return nil
+	}
+	commands, err := s.botStore.ListCommands(ctx)
+	if err != nil {
+		log.Printf("failed to load bot custom commands: %v", err)
+		return nil
+	}
+	out := make([]twitch.CustomCommand, 0, len(commands))
+	for _, command := range commands {
+		out = append(out, twitch.CustomCommand{Name: command.Name, Enabled: command.Enabled, Response: command.Response, Action: command.Action, RoleRequired: command.RoleRequired, CooldownSeconds: command.CooldownSeconds})
+	}
+	return out
 }
 
 func newBotStore(cfg config.Config) (*bot.Store, string) {

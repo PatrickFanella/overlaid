@@ -76,6 +76,33 @@ export type BotTimersResponse = {
   loadError?: string;
 };
 
+export type BotCommand = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  response: string;
+  action: 'ticker' | 'alert' | string;
+  roleRequired: 'viewer' | 'moderator' | 'broadcaster' | string;
+  cooldownSeconds: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BotCommandsResponse = {
+  commands: BotCommand[];
+  loadError?: string;
+};
+
+export type BotCommandPayload = {
+  id?: string;
+  name: string;
+  enabled: boolean;
+  response: string;
+  action: 'ticker' | 'alert';
+  roleRequired: 'viewer' | 'moderator' | 'broadcaster';
+  cooldownSeconds: number;
+};
+
 export type BotTimerPayload = {
   id?: string;
   name: string;
@@ -274,6 +301,32 @@ export async function fetchBotTimers(explicitBaseUrl?: string, operatorSecret?: 
     throw new Error(`bot timers failed: ${response.status}`);
   }
   return (await response.json()) as BotTimersResponse;
+}
+
+export async function fetchBotCommands(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl('/api/bot/commands', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) {
+    throw new Error(`bot commands failed: ${response.status}`);
+  }
+  return (await response.json()) as BotCommandsResponse;
+}
+
+export async function saveBotCommand(payload: BotCommandPayload, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/bot/commands', payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotCommand;
+}
+
+export async function setBotCommandEnabled(id: string, enabled: boolean, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await sendJSON('PUT', `/api/bot/commands/${encodeURIComponent(id)}`, { enabled }, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotCommand;
+}
+
+export async function deleteBotCommand(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl(`/api/bot/commands/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`delete bot command failed: ${response.status}${detail.trim() ? ` — ${detail.trim()}` : ''}`);
+  }
 }
 
 export async function saveBotTimer(payload: BotTimerPayload, explicitBaseUrl?: string, operatorSecret?: string) {
