@@ -6,6 +6,7 @@ import {
   deleteBotQuote,
   deleteBotTimer,
   dryRunBotModeration,
+  dryRunBotNuke,
   executeBotModerationAction,
   fetchBotAudit,
   fetchBotCommands,
@@ -29,6 +30,7 @@ import {
   type BotModerationDryRunResponse,
   type BotModerationRule,
   type BotModerationRulesResponse,
+  type BotNukeDryRunResponse,
   type BotQuote,
   type BotQuotesResponse,
   type BotStatus,
@@ -87,6 +89,7 @@ const defaultQuoteDraft = { text: '', author: '' };
 const defaultModerationDraft: ModerationDraft = { name: '', enabled: true, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
 const defaultModerationTest = { username: '', message: '' };
 const defaultModerationAction = { action: 'timeout' as const, targetUserId: '', targetUserLogin: '', messageId: '', durationSeconds: 60, reason: '' };
+const defaultNukeDraft = { pattern: '', regex: false, caseSensitive: false, lookbackMinutes: 30, limit: 100 };
 
 export function DashboardBotPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
@@ -102,6 +105,8 @@ export function DashboardBotPage() {
   const [moderationTest, setModerationTest] = useState(defaultModerationTest);
   const [moderationAction, setModerationAction] = useState(defaultModerationAction);
   const [moderationActionResult, setModerationActionResult] = useState('');
+  const [nukeDraft, setNukeDraft] = useState(defaultNukeDraft);
+  const [nukeResult, setNukeResult] = useState<BotNukeDryRunResponse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,6 +172,17 @@ export function DashboardBotPage() {
     } catch (error) {
       setModerationActionResult('');
       setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'moderation action failed' }));
+    }
+  }
+
+  async function handleNukeDryRun() {
+    try {
+      const result = await dryRunBotNuke(nukeDraft, apiBaseUrl, operatorSecret);
+      setNukeResult(result);
+      setState((current) => ({ ...current, error: '' }));
+    } catch (error) {
+      setNukeResult(null);
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'nuke dry-run failed' }));
     }
   }
 
@@ -303,13 +319,17 @@ export function DashboardBotPage() {
         dryRun={state.moderationDryRun}
         actionDraft={moderationAction}
         actionResult={moderationActionResult}
+        nukeDraft={nukeDraft}
+        nukeResult={nukeResult}
         onDraftChange={setModerationDraft}
         onTestChange={setModerationTest}
         onActionChange={setModerationAction}
+        onNukeDraftChange={setNukeDraft}
         onSave={handleSaveModerationRule}
         onDelete={handleDeleteModerationRule}
         onDryRun={handleModerationDryRun}
         onAction={handleModerationAction}
+        onNukeDryRun={handleNukeDryRun}
       />
 
       <BotTimersPanel
@@ -511,13 +531,17 @@ function BotModerationPanel({
   dryRun,
   actionDraft,
   actionResult,
+  nukeDraft,
+  nukeResult,
   onDraftChange,
   onTestChange,
   onActionChange,
+  onNukeDraftChange,
   onSave,
   onDelete,
   onDryRun,
   onAction,
+  onNukeDryRun,
 }: {
   rules: BotModerationRulesResponse | null;
   draft: ModerationDraft;
@@ -525,13 +549,17 @@ function BotModerationPanel({
   dryRun: BotModerationDryRunResponse | null;
   actionDraft: typeof defaultModerationAction;
   actionResult: string;
+  nukeDraft: typeof defaultNukeDraft;
+  nukeResult: BotNukeDryRunResponse | null;
   onDraftChange: (draft: ModerationDraft) => void;
   onTestChange: (test: { username: string; message: string }) => void;
   onActionChange: (draft: typeof defaultModerationAction) => void;
+  onNukeDraftChange: (draft: typeof defaultNukeDraft) => void;
   onSave: () => void;
   onDelete: (rule: BotModerationRule) => void;
   onDryRun: () => void;
   onAction: () => void;
+  onNukeDryRun: () => void;
 }) {
   const items = rules?.rules ?? [];
   const canSave = draft.name.trim() !== '' && draft.pattern.trim() !== '';
@@ -587,6 +615,25 @@ function BotModerationPanel({
         <div className="mt-2 flex items-center gap-2">
           <button className="hud-button" type="button" onClick={onAction}>Run guarded action</button>
           {actionResult ? <span className="text-xs text-emerald-200">{actionResult}</span> : null}
+        </div>
+      </div>
+
+      <div className="mt-4 border border-cyan-400/30 bg-black/40 p-2">
+        <p className="text-xs uppercase tracking-wide text-cyan-100">Nuke dry-run planner</p>
+        <p className="mt-1 text-xs text-zinc-400">Scans recent persisted Twitch chat history and reports matching messages. This does not delete messages or timeout users.</p>
+        <div className="mt-2 grid gap-2 md:grid-cols-[1fr_8rem_8rem_auto]">
+          <input className="hud-input" value={nukeDraft.pattern} onChange={(event) => onNukeDraftChange({ ...nukeDraft, pattern: event.target.value })} placeholder="phrase or regex" />
+          <input className="hud-input" type="number" min={1} max={360} value={nukeDraft.lookbackMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, lookbackMinutes: Number(event.target.value) })} />
+          <input className="hud-input" type="number" min={1} max={250} value={nukeDraft.limit} onChange={(event) => onNukeDraftChange({ ...nukeDraft, limit: Number(event.target.value) })} />
+          <button className="hud-button" type="button" disabled={nukeDraft.pattern.trim() === ''} onClick={onNukeDryRun}>Plan nuke</button>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-300">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={nukeDraft.regex} onChange={(event) => onNukeDraftChange({ ...nukeDraft, regex: event.target.checked })} /> regex</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={nukeDraft.caseSensitive} onChange={(event) => onNukeDraftChange({ ...nukeDraft, caseSensitive: event.target.checked })} /> case sensitive</label>
+        </div>
+        {nukeResult ? <p className="mt-2 text-xs text-zinc-300">planned matches :: {nukeResult.matches.length}</p> : null}
+        <div className="mt-2 grid gap-1">
+          {(nukeResult?.matches ?? []).slice(0, 5).map((match) => <div key={match.eventId} className="hud-terminal-line"><span className="hud-terminal-key">{match.user}</span><span className="hud-terminal-value">{match.message}</span></div>)}
         </div>
       </div>
 

@@ -4,9 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
+	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 )
 
 type botStatusResponse struct {
@@ -76,6 +80,25 @@ type botModerationDryRunRequest struct {
 type botModerationDryRunResponse struct {
 	Matches   []bot.ModerationMatch `json:"matches"`
 	LoadError string                `json:"loadError,omitempty"`
+}
+type botNukeDryRunRequest struct {
+	Pattern         string `json:"pattern"`
+	Regex           bool   `json:"regex"`
+	CaseSensitive   bool   `json:"caseSensitive"`
+	LookbackMinutes int    `json:"lookbackMinutes"`
+	Limit           int    `json:"limit"`
+}
+type botNukeDryRunMatch struct {
+	EventID   string `json:"eventId"`
+	MessageID string `json:"messageId,omitempty"`
+	User      string `json:"user"`
+	Message   string `json:"message"`
+	CreatedAt string `json:"createdAt"`
+}
+type botNukeDryRunResponse struct {
+	Matches []botNukeDryRunMatch `json:"matches"`
+	Pattern string               `json:"pattern"`
+	Action  string               `json:"action"`
 }
 
 type botCommandRequest struct {
@@ -257,6 +280,91 @@ func (s *Server) botModerationDryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, botModerationDryRunResponse{Matches: matches})
+}
+
+func (s *Server) botModerationNukeDryRun(w http.ResponseWriter, r *http.Request) {
+	var request botNukeDryRunRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	matches, err := s.planNukeDryRun(request)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, botNukeDryRunResponse{Matches: matches, Pattern: strings.TrimSpace(request.Pattern), Action: "dry_run_only"})
+}
+
+func (s *Server) planNukeDryRun(request botNukeDryRunRequest) ([]botNukeDryRunMatch, error) {
+	if s.history == nil {
+		return nil, errors.New("event history unavailable")
+	}
+	pattern := strings.TrimSpace(request.Pattern)
+	if pattern == "" {
+		return nil, errors.New("nuke pattern is required")
+	}
+	if len(pattern) > 200 {
+		return nil, errors.New("nuke pattern must be 200 characters or less")
+	}
+	limit := request.Limit
+	if limit <= 0 || limit > 250 {
+		limit = 100
+	}
+	lookback := request.LookbackMinutes
+	if lookback <= 0 || lookback > 360 {
+		lookback = 30
+	}
+	var compiled *regexp.Regexp
+	if request.Regex {
+		compiledPattern := pattern
+		if !request.CaseSensitive {
+			compiledPattern = "(?i)" + compiledPattern
+		}
+		var err error
+		compiled, err = regexp.Compile(compiledPattern)
+		if err != nil {
+			return nil, err
+		}
+	} else if !request.CaseSensitive {
+		pattern = strings.ToLower(pattern)
+	}
+	cutoff := time.Now().UTC().Add(-time.Duration(lookback) * time.Minute)
+	matches := []botNukeDryRunMatch{}
+	for _, event := range s.history.List(limit) {
+		if event.Type != events.EventTypeChatMessage || event.CreatedAt.Before(cutoff) {
+			continue
+		}
+		message := event.Message
+		candidate := message
+		if !request.CaseSensitive && !request.Regex {
+			candidate = strings.ToLower(candidate)
+		}
+		matched := false
+		if request.Regex {
+			matched = compiled.MatchString(candidate)
+		} else {
+			matched = strings.Contains(candidate, pattern)
+		}
+		if !matched {
+			continue
+		}
+		matches = append(matches, botNukeDryRunMatch{EventID: event.ID, MessageID: twitchMessageIDFromEvent(event), User: event.Title, Message: event.Message, CreatedAt: event.CreatedAt.Format(time.RFC3339)})
+	}
+	return matches, nil
+}
+
+func twitchMessageIDFromEvent(event events.Event) string {
+	if value, ok := event.Data["messageId"].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	if nested, ok := event.Data["twitchEvent"].(map[string]any); ok {
+		for _, key := range []string{"message_id", "id"} {
+			if value, ok := nested[key].(string); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+	}
+	return ""
 }
 
 func (s *Server) botQuoteSave(w http.ResponseWriter, r *http.Request) {

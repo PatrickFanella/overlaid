@@ -138,6 +138,15 @@ Manual guarded Twitch moderation actions are available from `/dashboard/bot` and
 
 If the dashboard reports missing moderation scopes, update `TWITCH_SCOPES`, re-run Twitch login, and re-consent before retrying. Do not use action labels from dry-run rules as automatic enforcement yet; rules are still dry-run/planning inputs.
 
+Nuke dry-run planning is available from `/dashboard/bot` and `POST /api/bot/moderation/nuke/dry-run`:
+
+- It scans recent persisted `chat_message` history only.
+- It supports plain contains matching or RE2 regular expressions.
+- It supports case-insensitive matching by default and an optional case-sensitive mode.
+- It accepts a bounded lookback window and result limit.
+- It returns matching users/messages/message IDs when available.
+- It does not delete, timeout, ban, or create a radiation/future-enforcement window yet.
+
 ## Command audit check
 
 1. Start a rehearsal session from `/dashboard/live` if you want session tagging.

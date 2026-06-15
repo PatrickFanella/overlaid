@@ -108,6 +108,9 @@ export type BotModerationMatch = { ruleId: string; ruleName: string; pattern: st
 export type BotModerationDryRunResponse = { matches: BotModerationMatch[]; loadError?: string };
 export type BotModerationActionPayload = { action: 'delete' | 'timeout' | 'ban' | 'unban'; targetUserId?: string; targetUserLogin?: string; messageId?: string; durationSeconds?: number; reason?: string };
 export type BotModerationActionResponse = { action: string; result: string; reason?: string };
+export type BotNukeDryRunPayload = { pattern: string; regex: boolean; caseSensitive: boolean; lookbackMinutes: number; limit: number };
+export type BotNukeDryRunMatch = { eventId: string; messageId?: string; user: string; message: string; createdAt: string };
+export type BotNukeDryRunResponse = { matches: BotNukeDryRunMatch[]; pattern: string; action: string };
 
 export type BotCommandPayload = {
   id?: string;
@@ -421,6 +424,11 @@ export async function dryRunBotModeration(payload: { message: string; username: 
 export async function executeBotModerationAction(payload: BotModerationActionPayload, explicitBaseUrl?: string, operatorSecret?: string) {
   const response = await postJSON('/api/bot/moderation/action', payload, explicitBaseUrl, { operatorSecret });
   return (await response.json()) as BotModerationActionResponse;
+}
+
+export async function dryRunBotNuke(payload: BotNukeDryRunPayload, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/bot/moderation/nuke/dry-run', payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotNukeDryRunResponse;
 }
 
 export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {
