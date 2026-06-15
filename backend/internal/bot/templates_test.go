@@ -1,0 +1,33 @@
+package bot
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestRenderTemplateKnownVariables(t *testing.T) {
+	result := RenderTemplate("hello {user} in {channel}: {args} via {command}", TemplateContext{DisplayName: "Viewer", User: "viewer_login", Channel: "patrick__eff", Args: "hydrate now", Command: "discord"})
+	if result.Text != "hello Viewer in patrick__eff: hydrate now via discord" {
+		t.Fatalf("unexpected render: %#v", result)
+	}
+	if len(result.UnknownVariables) != 0 {
+		t.Fatalf("unexpected unknown variables: %#v", result.UnknownVariables)
+	}
+}
+
+func TestRenderTemplateUnknownVariablesBecomeEmpty(t *testing.T) {
+	result := RenderTemplate("hello {missing} {user}", TemplateContext{User: "viewer"})
+	if result.Text != "hello  viewer" {
+		t.Fatalf("unexpected render: %#v", result)
+	}
+	if len(result.UnknownVariables) != 1 || result.UnknownVariables[0] != "missing" {
+		t.Fatalf("expected missing variable, got %#v", result.UnknownVariables)
+	}
+}
+
+func TestRenderTemplateCapsRenderedResponse(t *testing.T) {
+	result := RenderTemplate(strings.Repeat("界", 401), TemplateContext{})
+	if len([]rune(result.Text)) != 400 {
+		t.Fatalf("expected 400-rune cap, got %d", len([]rune(result.Text)))
+	}
+}

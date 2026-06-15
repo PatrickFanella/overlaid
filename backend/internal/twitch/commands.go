@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 )
 
@@ -34,6 +35,7 @@ type CommandProcessorConfig struct {
 	Now      func() time.Time
 	Aliases  map[string]string
 	Custom   []CustomCommand
+	Channel  string
 }
 
 type CommandProcessor struct {
@@ -43,6 +45,7 @@ type CommandProcessor struct {
 	lastRun  map[string]time.Time
 	aliases  map[string]string
 	custom   map[string]CustomCommand
+	channel  string
 }
 
 func ParseChatCommand(text string) (ChatCommand, bool) {
@@ -76,7 +79,7 @@ func NewCommandProcessor(config CommandProcessorConfig) *CommandProcessor {
 	if cooldown < 0 {
 		cooldown = 0
 	}
-	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases), custom: customCommandMap(config.Custom)}
+	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases), custom: customCommandMap(config.Custom), channel: strings.TrimSpace(config.Channel)}
 }
 
 func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []events.Event {
@@ -148,11 +151,12 @@ func (p *CommandProcessor) handleCustomCommand(original ChatCommand, resolved Ch
 	if p.onNamedCooldown("custom:"+custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
 	}
-	action, ok := customActionEvent(custom, user)
+	template := bot.RenderTemplate(custom.Response, bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: p.channel, Args: original.Args, Command: resolved.Name})
+	action, ok := customActionEvent(custom, user, template.Text, template.UnknownVariables)
 	if !ok {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command ignored", map[string]any{"custom": true, "action": custom.Action})}
 	}
-	return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"custom": true, "action": custom.Action}), action}
+	return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"custom": true, "action": custom.Action, "unknownVariables": template.UnknownVariables}), action}
 }
 
 func (p *CommandProcessor) resolveCommand(command ChatCommand) (ChatCommand, bool) {
@@ -244,19 +248,22 @@ func isSupportedChatCommand(name string) bool {
 	}
 }
 
-func customActionEvent(command CustomCommand, user ChatCommandUser) (events.Event, bool) {
-	message := truncateCommandText(command.Response, 500)
+func customActionEvent(command CustomCommand, user ChatCommandUser, rendered string, unknownVariables []string) (events.Event, bool) {
+	message := truncateCommandText(rendered, 400)
 	if message == "" {
 		return events.Event{}, false
 	}
 	switch command.Action {
 	case "alert":
-		return events.NewAlert("twitch", firstNonEmpty(user.Name, user.Login, "Twitch chat"), message, events.SeverityInfo), true
+		event := events.NewAlert("twitch", firstNonEmpty(user.Name, user.Login, "Twitch chat"), message, events.SeverityInfo)
+		event.Data = map[string]any{"command": command.Name, "custom": true, "action": "alert", "unknownVariables": unknownVariables}
+		return event, true
 	case "ticker":
 		event := events.NewCommand("twitch", "Bot response: !"+command.Name, message, events.SeverityInfo, map[string]any{
-			"command": command.Name,
-			"custom":  true,
-			"action":  "ticker",
+			"command":          command.Name,
+			"custom":           true,
+			"action":           "ticker",
+			"unknownVariables": unknownVariables,
 			"ticker": map[string]any{
 				"label":   "!" + command.Name,
 				"message": message,

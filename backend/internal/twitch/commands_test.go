@@ -126,21 +126,34 @@ func TestCommandProcessorSetAliasesReplacesAliasesLive(t *testing.T) {
 }
 
 func TestCommandProcessorCustomTickerCommand(t *testing.T) {
-	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Custom: []CustomCommand{{Name: "discord", Enabled: true, Response: "Join the Discord", Action: "ticker", RoleRequired: "viewer"}}})
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Channel: "patrick__eff", Custom: []CustomCommand{{Name: "discord", Enabled: true, Response: "Join {user} in {channel}: {args}", Action: "ticker", RoleRequired: "viewer"}}})
 
-	got := processor.Handle(ChatCommand{Name: "discord"}, ChatCommandUser{Name: "viewer"})
+	got := processor.Handle(ChatCommand{Name: "discord", Args: "today"}, ChatCommandUser{Name: "Viewer", Login: "viewer_login"})
 	if len(got) != 2 {
 		t.Fatalf("event count=%d, want 2: %#v", len(got), got)
 	}
 	if got[0].Type != events.EventTypeCommand || got[0].Severity != events.SeveritySuccess || got[0].Data["custom"] != true || got[0].Data["action"] != "ticker" {
 		t.Fatalf("unexpected diagnostic event: %#v", got[0])
 	}
-	if got[1].Type != events.EventTypeCommand || got[1].Message != "Join the Discord" {
+	if got[1].Type != events.EventTypeCommand || got[1].Message != "Join Viewer in patrick__eff: today" {
 		t.Fatalf("unexpected ticker response: %#v", got[1])
 	}
 	ticker, ok := got[1].Data["ticker"].(map[string]any)
-	if !ok || ticker["label"] != "!discord" || ticker["message"] != "Join the Discord" {
+	if !ok || ticker["label"] != "!discord" || ticker["message"] != "Join Viewer in patrick__eff: today" {
 		t.Fatalf("unexpected ticker payload: %#v", got[1].Data)
+	}
+}
+
+func TestCommandProcessorCustomCommandReportsUnknownTemplateVariables(t *testing.T) {
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Custom: []CustomCommand{{Name: "hello", Enabled: true, Response: "hi {missing} {user}", Action: "ticker", RoleRequired: "viewer"}}})
+
+	got := processor.Handle(ChatCommand{Name: "hello"}, ChatCommandUser{Name: "Viewer"})
+	if len(got) != 2 {
+		t.Fatalf("event count=%d, want 2: %#v", len(got), got)
+	}
+	unknown, ok := got[0].Data["unknownVariables"].([]string)
+	if !ok || len(unknown) != 1 || unknown[0] != "missing" {
+		t.Fatalf("expected unknown template variable in diagnostic data, got %#v", got[0].Data)
 	}
 }
 

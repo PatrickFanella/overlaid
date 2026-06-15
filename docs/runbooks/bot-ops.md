@@ -13,7 +13,7 @@ Implemented now:
 - Operator-protected timer list/create/toggle/delete at `/api/bot/timers`.
 - `/dashboard/bot` overview, command manager, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
-- Custom Twitch commands can publish safe ticker or alert overlay responses.
+- Custom Twitch commands can publish safe ticker or alert overlay responses with bounded template variables.
 
 Not implemented yet:
 
@@ -62,10 +62,20 @@ Custom commands are intentionally safer and smaller than FossaBot's full command
 - Commands do not execute scripts, send outbound chat, call external APIs, or run OBS actions.
 - Command saves refresh the in-memory Twitch command processor immediately.
 
+Supported template variables:
+
+- `{user}` / `{displayName}` — Twitch display name when available, otherwise login.
+- `{channel}` — configured Twitch channel.
+- `{args}` — text after the command name.
+- `{command}` — resolved command name without `!`.
+- `{nowPlaying.title}` / `{nowPlaying.artist}` — reserved now-playing variables; currently render empty until now-playing context is wired into the bot runtime.
+
+Unknown variables render empty and are included in command audit data. Rendered responses are capped at 400 characters.
+
 To test a custom command:
 
-1. Create `!discord` in `/dashboard/bot`.
-2. Send `!discord` in Twitch chat.
+1. Create `!discord` in `/dashboard/bot` with response `Join {user}: https://example.test {args}`.
+2. Send `!discord today` in Twitch chat.
 3. Confirm `/overlay/ticker` or `/overlay/alerts` shows the configured response.
 4. Confirm `/dashboard/bot` audit records the command with result `allowed`.
 
