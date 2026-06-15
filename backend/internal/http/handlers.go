@@ -95,6 +95,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 func (s *Server) buildReadinessReport(ctx context.Context) readinessResponse {
 	checks := []readinessCheck{{Name: "process", Status: "ok"}}
 	checks = append(checks, s.buildExposureReadinessChecks()...)
+	checks = append(checks, s.buildEventPipelineReadinessChecks()...)
 
 	if s.stateLoadError != "" {
 		checks = append(checks, readinessCheck{Name: "retained_state", Status: "degraded", Hint: "overlay state file could not be loaded; back it up, inspect JSON, or clear retained overlay state"})
@@ -142,6 +143,17 @@ func (s *Server) buildReadinessReport(ctx context.Context) readinessResponse {
 	}
 
 	return readinessResponse{Status: status, Checks: checks}
+}
+
+func (s *Server) buildEventPipelineReadinessChecks() []readinessCheck {
+	if s.bus == nil {
+		return []readinessCheck{{Name: "event_pipeline", Status: "degraded", Hint: "event bus is not initialized"}}
+	}
+	stats := s.bus.Stats()
+	if stats.Dropped > 0 {
+		return []readinessCheck{{Name: "event_pipeline", Status: "degraded", Hint: fmt.Sprintf("event bus dropped %d event deliveries; check slow/stale overlay clients", stats.Dropped)}}
+	}
+	return []readinessCheck{{Name: "event_pipeline", Status: "ok", Hint: fmt.Sprintf("subscribers=%d published=%d dropped=%d", stats.Subscribers, stats.Published, stats.Dropped)}}
 }
 
 func (s *Server) buildExposureReadinessChecks() []readinessCheck {
@@ -409,10 +421,15 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher.Flush()
 
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-heartbeat.C:
+			_, _ = fmt.Fprint(w, ": heartbeat\n\n")
+			flusher.Flush()
 		case event, ok := <-client.Events:
 			if !ok {
 				return

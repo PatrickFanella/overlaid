@@ -109,6 +109,7 @@ func TestReadyzReportsProcessAndOptionalDependencies(t *testing.T) {
 	assertReadyzCheckSet(t, body.Checks, map[string]string{
 		"process":             "ok",
 		"exposure":            "ok",
+		"event_pipeline":      "ok",
 		"retained_state":      "ok",
 		"event_history":       "ok",
 		"twitch_interactions": "ok",
@@ -402,6 +403,7 @@ func TestReadyzReturnsDegradedWhenOBSHelloStalls(t *testing.T) {
 	assertReadyzCheckSet(t, body.Checks, map[string]string{
 		"process":             "ok",
 		"exposure":            "ok",
+		"event_pipeline":      "ok",
 		"retained_state":      "ok",
 		"event_history":       "ok",
 		"twitch_interactions": "ok",

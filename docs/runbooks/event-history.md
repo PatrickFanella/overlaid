@@ -53,6 +53,10 @@ Start a session in the Rehearsal audit panel before a rehearsal/live pass to tag
 
 If `/readyz` reports `event_history` as degraded, event-history storage failed to load at startup. With `DATABASE_URL` set, also inspect the `postgres` readiness check.
 
+If `/readyz` reports `event_pipeline` as degraded, the in-memory SSE bus has dropped deliveries to at least one slow/stale overlay client. Refresh or remove stale browser sources, then recheck `/readyz`. The app keeps publishing new events; the counter is reset on API restart.
+
+`event_pipeline` readiness hints include current subscriber count, published events, and dropped delivery count.
+
 ### Postgres-backed history
 
 Check Postgres first:

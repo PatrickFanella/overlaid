@@ -37,6 +37,11 @@ func TestBusDoesNotBlockWhenSubscriberBufferIsFull(t *testing.T) {
 	bus.Publish(NewAlert("manual", "one", "one", SeverityInfo))
 	bus.Publish(NewAlert("manual", "two", "two", SeverityInfo))
 
+	stats := bus.Stats()
+	if stats.Published != 2 || stats.Dropped != 1 || stats.Subscribers != 1 {
+		t.Fatalf("unexpected stats: %#v", stats)
+	}
+
 	select {
 	case <-client.Events:
 	case <-time.After(time.Second):

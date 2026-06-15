@@ -11,6 +11,14 @@ type Bus struct {
 	mu         sync.RWMutex
 	bufferSize int
 	clients    map[string]Client
+	published  uint64
+	dropped    uint64
+}
+
+type BusStats struct {
+	Subscribers int    `json:"subscribers"`
+	Published   uint64 `json:"published"`
+	Dropped     uint64 `json:"dropped"`
 }
 
 func NewBus(bufferSize int) *Bus {
@@ -44,13 +52,21 @@ func (b *Bus) Unsubscribe(id string) {
 }
 
 func (b *Bus) Publish(event Event) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.published++
 
 	for _, client := range b.clients {
 		select {
 		case client.Events <- event:
 		default:
+			b.dropped++
 		}
 	}
+}
+
+func (b *Bus) Stats() BusStats {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return BusStats{Subscribers: len(b.clients), Published: b.published, Dropped: b.dropped}
 }
