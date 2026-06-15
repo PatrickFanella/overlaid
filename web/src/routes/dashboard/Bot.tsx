@@ -440,6 +440,10 @@ function BotCommandsPanel({
         Response
         <textarea className="hud-input min-h-20" value={draft.response} onChange={(event) => onDraftChange({ ...draft, response: event.target.value })} placeholder="Join the Discord: https://example.test" />
       </label>
+      <div className="mt-2 border border-cyan-400/20 bg-black/40 p-2 text-xs">
+        <p className="text-zinc-500">Preview with sample context</p>
+        <p className="mt-1 text-cyan-100">{renderCommandPreview(draft) || 'Enter a response to preview rendered output.'}</p>
+      </div>
       <div className="mt-2 flex items-center gap-3">
         <label className="flex items-center gap-2 text-xs text-zinc-300">
           <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
@@ -467,6 +471,23 @@ function BotCommandsPanel({
       </div>
     </section>
   );
+}
+
+function renderCommandPreview(draft: CommandDraft) {
+  const values: Record<string, string> = {
+    user: 'TestViewer',
+    displayName: 'TestViewer',
+    channel: 'patrick__eff',
+    args: 'sample args',
+    command: draft.name.trim().replace(/^!/, '') || 'command',
+    'nowPlaying.title': '',
+    'nowPlaying.artist': '',
+    'quote:random': 'Example quote — ExampleAuthor',
+  };
+  return draft.response.replace(/\{([^{}]+)\}/g, (_match, key: string) => {
+    if (key.startsWith('count:')) return '0';
+    return values[key] ?? '';
+  }).trim().slice(0, 400);
 }
 
 function BotCommunityPanel({

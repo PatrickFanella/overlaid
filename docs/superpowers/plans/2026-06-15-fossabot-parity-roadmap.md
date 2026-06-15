@@ -23,6 +23,26 @@ over-laid currently has strong production-control features: OBS automation, brow
 
 The parity roadmap adds FossaBot-style bot breadth without weakening the existing over-laid safety model.
 
+## Current status
+
+Implemented and verified in committed slices:
+
+- Bot audit storage, runtime permissions, existing Twitch command audit, and `/dashboard/bot` audit/status view.
+- Timer CRUD, dashboard management, safe template rendering, and enabled timer runtime dispatch through ticker/alert events.
+- Safe custom response commands with role/cooldown checks, template variables, dashboard management, and preview rendering.
+- Counters and quotes with dashboard/API management, chat commands, and `{count:name}` / `{quote:random}` variables.
+- Channel-point rule enrichment with cooldown seconds and fulfillment notes.
+- Moderation foundation: blocked-term rules, dry-run matching, guarded manual Twitch delete/timeout/ban/unban actions with required scopes, and nuke-style dry-run planning over recent chat history.
+
+Deliberately carried forward:
+
+- Outbound Twitch chat replies.
+- Arbitrary/custom API variables.
+- Twitch reward creation/fulfillment management through Helix.
+- Automatic moderation enforcement from rules.
+- Full nuke execution/radiation/rollback workflow.
+- Cloud-hosted uptime parity with FossaBot.
+
 ---
 
 ## File structure
