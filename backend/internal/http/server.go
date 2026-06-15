@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/dashboardconfig"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
@@ -31,6 +32,9 @@ type Server struct {
 	dashboardConfigLoadError  string
 	sessions                  *sessions.Store
 	sessionsLoadError         string
+	botStore                  *bot.Store
+	botLoadError              string
+	botRuntime                *bot.Runtime
 	obs                       obsws.Client
 	state                     *state.Store
 	stateLoadError            string
@@ -54,6 +58,10 @@ type sessionAwareHistoryStore interface {
 	SetActiveSessionID(string)
 }
 
+type activeSessionHistoryStore interface {
+	ActiveSessionID() string
+}
+
 func NewServer(cfg config.Config, bus *events.Bus) *Server {
 	eventHistory, historyLoadError, historyWritable := newEventHistoryStore(cfg)
 	store := state.New(cfg.OverlayStateFile)
@@ -66,6 +74,8 @@ func NewServer(cfg config.Config, bus *events.Bus) *Server {
 	server.dashboardConfig, server.dashboardConfigLoadError = newDashboardConfigStore(cfg)
 	server.sessions, server.sessionsLoadError = newSessionStore(cfg)
 	server.refreshActiveSession(context.Background())
+	server.botStore, server.botLoadError = newBotStore(cfg)
+	server.botRuntime = bot.NewRuntime(server.botStore)
 	server.interactions, server.interactionsLoadError = newInteractionStore(cfg)
 	rules := interactions.Rules{}
 	if server.interactions != nil {
@@ -78,6 +88,20 @@ func NewServer(cfg config.Config, bus *events.Bus) *Server {
 	}
 	server.routes()
 	return server
+}
+
+func newBotStore(cfg config.Config) (*bot.Store, string) {
+	if strings.TrimSpace(cfg.DatabaseURL) == "" {
+		return nil, ""
+	}
+	store, err := retryStartupStore("bot store", func() (*bot.Store, error) {
+		return bot.NewPostgres(cfg.DatabaseURL)
+	})
+	if err != nil {
+		log.Printf("failed to initialize bot store: %v", err)
+		return nil, err.Error()
+	}
+	return store, ""
 }
 
 func newSessionStore(cfg config.Config) (*sessions.Store, string) {

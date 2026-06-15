@@ -504,6 +504,7 @@ func (s *Server) publishEventSubEvent(event events.Event) {
 }
 
 func (s *Server) publishEvent(event events.Event) {
+	s.recordBotAuditForEvent(context.Background(), event)
 	if s.bus != nil {
 		s.bus.Publish(event)
 	}
