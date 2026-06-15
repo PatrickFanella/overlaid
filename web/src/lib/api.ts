@@ -59,6 +59,32 @@ export type BotAuditResponse = {
   loadError?: string;
 };
 
+export type BotTimer = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  intervalSeconds: number;
+  response: string;
+  action: 'ticker' | 'alert' | string;
+  createdAt: string;
+  updatedAt: string;
+  lastRunAt?: string;
+};
+
+export type BotTimersResponse = {
+  timers: BotTimer[];
+  loadError?: string;
+};
+
+export type BotTimerPayload = {
+  id?: string;
+  name: string;
+  enabled: boolean;
+  intervalSeconds: number;
+  response: string;
+  action: 'ticker' | 'alert';
+};
+
 export type ChatAliasRule = {
   alias: string;
   command: 'alert' | 'clear' | 'brb' | 'back';
@@ -240,6 +266,32 @@ export async function fetchBotAudit(limit = 50, explicitBaseUrl?: string, operat
     throw new Error(`bot audit failed: ${response.status}`);
   }
   return (await response.json()) as BotAuditResponse;
+}
+
+export async function fetchBotTimers(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl('/api/bot/timers', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) {
+    throw new Error(`bot timers failed: ${response.status}`);
+  }
+  return (await response.json()) as BotTimersResponse;
+}
+
+export async function saveBotTimer(payload: BotTimerPayload, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/bot/timers', payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotTimer;
+}
+
+export async function setBotTimerEnabled(id: string, enabled: boolean, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await sendJSON('PUT', `/api/bot/timers/${encodeURIComponent(id)}`, { enabled }, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotTimer;
+}
+
+export async function deleteBotTimer(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl(`/api/bot/timers/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`delete bot timer failed: ${response.status}${detail.trim() ? ` — ${detail.trim()}` : ''}`);
+  }
 }
 
 export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {

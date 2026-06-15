@@ -34,3 +34,33 @@ func TestNormalizeAuditEvent(t *testing.T) {
 		t.Fatalf("expected default data object, got %s", event.Data)
 	}
 }
+
+func TestNormalizeTimer(t *testing.T) {
+	timer, err := NormalizeTimer(Timer{Name: " Stream_Hype ", Enabled: true, IntervalSeconds: 120, Response: "  hydrate chat  ", Action: " ALERT "})
+	if err != nil {
+		t.Fatalf("expected valid timer, got %v", err)
+	}
+	if timer.Name != "stream_hype" || timer.Response != "hydrate chat" || timer.Action != "alert" {
+		t.Fatalf("unexpected normalized timer: %#v", timer)
+	}
+}
+
+func TestNormalizeTimerRejectsUnsafeValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		timer Timer
+	}{
+		{name: "empty name", timer: Timer{IntervalSeconds: 120, Response: "ok", Action: "ticker"}},
+		{name: "unsafe name", timer: Timer{Name: "bad name", IntervalSeconds: 120, Response: "ok", Action: "ticker"}},
+		{name: "short interval", timer: Timer{Name: "short", IntervalSeconds: 10, Response: "ok", Action: "ticker"}},
+		{name: "empty response", timer: Timer{Name: "empty", IntervalSeconds: 120, Action: "ticker"}},
+		{name: "unsupported action", timer: Timer{Name: "bad_action", IntervalSeconds: 120, Response: "ok", Action: "ban"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := NormalizeTimer(tt.timer); err == nil {
+				t.Fatal("expected timer validation error")
+			}
+		})
+	}
+}

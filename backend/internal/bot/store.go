@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -31,6 +32,18 @@ type AuditEvent struct {
 	EventID          string          `json:"eventId,omitempty"`
 	StreamSessionID  string          `json:"streamSessionId,omitempty"`
 	Data             json.RawMessage `json:"data,omitempty"`
+}
+
+type Timer struct {
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	Enabled         bool       `json:"enabled"`
+	IntervalSeconds int        `json:"intervalSeconds"`
+	Response        string     `json:"response"`
+	Action          string     `json:"action"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+	LastRunAt       *time.Time `json:"lastRunAt,omitempty"`
 }
 
 func NewPostgres(databaseURL string) (*Store, error) {
@@ -111,6 +124,147 @@ func (s *Store) Counts(ctx context.Context) (commandCount, timerCount, auditCoun
 			(SELECT count(*) FROM bot_audit_events)
 	`).Scan(&commandCount, &timerCount, &auditCount)
 	return commandCount, timerCount, auditCount, err
+}
+
+func (s *Store) ListTimers(ctx context.Context) ([]Timer, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
+		FROM bot_timers
+		ORDER BY name ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	timers := []Timer{}
+	for rows.Next() {
+		timer, err := scanTimer(rows)
+		if err != nil {
+			return nil, err
+		}
+		timers = append(timers, timer)
+	}
+	return timers, rows.Err()
+}
+
+func (s *Store) SaveTimer(ctx context.Context, timer Timer) (Timer, error) {
+	timer, err := NormalizeTimer(timer)
+	if err != nil {
+		return Timer{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if strings.TrimSpace(timer.ID) == "" {
+		return s.insertTimer(ctx, timer)
+	}
+	return s.updateTimer(ctx, timer)
+}
+
+func (s *Store) SetTimerEnabled(ctx context.Context, id string, enabled bool) (Timer, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Timer{}, errors.New("timer id is required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	row := s.db.QueryRowContext(ctx, `
+		UPDATE bot_timers SET enabled = $2, updated_at = now()
+		WHERE id = $1
+		RETURNING id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
+	`, id, enabled)
+	return scanTimer(row)
+}
+
+func (s *Store) DeleteTimer(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errors.New("timer id is required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	result, err := s.db.ExecContext(ctx, `DELETE FROM bot_timers WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if affected, err := result.RowsAffected(); err == nil && affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) insertTimer(ctx context.Context, timer Timer) (Timer, error) {
+	row := s.db.QueryRowContext(ctx, `
+		INSERT INTO bot_timers (name, enabled, interval_seconds, response, action)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
+	`, timer.Name, timer.Enabled, timer.IntervalSeconds, timer.Response, timer.Action)
+	return scanTimer(row)
+}
+
+func (s *Store) updateTimer(ctx context.Context, timer Timer) (Timer, error) {
+	row := s.db.QueryRowContext(ctx, `
+		UPDATE bot_timers
+		SET name = $2, enabled = $3, interval_seconds = $4, response = $5, action = $6, updated_at = now()
+		WHERE id = $1
+		RETURNING id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
+	`, strings.TrimSpace(timer.ID), timer.Name, timer.Enabled, timer.IntervalSeconds, timer.Response, timer.Action)
+	return scanTimer(row)
+}
+
+type timerScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTimer(row timerScanner) (Timer, error) {
+	var timer Timer
+	var lastRunAt sql.NullTime
+	if err := row.Scan(&timer.ID, &timer.Name, &timer.Enabled, &timer.IntervalSeconds, &timer.Response, &timer.Action, &timer.CreatedAt, &timer.UpdatedAt, &lastRunAt); err != nil {
+		return Timer{}, err
+	}
+	if lastRunAt.Valid {
+		timer.LastRunAt = &lastRunAt.Time
+	}
+	return timer, nil
+}
+
+func NormalizeTimer(timer Timer) (Timer, error) {
+	timer.ID = strings.TrimSpace(timer.ID)
+	timer.Name = strings.ToLower(strings.TrimSpace(timer.Name))
+	timer.Response = strings.TrimSpace(timer.Response)
+	timer.Action = normalizeToken(timer.Action, "ticker")
+	if timer.Name == "" {
+		return Timer{}, errors.New("timer name is required")
+	}
+	if !isSafeTimerName(timer.Name) {
+		return Timer{}, errors.New("timer name must use lowercase letters, numbers, dash, or underscore")
+	}
+	if timer.IntervalSeconds < 30 || timer.IntervalSeconds > 86400 {
+		return Timer{}, errors.New("timer interval must be between 30 and 86400 seconds")
+	}
+	if timer.Response == "" {
+		return Timer{}, errors.New("timer response is required")
+	}
+	if len(timer.Response) > 500 {
+		return Timer{}, errors.New("timer response must be 500 characters or less")
+	}
+	switch timer.Action {
+	case "ticker", "alert":
+	default:
+		return Timer{}, fmt.Errorf("unsupported timer action %q", timer.Action)
+	}
+	return timer, nil
+}
+
+func isSafeTimerName(name string) bool {
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (s *Store) Close() error {

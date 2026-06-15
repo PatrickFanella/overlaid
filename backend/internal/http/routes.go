@@ -16,6 +16,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/dashboard/config", s.requireOperator(s.dashboardConfigPut))
 	s.mux.HandleFunc("GET /api/bot/status", s.requireOperator(s.botStatus))
 	s.mux.HandleFunc("GET /api/bot/audit", s.requireOperator(s.botAudit))
+	s.mux.HandleFunc("GET /api/bot/timers", s.requireOperator(s.botTimers))
+	s.mux.HandleFunc("POST /api/bot/timers", s.requireOperator(s.botTimerSave))
+	s.mux.HandleFunc("PUT /api/bot/timers/{id}", s.requireOperator(s.botTimerSetEnabled))
+	s.mux.HandleFunc("DELETE /api/bot/timers/{id}", s.requireOperator(s.botTimerDelete))
 	s.mux.HandleFunc("GET /api/stream/session", s.requireOperator(s.streamSessionStatus))
 	s.mux.HandleFunc("GET /api/stream/session/{id}", s.requireOperator(s.streamSessionReport))
 	s.mux.HandleFunc("POST /api/stream/session/start", s.requireOperator(s.streamSessionStart))
@@ -40,7 +44,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", s.config.AllowedOrigin)
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Overlay-Operator-Secret,X-Overlay-Webhook-Secret")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
