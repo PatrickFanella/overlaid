@@ -20,6 +20,13 @@ func (a botCommunityAdapter) IncrementCounter(name string, delta int) (bot.Count
 	return a.store.IncrementCounter(context.Background(), name, delta)
 }
 
+func (a botCommunityAdapter) CounterValue(name string) (bot.Counter, bool, error) {
+	if a.store == nil {
+		return bot.Counter{}, false, errBotStoreUnavailable
+	}
+	return a.store.CounterValue(context.Background(), name)
+}
+
 func (a botCommunityAdapter) RandomQuote() (bot.Quote, bool, error) {
 	if a.store == nil {
 		return bot.Quote{}, false, errBotStoreUnavailable
@@ -32,4 +39,11 @@ func (a botCommunityAdapter) AddQuote(text string, author string) (bot.Quote, er
 		return bot.Quote{}, errBotStoreUnavailable
 	}
 	return a.store.SaveQuote(context.Background(), bot.Quote{Text: text, Author: author})
+}
+
+func (a botCommunityAdapter) DeleteQuote(id string) error {
+	if a.store == nil {
+		return errBotStoreUnavailable
+	}
+	return a.store.DeleteQuote(context.Background(), id)
 }

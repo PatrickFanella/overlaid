@@ -75,6 +75,8 @@ Supported template variables:
 - `{args}` — text after the command name.
 - `{command}` — resolved command name without `!`.
 - `{nowPlaying.title}` / `{nowPlaying.artist}` — reserved now-playing variables; currently render empty until now-playing context is wired into the bot runtime.
+- `{count:name}` — current value for a stored counter, or `0` when missing.
+- `{quote:random}` — random stored quote, including author when present.
 
 Unknown variables render empty and are included in command audit data. Rendered responses are capped at 400 characters.
 
@@ -104,7 +106,8 @@ Counters and quotes are intentionally safe community tools:
 - `!count name` increments a named counter by one. Broadcaster/moderator is required because this mutates persistent state.
 - Counter names use lowercase letters, numbers, dash, or underscore.
 - `!quote` displays a random stored quote as a ticker-style command event.
-- `!quote add text` stores a quote with the broadcaster/moderator display name as author.
+- `!quote add text` or `!addquote text` stores a quote with the broadcaster/moderator display name as author.
+- `!delquote <id>` deletes a quote by id for broadcaster/moderator users.
 - Quote text is required and capped at 500 characters; author is capped at 80 characters.
 - Counter and quote commands do not send outbound chat, call external APIs, run OBS actions, or moderate users.
 

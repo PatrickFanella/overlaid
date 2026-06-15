@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -17,6 +18,8 @@ type TemplateContext struct {
 	Command          string
 	NowPlayingTitle  string
 	NowPlayingArtist string
+	Counts           map[string]int
+	QuoteRandom      string
 }
 
 type TemplateResult struct {
@@ -56,7 +59,16 @@ func templateValue(name string, context TemplateContext) (string, bool) {
 		return context.NowPlayingTitle, true
 	case "nowplaying.artist":
 		return context.NowPlayingArtist, true
+	case "quote:random":
+		return context.QuoteRandom, true
 	default:
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(name)), "count:") {
+			counterName := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(name)), "count:"))
+			if context.Counts == nil {
+				return "0", true
+			}
+			return fmt.Sprintf("%d", context.Counts[counterName]), true
+		}
 		return "", false
 	}
 }

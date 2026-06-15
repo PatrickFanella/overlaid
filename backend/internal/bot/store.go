@@ -206,6 +206,20 @@ func (s *Store) IncrementCounter(ctx context.Context, name string, delta int) (C
 	`, name, delta))
 }
 
+func (s *Store) CounterValue(ctx context.Context, name string) (Counter, bool, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return Counter{}, false, errors.New("counter name is required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	counter, err := scanCounter(s.db.QueryRowContext(ctx, `SELECT id, name, value, created_at, updated_at FROM bot_counters WHERE name = $1`, name))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Counter{}, false, nil
+	}
+	return counter, err == nil, err
+}
+
 func (s *Store) DeleteCounter(ctx context.Context, id string) error {
 	return s.deleteByID(ctx, "bot_counters", id, "counter id is required")
 }

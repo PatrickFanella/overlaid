@@ -1,6 +1,7 @@
 package twitch
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,9 +34,13 @@ type CustomCommand struct {
 
 type CommunityStore interface {
 	IncrementCounter(name string, delta int) (bot.Counter, error)
+	CounterValue(name string) (bot.Counter, bool, error)
 	RandomQuote() (bot.Quote, bool, error)
 	AddQuote(text string, author string) (bot.Quote, error)
+	DeleteQuote(id string) error
 }
+
+var countTemplatePattern = regexp.MustCompile(`\{count:([a-z0-9_-]+)\}`)
 
 type CommandProcessorConfig struct {
 	Cooldown  time.Duration
@@ -128,7 +133,7 @@ func (p *CommandProcessor) handleCommunityCommand(original ChatCommand, resolved
 	switch resolved.Name {
 	case "count":
 		return p.handleCountCommand(original, resolved, aliased, user), true
-	case "quote":
+	case "quote", "addquote", "delquote":
 		return p.handleQuoteCommand(original, resolved, aliased, user), true
 	default:
 		return nil, false
@@ -159,11 +164,26 @@ func (p *CommandProcessor) handleQuoteCommand(original ChatCommand, resolved Cha
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Quote storage unavailable", map[string]any{"action": "quote"})}
 	}
 	args := strings.TrimSpace(resolved.Args)
-	if strings.HasPrefix(strings.ToLower(args), "add ") {
+	if resolved.Name == "delquote" {
 		if !CanRunChatCommand(user) {
 			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"action": "quote", "roleRequired": "moderator"})}
 		}
-		text := strings.TrimSpace(args[4:])
+		if args == "" {
+			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Quote id required", map[string]any{"action": "quote"})}
+		}
+		if err := p.community.DeleteQuote(args); err != nil {
+			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Quote delete failed", map[string]any{"action": "quote", "error": err.Error()})}
+		}
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"action": "quote", "quoteId": args})}
+	}
+	if resolved.Name == "addquote" || strings.HasPrefix(strings.ToLower(args), "add ") {
+		if !CanRunChatCommand(user) {
+			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"action": "quote", "roleRequired": "moderator"})}
+		}
+		text := strings.TrimSpace(args)
+		if strings.HasPrefix(strings.ToLower(text), "add ") {
+			text = strings.TrimSpace(text[4:])
+		}
 		quote, err := p.community.AddQuote(text, firstNonEmpty(user.Name, user.Login))
 		if err != nil {
 			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Quote add failed", map[string]any{"action": "quote", "error": err.Error()})}
@@ -224,12 +244,36 @@ func (p *CommandProcessor) handleCustomCommand(original ChatCommand, resolved Ch
 	if p.onNamedCooldown("custom:"+custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
 	}
-	template := bot.RenderTemplate(custom.Response, bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: p.channel, Args: original.Args, Command: resolved.Name})
+	template := bot.RenderTemplate(custom.Response, p.templateContext(custom.Response, original, resolved, user))
 	action, ok := customActionEvent(custom, user, template.Text, template.UnknownVariables)
 	if !ok {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command ignored", map[string]any{"custom": true, "action": custom.Action})}
 	}
 	return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"custom": true, "action": custom.Action, "unknownVariables": template.UnknownVariables}), action}
+}
+
+func (p *CommandProcessor) templateContext(response string, original ChatCommand, resolved ChatCommand, user ChatCommandUser) bot.TemplateContext {
+	ctx := bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: p.channel, Args: original.Args, Command: resolved.Name, Counts: map[string]int{}}
+	if p.community == nil {
+		return ctx
+	}
+	for _, match := range countTemplatePattern.FindAllStringSubmatch(strings.ToLower(response), -1) {
+		if len(match) < 2 {
+			continue
+		}
+		if counter, ok, err := p.community.CounterValue(match[1]); err == nil && ok {
+			ctx.Counts[match[1]] = counter.Value
+		}
+	}
+	if strings.Contains(strings.ToLower(response), "{quote:random}") {
+		if quote, ok, err := p.community.RandomQuote(); err == nil && ok {
+			ctx.QuoteRandom = quote.Text
+			if quote.Author != "" {
+				ctx.QuoteRandom += " — " + quote.Author
+			}
+		}
+	}
+	return ctx
 }
 
 func (p *CommandProcessor) resolveCommand(command ChatCommand) (ChatCommand, bool) {

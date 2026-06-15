@@ -18,6 +18,12 @@ func (f *fakeCommunityStore) IncrementCounter(name string, delta int) (bot.Count
 	f.counter = bot.Counter{Name: name, Value: f.counter.Value + delta}
 	return f.counter, nil
 }
+func (f *fakeCommunityStore) CounterValue(name string) (bot.Counter, bool, error) {
+	if f.counter.Name == name {
+		return f.counter, true, nil
+	}
+	return bot.Counter{}, false, nil
+}
 func (f *fakeCommunityStore) RandomQuote() (bot.Quote, bool, error) {
 	if f.quote.Text == "" {
 		return bot.Quote{}, false, nil
@@ -28,6 +34,7 @@ func (f *fakeCommunityStore) AddQuote(text string, author string) (bot.Quote, er
 	f.quote = bot.Quote{ID: "quote-1", Text: text, Author: author}
 	return f.quote, nil
 }
+func (f *fakeCommunityStore) DeleteQuote(id string) error { f.quote = bot.Quote{}; return nil }
 
 func TestParseChatCommand(t *testing.T) {
 	tests := []struct {
@@ -219,6 +226,15 @@ func TestCommandProcessorQuoteCommands(t *testing.T) {
 	shown := processor.Handle(ChatCommand{Name: "quote"}, ChatCommandUser{Name: "Viewer"})
 	if len(shown) != 2 || shown[1].Message != "never tell me the odds — Mod" {
 		t.Fatalf("unexpected quote show: %#v", shown)
+	}
+}
+
+func TestCommandProcessorCommunityTemplateVariables(t *testing.T) {
+	community := &fakeCommunityStore{counter: bot.Counter{Name: "hype", Value: 7}, quote: bot.Quote{Text: "stay awhile", Author: "Deckard"}}
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Community: community, Custom: []CustomCommand{{Name: "stats", Enabled: true, Response: "hype={count:hype} quote={quote:random}", Action: "ticker", RoleRequired: "viewer"}}})
+	got := processor.Handle(ChatCommand{Name: "stats"}, ChatCommandUser{Name: "Viewer"})
+	if len(got) != 2 || got[1].Message != "hype=7 quote=stay awhile — Deckard" {
+		t.Fatalf("unexpected community template response: %#v", got)
 	}
 }
 
