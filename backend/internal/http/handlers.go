@@ -95,6 +95,7 @@ func (s *Server) buildReadinessReport(ctx context.Context) readinessResponse {
 	checks := []readinessCheck{{Name: "process", Status: "ok"}}
 	checks = append(checks, s.buildExposureReadinessChecks()...)
 	checks = append(checks, s.buildEventPipelineReadinessChecks()...)
+	checks = append(checks, s.buildBotReadinessChecks()...)
 
 	if s.stateLoadError != "" {
 		checks = append(checks, readinessCheck{Name: "retained_state", Status: "degraded", Hint: "overlay state file could not be loaded; back it up, inspect JSON, or clear retained overlay state"})
@@ -142,6 +143,19 @@ func (s *Server) buildReadinessReport(ctx context.Context) readinessResponse {
 	}
 
 	return readinessResponse{Status: status, Checks: checks}
+}
+
+func (s *Server) buildBotReadinessChecks() []readinessCheck {
+	if strings.TrimSpace(s.config.DatabaseURL) == "" {
+		return nil
+	}
+	if s.botStore == nil {
+		return []readinessCheck{{Name: "bot_runtime", Status: "degraded", Hint: firstNonEmptyString(s.botLoadError, "bot store is unavailable")}}
+	}
+	if s.botRuntime != nil && strings.TrimSpace(s.botRuntime.LastAuditError()) != "" {
+		return []readinessCheck{{Name: "bot_runtime", Status: "degraded", Hint: s.botRuntime.LastAuditError()}}
+	}
+	return []readinessCheck{{Name: "bot_runtime", Status: "ok"}}
 }
 
 func (s *Server) buildEventPipelineReadinessChecks() []readinessCheck {

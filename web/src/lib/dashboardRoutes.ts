@@ -49,6 +49,14 @@ export const dashboardRoutes: DashboardRoute[] = [
     intent: 'operate',
   },
   {
+    path: '/dashboard/bot',
+    navLabel: 'Bot',
+    title: 'Bot operations',
+    description: 'Twitch bot audit, future custom commands, timers, counters, and moderation controls.',
+    landmarkText: 'Bot audit',
+    intent: 'operate',
+  },
+  {
     path: '/dashboard/config',
     navLabel: 'Config',
     title: 'Operator config',

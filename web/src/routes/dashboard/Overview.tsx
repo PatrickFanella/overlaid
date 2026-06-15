@@ -24,6 +24,7 @@ export function DashboardOverviewPage() {
           <a className="hud-action-button hud-action-button--compact" href="/dashboard/setup">Setup checklist</a>
           <a className="hud-action-button hud-action-button--compact" href="/dashboard/sources">Source URLs</a>
           <a className="hud-action-button hud-action-button--compact" href="/dashboard/control">Stream control</a>
+          <a className="hud-action-button hud-action-button--compact" href="/dashboard/bot">Bot ops</a>
           <a className="hud-action-button hud-action-button--compact" href="/dashboard/config">Config</a>
         </div>
       </section>

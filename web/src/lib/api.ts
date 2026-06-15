@@ -27,6 +27,38 @@ export type TwitchStatus = {
   };
 };
 
+export type BotStatus = {
+  available: boolean;
+  loadError?: string;
+  lastAuditError?: string;
+  commandCount: number;
+  timerCount: number;
+  auditCount: number;
+};
+
+export type BotAuditEvent = {
+  id: string;
+  createdAt: string;
+  source: string;
+  actorId?: string;
+  actorLogin?: string;
+  actorDisplayName?: string;
+  actorRole?: string;
+  trigger?: string;
+  command?: string;
+  action?: string;
+  result: string;
+  reason?: string;
+  eventId?: string;
+  streamSessionId?: string;
+  data?: Record<string, unknown>;
+};
+
+export type BotAuditResponse = {
+  events: BotAuditEvent[];
+  loadError?: string;
+};
+
 export type ChatAliasRule = {
   alias: string;
   command: 'alert' | 'clear' | 'brb' | 'back';
@@ -192,6 +224,22 @@ export async function fetchTwitchStatus(explicitBaseUrl?: string) {
     throw new Error(`Twitch status failed: ${response.status}`);
   }
   return (await response.json()) as TwitchStatus;
+}
+
+export async function fetchBotStatus(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl('/api/bot/status', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) {
+    throw new Error(`bot status failed: ${response.status}`);
+  }
+  return (await response.json()) as BotStatus;
+}
+
+export async function fetchBotAudit(limit = 50, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl(`/api/bot/audit?limit=${encodeURIComponent(String(limit))}`, explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) {
+    throw new Error(`bot audit failed: ${response.status}`);
+  }
+  return (await response.json()) as BotAuditResponse;
 }
 
 export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {

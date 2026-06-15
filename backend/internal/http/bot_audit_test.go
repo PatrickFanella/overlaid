@@ -2,9 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 )
 
@@ -71,4 +75,51 @@ func TestRecordBotAuditForDeniedTwitchCommand(t *testing.T) {
 	if recorder.events[0].Result != "denied" || recorder.events[0].Reason != "permission_denied" || recorder.events[0].ActorRole != "viewer" {
 		t.Fatalf("unexpected denied audit event: %#v", recorder.events[0])
 	}
+}
+
+func TestBotStatusRequiresOperator(t *testing.T) {
+	server := NewServer(configForBotTest("secret"), events.NewBus(4))
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/bot/status", nil))
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without operator secret, got %d", rec.Code)
+	}
+}
+
+func TestBotStatusReportsUnavailableWithoutDatabase(t *testing.T) {
+	server := NewServer(configForBotTest("secret"), events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/api/bot/status", nil)
+	req.Header.Set("X-Overlay-Operator-Secret", "secret")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"available":false`) {
+		t.Fatalf("expected unavailable bot status, got %s", rec.Body.String())
+	}
+}
+
+func TestBotAuditReturnsEmptyWhenStoreUnavailable(t *testing.T) {
+	server := NewServer(configForBotTest("secret"), events.NewBus(4))
+	req := httptest.NewRequest(http.MethodGet, "/api/bot/audit", nil)
+	req.Header.Set("X-Overlay-Operator-Secret", "secret")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"events":[]`) {
+		t.Fatalf("expected empty audit events, got %s", rec.Body.String())
+	}
+}
+
+func configForBotTest(operatorSecret string) config.Config {
+	return config.Config{AllowedOrigin: "*", OperatorSecret: operatorSecret}
 }

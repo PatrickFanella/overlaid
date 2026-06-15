@@ -9,6 +9,7 @@ import { OverlayPlaceholderPage } from './routes/OverlayPlaceholder';
 import { OverlayTickerPage } from './routes/OverlayTicker';
 import { DashboardConfigPage } from './routes/dashboard/Config';
 import { DashboardControlPage } from './routes/dashboard/Control';
+import { DashboardBotPage } from './routes/dashboard/Bot';
 import { DashboardLivePage } from './routes/dashboard/Live';
 import { DashboardOverviewPage } from './routes/dashboard/Overview';
 import { DashboardSetupPage } from './routes/dashboard/Setup';
@@ -67,6 +68,10 @@ export function getAppRoute(pathname: string) {
 
   if (route === '/dashboard/control') {
     return <DashboardControlPage />;
+  }
+
+  if (route === '/dashboard/bot') {
+    return <DashboardBotPage />;
   }
 
   if (route === '/dashboard/config') {

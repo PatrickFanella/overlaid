@@ -17,6 +17,10 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByRole('heading', { name: 'Stream control', exact: true })).toBeVisible();
     await expect(page.getByText('Quick actions', { exact: true })).toBeVisible();
 
+    await page.goto('/dashboard/bot');
+    await expect(page.getByText('Bot operations')).toBeVisible();
+    await expect(page.getByText('Bot audit', { exact: true })).toBeVisible();
+
     await page.goto('/overlay/alerts');
     await expect(page.getByText('Alert feed')).toBeVisible();
   });

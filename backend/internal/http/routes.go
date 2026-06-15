@@ -14,6 +14,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/twitch/interactions", s.requireOperator(s.putTwitchInteractions))
 	s.mux.HandleFunc("GET /api/dashboard/config", s.requireOperator(s.dashboardConfigGet))
 	s.mux.HandleFunc("PUT /api/dashboard/config", s.requireOperator(s.dashboardConfigPut))
+	s.mux.HandleFunc("GET /api/bot/status", s.requireOperator(s.botStatus))
+	s.mux.HandleFunc("GET /api/bot/audit", s.requireOperator(s.botAudit))
 	s.mux.HandleFunc("GET /api/stream/session", s.requireOperator(s.streamSessionStatus))
 	s.mux.HandleFunc("GET /api/stream/session/{id}", s.requireOperator(s.streamSessionReport))
 	s.mux.HandleFunc("POST /api/stream/session/start", s.requireOperator(s.streamSessionStart))
