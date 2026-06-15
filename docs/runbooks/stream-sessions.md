@@ -12,11 +12,12 @@ Use this to tag rehearsal or live-stream events for later review.
 ## Operator workflow
 
 1. Open `/dashboard/live`.
-2. In **Rehearsal audit**, click **Start rehearsal** or **Start live**.
-3. Run overlays, Twitch actions, OBS actions, and recovery checks.
-4. Confirm Event history rows show a session id.
-5. Click **End session** when the pass is complete.
-6. Click the recent session card to review tagged events plus start/end readiness snapshots.
+2. For a quick smoke pass, click **Run preflight rehearsal**. This starts a rehearsal session, emits sample alert/ticker/goals/BRB events, ends the session, and loads the report.
+3. For a manual pass, click **Start rehearsal** or **Start live**.
+4. Run overlays, Twitch actions, OBS actions, and recovery checks.
+5. Confirm Event history rows show a session id.
+6. Click **End session** when the manual pass is complete.
+7. Click the recent session card to review tagged events plus start/end readiness snapshots.
 
 ## API
 

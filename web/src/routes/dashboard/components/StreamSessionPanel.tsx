@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { endStreamSession, fetchStreamSessionReport, startStreamSession, type StreamSession, type StreamSessionReport, type StreamSessionResponse } from '../../../lib/api';
+import { createRehearsalSteps } from '../../../lib/rehearsal';
 import { EventHistoryPanel } from './EventHistoryPanel';
 
 type StreamSessionPanelProps = {
@@ -16,6 +17,7 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
   const [message, setMessage] = useState('');
   const [report, setReport] = useState<StreamSessionReport | null>(null);
   const [reportError, setReportError] = useState('');
+  const [preflightSteps, setPreflightSteps] = useState<Record<string, StepState>>({});
 
   async function start(kind: 'rehearsal' | 'live') {
     setBusy(true);
@@ -67,6 +69,57 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
     }
   }
 
+  async function runPreflightRehearsal() {
+    setBusy(true);
+    setReport(null);
+    setReportError('');
+    setPreflightSteps({});
+    setMessage('Starting preflight rehearsal…');
+
+    let session: StreamSession | null = null;
+    const steps = createRehearsalSteps(apiBaseUrl, operatorSecret);
+    const stepState: Record<string, StepState> = {};
+
+    try {
+      const startedSession = await startStreamSession({ title: 'Preflight rehearsal', kind: 'rehearsal', notes: 'One-click dashboard preflight run' }, apiBaseUrl, operatorSecret);
+      session = startedSession;
+      onChange({ current: startedSession, recent: [startedSession, ...(status?.recent ?? []).filter((item) => item.id !== startedSession.id)].slice(0, 8) });
+
+      for (const step of steps) {
+        stepState[step.id] = 'running';
+        setPreflightSteps({ ...stepState });
+        setMessage(`Running ${step.label}…`);
+        await step.run();
+        stepState[step.id] = 'pass';
+        setPreflightSteps({ ...stepState });
+      }
+
+      const ended = await endStreamSession(apiBaseUrl, operatorSecret);
+      const endedSession = isStreamSession(ended) ? ended : session;
+      const recent = [endedSession, ...(status?.recent ?? []).filter((item) => item.id !== endedSession.id)].slice(0, 8);
+      onChange({ recent });
+      await loadReport(endedSession.id);
+      setMessage('Preflight rehearsal complete. Report loaded.');
+    } catch (err) {
+      const runningStep = Object.entries(stepState).find(([, state]) => state === 'running')?.[0];
+      if (runningStep) {
+        stepState[runningStep] = 'fail';
+        setPreflightSteps({ ...stepState });
+      }
+      if (session) {
+        try {
+          await endStreamSession(apiBaseUrl, operatorSecret);
+          await loadReport(session.id);
+        } catch {
+          // Keep the original preflight failure visible.
+        }
+      }
+      setMessage(err instanceof Error ? `Preflight failed: ${err.message}` : 'Preflight failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const current = status?.current;
   const recent = status?.recent ?? [];
 
@@ -94,8 +147,21 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
         <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy || !current} onClick={() => void end()}>
           End session
         </button>
+        <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy || !!current || !!status?.loadError} onClick={() => void runPreflightRehearsal()}>
+          Run preflight rehearsal
+        </button>
       </div>
       {message ? <p className="mt-3 text-xs text-zinc-300">{message}</p> : null}
+
+      {Object.keys(preflightSteps).length > 0 ? (
+        <div className="mt-3 grid gap-2 md:grid-cols-5">
+          {createRehearsalSteps(apiBaseUrl, operatorSecret).map((step) => (
+            <span key={step.id} className="hud-chip hud-chip--square">
+              {step.label}: {preflightSteps[step.id] || 'pending'}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {recent.length > 0 ? (
         <div className="mt-4 grid gap-2 md:grid-cols-2">
@@ -121,6 +187,8 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
     </section>
   );
 }
+
+type StepState = 'pending' | 'running' | 'pass' | 'fail';
 
 function SessionCard({ session, label }: { session: StreamSession; label: string }) {
   return (
