@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { dashboardRoutes } from './lib/dashboardRoutes';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
-import { fetchTwitchInteractions } from './lib/api';
+import { fetchTwitchInteractions, type StreamSessionReport } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
 import {
   defaultDashboardConfig,
@@ -33,6 +33,7 @@ import { TwitchInteractionsManager } from './routes/dashboard/components/TwitchI
 import { RecoveryConsolePanel } from './routes/dashboard/components/RecoveryConsolePanel';
 import { SessionLogPanel } from './routes/dashboard/components/SessionLogPanel';
 import { validateQuickActionsAgainstOBS } from './lib/obsValidation';
+import { formatSessionReportMarkdown, sessionReportFilename } from './lib/sessionReports';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -779,6 +780,18 @@ describe('quick action sequence utilities', () => {
     expect(issues).toEqual([
       { actionId: 'main', label: 'Go Main', field: 'sceneName', value: 'Missing Scene', message: 'Missing OBS scene: Missing Scene' },
     ]);
+  });
+
+  it('formats session reports for export', () => {
+    const report: StreamSessionReport = {
+      session: { id: 'abcdef123456', title: 'Preflight rehearsal', kind: 'rehearsal', startedAt: '2026-06-15T00:00:00Z', eventCount: 1 },
+      events: [{ id: 'e1', type: 'alert', source: 'test', title: 'Sample alert', message: '', severity: 'success', createdAt: '2026-06-15T00:01:00Z' }],
+      snapshots: [{ id: 's1', sessionId: 'abcdef123456', phase: 'start', status: 'ok', checks: [], capturedAt: '2026-06-15T00:00:00Z' }],
+    };
+
+    expect(formatSessionReportMarkdown(report)).toContain('# Preflight rehearsal');
+    expect(formatSessionReportMarkdown(report)).toContain('## Events');
+    expect(sessionReportFilename(report, 'md')).toBe('preflight-rehearsal-abcdef12.md');
   });
 
   it('resolves atomic quick actions in sequence order', () => {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { endStreamSession, fetchStreamSessionReport, startStreamSession, type StreamSession, type StreamSessionReport, type StreamSessionResponse } from '../../../lib/api';
 import { createRehearsalSteps } from '../../../lib/rehearsal';
-import { formatSessionReportSummary } from '../../../lib/sessionReports';
+import { formatSessionReportMarkdown, formatSessionReportSummary, sessionReportFilename } from '../../../lib/sessionReports';
 import { EventHistoryPanel } from './EventHistoryPanel';
 
 type StreamSessionPanelProps = {
@@ -196,9 +196,17 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
       {report ? (
         <div className="mt-4 grid gap-3">
           <div className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-            <p className="hud-kicker">Session report · {report.session.id.slice(0, 8)}</p>
-            <p className="mt-1 text-sm font-bold text-white">{report.session.title}</p>
-            <p className="mt-1 text-xs text-zinc-400">{report.events.length} visible events · {report.session.eventCount} total tagged events · {report.snapshots.length} readiness snapshots</p>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="hud-kicker">Session report · {report.session.id.slice(0, 8)}</p>
+                <p className="mt-1 text-sm font-bold text-white">{report.session.title}</p>
+                <p className="mt-1 text-xs text-zinc-400">{report.events.length} visible events · {report.session.eventCount} total tagged events · {report.snapshots.length} readiness snapshots</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => downloadReport(report, 'md')}>Export Markdown</button>
+                <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => downloadReport(report, 'json')}>Export JSON</button>
+              </div>
+            </div>
           </div>
           {report.snapshots.length > 0 ? <ReadinessSnapshotGrid snapshots={report.snapshots} /> : null}
           <EventHistoryPanel events={report.events} />
@@ -283,4 +291,16 @@ async function copyText(value: string) {
     return;
   }
   throw new Error('Clipboard is unavailable in this browser context.');
+}
+
+function downloadReport(report: StreamSessionReport, format: 'json' | 'md') {
+  const content = format === 'json' ? `${JSON.stringify(report, null, 2)}\n` : formatSessionReportMarkdown(report);
+  const type = format === 'json' ? 'application/json' : 'text/markdown';
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = sessionReportFilename(report, format);
+  link.click();
+  URL.revokeObjectURL(url);
 }

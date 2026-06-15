@@ -52,4 +52,4 @@ If a session is accidentally left open, starting a new one automatically closes 
 
 ## Review
 
-Recent sessions appear in `/dashboard/live` under **Rehearsal audit**. Click a recent/open session card to load its report. Reports show the selected session, start/end readiness snapshots, and recent events tagged with its `sessionId`.
+Recent sessions appear in `/dashboard/live` under **Rehearsal audit**. Click a recent/open session card to load its report. Reports show the selected session, start/end readiness snapshots, and recent events tagged with its `sessionId`. Use **Export Markdown** or **Export JSON** to save the report after a rehearsal.
