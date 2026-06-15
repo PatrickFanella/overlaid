@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   deleteBotCommand,
   deleteBotCounter,
+  deleteBotAPIVariable,
   deleteBotModerationRule,
   deleteBotQuote,
   deleteBotTimer,
@@ -9,6 +10,7 @@ import {
   dryRunBotNuke,
   executeBotModerationAction,
   fetchBotAudit,
+  fetchBotAPIVariables,
   fetchBotCommands,
   fetchBotCounters,
   fetchBotModerationRules,
@@ -17,12 +19,15 @@ import {
   fetchBotTimers,
   saveBotCommand,
   saveBotCounter,
+  saveBotAPIVariable,
   saveBotModerationRule,
   saveBotQuote,
   saveBotTimer,
   setBotCommandEnabled,
   setBotTimerEnabled,
   type BotAuditResponse,
+  type BotAPIVariable,
+  type BotAPIVariablesResponse,
   type BotCommand,
   type BotCommandsResponse,
   type BotCounter,
@@ -47,6 +52,7 @@ type BotPageState = {
   commands: BotCommandsResponse | null;
   counters: BotCountersResponse | null;
   quotes: BotQuotesResponse | null;
+  apiVariables: BotAPIVariablesResponse | null;
   moderation: BotModerationRulesResponse | null;
   moderationDryRun: BotModerationDryRunResponse | null;
   timers: BotTimersResponse | null;
@@ -87,6 +93,7 @@ const defaultTimerDraft: TimerDraft = { name: '', intervalSeconds: 300, response
 const defaultCommandDraft: CommandDraft = { name: '', response: '', action: 'ticker', responseMode: 'overlay', roleRequired: 'viewer', cooldownSeconds: 10, enabled: true };
 const defaultCounterDraft = { name: '', value: 0 };
 const defaultQuoteDraft = { text: '', author: '' };
+const defaultAPIVariableDraft = { name: '', enabled: true, url: '', responseSelector: '', fallback: '', cacheTtlSeconds: 60, timeoutMs: 1500 };
 const defaultModerationDraft: ModerationDraft = { name: '', enabled: true, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
 const defaultModerationTest = { username: '', message: '' };
 const defaultModerationAction = { action: 'timeout' as const, targetUserId: '', targetUserLogin: '', messageId: '', durationSeconds: 60, reason: '' };
@@ -95,13 +102,14 @@ const defaultNukeDraft = { pattern: '', regex: false, caseSensitive: false, look
 export function DashboardBotPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const operatorSecret = loadOperatorSecret();
-  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, counters: null, quotes: null, moderation: null, moderationDryRun: null, timers: null, loading: false, error: '' });
+  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, counters: null, quotes: null, apiVariables: null, moderation: null, moderationDryRun: null, timers: null, loading: false, error: '' });
   const [commandDraft, setCommandDraft] = useState<CommandDraft>(defaultCommandDraft);
   const [draft, setDraft] = useState<TimerDraft>(defaultTimerDraft);
   const [savingCommand, setSavingCommand] = useState(false);
   const [savingTimer, setSavingTimer] = useState(false);
   const [counterDraft, setCounterDraft] = useState(defaultCounterDraft);
   const [quoteDraft, setQuoteDraft] = useState(defaultQuoteDraft);
+  const [apiVariableDraft, setAPIVariableDraft] = useState(defaultAPIVariableDraft);
   const [moderationDraft, setModerationDraft] = useState<ModerationDraft>(defaultModerationDraft);
   const [moderationTest, setModerationTest] = useState(defaultModerationTest);
   const [moderationAction, setModerationAction] = useState(defaultModerationAction);
@@ -114,9 +122,9 @@ export function DashboardBotPage() {
     async function load() {
       setState((current) => ({ ...current, loading: true, error: '' }));
       try {
-        const [status, audit, commands, counters, quotes, moderation, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotModerationRules(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
+        const [status, audit, commands, counters, quotes, apiVariables, moderation, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotAPIVariables(apiBaseUrl, operatorSecret), fetchBotModerationRules(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
         if (!cancelled) {
-          setState({ status, audit, commands, counters, quotes, moderation, moderationDryRun: null, timers, loading: false, error: '' });
+          setState({ status, audit, commands, counters, quotes, apiVariables, moderation, moderationDryRun: null, timers, loading: false, error: '' });
         }
       } catch (error) {
         if (!cancelled) {
@@ -141,8 +149,8 @@ export function DashboardBotPage() {
   }
 
   async function refreshCommunity() {
-    const [status, counters, quotes] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret)]);
-    setState((current) => ({ ...current, status, counters, quotes }));
+    const [status, counters, quotes, apiVariables] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotAPIVariables(apiBaseUrl, operatorSecret)]);
+    setState((current) => ({ ...current, status, counters, quotes, apiVariables }));
   }
 
   async function refreshModeration() {
@@ -205,6 +213,16 @@ export function DashboardBotPage() {
   async function handleDeleteQuote(quote: BotQuote) {
     try { await deleteBotQuote(quote.id, apiBaseUrl, operatorSecret); await refreshCommunity(); }
     catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'quote delete failed' })); }
+  }
+
+  async function handleSaveAPIVariable() {
+    try { await saveBotAPIVariable(apiVariableDraft, apiBaseUrl, operatorSecret); setAPIVariableDraft(defaultAPIVariableDraft); await refreshCommunity(); }
+    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'api variable save failed' })); }
+  }
+
+  async function handleDeleteAPIVariable(variable: BotAPIVariable) {
+    try { await deleteBotAPIVariable(variable.id, apiBaseUrl, operatorSecret); await refreshCommunity(); }
+    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'api variable delete failed' })); }
   }
 
   async function handleSaveCommand() {
@@ -311,6 +329,14 @@ export function DashboardBotPage() {
         onDeleteCounter={handleDeleteCounter}
         onSaveQuote={handleSaveQuote}
         onDeleteQuote={handleDeleteQuote}
+      />
+
+      <BotAPIVariablesPanel
+        variables={state.apiVariables}
+        draft={apiVariableDraft}
+        onDraftChange={setAPIVariableDraft}
+        onSave={handleSaveAPIVariable}
+        onDelete={handleDeleteAPIVariable}
       />
 
       <BotModerationPanel
@@ -495,6 +521,7 @@ function renderCommandPreview(draft: CommandDraft) {
   };
   return draft.response.replace(/\{([^{}]+)\}/g, (_match, key: string) => {
     if (key.startsWith('count:')) return '0';
+    if (key.startsWith('api:')) return 'API preview';
     return values[key] ?? '';
   }).trim().slice(0, 400);
 }
@@ -549,6 +576,44 @@ function BotCommunityPanel({
             {(quotes?.quotes ?? []).map((quote) => <article key={quote.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><p className="text-zinc-300">{quote.text}</p><div className="mt-1 flex items-center justify-between"><span className="text-zinc-500">{quote.author || 'unknown'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDeleteQuote(quote)}>Delete</button></div></article>)}
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function BotAPIVariablesPanel({ variables, draft, onDraftChange, onSave, onDelete }: { variables: BotAPIVariablesResponse | null; draft: typeof defaultAPIVariableDraft; onDraftChange: (draft: typeof defaultAPIVariableDraft) => void; onSave: () => void; onDelete: (variable: BotAPIVariable) => void }) {
+  const items = variables?.variables ?? [];
+  const canSave = draft.name.trim() !== '' && draft.url.trim().startsWith('https://');
+  return (
+    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+      <p className="hud-label">Bot API variables</p>
+      <p className="mt-1 text-sm text-zinc-300">Operator-defined read-only HTTP variables for templates like <code>{'{api:weather}'}</code>. GET-only, HTTPS-only, capped, cached, and blocked from private hosts.</p>
+      {variables?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">api variables unavailable :: {variables.loadError}</p> : null}
+      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_2fr_10rem_8rem]">
+        <label className="grid gap-1 text-xs text-zinc-300">Name<input className="hud-input" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="weather" /></label>
+        <label className="grid gap-1 text-xs text-zinc-300">HTTPS URL<input className="hud-input" value={draft.url} onChange={(event) => onDraftChange({ ...draft, url: event.target.value })} placeholder="https://api.example.test/value" /></label>
+        <label className="grid gap-1 text-xs text-zinc-300">JSON selector<input className="hud-input" value={draft.responseSelector} onChange={(event) => onDraftChange({ ...draft, responseSelector: event.target.value })} placeholder="data.value" /></label>
+        <label className="grid gap-1 text-xs text-zinc-300">TTL seconds<input className="hud-input" type="number" min={15} max={3600} value={draft.cacheTtlSeconds} onChange={(event) => onDraftChange({ ...draft, cacheTtlSeconds: Number(event.target.value) })} /></label>
+      </div>
+      <div className="mt-2 grid gap-2 md:grid-cols-[1fr_8rem]">
+        <label className="grid gap-1 text-xs text-zinc-300">Fallback<input className="hud-input" value={draft.fallback} onChange={(event) => onDraftChange({ ...draft, fallback: event.target.value })} placeholder="unavailable" /></label>
+        <label className="grid gap-1 text-xs text-zinc-300">Timeout ms<input className="hud-input" type="number" min={250} max={3000} value={draft.timeoutMs} onChange={(event) => onDraftChange({ ...draft, timeoutMs: Number(event.target.value) })} /></label>
+      </div>
+      <div className="mt-2 flex items-center gap-3">
+        <label className="flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />enabled</label>
+        <button className="hud-button" type="button" disabled={!canSave} onClick={onSave}>Save API variable</button>
+      </div>
+      {items.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No API variables configured yet.</p> : null}
+      <div className="mt-3 grid gap-2">
+        {items.map((variable) => (
+          <article key={variable.id} className="border border-zinc-700 bg-black/40 p-2 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-cyan-100">{`{api:${variable.name}}`}</strong><span className="hud-chip hud-chip--square">{variable.enabled ? 'enabled' : 'paused'}</span></div>
+            <p className="mt-1 break-all text-zinc-400">{variable.url}</p>
+            <p className="mt-1 text-zinc-500">status {variable.lastStatus || 'untested'} · ttl {variable.cacheTtlSeconds}s · timeout {variable.timeoutMs}ms</p>
+            {variable.lastError ? <p className="mt-1 text-amber-200">{variable.lastError}</p> : null}
+            <button className="hud-button hud-button--small mt-2" type="button" onClick={() => onDelete(variable)}>Delete</button>
+          </article>
+        ))}
       </div>
     </section>
   );

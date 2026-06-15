@@ -100,8 +100,11 @@ export type BotCounter = { id: string; name: string; value: number; createdAt: s
 export type BotQuote = { id: string; text: string; author?: string; createdAt: string; updatedAt: string };
 export type BotCountersResponse = { counters: BotCounter[]; loadError?: string };
 export type BotQuotesResponse = { quotes: BotQuote[]; loadError?: string };
+export type BotAPIVariable = { id: string; name: string; enabled: boolean; url: string; responseSelector?: string; fallback?: string; cacheTtlSeconds: number; timeoutMs: number; lastStatus?: string; lastError?: string; lastCheckedAt?: string; createdAt: string; updatedAt: string };
+export type BotAPIVariablesResponse = { variables: BotAPIVariable[]; loadError?: string };
 export type BotCounterPayload = { id?: string; name: string; value: number };
 export type BotQuotePayload = { id?: string; text: string; author?: string };
+export type BotAPIVariablePayload = { id?: string; name: string; enabled: boolean; url: string; responseSelector?: string; fallback?: string; cacheTtlSeconds: number; timeoutMs: number };
 export type BotModerationRule = { id: string; name: string; enabled: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both' | string; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban' | string; reason?: string; createdAt: string; updatedAt: string };
 export type BotModerationRulesResponse = { rules: BotModerationRule[]; loadError?: string };
 export type BotModerationRulePayload = { id?: string; name: string; enabled: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both'; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban'; reason?: string };
@@ -390,6 +393,22 @@ export async function fetchBotQuotes(explicitBaseUrl?: string, operatorSecret?: 
   const response = await fetch(apiUrl('/api/bot/quotes', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
   if (!response.ok) throw new Error(`bot quotes failed: ${response.status}`);
   return (await response.json()) as BotQuotesResponse;
+}
+
+export async function fetchBotAPIVariables(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl('/api/bot/api-variables', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) throw new Error(`bot api variables failed: ${response.status}`);
+  return (await response.json()) as BotAPIVariablesResponse;
+}
+
+export async function saveBotAPIVariable(payload: BotAPIVariablePayload, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/bot/api-variables', payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotAPIVariable;
+}
+
+export async function deleteBotAPIVariable(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl(`/api/bot/api-variables/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) throw new Error(`delete bot api variable failed: ${response.status}`);
 }
 
 export async function saveBotQuote(payload: BotQuotePayload, explicitBaseUrl?: string, operatorSecret?: string) {

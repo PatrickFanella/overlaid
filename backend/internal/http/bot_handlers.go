@@ -47,6 +47,12 @@ type botQuotesResponse struct {
 	Quotes    []bot.Quote `json:"quotes"`
 	LoadError string      `json:"loadError,omitempty"`
 }
+
+type botAPIVariablesResponse struct {
+	Variables []bot.APIVariable `json:"variables"`
+	LoadError string            `json:"loadError,omitempty"`
+}
+
 type botCounterRequest struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
@@ -56,6 +62,17 @@ type botQuoteRequest struct {
 	ID     string `json:"id"`
 	Text   string `json:"text"`
 	Author string `json:"author"`
+}
+
+type botAPIVariableRequest struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Enabled          bool   `json:"enabled"`
+	URL              string `json:"url"`
+	ResponseSelector string `json:"responseSelector"`
+	Fallback         string `json:"fallback"`
+	CacheTTLSeconds  int    `json:"cacheTtlSeconds"`
+	TimeoutMs        int    `json:"timeoutMs"`
 }
 
 type botModerationRulesResponse struct {
@@ -395,6 +412,56 @@ func (s *Server) botQuoteDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.botStore.DeleteQuote(r.Context(), r.PathValue("id")); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) botAPIVariables(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		writeJSON(w, botAPIVariablesResponse{Variables: []bot.APIVariable{}, LoadError: s.botLoadError})
+		return
+	}
+	variables, err := s.botStore.ListAPIVariables(r.Context())
+	if err != nil {
+		http.Error(w, "bot api variables unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, botAPIVariablesResponse{Variables: variables})
+}
+
+func (s *Server) botAPIVariableSave(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot api variables unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var request botAPIVariableRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	variable, err := s.botStore.SaveAPIVariable(r.Context(), bot.APIVariable{ID: request.ID, Name: request.Name, Enabled: request.Enabled, URL: request.URL, ResponseSelector: request.ResponseSelector, Fallback: request.Fallback, CacheTTLSeconds: request.CacheTTLSeconds, TimeoutMs: request.TimeoutMs})
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, variable)
+}
+
+func (s *Server) botAPIVariableDelete(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot api variables unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := s.botStore.DeleteAPIVariable(r.Context(), r.PathValue("id")); err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound

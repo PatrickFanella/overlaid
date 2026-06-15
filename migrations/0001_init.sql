@@ -142,3 +142,21 @@ CREATE TABLE IF NOT EXISTS bot_moderation_rules (
 );
 
 CREATE INDEX IF NOT EXISTS bot_moderation_rules_enabled_idx ON bot_moderation_rules (enabled);
+
+CREATE TABLE IF NOT EXISTS bot_api_variables (
+    id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+    name text NOT NULL UNIQUE,
+    enabled boolean NOT NULL DEFAULT true,
+    url text NOT NULL,
+    response_selector text NOT NULL DEFAULT '',
+    fallback text NOT NULL DEFAULT '',
+    cache_ttl_seconds integer NOT NULL DEFAULT 60,
+    timeout_ms integer NOT NULL DEFAULT 1500,
+    last_status text NOT NULL DEFAULT '',
+    last_error text NOT NULL DEFAULT '',
+    last_checked_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS bot_api_variables_enabled_idx ON bot_api_variables (enabled);

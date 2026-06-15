@@ -41,26 +41,33 @@ type CommunityStore interface {
 	DeleteQuote(id string) error
 }
 
+type APIVariableStore interface {
+	ResolveAPIVariables(names []string) map[string]bot.APIVariableResult
+}
+
 var countTemplatePattern = regexp.MustCompile(`\{count:([a-z0-9_-]+)\}`)
+var apiTemplatePattern = regexp.MustCompile(`\{api:([a-z0-9_-]+)\}`)
 
 type CommandProcessorConfig struct {
-	Cooldown  time.Duration
-	Now       func() time.Time
-	Aliases   map[string]string
-	Custom    []CustomCommand
-	Channel   string
-	Community CommunityStore
+	Cooldown     time.Duration
+	Now          func() time.Time
+	Aliases      map[string]string
+	Custom       []CustomCommand
+	Channel      string
+	Community    CommunityStore
+	APIVariables APIVariableStore
 }
 
 type CommandProcessor struct {
-	mu        sync.RWMutex
-	cooldown  time.Duration
-	now       func() time.Time
-	lastRun   map[string]time.Time
-	aliases   map[string]string
-	custom    map[string]CustomCommand
-	channel   string
-	community CommunityStore
+	mu           sync.RWMutex
+	cooldown     time.Duration
+	now          func() time.Time
+	lastRun      map[string]time.Time
+	aliases      map[string]string
+	custom       map[string]CustomCommand
+	channel      string
+	community    CommunityStore
+	apiVariables APIVariableStore
 }
 
 func ParseChatCommand(text string) (ChatCommand, bool) {
@@ -94,7 +101,7 @@ func NewCommandProcessor(config CommandProcessorConfig) *CommandProcessor {
 	if cooldown < 0 {
 		cooldown = 0
 	}
-	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases), custom: customCommandMap(config.Custom), channel: strings.TrimSpace(config.Channel), community: config.Community}
+	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases), custom: customCommandMap(config.Custom), channel: strings.TrimSpace(config.Channel), community: config.Community, apiVariables: config.APIVariables}
 }
 
 func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []events.Event {
@@ -263,6 +270,21 @@ func (p *CommandProcessor) handleCustomCommand(original ChatCommand, resolved Ch
 
 func (p *CommandProcessor) templateContext(response string, original ChatCommand, resolved ChatCommand, user ChatCommandUser) bot.TemplateContext {
 	ctx := bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: p.channel, Args: original.Args, Command: resolved.Name, Counts: map[string]int{}}
+	if p.apiVariables != nil {
+		names := []string{}
+		for _, match := range apiTemplatePattern.FindAllStringSubmatch(strings.ToLower(response), -1) {
+			if len(match) >= 2 {
+				names = append(names, match[1])
+			}
+		}
+		results := p.apiVariables.ResolveAPIVariables(names)
+		if len(results) > 0 {
+			ctx.APIVariables = map[string]string{}
+			for name, result := range results {
+				ctx.APIVariables[name] = result.Value
+			}
+		}
+	}
 	if p.community == nil {
 		return ctx
 	}

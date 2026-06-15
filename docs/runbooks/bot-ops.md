@@ -13,11 +13,13 @@ Implemented now:
 - Operator-protected timer list/create/toggle/delete at `/api/bot/timers`.
 - Operator-protected counter list/create/delete at `/api/bot/counters`.
 - Operator-protected quote list/create/delete at `/api/bot/quotes`.
+- Operator-protected custom API variable list/create/delete at `/api/bot/api-variables`.
 - Operator-protected moderation rule list/create/delete and dry-run matching at `/api/bot/moderation/*`.
 - Enabled timers publish safe ticker or alert overlay events when due.
 - `/dashboard/bot` overview, command manager, counters/quotes manager, moderation dry-run panel, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
 - Custom Twitch commands can publish safe ticker/alert overlays, guarded outbound Twitch chat replies, or both, with bounded template variables.
+- Templates can use operator-configured `{api:name}` variables for read-only HTTPS GET data.
 
 Not implemented yet:
 
@@ -33,6 +35,7 @@ curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhos
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/timers | jq .
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/counters | jq .
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/quotes | jq .
+curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/api-variables | jq .
 curl -fsS -H 'X-Overlay-Operator-Secret: <secret-if-configured>' http://localhost:8080/api/bot/moderation/rules | jq .
 ```
 
@@ -84,8 +87,20 @@ Supported template variables:
 - `{nowPlaying.title}` / `{nowPlaying.artist}` — reserved now-playing variables; currently render empty until now-playing context is wired into the bot runtime.
 - `{count:name}` — current value for a stored counter, or `0` when missing.
 - `{quote:random}` — random stored quote, including author when present.
+- `{api:name}` — operator-configured read-only HTTPS API variable output or fallback.
 
 Unknown variables render empty and are included in command audit data. Rendered responses are capped at 400 characters.
+
+## API variable behavior
+
+API variables are safer than FossaBot-style inline custom API URLs:
+
+- Operators define named variables in `/dashboard/bot`; chat cannot provide URLs.
+- Variables are GET-only and HTTPS-only.
+- Local/private hosts, user-info URLs, fragments, unsafe names, long responses, and slow responses are rejected or capped.
+- Cache TTL is 15-3600 seconds; timeout is 250-3000ms; at most three unique API variables resolve per template render.
+- Supported responses are `text/plain` or scalar/selected `application/json` values via a simple dot selector such as `data.value`.
+- Headers, request bodies, POST/PUT/DELETE, scripts, jq, HTML scraping, and arbitrary chat-provided URLs are intentionally not supported.
 
 To test a custom command:
 

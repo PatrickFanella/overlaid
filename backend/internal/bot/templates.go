@@ -20,6 +20,7 @@ type TemplateContext struct {
 	NowPlayingArtist string
 	Counts           map[string]int
 	QuoteRandom      string
+	APIVariables     map[string]string
 }
 
 type TemplateResult struct {
@@ -62,6 +63,13 @@ func templateValue(name string, context TemplateContext) (string, bool) {
 	case "quote:random":
 		return context.QuoteRandom, true
 	default:
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(name)), "api:") {
+			apiName := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(name)), "api:"))
+			if context.APIVariables == nil {
+				return "", true
+			}
+			return context.APIVariables[apiName], true
+		}
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(name)), "count:") {
 			counterName := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(name)), "count:"))
 			if context.Counts == nil {

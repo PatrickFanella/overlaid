@@ -31,13 +31,14 @@ Implemented and verified in committed slices:
 - Timer CRUD, dashboard management, safe template rendering, and enabled timer runtime dispatch through ticker/alert events.
 - Safe custom response commands with role/cooldown checks, template variables, dashboard management, and preview rendering.
 - Guarded outbound Twitch chat replies for custom commands through `user:write:chat`, with per-command response mode `overlay`, `chat`, or `both`.
+- Operator-configured custom API variables using `{api:name}` with GET-only HTTPS fetching, caps, caching, and private-host blocking.
 - Counters and quotes with dashboard/API management, chat commands, and `{count:name}` / `{quote:random}` variables.
 - Channel-point rule enrichment with cooldown seconds and fulfillment notes.
 - Moderation foundation: blocked-term rules, dry-run matching, guarded manual Twitch delete/timeout/ban/unban actions with required scopes, and nuke-style dry-run planning over recent chat history.
 
 Deliberately carried forward:
 
-- Arbitrary/custom API variables.
+- Arbitrary inline/custom API URLs supplied by chat or templates.
 - Twitch reward creation/fulfillment management through Helix.
 - Automatic moderation enforcement from rules.
 - Full nuke execution/radiation/rollback workflow.
