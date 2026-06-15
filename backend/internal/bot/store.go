@@ -257,6 +257,52 @@ func (s *Store) SetTimerEnabled(ctx context.Context, id string, enabled bool) (T
 	return scanTimer(row)
 }
 
+func (s *Store) DueTimers(ctx context.Context, now time.Time, limit int) ([]Timer, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
+		FROM bot_timers
+		WHERE enabled = true
+		  AND (last_run_at IS NULL OR last_run_at + (interval_seconds * interval '1 second') <= $1)
+		ORDER BY COALESCE(last_run_at, 'epoch'::timestamptz) ASC, name ASC
+		LIMIT $2
+	`, now.UTC(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	timers := []Timer{}
+	for rows.Next() {
+		timer, err := scanTimer(rows)
+		if err != nil {
+			return nil, err
+		}
+		timers = append(timers, timer)
+	}
+	return timers, rows.Err()
+}
+
+func (s *Store) MarkTimerRun(ctx context.Context, id string, at time.Time) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errors.New("timer id is required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	result, err := s.db.ExecContext(ctx, `UPDATE bot_timers SET last_run_at = $2, updated_at = now() WHERE id = $1`, id, at.UTC())
+	if err != nil {
+		return err
+	}
+	if affected, err := result.RowsAffected(); err == nil && affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *Store) DeleteTimer(ctx context.Context, id string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {

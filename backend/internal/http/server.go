@@ -258,6 +258,14 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) StartBackground(ctx context.Context) {
+	if s.botStore != nil {
+		scheduler := bot.TimerScheduler{Store: s.botStore, Channel: s.config.TwitchChannel, Publish: s.publishEvent, StreamSessionID: s.activeSessionID}
+		go func() {
+			log.Printf("bot timer background worker enabled")
+			scheduler.Run(ctx)
+		}()
+	}
+
 	if s.config.MPRISEnabled {
 		if !mprisSessionBusAvailable() {
 			log.Printf("MPRIS now-playing disabled: DBUS_SESSION_BUS_ADDRESS points to a missing session bus socket")

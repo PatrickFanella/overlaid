@@ -11,13 +11,13 @@ Implemented now:
 - Operator-protected recent audit events at `GET /api/bot/audit`.
 - Operator-protected custom command list/create/toggle/delete at `/api/bot/commands`.
 - Operator-protected timer list/create/toggle/delete at `/api/bot/timers`.
+- Enabled timers publish safe ticker or alert overlay events when due.
 - `/dashboard/bot` overview, command manager, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
 - Custom Twitch commands can publish safe ticker or alert overlay responses with bounded template variables.
 
 Not implemented yet:
 
-- Timer firing/runtime dispatch.
 - Counters, quotes, and community utilities.
 - Twitch moderation actions and nuke-style workflows.
 
@@ -81,9 +81,7 @@ To test a custom command:
 
 ## Timer behavior
 
-Timers are persisted now so operator configuration survives browser/session changes. Runtime dispatch is intentionally held until custom response commands/templates land; otherwise timers would need a separate response language that would be replaced in the next milestone.
-
-Now that custom commands exist, the next timer milestone can route enabled timers through the same safe ticker/alert response pipeline.
+Timers are persisted so operator configuration survives browser/session changes. When bot storage is available, the API starts a timer worker that polls due enabled timers and publishes the configured safe `ticker` or `alert` response into the existing event pipeline. Timer executions write bot audit rows with result `allowed` and reason `timer_due`.
 
 Timer validation:
 
@@ -91,6 +89,7 @@ Timer validation:
 - Intervals must be between 30 seconds and 24 hours.
 - Actions are currently `ticker` or `alert`.
 - Responses are required and capped at 500 characters.
+- Template variables use the same renderer as custom commands. `{channel}` and `{command}` are useful for timers; user/args variables render empty for timer-triggered messages.
 
 ## Command audit check
 
