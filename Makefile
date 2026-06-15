@@ -9,7 +9,7 @@ BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GO_LDFLAGS := -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Version=$(VERSION) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Commit=$(BUILD_COMMIT) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.BuiltAt=$(BUILD_DATE)
 BACKUP_DIR ?= backups
 
-.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build wait-api smoke smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup postgres-backup
+.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build wait-api smoke smoke-browser smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup postgres-backup
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -84,6 +84,9 @@ smoke: wait-api ## Smoke test API health and web shell
 	curl --max-time 15 -fsS http://localhost:$(WEB_PORT)/overlay/alerts >/dev/null
 	curl --max-time 15 -fsS http://localhost:$(WEB_PORT)/dashboard >/dev/null
 	curl --max-time 15 -fsS http://localhost:$(WEB_PORT)/dashboard/live >/dev/null
+
+smoke-browser: ## Browser smoke test critical dashboard and overlay routes
+	pnpm --dir web run e2e:smoke
 
 api-data-volume-check: ## Ensure the Compose api-data volume exists before backup
 	@volume=$$(docker volume ls -q \
