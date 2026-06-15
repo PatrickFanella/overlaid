@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   fetchTwitchInteractions,
+  fetchTwitchRewardRedemptions,
+  fetchTwitchRewards,
   saveTwitchInteractions,
+  updateTwitchRedemptionStatus,
   type ChatAliasRule,
   type ChannelPointRule,
+  type TwitchRedemption,
+  type TwitchReward,
   type TwitchInteractionRules,
 } from '../../../lib/api';
 import {
@@ -29,6 +34,10 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
   const [saveError, setSaveError] = useState('');
   const [importRaw, setImportRaw] = useState('');
   const [importError, setImportError] = useState('');
+  const [rewards, setRewards] = useState<TwitchReward[]>([]);
+  const [redemptions, setRedemptions] = useState<TwitchRedemption[]>([]);
+  const [selectedRewardId, setSelectedRewardId] = useState('');
+  const [rewardError, setRewardError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +106,37 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
       setSaveError(error instanceof Error ? error.message : 'Failed to save Twitch interaction rules.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function loadRewards() {
+    try {
+      const response = await fetchTwitchRewards(apiBaseUrl, operatorSecret);
+      setRewards(response.rewards ?? []);
+      setSelectedRewardId(response.rewards?.[0]?.id ?? '');
+      setRewardError('');
+    } catch (error) {
+      setRewardError(error instanceof Error ? error.message : 'Failed to load rewards.');
+    }
+  }
+
+  async function loadRedemptions(rewardId = selectedRewardId) {
+    if (!rewardId) return;
+    try {
+      const response = await fetchTwitchRewardRedemptions(rewardId, apiBaseUrl, operatorSecret);
+      setRedemptions(response.redemptions ?? []);
+      setRewardError('');
+    } catch (error) {
+      setRewardError(error instanceof Error ? error.message : 'Failed to load redemptions.');
+    }
+  }
+
+  async function updateRedemption(redemption: TwitchRedemption, status: 'FULFILLED' | 'CANCELED') {
+    try {
+      await updateTwitchRedemptionStatus(redemption.reward.id || selectedRewardId, redemption.id, status, apiBaseUrl, operatorSecret);
+      await loadRedemptions(redemption.reward.id || selectedRewardId);
+    } catch (error) {
+      setRewardError(error instanceof Error ? error.message : 'Failed to update redemption.');
     }
   }
 
@@ -218,6 +258,27 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
               <p className="text-xs text-zinc-400">No channel point reward rules yet.</p>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="mt-3 hud-panel hud-corners hud-panel--flat hud-compact-card">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="hud-kicker">Reward queue</p>
+            <p className="mt-1 text-xs text-zinc-400">Load manageable rewards and fulfill/cancel unfulfilled redemptions. Creation/deletion stays out of this safe pass.</p>
+          </div>
+          <button className="hud-chip" type="button" onClick={loadRewards}>Load rewards</button>
+        </div>
+        {rewardError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">{rewardError}</p> : null}
+        {rewards.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <label className="grid min-w-64 gap-1 text-xs text-zinc-300"><span className="hud-kicker">Reward</span><select className="hud-input" value={selectedRewardId} onChange={(event) => setSelectedRewardId(event.target.value)}>{rewards.map((reward) => <option key={reward.id} value={reward.id}>{reward.title} · {reward.cost}</option>)}</select></label>
+            <button className="hud-chip" type="button" onClick={() => loadRedemptions()}>Load unfulfilled</button>
+          </div>
+        ) : null}
+        <div className="mt-3 grid gap-2">
+          {redemptions.length === 0 ? <p className="text-xs text-zinc-400">No unfulfilled redemptions loaded.</p> : null}
+          {redemptions.map((redemption) => <article key={redemption.id} className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/5 p-3 text-xs"><p className="font-semibold text-fuchsia-100">{redemption.user_name || redemption.user_login} · {redemption.reward.title}</p><p className="mt-1 text-zinc-300">{redemption.user_input || 'No input'}</p><p className="mt-1 text-zinc-500">{redemption.status} · {redemption.redeemed_at}</p><div className="mt-2 flex gap-2"><button className="hud-chip" type="button" onClick={() => updateRedemption(redemption, 'FULFILLED')}>Fulfill</button><button className="hud-chip" type="button" onClick={() => updateRedemption(redemption, 'CANCELED')}>Cancel</button></div></article>)}
         </div>
       </div>
 

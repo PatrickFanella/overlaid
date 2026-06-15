@@ -12,6 +12,7 @@ test.describe('operator browser smoke', () => {
     await page.goto('/dashboard/config');
     await expect(page.getByText('OBS import')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
+    await expect(page.getByText('Reward queue', { exact: true })).toBeVisible();
 
     await page.goto('/dashboard/control');
     await expect(page.getByRole('heading', { name: 'Stream control', exact: true })).toBeVisible();

@@ -24,7 +24,7 @@ Implemented now:
 Not implemented yet:
 
 - Nuke-style multi-message workflows.
-- Twitch reward creation/fulfillment through Helix management APIs.
+- Twitch reward creation/deletion through Helix management APIs.
 
 ## Fast checks
 

@@ -162,6 +162,11 @@ export type TwitchInteractionsResponse = {
   loadError?: string;
 };
 
+export type TwitchReward = { id: string; title: string; prompt?: string; cost: number; is_enabled?: boolean; is_paused?: boolean; is_in_stock?: boolean; manageable?: boolean };
+export type TwitchRewardsResponse = { rewards: TwitchReward[] };
+export type TwitchRedemption = { id: string; user_login?: string; user_name?: string; user_input?: string; status: string; redeemed_at: string; reward: { id: string; title: string; cost: number } };
+export type TwitchRedemptionsResponse = { redemptions: TwitchRedemption[] };
+
 export type FetchTwitchInteractionsOptions = {
   baseUrl?: string;
   operatorSecret?: string;
@@ -476,6 +481,23 @@ export async function fetchTwitchInteractions(
   }
 
   return (await response.json()) as TwitchInteractionsResponse;
+}
+
+export async function fetchTwitchRewards(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl('/api/twitch/rewards', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) throw new Error(`Twitch rewards failed: ${response.status}`);
+  return (await response.json()) as TwitchRewardsResponse;
+}
+
+export async function fetchTwitchRewardRedemptions(rewardId: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl(`/api/twitch/rewards/${encodeURIComponent(rewardId)}/redemptions?status=UNFULFILLED`, explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
+  if (!response.ok) throw new Error(`Twitch redemptions failed: ${response.status}`);
+  return (await response.json()) as TwitchRedemptionsResponse;
+}
+
+export async function updateTwitchRedemptionStatus(rewardId: string, redemptionId: string, status: 'FULFILLED' | 'CANCELED', explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON(`/api/twitch/rewards/${encodeURIComponent(rewardId)}/redemptions/${encodeURIComponent(redemptionId)}`, { status }, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as { status: string; result: string };
 }
 
 export async function fetchOBSStatus(explicitBaseUrl?: string) {
