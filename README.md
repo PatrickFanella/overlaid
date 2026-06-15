@@ -19,6 +19,7 @@ docker compose up --build
 - `API_ADDR` / `API_PORT` — backend listen address and host port.
 - `POSTGRES_PORT` — host Postgres port. Defaults to `55432` to avoid clashing with a local Postgres on `5432`.
 - `CORS_ALLOWED_ORIGIN` — browser origin allowed to call the API.
+- `EXPOSURE_MODE` — `local`, `lan`, or `public`. Non-local modes make `/readyz` degrade when `OPERATOR_SECRET` or `WEBHOOK_SECRET` is empty.
 - `OPERATOR_SECRET` — optional shared secret for dashboard/operator mutating routes. Send as `X-Overlay-Operator-Secret` or `Authorization: Bearer <secret>`.
 - `WEBHOOK_SECRET` — optional shared secret for `POST /api/integrations/webhook/{source}`. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
 - `OVERLAY_STATE_FILE` — retained overlay state snapshot path. Defaults to `/data/overlay-state.json` in Docker.
@@ -166,6 +167,7 @@ Local dev:
 LAN-only streaming:
 
 - Set a non-empty `OPERATOR_SECRET` before using the dashboard on your network.
+- Set `EXPOSURE_MODE=lan` so `/readyz` warns if operator/webhook secrets are empty.
 - Keep overlay browser-source routes readable for OBS, but treat API port `8080` as a trusted-LAN service.
 - Set `CORS_ALLOWED_ORIGIN` to the dashboard/web origin instead of `*` when the host name is stable.
 - Use `docker-compose.override.example.yml` as a template when you need host MPRIS session-bus access.
@@ -173,6 +175,8 @@ LAN-only streaming:
 Public reverse proxy:
 
 - Put `/dashboard` and API mutating routes behind reverse-proxy authentication in addition to `OPERATOR_SECRET`.
+- Set `EXPOSURE_MODE=public`, `OPERATOR_SECRET`, and `WEBHOOK_SECRET` before exposing any API route.
+- OBS scene/input inventory endpoints are operator-protected because they reveal local OBS structure.
 - Expose only the overlay routes needed by OBS/browser sources when possible.
 - Do not publish the API directly to the internet without auth/rate-limit/reverse-proxy controls.
 - Keep `TWITCH_TOKEN_FILE`, `OVERLAY_STATE_FILE`, and `EVENT_HISTORY_FILE` on the `api-data` volume and include that volume in backups if you want OAuth/state continuity and recent event history.

@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Addr                   string
 	AllowedOrigin          string
+	ExposureMode           string
 	OperatorSecret         string
 	WebhookSecret          string
 	OverlayStateFile       string
@@ -37,6 +38,7 @@ func Load() Config {
 	return Config{
 		Addr:                   env("API_ADDR", ":8080"),
 		AllowedOrigin:          env("CORS_ALLOWED_ORIGIN", "*"),
+		ExposureMode:           env("EXPOSURE_MODE", "local"),
 		OperatorSecret:         env("OPERATOR_SECRET", ""),
 		WebhookSecret:          env("WEBHOOK_SECRET", ""),
 		OverlayStateFile:       env("OVERLAY_STATE_FILE", "/data/overlay-state.json"),

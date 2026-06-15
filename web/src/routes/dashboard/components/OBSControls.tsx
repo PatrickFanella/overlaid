@@ -46,7 +46,7 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
 
   async function refreshSceneItems(sceneName: string) {
     try {
-      const items = await fetchOBSSceneItems(sceneName, apiBaseUrl);
+      const items = await fetchOBSSceneItems(sceneName, apiBaseUrl, operatorSecret);
       setState((current) => ({
         ...current,
         selectedSceneName: sceneName,
@@ -64,7 +64,7 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
   async function loadInventory() {
     setState((current) => ({ ...current, loading: true, error: '' }));
 
-    const [scenesResult, inputsResult] = await Promise.allSettled([fetchOBSScenes(apiBaseUrl), fetchOBSInputs(apiBaseUrl)]);
+    const [scenesResult, inputsResult] = await Promise.allSettled([fetchOBSScenes(apiBaseUrl, operatorSecret), fetchOBSInputs(apiBaseUrl, operatorSecret)]);
 
     const scenes = scenesResult.status === 'fulfilled' ? scenesResult.value.scenes : [];
     const currentSceneName = scenesResult.status === 'fulfilled' ? scenesResult.value.currentProgramSceneName : '';
@@ -92,7 +92,7 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
   }
 
   async function loadSceneItems(sceneName: string) {
-    const itemsResult = await fetchOBSSceneItems(sceneName, apiBaseUrl)
+    const itemsResult = await fetchOBSSceneItems(sceneName, apiBaseUrl, operatorSecret)
       .then((value) => ({ status: 'fulfilled' as const, value }))
       .catch((error: unknown) => ({ status: 'rejected' as const, error }));
 

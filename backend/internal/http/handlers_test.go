@@ -108,6 +108,7 @@ func TestReadyzReportsProcessAndOptionalDependencies(t *testing.T) {
 	}
 	assertReadyzCheckSet(t, body.Checks, map[string]string{
 		"process":             "ok",
+		"exposure":            "ok",
 		"retained_state":      "ok",
 		"event_history":       "ok",
 		"twitch_interactions": "ok",
@@ -120,6 +121,42 @@ func TestReadyzReportsProcessAndOptionalDependencies(t *testing.T) {
 	})
 	if body.Status != "degraded" {
 		t.Fatalf("expected degraded overall status, got %#v", body)
+	}
+}
+
+func TestReadyzReportsMissingSecretsForNonLocalExposure(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", ExposureMode: "public"}, events.NewBus(4))
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body readyzResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode readyz: %v", err)
+	}
+	if body.Status != "degraded" || !readyzHasCheck(body.Checks, "operator_secret", "degraded") || !readyzHasCheck(body.Checks, "webhook_secret", "degraded") {
+		t.Fatalf("expected missing secret degradation, got %#v", body)
+	}
+}
+
+func TestOBSInventoryRequiresOperatorAuthorization(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", OperatorSecret: "secret"}, events.NewBus(4))
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/obs/scenes", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without operator secret, got %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/obs/scenes", nil)
+	req.Header.Set("X-Overlay-Operator-Secret", "secret")
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code == http.StatusUnauthorized {
+		t.Fatalf("expected authorized request to reach OBS handler, got 401")
 	}
 }
 
@@ -364,6 +401,7 @@ func TestReadyzReturnsDegradedWhenOBSHelloStalls(t *testing.T) {
 	}
 	assertReadyzCheckSet(t, body.Checks, map[string]string{
 		"process":             "ok",
+		"exposure":            "ok",
 		"retained_state":      "ok",
 		"event_history":       "ok",
 		"twitch_interactions": "ok",

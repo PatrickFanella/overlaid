@@ -75,7 +75,7 @@ export function DashboardConfigPage() {
   async function loadOBSAssignments() {
     setOBSImportStatus('Loading OBS scenes and sources…');
     try {
-      const [scenes, inputs] = await Promise.all([fetchOBSScenes(apiBaseUrl), fetchOBSInputs(apiBaseUrl)]);
+      const [scenes, inputs] = await Promise.all([fetchOBSScenes(apiBaseUrl, operatorSecret), fetchOBSInputs(apiBaseUrl, operatorSecret)]);
       const sceneNames = scenes.scenes.map((scene) => scene.sceneName);
       const inputNames = inputs.map((input) => input.inputName);
       const browserInputNames = inputs.filter((input) => isBrowserInput(input)).map((input) => input.inputName);

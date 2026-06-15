@@ -94,6 +94,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) buildReadinessReport(ctx context.Context) readinessResponse {
 	checks := []readinessCheck{{Name: "process", Status: "ok"}}
+	checks = append(checks, s.buildExposureReadinessChecks()...)
 
 	if s.stateLoadError != "" {
 		checks = append(checks, readinessCheck{Name: "retained_state", Status: "degraded", Hint: "overlay state file could not be loaded; back it up, inspect JSON, or clear retained overlay state"})
@@ -141,6 +142,25 @@ func (s *Server) buildReadinessReport(ctx context.Context) readinessResponse {
 	}
 
 	return readinessResponse{Status: status, Checks: checks}
+}
+
+func (s *Server) buildExposureReadinessChecks() []readinessCheck {
+	mode := strings.ToLower(strings.TrimSpace(s.config.ExposureMode))
+	if mode == "" || mode == "local" {
+		return []readinessCheck{{Name: "exposure", Status: "ok"}}
+	}
+	checks := []readinessCheck{{Name: "exposure", Status: "ok"}}
+	if strings.TrimSpace(s.config.OperatorSecret) == "" {
+		checks = append(checks, readinessCheck{Name: "operator_secret", Status: "degraded", Hint: "EXPOSURE_MODE is not local; set OPERATOR_SECRET before exposing protected dashboard APIs"})
+	} else {
+		checks = append(checks, readinessCheck{Name: "operator_secret", Status: "ok"})
+	}
+	if strings.TrimSpace(s.config.WebhookSecret) == "" {
+		checks = append(checks, readinessCheck{Name: "webhook_secret", Status: "degraded", Hint: "EXPOSURE_MODE is not local; set WEBHOOK_SECRET before exposing webhook integrations"})
+	} else {
+		checks = append(checks, readinessCheck{Name: "webhook_secret", Status: "ok"})
+	}
+	return checks
 }
 
 func (s *Server) buildTwitchInteractionReadinessChecks() []readinessCheck {

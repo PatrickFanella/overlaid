@@ -292,25 +292,25 @@ export async function saveSharedDashboardConfig(config: DashboardConfig, explici
   return (await response.json()) as DashboardConfigResponse;
 }
 
-export async function fetchOBSScenes(explicitBaseUrl?: string) {
-  const response = await fetch(apiUrl('/api/obs/scenes', explicitBaseUrl), { headers: { Accept: 'application/json' } });
+export async function fetchOBSScenes(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl('/api/obs/scenes', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
   if (!response.ok) {
     throw new Error(`OBS scenes failed: ${response.status}`);
   }
   return (await response.json()) as OBSSceneList;
 }
 
-export async function fetchOBSInputs(explicitBaseUrl?: string) {
-  const response = await fetch(apiUrl('/api/obs/inputs', explicitBaseUrl), { headers: { Accept: 'application/json' } });
+export async function fetchOBSInputs(explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await fetch(apiUrl('/api/obs/inputs', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
   if (!response.ok) {
     throw new Error(`OBS inputs failed: ${response.status}`);
   }
   return (await response.json()) as OBSInput[];
 }
 
-export async function fetchOBSSceneItems(sceneName: string, explicitBaseUrl?: string) {
+export async function fetchOBSSceneItems(sceneName: string, explicitBaseUrl?: string, operatorSecret?: string) {
   const trimmedSceneName = sceneName.trim();
-  const response = await fetch(apiUrl(`/api/obs/scene-items?sceneName=${encodeURIComponent(trimmedSceneName)}`, explicitBaseUrl), { headers: { Accept: 'application/json' } });
+  const response = await fetch(apiUrl(`/api/obs/scene-items?sceneName=${encodeURIComponent(trimmedSceneName)}`, explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
   if (!response.ok) {
     throw new Error(`OBS scene items failed: ${response.status}`);
   }
