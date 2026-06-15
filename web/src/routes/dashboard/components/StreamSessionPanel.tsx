@@ -141,6 +141,14 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
   const current = status?.current;
   const recent = status?.recent ?? [];
   const latestSession = recent[0] ?? current;
+  const sessionBlockedReason = !operatorSecret
+    ? 'Operator secret is missing. Open Config and save the secret before running protected session actions.'
+    : status?.loadError
+      ? `Stream sessions unavailable: ${status.loadError}`
+      : '';
+  const startBlockedReason = sessionBlockedReason || (current ? 'End the current session before starting another.' : busy ? 'A session action is already running.' : '');
+  const endBlockedReason = sessionBlockedReason || (!current ? 'No active session to end.' : busy ? 'A session action is already running.' : '');
+  const preflightBlockedReason = startBlockedReason;
 
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
@@ -158,19 +166,22 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
       {current ? <SessionCard session={current} label="Current" /> : <p className="mt-3 text-sm text-zinc-400">No active session. Start one before rehearsal or going live.</p>}
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy || !!current} onClick={() => void start('rehearsal')}>
+        <button className="hud-action-button hud-action-button--compact" type="button" disabled={!!startBlockedReason} title={startBlockedReason || undefined} onClick={() => void start('rehearsal')}>
           Start rehearsal
         </button>
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy || !!current} onClick={() => void start('live')}>
+        <button className="hud-action-button hud-action-button--compact" type="button" disabled={!!startBlockedReason} title={startBlockedReason || undefined} onClick={() => void start('live')}>
           Start live
         </button>
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy || !current} onClick={() => void end()}>
+        <button className="hud-action-button hud-action-button--compact" type="button" disabled={!!endBlockedReason} title={endBlockedReason || undefined} onClick={() => void end()}>
           End session
         </button>
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy || !!current || !!status?.loadError} onClick={() => void runPreflightRehearsal()}>
+        <button className="hud-action-button hud-action-button--compact" type="button" disabled={!!preflightBlockedReason} title={preflightBlockedReason || undefined} onClick={() => void runPreflightRehearsal()}>
           Run preflight rehearsal
         </button>
       </div>
+      {startBlockedReason || endBlockedReason ? (
+        <p className="mt-2 text-xs text-zinc-400">{current ? endBlockedReason : startBlockedReason}</p>
+      ) : null}
       {message ? <p className="mt-3 text-xs text-zinc-300">{message}</p> : null}
 
       {Object.keys(preflightSteps).length > 0 ? (

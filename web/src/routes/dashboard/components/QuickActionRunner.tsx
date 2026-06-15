@@ -16,6 +16,7 @@ type QuickActionRunnerProps = {
 
 export function QuickActionRunner({ actions, actionCatalog, apiBaseUrl, operatorSecret, isRunning, compact = false, runAction }: QuickActionRunnerProps) {
   const sequenceCatalog = actionCatalog ?? actions;
+  const disabledReason = !operatorSecret ? 'Operator secret is missing. Open Config and save the secret before running protected quick actions.' : isRunning ? 'Another operator action is running.' : '';
 
   function executeAtomic(action: AtomicQuickAction) {
     switch (action.kind) {
@@ -56,10 +57,11 @@ export function QuickActionRunner({ actions, actionCatalog, apiBaseUrl, operator
       <p className="hud-label">Quick actions</p>
       <h2 className="hud-section-title">Run configured actions</h2>
       <p className={`hud-copy mt-1 text-xs text-zinc-300 ${compact ? 'max-w-2xl' : ''}`}>Stored in browser local storage and executed through protected API helpers. Sequences run listed actions in order, skip nested sequences, and write warnings to the session log.</p>
+      {disabledReason ? <p className="mt-2 text-xs text-amber-200">{disabledReason}</p> : null}
 
       <div className="hud-dashboard-grid hud-dashboard-grid--three mt-5">
         {visibleActions.map((action) => (
-          <ConfirmableActionButton key={action.id} label={action.label} confirm={action.confirm} disabled={isRunning} onRun={() => execute(action)} />
+          <ConfirmableActionButton key={action.id} label={action.label} confirm={action.confirm} disabled={!!disabledReason} disabledReason={disabledReason} onRun={() => execute(action)} />
         ))}
       </div>
     </section>

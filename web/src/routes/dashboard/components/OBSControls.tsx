@@ -42,6 +42,7 @@ const defaultState: InventoryState = {
 
 export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = false, runAction }: OBSControlsProps) {
   const [state, setState] = useState<InventoryState>(defaultState);
+  const actionDisabledReason = !operatorSecret ? 'Operator secret is missing. Open Config and save the secret before running OBS actions.' : isRunning ? 'Another operator action is running.' : '';
 
   async function refreshSceneItems(sceneName: string) {
     try {
@@ -150,9 +151,10 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
           <p className="hud-label">Scene controls</p>
           <h2 className="hud-section-title">OBS controls</h2>
           {!compact ? <p className="hud-copy mt-1 text-xs text-zinc-300">Click refresh to load OBS inventory. This avoids WebSocket connect/disconnect spam on page load.</p> : null}
+          {actionDisabledReason ? <p className="mt-2 text-xs text-amber-200">{actionDisabledReason}</p> : null}
         </div>
         <div className="flex gap-2">
-          <button className="hud-chip hud-chip--square" type="button" disabled={isRunning || state.loading} onClick={() => void loadInventory()}>{state.loading ? 'loading' : 'refresh OBS'}</button>
+          <button className="hud-chip hud-chip--square" type="button" disabled={isRunning || state.loading} title={isRunning ? actionDisabledReason : undefined} onClick={() => void loadInventory()}>{state.loading ? 'loading' : 'refresh OBS'}</button>
           <span className="hud-chip hud-chip--square">{state.currentSceneName || 'not loaded'}</span>
         </div>
       </div>
@@ -168,7 +170,8 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
                 key={scene.sceneName}
                 className={`hud-chip justify-between rounded-2xl px-4 py-3 text-left ${scene.sceneName === state.currentSceneName ? 'border-emerald-300/40 text-emerald-100' : ''}`}
                 type="button"
-                disabled={isRunning}
+                disabled={!!actionDisabledReason}
+                title={actionDisabledReason || undefined}
                 onClick={() => chooseScene(scene.sceneName)}
               >
                 <span>{scene.sceneName}</span>
@@ -188,7 +191,7 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
                   <p className="text-sm font-semibold text-white">{input.inputName}</p>
                   <p className="text-xs uppercase tracking-[0.24em] text-zinc-400">{input.inputKind || 'input'}</p>
                 </div>
-                <button className="hud-chip" type="button" disabled={isRunning} onClick={() => toggleInput(input.inputName, true)}>
+                <button className="hud-chip" type="button" disabled={!!actionDisabledReason} title={actionDisabledReason || undefined} onClick={() => toggleInput(input.inputName, true)}>
                   Mute
                 </button>
               </div>
@@ -215,10 +218,10 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
                 <p className="text-xs uppercase tracking-[0.24em] text-zinc-400">{item.sceneItemEnabled ? 'enabled' : 'hidden'}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button className="hud-chip" type="button" disabled={isRunning} onClick={() => refreshSource(item.sourceName)}>
+                <button className="hud-chip" type="button" disabled={!!actionDisabledReason} title={actionDisabledReason || undefined} onClick={() => refreshSource(item.sourceName)}>
                   Refresh
                 </button>
-                <button className="hud-chip" type="button" disabled={isRunning} onClick={() => toggleSceneItem(item.sceneItemId, !item.sceneItemEnabled)}>
+                <button className="hud-chip" type="button" disabled={!!actionDisabledReason} title={actionDisabledReason || undefined} onClick={() => toggleSceneItem(item.sceneItemId, !item.sceneItemEnabled)}>
                   {item.sceneItemEnabled ? 'Disable' : 'Enable'}
                 </button>
               </div>

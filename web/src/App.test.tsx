@@ -728,6 +728,23 @@ describe('quick action sequence utilities', () => {
     expect(html).not.toContain('Empty Sequence');
   });
 
+  it('explains disabled quick actions when operator secret is missing', () => {
+    const html = renderToString(
+      <QuickActionRunner
+        actions={[{ id: 'a', label: 'Run Main', kind: 'setScene', sceneName: '40_MAIN' }]}
+        apiBaseUrl="http://localhost:8080"
+        operatorSecret=""
+        isRunning={false}
+        runAction={() => {
+          throw new Error('unused');
+        }}
+      />,
+    );
+
+    expect(html).toContain('Operator secret is missing');
+    expect(html).toContain('disabled');
+  });
+
   it('renders sequences when children exist only in the action catalog', () => {
     const actions: QuickAction[] = [{ id: 'seq', label: 'Visible Sequence', kind: 'sequence', actionIds: ['child-only'], stopOnError: true }];
     const actionCatalog: QuickAction[] = [

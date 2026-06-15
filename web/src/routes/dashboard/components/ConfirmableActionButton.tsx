@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { getConfirmableActionLabel, nextConfirmableActionState } from '../../../lib/controlActions';
 
-export function ConfirmableActionButton({ label, confirm, disabled, onRun }: { label: string; confirm?: boolean; disabled?: boolean; onRun: () => void }) {
+export function ConfirmableActionButton({ label, confirm, disabled, disabledReason, onRun }: { label: string; confirm?: boolean; disabled?: boolean; disabledReason?: string; onRun: () => void }) {
   const [armed, setArmed] = useState(false);
 
   return (
@@ -9,6 +9,7 @@ export function ConfirmableActionButton({ label, confirm, disabled, onRun }: { l
       className={`hud-action-button hud-action-button--compact ${armed ? 'hud-accent-rose' : ''}`}
       type="button"
       disabled={disabled}
+      title={disabledReason || undefined}
       onClick={() => {
         const next = nextConfirmableActionState({ confirm, armed });
         setArmed(next.armed);
