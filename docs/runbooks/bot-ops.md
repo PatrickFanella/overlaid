@@ -21,7 +21,7 @@ Implemented now:
 
 Not implemented yet:
 
-- Live Twitch moderation actions and nuke-style workflows.
+- Nuke-style multi-message workflows.
 - Twitch reward creation/fulfillment through Helix management APIs.
 
 ## Fast checks
@@ -127,7 +127,16 @@ Moderation rules are a safe foundation for future Twitch moderation tools. They 
 - Actions `flag`, `delete`, `timeout`, and `ban` are labels only in this milestone.
 - Dry-run requests return the rules that would match a sample username/message.
 
-Before enabling real Twitch moderation actions, verify OAuth scopes, broadcaster/moderator identity requirements, dry-run output, audit logging, and rollback/operator controls.
+Manual guarded Twitch moderation actions are available from `/dashboard/bot` and `POST /api/bot/moderation/action`:
+
+- `delete` requires `messageId` and Twitch scope `moderator:manage:chat_messages`.
+- `timeout` requires `targetUserId`, `durationSeconds` from `1` to `1209600`, and Twitch scope `moderator:manage:banned_users`.
+- `ban` requires `targetUserId` and Twitch scope `moderator:manage:banned_users`.
+- `unban` requires `targetUserId` and Twitch scope `moderator:manage:banned_users`.
+- The current implementation is broadcaster-self mode: the OAuth token user is used as both broadcaster and moderator id.
+- Every attempted action writes a bot audit row with result `allowed` or `failed`.
+
+If the dashboard reports missing moderation scopes, update `TWITCH_SCOPES`, re-run Twitch login, and re-consent before retrying. Do not use action labels from dry-run rules as automatic enforcement yet; rules are still dry-run/planning inputs.
 
 ## Command audit check
 

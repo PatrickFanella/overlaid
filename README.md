@@ -36,7 +36,7 @@ docker compose up --build
 - `TWITCH_TOKEN_FILE` — durable OAuth token path. Defaults to `/data/twitch-token.json` in Docker.
 - `TWITCH_INTERACTIONS_FILE` — durable Twitch interaction-rules path. Defaults to `/data/twitch-interactions.json` in Docker.
 - `TWITCH_EVENTSUB_ENABLED` — starts the Twitch EventSub WebSocket worker when OAuth is configured. Defaults to `true`.
-- `TWITCH_SCOPES` — space-delimited scopes used for the login redirect. Defaults to `user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers`.
+- `TWITCH_SCOPES` — space-delimited scopes used for the login redirect. Defaults to chat, redemption, subscription, bits/follower, and guarded moderation scopes: `user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers moderator:manage:chat_messages moderator:manage:banned_users`.
 
 Twitch auth routes:
 

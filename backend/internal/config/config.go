@@ -54,7 +54,7 @@ func Load() Config {
 		TwitchRedirectURL:      env("TWITCH_REDIRECT_URL", "http://localhost:8080/api/auth/twitch/callback"),
 		TwitchTokenFile:        env("TWITCH_TOKEN_FILE", "/data/twitch-token.json"),
 		TwitchInteractionsFile: env("TWITCH_INTERACTIONS_FILE", "/data/twitch-interactions.json"),
-		TwitchScopes:           envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers"}),
+		TwitchScopes:           envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers", "moderator:manage:chat_messages", "moderator:manage:banned_users"}),
 		TwitchEventSub:         envBool("TWITCH_EVENTSUB_ENABLED", true),
 		MPRISEnabled:           envBool("MPRIS_ENABLED", false),
 		MPRISPlayer:            env("MPRIS_PLAYER", ""),

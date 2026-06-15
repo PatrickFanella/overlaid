@@ -106,6 +106,8 @@ export type BotModerationRulesResponse = { rules: BotModerationRule[]; loadError
 export type BotModerationRulePayload = { id?: string; name: string; enabled: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both'; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban'; reason?: string };
 export type BotModerationMatch = { ruleId: string; ruleName: string; pattern: string; matchTarget: string; action: string; reason?: string };
 export type BotModerationDryRunResponse = { matches: BotModerationMatch[]; loadError?: string };
+export type BotModerationActionPayload = { action: 'delete' | 'timeout' | 'ban' | 'unban'; targetUserId?: string; targetUserLogin?: string; messageId?: string; durationSeconds?: number; reason?: string };
+export type BotModerationActionResponse = { action: string; result: string; reason?: string };
 
 export type BotCommandPayload = {
   id?: string;
@@ -414,6 +416,11 @@ export async function deleteBotModerationRule(id: string, explicitBaseUrl?: stri
 export async function dryRunBotModeration(payload: { message: string; username: string }, explicitBaseUrl?: string, operatorSecret?: string) {
   const response = await postJSON('/api/bot/moderation/dry-run', payload, explicitBaseUrl, { operatorSecret });
   return (await response.json()) as BotModerationDryRunResponse;
+}
+
+export async function executeBotModerationAction(payload: BotModerationActionPayload, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/bot/moderation/action', payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotModerationActionResponse;
 }
 
 export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {
