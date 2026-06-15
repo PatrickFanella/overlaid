@@ -20,7 +20,7 @@ deps: ## Install frontend dependencies
 verify: deps fmt lint test build compose-config open-pilot-check ## Run all checks
 
 fmt: ## Format/check code formatting
-	@git ls-files --cached --others --exclude-standard 'backend/*.go' | xargs -r gofmt -w
+	@git ls-files -z --cached --others --exclude-standard 'backend/*.go' | while IFS= read -r -d '' file; do [[ -f "$$file" ]] && printf '%s\0' "$$file"; done | xargs -0 -r gofmt -w
 	pnpm --dir web run format
 
 lint: ## Run linters/static checks
