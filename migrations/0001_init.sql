@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS bot_moderation_rules (
   id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
   name text NOT NULL UNIQUE,
   enabled boolean NOT NULL DEFAULT true,
+  enforce boolean NOT NULL DEFAULT false,
   pattern text NOT NULL,
   match_target text NOT NULL DEFAULT 'message',
   case_sensitive boolean NOT NULL DEFAULT false,
@@ -142,6 +143,7 @@ CREATE TABLE IF NOT EXISTS bot_moderation_rules (
 );
 
 CREATE INDEX IF NOT EXISTS bot_moderation_rules_enabled_idx ON bot_moderation_rules (enabled);
+ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS enforce boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS bot_api_variables (
     id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),

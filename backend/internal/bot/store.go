@@ -83,6 +83,7 @@ type ModerationRule struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	Enabled       bool      `json:"enabled"`
+	Enforce       bool      `json:"enforce"`
 	Pattern       string    `json:"pattern"`
 	MatchTarget   string    `json:"matchTarget"`
 	CaseSensitive bool      `json:"caseSensitive"`
@@ -274,7 +275,7 @@ func (s *Store) ListQuotes(ctx context.Context) ([]Quote, error) {
 func (s *Store) ListModerationRules(ctx context.Context) ([]ModerationRule, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at FROM bot_moderation_rules ORDER BY name ASC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at FROM bot_moderation_rules ORDER BY name ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -298,9 +299,9 @@ func (s *Store) SaveModerationRule(ctx context.Context, rule ModerationRule) (Mo
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if strings.TrimSpace(rule.ID) == "" {
-		return scanModerationRule(s.db.QueryRowContext(ctx, `INSERT INTO bot_moderation_rules (name, enabled, pattern, match_target, case_sensitive, regex, action, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, name, enabled, pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at`, rule.Name, rule.Enabled, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason))
+		return scanModerationRule(s.db.QueryRowContext(ctx, `INSERT INTO bot_moderation_rules (name, enabled, enforce, pattern, match_target, case_sensitive, regex, action, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at`, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason))
 	}
-	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET name=$2, enabled=$3, pattern=$4, match_target=$5, case_sensitive=$6, regex=$7, action=$8, reason=$9, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at`, rule.ID, rule.Name, rule.Enabled, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason))
+	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET name=$2, enabled=$3, enforce=$4, pattern=$5, match_target=$6, case_sensitive=$7, regex=$8, action=$9, reason=$10, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, created_at, updated_at`, rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason))
 }
 
 func (s *Store) DeleteModerationRule(ctx context.Context, id string) error {
@@ -612,7 +613,7 @@ func scanQuote(row quoteScanner) (Quote, error) {
 
 func scanModerationRule(row moderationRuleScanner) (ModerationRule, error) {
 	var rule ModerationRule
-	if err := row.Scan(&rule.ID, &rule.Name, &rule.Enabled, &rule.Pattern, &rule.MatchTarget, &rule.CaseSensitive, &rule.Regex, &rule.Action, &rule.Reason, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+	if err := row.Scan(&rule.ID, &rule.Name, &rule.Enabled, &rule.Enforce, &rule.Pattern, &rule.MatchTarget, &rule.CaseSensitive, &rule.Regex, &rule.Action, &rule.Reason, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
 		return ModerationRule{}, err
 	}
 	return rule, nil
@@ -1016,6 +1017,7 @@ CREATE TABLE IF NOT EXISTS bot_moderation_rules (
   id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
   name text NOT NULL UNIQUE,
   enabled boolean NOT NULL DEFAULT true,
+  enforce boolean NOT NULL DEFAULT false,
   pattern text NOT NULL,
   match_target text NOT NULL DEFAULT 'message',
   case_sensitive boolean NOT NULL DEFAULT false,
@@ -1027,6 +1029,7 @@ CREATE TABLE IF NOT EXISTS bot_moderation_rules (
 );
 
 CREATE INDEX IF NOT EXISTS bot_moderation_rules_enabled_idx ON bot_moderation_rules (enabled);
+ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS enforce boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS bot_api_variables (
   id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),

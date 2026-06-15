@@ -35,13 +35,13 @@ Implemented and verified in committed slices:
 - Counters and quotes with dashboard/API management, chat commands, and `{count:name}` / `{quote:random}` variables.
 - Channel-point rule enrichment with cooldown seconds and fulfillment notes.
 - Twitch reward inventory and unfulfilled redemption queue controls for fulfill/cancel actions.
-- Moderation foundation: blocked-term rules, dry-run matching, guarded manual Twitch delete/timeout/ban/unban actions with required scopes, and nuke-style dry-run planning over recent chat history.
+- Moderation foundation: blocked-term rules, dry-run matching, opt-in automatic enforcement, guarded manual Twitch delete/timeout/ban/unban actions with required scopes, and nuke-style dry-run planning over recent chat history.
 
 Deliberately carried forward:
 
 - Arbitrary inline/custom API URLs supplied by chat or templates.
 - Twitch reward creation/deletion management through Helix.
-- Automatic moderation enforcement from rules.
+- Safer enforcement UX for bulk/nuke workflows.
 - Full nuke execution/radiation/rollback workflow.
 - Cloud-hosted uptime parity with FossaBot.
 

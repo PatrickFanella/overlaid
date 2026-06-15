@@ -83,6 +83,7 @@ type botModerationRuleRequest struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
 	Enabled       bool   `json:"enabled"`
+	Enforce       bool   `json:"enforce"`
 	Pattern       string `json:"pattern"`
 	MatchTarget   string `json:"matchTarget"`
 	CaseSensitive bool   `json:"caseSensitive"`
@@ -255,7 +256,7 @@ func (s *Server) botModerationRuleSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	rule, err := s.botStore.SaveModerationRule(r.Context(), bot.ModerationRule{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Pattern: request.Pattern, MatchTarget: request.MatchTarget, CaseSensitive: request.CaseSensitive, Regex: request.Regex, Action: request.Action, Reason: request.Reason})
+	rule, err := s.botStore.SaveModerationRule(r.Context(), bot.ModerationRule{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Enforce: request.Enforce, Pattern: request.Pattern, MatchTarget: request.MatchTarget, CaseSensitive: request.CaseSensitive, Regex: request.Regex, Action: request.Action, Reason: request.Reason})
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {

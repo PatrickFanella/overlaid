@@ -135,14 +135,15 @@ Counters and quotes are intentionally safe community tools:
 
 ## Moderation dry-run behavior
 
-Moderation rules are a safe foundation for future Twitch moderation tools. They currently do not call Twitch delete, timeout, or ban APIs.
+Moderation rules are dry-run by default. They only call Twitch delete, timeout, or ban APIs when `enforce` is explicitly enabled on the matching rule.
 
 - Rule names use lowercase letters, numbers, dash, or underscore.
 - Patterns match message text, username, or both.
 - Patterns can be plain contains matches or Go/RE2 regular expressions.
 - Matching is case-insensitive unless `case sensitive` is enabled.
-- Actions `flag`, `delete`, `timeout`, and `ban` are labels only in this milestone.
+- Actions `flag`, `delete`, `timeout`, and `ban` can be tested in dry-run first. `delete`/`timeout`/`ban` become live only when `enforce` is checked.
 - Dry-run requests return the rules that would match a sample username/message.
+- Keep new rules in dry-run until a live sample confirms the pattern is correct; regex mistakes can otherwise delete, timeout, or ban real users.
 
 Manual guarded Twitch moderation actions are available from `/dashboard/bot` and `POST /api/bot/moderation/action`:
 
@@ -153,7 +154,7 @@ Manual guarded Twitch moderation actions are available from `/dashboard/bot` and
 - The current implementation is broadcaster-self mode: the OAuth token user is used as both broadcaster and moderator id.
 - Every attempted action writes a bot audit row with result `allowed` or `failed`.
 
-If the dashboard reports missing moderation scopes, update `TWITCH_SCOPES`, re-run Twitch login, and re-consent before retrying. Do not use action labels from dry-run rules as automatic enforcement yet; rules are still dry-run/planning inputs.
+If the dashboard reports missing moderation scopes, update `TWITCH_SCOPES`, re-run Twitch login, and re-consent before retrying. Enforced rules fail closed when the required Twitch scope is missing and write a failed audit row.
 
 Nuke dry-run planning is available from `/dashboard/bot` and `POST /api/bot/moderation/nuke/dry-run`:
 

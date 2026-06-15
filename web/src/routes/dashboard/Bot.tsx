@@ -81,6 +81,7 @@ type TimerDraft = {
 type ModerationDraft = {
   name: string;
   enabled: boolean;
+  enforce: boolean;
   pattern: string;
   matchTarget: 'message' | 'username' | 'both';
   caseSensitive: boolean;
@@ -94,7 +95,7 @@ const defaultCommandDraft: CommandDraft = { name: '', response: '', action: 'tic
 const defaultCounterDraft = { name: '', value: 0 };
 const defaultQuoteDraft = { text: '', author: '' };
 const defaultAPIVariableDraft = { name: '', enabled: true, url: '', responseSelector: '', fallback: '', cacheTtlSeconds: 60, timeoutMs: 1500 };
-const defaultModerationDraft: ModerationDraft = { name: '', enabled: true, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
+const defaultModerationDraft: ModerationDraft = { name: '', enabled: true, enforce: false, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
 const defaultModerationTest = { username: '', message: '' };
 const defaultModerationAction = { action: 'timeout' as const, targetUserId: '', targetUserLogin: '', messageId: '', durationSeconds: 60, reason: '' };
 const defaultNukeDraft = { pattern: '', regex: false, caseSensitive: false, lookbackMinutes: 30, limit: 100 };
@@ -661,7 +662,7 @@ function BotModerationPanel({
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
       <p className="hud-label">Bot moderation dry-run</p>
-      <p className="mt-1 text-sm text-zinc-300">Blocked-term rules are stored and testable here. Actions are audit/planning labels only for now; no Twitch delete, timeout, or ban calls are sent.</p>
+      <p className="mt-1 text-sm text-zinc-300">Blocked-term rules are stored and testable here. Rules stay dry-run unless enforce is checked. Enforced delete/timeout/ban actions require Twitch moderation scopes.</p>
       {rules?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">moderation unavailable :: {rules.loadError}</p> : null}
       <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_9rem_8rem]">
         <input className="hud-input" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="spam_link" />
@@ -681,6 +682,7 @@ function BotModerationPanel({
       <input className="hud-input mt-2" value={draft.reason} onChange={(event) => onDraftChange({ ...draft, reason: event.target.value })} placeholder="reason shown in audit/planning" />
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-300">
         <label className="flex items-center gap-2"><input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} /> enabled</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={draft.enforce} onChange={(event) => onDraftChange({ ...draft, enforce: event.target.checked })} /> enforce</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={draft.regex} onChange={(event) => onDraftChange({ ...draft, regex: event.target.checked })} /> regex</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={draft.caseSensitive} onChange={(event) => onDraftChange({ ...draft, caseSensitive: event.target.checked })} /> case sensitive</label>
         <button className="hud-button" type="button" disabled={!canSave} onClick={onSave}>Save rule</button>
@@ -734,7 +736,7 @@ function BotModerationPanel({
 
       {items.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No moderation rules configured yet.</p> : null}
       <div className="mt-3 grid gap-2">
-        {items.map((rule) => <article key={rule.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><div className="flex items-center justify-between gap-2"><strong className="text-cyan-100">{rule.name}</strong><span className="hud-chip hud-chip--square">{rule.enabled ? 'enabled' : 'paused'}</span></div><p className="mt-1 text-zinc-300">{rule.matchTarget} · {rule.regex ? 'regex' : 'contains'} · {rule.action}</p><p className="mt-1 text-zinc-400">{rule.pattern}</p><div className="mt-2 flex justify-between gap-2"><span className="text-zinc-500">{rule.reason || 'no reason'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDelete(rule)}>Delete</button></div></article>)}
+        {items.map((rule) => <article key={rule.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><div className="flex items-center justify-between gap-2"><strong className="text-cyan-100">{rule.name}</strong><span className="hud-chip hud-chip--square">{rule.enabled ? (rule.enforce ? 'enforced' : 'dry-run') : 'paused'}</span></div><p className="mt-1 text-zinc-300">{rule.matchTarget} · {rule.regex ? 'regex' : 'contains'} · {rule.action}</p><p className="mt-1 text-zinc-400">{rule.pattern}</p><div className="mt-2 flex justify-between gap-2"><span className="text-zinc-500">{rule.reason || 'no reason'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDelete(rule)}>Delete</button></div></article>)}
       </div>
     </section>
   );
