@@ -48,4 +48,5 @@ If you add chat aliases, they can only point to `alert`, `clear`, `brb`, or `bac
 - If commands work once and then stop briefly, wait for the cooldown window.
 - If `!alert` does nothing, make sure a non-empty message was supplied.
 - If no chat appears, check Twitch auth, scopes, EventSub diagnostics, and API logs.
+- EventSub diagnostics show reconnect attempts, last disconnect time, subscription count, and missing OAuth scopes. Re-run Twitch login if `missing scopes` appears.
 - If alias behavior looks wrong, open `/dashboard/config`, inspect the Twitch interaction rules manager, and re-save valid JSON.

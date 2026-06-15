@@ -81,6 +81,7 @@ type twitchStatusResponse struct {
 	TokenExpiresAt *time.Time         `json:"tokenExpiresAt,omitempty"`
 	AuthError      string             `json:"authError,omitempty"`
 	LastAuthError  string             `json:"lastAuthError,omitempty"`
+	MissingScopes  []string           `json:"missingScopes,omitempty"`
 	EventSub       twitch.Diagnostics `json:"eventSub"`
 }
 
@@ -405,6 +406,7 @@ func (s *Server) buildTwitchStatus(ctx context.Context) twitchStatusResponse {
 		status.StreamerUserID = token.UserID
 		expiresAt := token.ExpiresAt
 		status.TokenExpiresAt = &expiresAt
+		status.MissingScopes = missingScopes(s.config.TwitchScopes, token.Scope)
 	}
 
 	if reason := s.twitch.recentAuthError(); reason != "" {
@@ -413,6 +415,25 @@ func (s *Server) buildTwitchStatus(ctx context.Context) twitchStatusResponse {
 	}
 
 	return status
+}
+
+func missingScopes(required, granted []string) []string {
+	grantedSet := make(map[string]struct{}, len(granted))
+	for _, scope := range granted {
+		if scope = strings.TrimSpace(scope); scope != "" {
+			grantedSet[scope] = struct{}{}
+		}
+	}
+	missing := []string{}
+	for _, scope := range required {
+		if scope = strings.TrimSpace(scope); scope == "" {
+			continue
+		}
+		if _, ok := grantedSet[scope]; !ok {
+			missing = append(missing, scope)
+		}
+	}
+	return missing
 }
 
 func (s *Server) ensureTwitchToken(ctx context.Context) (*twitchTokenInfo, bool) {

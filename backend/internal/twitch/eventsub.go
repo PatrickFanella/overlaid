@@ -38,13 +38,15 @@ type TokenProvider func(context.Context) (Token, bool)
 type Publisher func(events.Event)
 
 type Diagnostics struct {
-	Enabled           bool      `json:"enabled"`
-	Connected         bool      `json:"connected"`
-	LastConnectedAt   time.Time `json:"lastConnectedAt,omitempty"`
-	LastEventAt       time.Time `json:"lastEventAt,omitempty"`
-	LastError         string    `json:"lastError,omitempty"`
-	SubscriptionsMade int       `json:"subscriptionsMade"`
-	SubscriptionsPlan int       `json:"subscriptionsPlan"`
+	Enabled            bool      `json:"enabled"`
+	Connected          bool      `json:"connected"`
+	LastConnectedAt    time.Time `json:"lastConnectedAt,omitempty"`
+	LastDisconnectedAt time.Time `json:"lastDisconnectedAt,omitempty"`
+	LastEventAt        time.Time `json:"lastEventAt,omitempty"`
+	LastError          string    `json:"lastError,omitempty"`
+	ReconnectAttempts  int       `json:"reconnectAttempts"`
+	SubscriptionsMade  int       `json:"subscriptionsMade"`
+	SubscriptionsPlan  int       `json:"subscriptionsPlan"`
 }
 
 type DiagnosticsStore struct {
@@ -75,6 +77,7 @@ func (s *DiagnosticsStore) MarkConnected(created, planned int) {
 	defer s.mu.Unlock()
 	s.d.Connected = true
 	s.d.LastConnectedAt = time.Now().UTC()
+	s.d.LastDisconnectedAt = time.Time{}
 	s.d.SubscriptionsMade = created
 	s.d.SubscriptionsPlan = planned
 	if created == planned {
@@ -97,7 +100,7 @@ func (s *DiagnosticsStore) MarkError(err error) {
 		return
 	}
 
-	message := strings.TrimSpace(err.Error())
+	message := sanitizeDiagnosticMessage(err.Error())
 	if message == "" {
 		return
 	}
@@ -115,11 +118,28 @@ func (s *DiagnosticsStore) MarkDisconnected(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.d.Connected = false
+	s.d.LastDisconnectedAt = time.Now().UTC()
+	s.d.ReconnectAttempts++
 	if err != nil && strings.TrimSpace(s.d.LastError) == "" {
-		if message := strings.TrimSpace(err.Error()); message != "" {
+		if message := sanitizeDiagnosticMessage(err.Error()); message != "" {
 			s.d.LastError = message
 		}
 	}
+}
+
+func sanitizeDiagnosticMessage(message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return ""
+	}
+	fields := strings.Fields(message)
+	for index, field := range fields {
+		lower := strings.ToLower(field)
+		if strings.Contains(lower, "token") || strings.Contains(lower, "authorization") || strings.Contains(lower, "password") || strings.HasPrefix(lower, "bearer") {
+			fields[index] = "[redacted]"
+		}
+	}
+	return strings.Join(fields, " ")
 }
 
 type Client struct {

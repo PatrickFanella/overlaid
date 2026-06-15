@@ -78,4 +78,5 @@ Recommended editing rules:
 - If a step is skipped, confirm the child ID still exists and is not another sequence.
 - If the session log shows warnings, remove missing IDs and replace nested sequence references with atomic actions.
 - If OBS control calls fail, verify OBS WebSocket connectivity, password, and the current scene/input names.
+- `/api/obs/status` reports a safe `errorKind` such as `not_configured`, `connection_refused`, `dns_failed`, `timeout`, or `auth_failed`. The displayed OBS URL is redacted to omit user-info and query strings.
 - If defaults disappeared after an update, reload the dashboard config so the stable default actions are restored.

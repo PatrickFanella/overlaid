@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -26,7 +27,20 @@ type refreshOBSSourceRequest struct {
 }
 
 func (s *Server) obsStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.obs.Status(r.Context()))
+	status := s.obs.Status(r.Context())
+	status.URL = redactDiagnosticURL(status.URL)
+	writeJSON(w, status)
+}
+
+func redactDiagnosticURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil {
+		return ""
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 func (s *Server) obsScenes(w http.ResponseWriter, r *http.Request) {

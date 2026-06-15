@@ -39,6 +39,7 @@ type Status struct {
 	URL                 string `json:"url"`
 	Reachable           bool   `json:"reachable"`
 	Authenticated       bool   `json:"authenticated"`
+	ErrorKind           string `json:"errorKind,omitempty"`
 	OBSStudioVersion    string `json:"obsStudioVersion,omitempty"`
 	OBSWebSocketVersion string `json:"obsWebSocketVersion,omitempty"`
 	RPCVersion          int    `json:"rpcVersion,omitempty"`
@@ -112,12 +113,14 @@ type requestStatus struct {
 func (c Client) Status(ctx context.Context) Status {
 	status := Status{Configured: strings.TrimSpace(c.URL) != "", URL: c.URL}
 	if !status.Configured {
+		status.ErrorKind = "not_configured"
 		status.Error = "obs websocket url is not configured"
 		return status
 	}
 
 	conn, hello, err := c.connect(ctx)
 	if err != nil {
+		status.ErrorKind = classifyStatusError(err)
 		status.Error = err.Error()
 		if errors.Is(err, errOBSAuthFailed) {
 			status.Reachable = true
@@ -137,6 +140,26 @@ func (c Client) Status(ctx context.Context) Status {
 	status.OBSWebSocketVersion = hello.OBSWebSocketVersion
 	status.RPCVersion = hello.RPCVersion
 	return status
+}
+
+func classifyStatusError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, errOBSAuthFailed) {
+		return "auth_failed"
+	}
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case strings.Contains(message, "timeout") || strings.Contains(message, "deadline"):
+		return "timeout"
+	case strings.Contains(message, "connection refused"):
+		return "connection_refused"
+	case strings.Contains(message, "no such host") || strings.Contains(message, "lookup"):
+		return "dns_failed"
+	default:
+		return "unreachable"
+	}
 }
 
 func (c Client) GetSceneList(ctx context.Context) (SceneList, error) {

@@ -161,6 +161,24 @@ func TestOBSInventoryRequiresOperatorAuthorization(t *testing.T) {
 	}
 }
 
+func TestOBSStatusRedactsDiagnosticURL(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", OBSWebSocketURL: "ws://user:super-secret@127.0.0.1:1/obs?token=hidden"}, events.NewBus(4))
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/obs/status", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "super-secret") || strings.Contains(body, "hidden") || strings.Contains(body, "user:") {
+		t.Fatalf("expected redacted OBS status URL, got %s", body)
+	}
+	if !strings.Contains(body, `"errorKind"`) {
+		t.Fatalf("expected classified OBS error kind, got %s", body)
+	}
+}
+
 func TestReadyzReportsStateLoadFailure(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "overlay-state.json")
 	if err := os.WriteFile(statePath, []byte("not-json"), 0o600); err != nil {

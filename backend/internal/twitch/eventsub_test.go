@@ -2,6 +2,7 @@ package twitch
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -61,6 +62,15 @@ func TestHasScopes(t *testing.T) {
 	}
 	if hasScopes([]string{"user:read:chat"}, []string{"bits:read"}) {
 		t.Fatal("expected missing scope")
+	}
+}
+
+func TestDiagnosticsSanitizeSecretLookingErrors(t *testing.T) {
+	store := NewDiagnosticsStore(true)
+	store.MarkError(errors.New("bearer token password authorization"))
+	snapshot := store.Snapshot()
+	if strings.Contains(strings.ToLower(snapshot.LastError), "token") || strings.Contains(strings.ToLower(snapshot.LastError), "password") || strings.Contains(strings.ToLower(snapshot.LastError), "authorization") {
+		t.Fatalf("expected sanitized diagnostic error, got %q", snapshot.LastError)
 	}
 }
 

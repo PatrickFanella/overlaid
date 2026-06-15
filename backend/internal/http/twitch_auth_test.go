@@ -526,3 +526,16 @@ func readTwitchStatus(t *testing.T, server *Server) twitchStatusResponse {
 	}
 	return status
 }
+
+func TestMissingScopes(t *testing.T) {
+	got := missingScopes([]string{"user:read:chat", "bits:read", "channel:read:redemptions"}, []string{"user:read:chat"})
+	want := []string{"bits:read", "channel:read:redemptions"}
+	if len(got) != len(want) {
+		t.Fatalf("missing scopes=%#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("missing scopes=%#v, want %#v", got, want)
+		}
+	}
+}

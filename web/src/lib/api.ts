@@ -13,12 +13,15 @@ export type TwitchStatus = {
   tokenExpiresAt?: string;
   authError?: string;
   lastAuthError?: string;
+  missingScopes?: string[];
   eventSub?: {
     enabled: boolean;
     connected: boolean;
     lastConnectedAt?: string;
+    lastDisconnectedAt?: string;
     lastEventAt?: string;
     lastError?: string;
+    reconnectAttempts: number;
     subscriptionsMade: number;
     subscriptionsPlan: number;
   };
@@ -126,6 +129,7 @@ export type OBSStatus = {
   url: string;
   reachable: boolean;
   authenticated: boolean;
+  errorKind?: string;
   obsStudioVersion?: string;
   obsWebSocketVersion?: string;
   rpcVersion?: number;
