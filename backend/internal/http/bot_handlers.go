@@ -105,10 +105,14 @@ type botNukeDryRunRequest struct {
 	CaseSensitive   bool   `json:"caseSensitive"`
 	LookbackMinutes int    `json:"lookbackMinutes"`
 	Limit           int    `json:"limit"`
+	Action          string `json:"action"`
+	DurationSeconds int    `json:"durationSeconds"`
+	Confirm         bool   `json:"confirm"`
 }
 type botNukeDryRunMatch struct {
 	EventID   string `json:"eventId"`
 	MessageID string `json:"messageId,omitempty"`
+	UserID    string `json:"userId,omitempty"`
 	User      string `json:"user"`
 	Message   string `json:"message"`
 	CreatedAt string `json:"createdAt"`
@@ -117,6 +121,14 @@ type botNukeDryRunResponse struct {
 	Matches []botNukeDryRunMatch `json:"matches"`
 	Pattern string               `json:"pattern"`
 	Action  string               `json:"action"`
+}
+
+type botNukeExecuteResponse struct {
+	Matches   []botNukeDryRunMatch `json:"matches"`
+	Attempted int                  `json:"attempted"`
+	Succeeded int                  `json:"succeeded"`
+	Failed    int                  `json:"failed"`
+	Action    string               `json:"action"`
 }
 
 type botCommandRequest struct {
@@ -314,6 +326,48 @@ func (s *Server) botModerationNukeDryRun(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, botNukeDryRunResponse{Matches: matches, Pattern: strings.TrimSpace(request.Pattern), Action: "dry_run_only"})
 }
 
+func (s *Server) botModerationNukeExecute(w http.ResponseWriter, r *http.Request) {
+	var request botNukeDryRunRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if !request.Confirm {
+		http.Error(w, "confirm is required", http.StatusBadRequest)
+		return
+	}
+	action := strings.ToLower(strings.TrimSpace(request.Action))
+	if action == "" {
+		action = "delete"
+	}
+	if action != "delete" && action != "timeout" {
+		http.Error(w, "nuke action must be delete or timeout", http.StatusBadRequest)
+		return
+	}
+	matches, err := s.planNukeDryRun(request)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(matches) > 50 {
+		matches = matches[:50]
+	}
+	response := botNukeExecuteResponse{Matches: matches, Attempted: len(matches), Action: action}
+	for _, match := range matches {
+		mod := botModerationActionRequest{Action: action, TargetUserID: match.UserID, TargetUserLogin: match.User, MessageID: match.MessageID, DurationSeconds: request.DurationSeconds, Reason: "nuke:" + strings.TrimSpace(request.Pattern)}
+		if action == "timeout" && mod.DurationSeconds == 0 {
+			mod.DurationSeconds = 60
+		}
+		if _, err := s.executeTwitchModerationAction(r.Context(), mod); err != nil {
+			response.Failed++
+			s.recordModerationActionAudit(r.Context(), mod, "failed", err.Error())
+			continue
+		}
+		response.Succeeded++
+		s.recordModerationActionAudit(r.Context(), mod, "allowed", "nuke_execute")
+	}
+	writeJSON(w, response)
+}
+
 func (s *Server) planNukeDryRun(request botNukeDryRunRequest) ([]botNukeDryRunMatch, error) {
 	if s.history == nil {
 		return nil, errors.New("event history unavailable")
@@ -367,7 +421,7 @@ func (s *Server) planNukeDryRun(request botNukeDryRunRequest) ([]botNukeDryRunMa
 		if !matched {
 			continue
 		}
-		matches = append(matches, botNukeDryRunMatch{EventID: event.ID, MessageID: twitchMessageIDFromEvent(event), User: event.Title, Message: event.Message, CreatedAt: event.CreatedAt.Format(time.RFC3339)})
+		matches = append(matches, botNukeDryRunMatch{EventID: event.ID, MessageID: twitchMessageIDFromEvent(event), UserID: twitchEventString(event, "chatter_user_id"), User: event.Title, Message: event.Message, CreatedAt: event.CreatedAt.Format(time.RFC3339)})
 	}
 	return matches, nil
 }

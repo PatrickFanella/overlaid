@@ -101,7 +101,7 @@ See `docs/runbooks/twitch-interaction-rules.md` for the editing, backup, and liv
 - `/overlay/debug`
 
 For live operation, open `/dashboard/live` first during degradation, then use `/dashboard` to choose the right route or runbook. Follow `docs/runbooks/live-stream-preflight.md` for quick checks and `docs/runbooks/live-qa.md` for the full rehearsal/live QA pass.
-For bot runtime status and FossaBot-parity audit checks, follow `docs/runbooks/bot-ops.md`.
+For bot runtime status, FossaBot-parity audit checks, and guarded moderation/nuke operations, follow `docs/runbooks/bot-ops.md`.
 For Twitch interaction rules, follow `docs/runbooks/twitch-interaction-rules.md`.
 For production recovery, follow `docs/runbooks/production-recovery.md`.
 For persisted recent event history and recovery guidance, follow `docs/runbooks/event-history.md`.

@@ -156,14 +156,18 @@ Manual guarded Twitch moderation actions are available from `/dashboard/bot` and
 
 If the dashboard reports missing moderation scopes, update `TWITCH_SCOPES`, re-run Twitch login, and re-consent before retrying. Enforced rules fail closed when the required Twitch scope is missing and write a failed audit row.
 
-Nuke dry-run planning is available from `/dashboard/bot` and `POST /api/bot/moderation/nuke/dry-run`:
+Nuke planning and guarded execution are available from `/dashboard/bot`:
 
 - It scans recent persisted `chat_message` history only.
 - It supports plain contains matching or RE2 regular expressions.
 - It supports case-insensitive matching by default and an optional case-sensitive mode.
 - It accepts a bounded lookback window and result limit.
 - It returns matching users/messages/message IDs when available.
-- It does not delete, timeout, ban, or create a radiation/future-enforcement window yet.
+- Execution uses `POST /api/bot/moderation/nuke/execute`, accepts the same plan fields, and requires `confirm: true`.
+- Execution supports `delete` and `timeout` only. Timeout defaults to 60 seconds when no duration is supplied.
+- Execution is capped to 50 matching chat events per request and writes bot audit rows for successful and failed Twitch moderation attempts.
+- The dashboard clears confirmation whenever the plan inputs change; run the dry-run, review the listed matches, check `I reviewed this dry-run plan`, then execute.
+- It does not ban users or create a radiation/future-enforcement window yet.
 
 ## Command audit check
 

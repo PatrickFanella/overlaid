@@ -112,9 +112,10 @@ export type BotModerationMatch = { ruleId: string; ruleName: string; pattern: st
 export type BotModerationDryRunResponse = { matches: BotModerationMatch[]; loadError?: string };
 export type BotModerationActionPayload = { action: 'delete' | 'timeout' | 'ban' | 'unban'; targetUserId?: string; targetUserLogin?: string; messageId?: string; durationSeconds?: number; reason?: string };
 export type BotModerationActionResponse = { action: string; result: string; reason?: string };
-export type BotNukeDryRunPayload = { pattern: string; regex: boolean; caseSensitive: boolean; lookbackMinutes: number; limit: number };
-export type BotNukeDryRunMatch = { eventId: string; messageId?: string; user: string; message: string; createdAt: string };
+export type BotNukeDryRunPayload = { pattern: string; regex: boolean; caseSensitive: boolean; lookbackMinutes: number; limit: number; action?: 'delete' | 'timeout'; durationSeconds?: number; confirm?: boolean };
+export type BotNukeDryRunMatch = { eventId: string; messageId?: string; userId?: string; user: string; message: string; createdAt: string };
 export type BotNukeDryRunResponse = { matches: BotNukeDryRunMatch[]; pattern: string; action: string };
+export type BotNukeExecuteResponse = { matches: BotNukeDryRunMatch[]; attempted: number; succeeded: number; failed: number; action: string };
 
 export type BotCommandPayload = {
   id?: string;
@@ -455,6 +456,11 @@ export async function executeBotModerationAction(payload: BotModerationActionPay
 export async function dryRunBotNuke(payload: BotNukeDryRunPayload, explicitBaseUrl?: string, operatorSecret?: string) {
   const response = await postJSON('/api/bot/moderation/nuke/dry-run', payload, explicitBaseUrl, { operatorSecret });
   return (await response.json()) as BotNukeDryRunResponse;
+}
+
+export async function executeBotNuke(payload: BotNukeDryRunPayload, explicitBaseUrl?: string, operatorSecret?: string) {
+  const response = await postJSON('/api/bot/moderation/nuke/execute', payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as BotNukeExecuteResponse;
 }
 
 export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {

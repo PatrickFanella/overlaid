@@ -268,7 +268,7 @@ Build the spine before adding feature breadth.
 - Add blocked-term rules and dry-run matching.
 - Add Twitch moderation API actions: delete message, timeout, ban only with explicit scopes.
 - Add dashboard moderation audit.
-- Later add “nuke” workflow with regex, lookback window, dry-run preview, and audit report.
+- “Nuke” workflow has regex/plain matching, lookback window, dry-run preview, guarded delete/timeout execution, and audit rows; radiation/future-enforcement remains a follow-up.
 
 ---
 
