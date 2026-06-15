@@ -100,7 +100,7 @@ See `docs/runbooks/twitch-interaction-rules.md` for the editing, backup, and liv
 - `/overlay/brb`
 - `/overlay/debug`
 
-For live operation, open `/dashboard/live` first during degradation, then use `/dashboard` to choose the right route or runbook. Follow `docs/runbooks/live-stream-preflight.md`.
+For live operation, open `/dashboard/live` first during degradation, then use `/dashboard` to choose the right route or runbook. Follow `docs/runbooks/live-stream-preflight.md` for quick checks and `docs/runbooks/live-qa.md` for the full rehearsal/live QA pass.
 For Twitch interaction rules, follow `docs/runbooks/twitch-interaction-rules.md`.
 For production recovery, follow `docs/runbooks/production-recovery.md`.
 For persisted recent event history and recovery guidance, follow `docs/runbooks/event-history.md`.

@@ -1,0 +1,93 @@
+# Live QA Runbook
+
+Canonical checklist for off-stream rehearsal, live-start validation, and post-stream evidence. Use this before real streams and after any deployment that changes dashboard, overlay, Twitch, OBS, or event-history behavior.
+
+## Preconditions
+
+- [ ] Latest code is deployed with `make docker-build`.
+- [ ] `make smoke` passes against the running stack.
+- [ ] `make smoke-browser` passes from the operator machine.
+- [ ] `/readyz` is `ok`, or every degraded check has an accepted reason.
+- [ ] OBS is open with the intended scene collection.
+- [ ] Dashboard operator secret is loaded if `OPERATOR_SECRET` is configured.
+
+## Phase 1: static dashboard and overlay pass
+
+Follow `docs/runbooks/visual-qa.md` after route, CSS, or layout changes.
+
+Minimum live-day route pass:
+
+- [ ] `/dashboard/live` loads without console-visible failures.
+- [ ] `/dashboard/control` shows expected quick actions and disabled-state reasons.
+- [ ] `/dashboard/config` can validate OBS quick action assignments.
+- [ ] `/overlay/alerts`, `/overlay/ticker`, `/overlay/goals`, `/overlay/brb`, and `/overlay/now-playing` fit the OBS canvas.
+
+## Phase 2: one-click preflight rehearsal
+
+1. Open `/dashboard/live`.
+2. Click **Run preflight rehearsal**.
+3. Confirm the session starts and ends automatically.
+4. Open the generated report.
+
+Expected evidence:
+
+- [ ] Report contains readiness snapshots for `start` and `end`.
+- [ ] Report contains tagged alert, ticker/goal, and BRB events.
+- [ ] Readiness snapshots have no unexpected degraded checks.
+- [ ] Export Markdown and JSON if this is a release/rehearsal record.
+
+## Phase 3: OBS control validation
+
+1. Open `/dashboard/config`.
+2. Click **Load from OBS**.
+3. Confirm assigned main scene, standby/BRB scene, and alerts source match the real OBS collection.
+4. Click **Validate quick actions**.
+5. Fix missing scene/input/source warnings before continuing.
+6. Open `/dashboard/control` and run the safe rehearsal quick actions.
+
+Expected evidence:
+
+- [ ] Main scene switch succeeds.
+- [ ] Standby/BRB scene switch succeeds.
+- [ ] Alerts browser source refresh succeeds.
+- [ ] Session log records action durations and failures clearly.
+
+## Phase 4: Twitch/EventSub validation
+
+1. Confirm `/dashboard/live` shows Twitch authenticated and EventSub connected.
+2. Confirm EventSub diagnostics show expected subscription count.
+3. If `missing scopes` appears, re-run Twitch login and re-consent.
+4. From a broadcaster/moderator account, send a safe chat command such as `!alert command smoke`.
+5. Trigger a configured channel-point test if available off-stream.
+
+Expected evidence:
+
+- [ ] `/overlay/debug` shows incoming Twitch diagnostics.
+- [ ] Chat command from broadcaster/moderator produces the expected safe overlay event.
+- [ ] Viewer/non-moderator commands are denied and recorded as diagnostics.
+- [ ] EventSub reconnect attempts and last disconnect remain stable during the pass.
+
+## Phase 5: recovery drill
+
+Run at least one recovery action off-stream:
+
+- [ ] Refresh OBS browser source or reload the overlay route.
+- [ ] Restart API and confirm retained BRB/overlay state and recent history behave as expected.
+- [ ] Confirm `/readyz` returns to `ok` after the restart window.
+- [ ] Confirm `event_pipeline` has no unexpected dropped deliveries.
+
+## Phase 6: post-stream notes
+
+After rehearsal or live stream:
+
+- [ ] End any active stream session.
+- [ ] Open the latest session report.
+- [ ] Export Markdown/JSON if the pass found issues or confirms release readiness.
+- [ ] Record recurring failures in the relevant runbook or issue tracker.
+- [ ] Back up Postgres and `api-data` if the session created important operational history.
+
+## Latest QA status
+
+Current status: automated checks and one-click rehearsal coverage are in place. Real-stream QA should continue to use this runbook, because Twitch chat, channel-point redemptions, OBS scene collections, and browser-source behavior depend on the live operator environment.
+
+When updating this status, include date, deployed commit, rehearsal/session report ID, OBS collection used, and any accepted degraded readiness checks. Do not paste secrets, OAuth tokens, or webhook payloads.

@@ -9,7 +9,7 @@ make smoke
 
 ## Dashboard
 
-Start at `/dashboard/live`; it is both the preflight view and the recovery cockpit.
+Start at `/dashboard/live`; it is both the preflight view and the recovery cockpit. For the full rehearsal/live checklist, use `docs/runbooks/live-qa.md`.
 
 ```text
 http://localhost:5173/dashboard/live
@@ -60,4 +60,4 @@ Use the Event history panel as a quick post-rehearsal audit trail; it should sho
 
 ## Live QA status
 
-Latest manual live QA pass: OK so far. Keep using this runbook before each real stream and update this section if a recurring failure appears.
+Latest status is tracked in `docs/runbooks/live-qa.md`. Keep using that runbook before each real stream and update it if a recurring failure appears.
