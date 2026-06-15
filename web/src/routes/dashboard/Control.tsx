@@ -43,14 +43,16 @@ export function DashboardControlPage() {
   }
 
   function runAction(label: string, action: () => Promise<string | void>) {
+    const startedAt = Date.now();
     setRunningAction(label);
     recordLog(label, 'running', 'Action started.');
     void action()
       .then((message) => {
-        recordLog(label, 'success', message || 'Action completed.');
+        recordLog(label, 'success', `${message || 'Action completed.'} (${formatDuration(Date.now() - startedAt)})`);
       })
       .catch((error) => {
-        recordLog(label, 'error', error instanceof Error ? error.message : 'Action failed.');
+        const detail = error instanceof Error ? error.message : 'Action failed.';
+        recordLog(label, 'error', `${detail} (${formatDuration(Date.now() - startedAt)})`);
       })
       .finally(() => {
         setRunningAction((current) => (current === label ? null : current));
@@ -112,4 +114,9 @@ export function DashboardControlPage() {
       </div>
     </DashboardShell>
   );
+}
+
+function formatDuration(ms: number) {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }

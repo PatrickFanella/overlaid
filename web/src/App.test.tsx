@@ -31,6 +31,7 @@ import { EventHistoryPanel } from './routes/dashboard/components/EventHistoryPan
 import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
 import { TwitchInteractionsManager } from './routes/dashboard/components/TwitchInteractionsManager';
 import { RecoveryConsolePanel } from './routes/dashboard/components/RecoveryConsolePanel';
+import { SessionLogPanel } from './routes/dashboard/components/SessionLogPanel';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -747,6 +748,21 @@ describe('quick action sequence utilities', () => {
 
     expect(html).toContain('Visible Sequence');
     expect(html).not.toContain('Hidden Child');
+  });
+
+  it('highlights the latest operator action in the session log', () => {
+    const html = renderToString(
+      <SessionLogPanel
+        entries={[
+          { id: '1', label: 'Refresh Alerts', status: 'success', message: 'Action completed. (120ms)', createdAt: '2026-06-15T00:00:00Z' },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Latest action');
+    expect(html).toContain('success');
+    expect(html).toContain('Refresh Alerts');
+    expect(html).toContain('Action completed. (120ms)');
   });
 
   it('resolves atomic quick actions in sequence order', () => {
