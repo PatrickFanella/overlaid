@@ -145,7 +145,7 @@ function sanitizeQuickAction(action: unknown): QuickAction | null {
         label: baseLabel,
         kind: 'sequence',
         actionIds: sanitizeStringArray(action.actionIds, ['main-scene', 'refresh-alerts']),
-        stopOnError: sanitizeBoolean(action.stopOnError, true),
+        stopOnError: sanitizeBoolean(action.stopOnError, baseId === 'sequence-go-live-main' ? false : true),
         ...(typeof action.confirm === 'boolean' ? { confirm: action.confirm } : {}),
       };
     }
@@ -154,7 +154,7 @@ function sanitizeQuickAction(action: unknown): QuickAction | null {
         id: baseId,
         label: baseLabel,
         kind: 'setScene',
-        sceneName: typeof action.sceneName === 'string' ? action.sceneName : 'Main',
+        sceneName: typeof action.sceneName === 'string' ? action.sceneName : '40_MAIN',
         ...(typeof action.confirm === 'boolean' ? { confirm: action.confirm } : {}),
       };
     case 'runPreset':
@@ -163,7 +163,7 @@ function sanitizeQuickAction(action: unknown): QuickAction | null {
         label: baseLabel,
         kind: 'runPreset',
         presetId: typeof action.presetId === 'string' ? action.presetId : 'main',
-        sceneName: typeof action.sceneName === 'string' ? action.sceneName : 'Main',
+        sceneName: typeof action.sceneName === 'string' ? action.sceneName : '40_MAIN',
         ...(typeof action.confirm === 'boolean' ? { confirm: action.confirm } : {}),
       };
     case 'refreshSource':
@@ -171,7 +171,7 @@ function sanitizeQuickAction(action: unknown): QuickAction | null {
         id: baseId,
         label: baseLabel,
         kind: 'refreshSource',
-        inputName: typeof action.inputName === 'string' ? action.inputName : 'Alerts Browser',
+        inputName: typeof action.inputName === 'string' ? action.inputName : 'ALERTS',
         ...(typeof action.confirm === 'boolean' ? { confirm: action.confirm } : {}),
       };
     case 'sendAlert':
@@ -276,14 +276,14 @@ export const defaultDashboardConfig: DashboardConfig = {
   ],
   activeAutomationProfileId: 'full-console',
   quickActions: [
-    { id: 'main-scene', label: 'Go Main', kind: 'setScene', sceneName: 'Main' },
-    { id: 'preset-main', label: 'Run Main preset', kind: 'runPreset', presetId: 'main', sceneName: 'Main', confirm: true },
-    { id: 'refresh-alerts', label: 'Refresh Alerts', kind: 'refreshSource', inputName: 'Alerts Browser' },
-    { id: 'brb-scene', label: 'Go BRB', kind: 'setScene', sceneName: 'BRB', confirm: true },
+    { id: 'main-scene', label: 'Go Main', kind: 'setScene', sceneName: '40_MAIN' },
+    { id: 'preset-main', label: 'Run Main preset', kind: 'runPreset', presetId: 'main', sceneName: '40_MAIN', confirm: true },
+    { id: 'refresh-alerts', label: 'Refresh Alerts', kind: 'refreshSource', inputName: 'ALERTS' },
+    { id: 'brb-scene', label: 'Go Stand By', kind: 'setScene', sceneName: '30_STAND_BY', confirm: true },
     { id: 'sample-alert', label: 'Sample Alert', kind: 'sendAlert', title: 'Sample alert', message: 'Quick action fired', severity: 'success' },
     { id: 'show-brb', label: 'Show BRB', kind: 'showBRB', title: 'Be right back', message: 'Short intermission. Stream resumes soon.', eta: '5 min', items: ['Hydrate', 'Stretch', 'Chat stays live'] },
     { id: 'hide-brb', label: 'Hide BRB', kind: 'hideBRB', confirm: false },
-    { id: 'sequence-go-live-main', label: 'Go Live Main', kind: 'sequence', actionIds: ['main-scene', 'refresh-alerts', 'hide-brb'], stopOnError: true, confirm: true },
+    { id: 'sequence-go-live-main', label: 'Go Live Main', kind: 'sequence', actionIds: ['main-scene', 'refresh-alerts', 'hide-brb'], stopOnError: false, confirm: true },
     { id: 'sequence-start-brb', label: 'Start BRB', kind: 'sequence', actionIds: ['brb-scene', 'show-brb'], stopOnError: true, confirm: true },
   ],
   controlWidgets: [
@@ -305,7 +305,7 @@ function mergeQuickActions(persistedQuickActions: QuickAction[] | undefined) {
   for (const action of persistedQuickActions ?? []) {
     if (seenIds.has(action.id)) continue;
     seenIds.add(action.id);
-    mergedQuickActions.push(action);
+    mergedQuickActions.push(migrateBuiltInQuickAction(action));
   }
 
   for (const action of defaultDashboardConfig.quickActions) {
@@ -315,6 +315,22 @@ function mergeQuickActions(persistedQuickActions: QuickAction[] | undefined) {
   }
 
   return mergedQuickActions;
+}
+
+function migrateBuiltInQuickAction(action: QuickAction): QuickAction {
+  if ((action.id === 'main-scene' || action.id === 'preset-main') && (action.kind === 'setScene' || action.kind === 'runPreset') && action.sceneName === 'Main') {
+    return { ...action, sceneName: '40_MAIN' };
+  }
+  if (action.id === 'brb-scene' && action.kind === 'setScene' && action.sceneName === 'BRB') {
+    return { ...action, label: action.label === 'Go BRB' ? 'Go Stand By' : action.label, sceneName: '30_STAND_BY' };
+  }
+  if (action.id === 'refresh-alerts' && action.kind === 'refreshSource' && action.inputName === 'Alerts Browser') {
+    return { ...action, inputName: 'ALERTS' };
+  }
+  if (action.id === 'sequence-go-live-main' && action.kind === 'sequence' && action.stopOnError) {
+    return { ...action, stopOnError: false };
+  }
+  return action;
 }
 
 function mergeAutomationProfiles(persistedAutomationProfiles: AutomationProfile[] | undefined) {
@@ -421,11 +437,11 @@ export function createQuickAction(kind: QuickAction['kind'], label = 'New action
     case 'sequence':
       return { id, label, kind, actionIds: ['main-scene', 'refresh-alerts'], stopOnError: true, confirm: true };
     case 'setScene':
-      return { id, label, kind, sceneName: 'Main' };
+      return { id, label, kind, sceneName: '40_MAIN' };
     case 'runPreset':
-      return { id, label, kind, presetId: 'main', sceneName: 'Main', confirm: true };
+      return { id, label, kind, presetId: 'main', sceneName: '40_MAIN', confirm: true };
     case 'refreshSource':
-      return { id, label, kind, inputName: 'Alerts Browser' };
+      return { id, label, kind, inputName: 'ALERTS' };
     case 'sendAlert':
       return { id, label, kind, title: 'Sample alert', message: 'Quick action fired', severity: 'success' };
     case 'showBRB':

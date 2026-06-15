@@ -316,7 +316,7 @@ function mergeAction(action: QuickAction, patch: Partial<QuickAction>): QuickAct
   }
 
   if (next.kind === 'setScene') {
-    return { ...next, sceneName: next.sceneName || 'Main' };
+    return { ...next, sceneName: next.sceneName || '40_MAIN' };
   }
 
   if (next.kind === 'sequence') {
@@ -332,13 +332,13 @@ function mergeAction(action: QuickAction, patch: Partial<QuickAction>): QuickAct
     return {
       ...next,
       presetId: next.presetId || 'main',
-      sceneName: next.sceneName || 'Main',
+      sceneName: next.sceneName || '40_MAIN',
       confirm: Boolean(next.confirm),
     };
   }
 
   if (next.kind === 'refreshSource') {
-    return { ...next, inputName: next.inputName || 'Alerts Browser' };
+    return { ...next, inputName: next.inputName || 'ALERTS' };
   }
 
   if (next.kind === 'muteInput') {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchDashboardConfig, saveSharedDashboardConfig } from '../../lib/api';
+import { fetchDashboardConfig, fetchOBSInputs, fetchOBSScenes, saveSharedDashboardConfig, type OBSInput } from '../../lib/api';
 import {
   loadDashboardConfig,
   loadOperatorSecret,
@@ -7,6 +7,7 @@ import {
   saveOperatorSecret,
   type DashboardConfig,
   normalizeDashboardConfig,
+  type QuickAction,
 } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { DashboardShell } from './DashboardShell';
@@ -19,6 +20,10 @@ export function DashboardConfigPage() {
   const [webhookSecret, setWebhookSecret] = useState('');
   const [config, setConfig] = useState<DashboardConfig>(() => loadDashboardConfig());
   const [sharedConfigStatus, setSharedConfigStatus] = useState('');
+  const [obsImportStatus, setOBSImportStatus] = useState('');
+  const [obsSceneNames, setOBSSceneNames] = useState<string[]>([]);
+  const [obsBrowserInputNames, setOBSBrowserInputNames] = useState<string[]>([]);
+  const [obsAssignments, setOBSAssignments] = useState<OBSAssignments>({ mainScene: '', brbScene: '', alertsSource: '' });
 
   useEffect(() => {
     setOperatorSecret(loadOperatorSecret());
@@ -62,6 +67,28 @@ export function DashboardConfigPage() {
     } catch (error) {
       setSharedConfigStatus(error instanceof Error ? error.message : 'Failed to save shared config.');
     }
+  }
+
+  async function loadOBSAssignments() {
+    setOBSImportStatus('Loading OBS scenes and sources…');
+    try {
+      const [scenes, inputs] = await Promise.all([fetchOBSScenes(apiBaseUrl), fetchOBSInputs(apiBaseUrl)]);
+      const sceneNames = scenes.scenes.map((scene) => scene.sceneName);
+      const browserInputNames = inputs.filter((input) => isBrowserInput(input)).map((input) => input.inputName);
+      const nextAssignments = suggestOBSAssignments(sceneNames, browserInputNames, config);
+      setOBSSceneNames(sceneNames);
+      setOBSBrowserInputNames(browserInputNames);
+      setOBSAssignments(nextAssignments);
+      setOBSImportStatus('OBS names loaded. Review assignments, then apply.');
+    } catch (error) {
+      setOBSImportStatus(error instanceof Error ? error.message : 'Failed to load OBS names.');
+    }
+  }
+
+  function applyOBSAssignments() {
+    const next = applyOBSAssignmentsToConfig(config, obsAssignments);
+    updateConfig(next);
+    setOBSImportStatus('Applied OBS assignments to quick actions. Use Save shared if you want other browsers to pull them.');
   }
 
   function setMprisDecision(mprisDecision: DashboardConfig['mprisDecision']) {
@@ -129,6 +156,29 @@ export function DashboardConfigPage() {
       </section>
 
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="hud-label">OBS import</p>
+            <p className="hud-copy mt-1 text-xs text-zinc-300">Import live OBS scene/source names into built-in quick actions. If auto-match misses, assign them manually.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => void loadOBSAssignments()}>
+              Load from OBS
+            </button>
+            <button className="hud-action-button hud-action-button--compact" type="button" disabled={!obsAssignments.mainScene && !obsAssignments.brbScene && !obsAssignments.alertsSource} onClick={applyOBSAssignments}>
+              Apply assignments
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <AssignmentSelect label="Main scene" value={obsAssignments.mainScene} options={obsSceneNames} onChange={(mainScene) => setOBSAssignments((current) => ({ ...current, mainScene }))} />
+          <AssignmentSelect label="BRB / standby scene" value={obsAssignments.brbScene} options={obsSceneNames} onChange={(brbScene) => setOBSAssignments((current) => ({ ...current, brbScene }))} />
+          <AssignmentSelect label="Alerts browser source" value={obsAssignments.alertsSource} options={obsBrowserInputNames} onChange={(alertsSource) => setOBSAssignments((current) => ({ ...current, alertsSource }))} />
+        </div>
+        {obsImportStatus ? <p className="mt-3 text-xs text-zinc-300">{obsImportStatus}</p> : null}
+      </section>
+
+      <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <p className="hud-label">Overlay noise controls</p>
         <p className="hud-copy mt-1 text-xs text-zinc-300">Tune how many live items stay visible and how aggressively repeated alerts are suppressed.</p>
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -158,6 +208,72 @@ export function DashboardConfigPage() {
       </section>
     </DashboardShell>
   );
+}
+
+type OBSAssignments = {
+  mainScene: string;
+  brbScene: string;
+  alertsSource: string;
+};
+
+function AssignmentSelect({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+  return (
+    <label className="grid gap-2 text-xs text-zinc-300">
+      <span className="hud-kicker">{label}</span>
+      <select className="hud-input" value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Assign…</option>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function isBrowserInput(input: OBSInput) {
+  return input.inputKind === 'browser_source' || input.inputName.toLowerCase().includes('alert') || input.inputName.toLowerCase().includes('browser');
+}
+
+function suggestOBSAssignments(sceneNames: string[], browserInputNames: string[], config: DashboardConfig): OBSAssignments {
+  return {
+    mainScene: findPreferred(sceneNames, ['40_MAIN', 'MAIN'], currentActionValue(config, 'main-scene', 'sceneName')),
+    brbScene: findPreferred(sceneNames, ['30_STAND_BY', 'STAND_BY', 'BRB'], currentActionValue(config, 'brb-scene', 'sceneName')),
+    alertsSource: findPreferred(browserInputNames, ['ALERTS', 'Alerts Browser'], currentActionValue(config, 'refresh-alerts', 'inputName')),
+  };
+}
+
+function currentActionValue(config: DashboardConfig, id: string, key: 'sceneName' | 'inputName') {
+  const action = config.quickActions.find((item) => item.id === id) as (QuickAction & Partial<Record<typeof key, string>>) | undefined;
+  return action?.[key] || '';
+}
+
+function findPreferred(options: string[], preferred: string[], current: string) {
+  if (current && options.includes(current)) return current;
+  for (const candidate of preferred) {
+    const exact = options.find((option) => option === candidate);
+    if (exact) return exact;
+    const loose = options.find((option) => option.toLowerCase().includes(candidate.toLowerCase()));
+    if (loose) return loose;
+  }
+  return '';
+}
+
+function applyOBSAssignmentsToConfig(config: DashboardConfig, assignments: OBSAssignments): DashboardConfig {
+  return {
+    ...config,
+    quickActions: config.quickActions.map((action) => applyOBSAssignmentToAction(action, assignments)),
+  };
+}
+
+function applyOBSAssignmentToAction(action: QuickAction, assignments: OBSAssignments): QuickAction {
+  if ((action.id === 'main-scene' || action.id === 'preset-main') && (action.kind === 'setScene' || action.kind === 'runPreset') && assignments.mainScene) {
+    return { ...action, sceneName: assignments.mainScene };
+  }
+  if (action.id === 'brb-scene' && action.kind === 'setScene' && assignments.brbScene) {
+    return { ...action, sceneName: assignments.brbScene };
+  }
+  if (action.id === 'refresh-alerts' && action.kind === 'refreshSource' && assignments.alertsSource) {
+    return { ...action, inputName: assignments.alertsSource };
+  }
+  return action;
 }
 
 function NumberControl({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {

@@ -399,7 +399,8 @@ async function sendJSON(
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    throw new Error(`${path} failed: ${response.status}`);
+    const detail = await response.text().catch(() => '');
+    throw new Error(`${path} failed: ${response.status}${detail.trim() ? ` — ${detail.trim()}` : ''}`);
   }
   return response;
 }
