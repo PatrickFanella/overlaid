@@ -57,7 +57,7 @@ func TestNormalizeDropsInvalidAndDuplicateRules(t *testing.T) {
 			{Alias: "", Command: "clear", Enabled: true},
 		},
 		ChannelPointRules: []ChannelPointRule{
-			{RewardTitle: "  Big Red Button  ", Action: " ALERT ", Title: "  hello  ", Message: strings.Repeat("文", 181), Enabled: true},
+			{RewardTitle: "  Big Red Button  ", Action: " ALERT ", Title: "  hello  ", Message: strings.Repeat("文", 181), CooldownSeconds: 999999, FulfillmentNote: strings.Repeat("n", 181), Enabled: true},
 			{RewardTitle: "big red button", Action: "clear", Enabled: true},
 			{RewardTitle: "Other", Action: "dance", Enabled: true},
 			{RewardTitle: "Second", Action: "ignore", Enabled: false},
@@ -75,7 +75,7 @@ func TestNormalizeDropsInvalidAndDuplicateRules(t *testing.T) {
 		t.Fatalf("channel point rules len=%d, want 2", len(got.ChannelPointRules))
 	}
 	first := got.ChannelPointRules[0]
-	if first.RewardTitle != "Big Red Button" || first.Action != "alert" || first.Title != "hello" || len([]rune(first.Message)) != 180 {
+	if first.RewardTitle != "Big Red Button" || first.Action != "alert" || first.Title != "hello" || len([]rune(first.Message)) != 180 || first.CooldownSeconds != 86400 || len([]rune(first.FulfillmentNote)) != 180 {
 		t.Fatalf("first channel point rule = %#v, want normalized/sanitized", first)
 	}
 	if got.ChannelPointRules[1] != (ChannelPointRule{RewardTitle: "Second", Action: "ignore", Enabled: false}) {

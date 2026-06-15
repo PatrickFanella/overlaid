@@ -132,6 +132,8 @@ export type ChannelPointRule = {
   action: 'alert' | 'brb' | 'clear' | 'ignore';
   title?: string;
   message?: string;
+  cooldownSeconds?: number;
+  fulfillmentNote?: string;
   enabled: boolean;
 };
 

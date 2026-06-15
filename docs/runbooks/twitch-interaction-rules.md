@@ -35,12 +35,16 @@ Recommended smoke check:
 
 - Reward-title matching is exact after case-insensitive normalization.
 - Supported actions are `alert`, `brb`, `clear`, and `ignore`.
+- Optional cooldown seconds suppress repeated matching reward actions and emit a diagnostic event while cooling down.
+- Optional fulfillment notes are stored with the rule and included in emitted overlay event metadata for operator review.
+- Title/message overrides support `{user}`, `{reward}`, and `{input}` variables.
 - `ignore` suppresses the normal redemption alert and emits a `custom_command` diagnostic event. Diagnostic events can still appear in broad diagnostic surfaces such as `/overlay/debug`, event history, or ticker-style feeds that intentionally show generic event summaries.
 
 Examples:
 
 - `Change Color` matches `change color` and `CHANGE COLOR`.
 - `ignore` is useful when you want to suppress the normal redemption alert while still leaving an operator-visible diagnostic trail.
+- A cooldown is useful for expensive or disruptive rewards such as scene changes, long BRB prompts, or visual spam.
 
 ## Backup and recovery
 

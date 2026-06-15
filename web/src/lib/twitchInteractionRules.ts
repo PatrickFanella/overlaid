@@ -49,13 +49,22 @@ export function normalizeImportedTwitchInteractionRules(value: unknown): TwitchI
         typeof entry.action === 'string' &&
         typeof entry.enabled === 'boolean',
     )
-    .map((entry) => ({
-      rewardTitle: entry.rewardTitle,
-      action: rewardActions.includes(entry.action as (typeof rewardActions)[number]) ? (entry.action as ChannelPointRule['action']) : 'ignore',
-      title: typeof entry.title === 'string' ? entry.title : undefined,
-      message: typeof entry.message === 'string' ? entry.message : undefined,
-      enabled: entry.enabled,
-    }));
+    .map((entry) => {
+      const rule: ChannelPointRule = {
+        rewardTitle: entry.rewardTitle,
+        action: rewardActions.includes(entry.action as (typeof rewardActions)[number]) ? (entry.action as ChannelPointRule['action']) : 'ignore',
+        title: typeof entry.title === 'string' ? entry.title : undefined,
+        message: typeof entry.message === 'string' ? entry.message : undefined,
+        enabled: entry.enabled,
+      };
+      if (typeof entry.cooldownSeconds === 'number') {
+        rule.cooldownSeconds = Math.max(0, Math.min(86400, entry.cooldownSeconds));
+      }
+      if (typeof entry.fulfillmentNote === 'string') {
+        rule.fulfillmentNote = entry.fulfillmentNote;
+      }
+      return rule;
+    });
 
   return { chatAliases, channelPointRules };
 }

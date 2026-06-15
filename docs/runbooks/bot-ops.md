@@ -21,6 +21,7 @@ Implemented now:
 Not implemented yet:
 
 - Twitch moderation actions and nuke-style workflows.
+- Twitch reward creation/fulfillment through Helix management APIs.
 
 ## Fast checks
 

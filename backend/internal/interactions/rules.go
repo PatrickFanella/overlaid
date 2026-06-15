@@ -35,11 +35,13 @@ type ChatAliasRule struct {
 }
 
 type ChannelPointRule struct {
-	RewardTitle string `json:"rewardTitle"`
-	Action      string `json:"action"`
-	Title       string `json:"title,omitempty"`
-	Message     string `json:"message,omitempty"`
-	Enabled     bool   `json:"enabled"`
+	RewardTitle     string `json:"rewardTitle"`
+	Action          string `json:"action"`
+	Title           string `json:"title,omitempty"`
+	Message         string `json:"message,omitempty"`
+	CooldownSeconds int    `json:"cooldownSeconds,omitempty"`
+	FulfillmentNote string `json:"fulfillmentNote,omitempty"`
+	Enabled         bool   `json:"enabled"`
 }
 
 type Rules struct {
@@ -313,12 +315,24 @@ func normalizeChannelPointRule(rule ChannelPointRule) (ChannelPointRule, bool) {
 		return ChannelPointRule{}, false
 	}
 	return ChannelPointRule{
-		RewardTitle: rewardTitle,
-		Action:      action,
-		Title:       capRunes(strings.TrimSpace(rule.Title), maxTitleRunes),
-		Message:     capRunes(strings.TrimSpace(rule.Message), maxMessageRunes),
-		Enabled:     rule.Enabled,
+		RewardTitle:     rewardTitle,
+		Action:          action,
+		Title:           capRunes(strings.TrimSpace(rule.Title), maxTitleRunes),
+		Message:         capRunes(strings.TrimSpace(rule.Message), maxMessageRunes),
+		CooldownSeconds: normalizeCooldownSeconds(rule.CooldownSeconds),
+		FulfillmentNote: capRunes(strings.TrimSpace(rule.FulfillmentNote), maxMessageRunes),
+		Enabled:         rule.Enabled,
 	}, true
+}
+
+func normalizeCooldownSeconds(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 86400 {
+		return 86400
+	}
+	return value
 }
 
 func writeRulesFile(path string, rules Rules) error {

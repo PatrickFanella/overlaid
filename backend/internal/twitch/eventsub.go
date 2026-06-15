@@ -27,6 +27,8 @@ const (
 	connectionRetryDelay = 10 * time.Second
 )
 
+var channelPointCooldowns sync.Map
+
 type Token struct {
 	AccessToken string
 	UserID      string
@@ -472,6 +474,15 @@ func EventsForChannelPointRedemption(message EventSubMessage, rules interactions
 	input := stringValue(event, "user_input")
 
 	if rule, ok := interactions.MatchChannelPointRule(rules, rewardTitle); ok {
+		if rule.CooldownSeconds > 0 && channelPointRuleCoolingDown(rule, rewardTitle, time.Now().UTC()) {
+			return []events.Event{events.NewCommand("twitch", "Channel point reward cooling down", "Matched reward is cooling down", events.SeverityWarning, map[string]any{
+				"action":          "cooldown",
+				"reward":          capRunes(firstNonEmpty(rewardTitle, "Unknown reward"), 180),
+				"user":            capRunes(user, 180),
+				"cooldownSeconds": rule.CooldownSeconds,
+				"eventsubType":    message.Payload.Subscription.Type,
+			})}
+		}
 		switch rule.Action {
 		case "ignore":
 			return []events.Event{events.NewCommand("twitch", "Channel point reward ignored", "Matched reward ignored", events.SeverityWarning, map[string]any{
@@ -483,7 +494,8 @@ func EventsForChannelPointRedemption(message EventSubMessage, rules interactions
 		case "clear":
 			return []events.Event{events.NewClear("twitch")}
 		case "brb":
-			data := map[string]any{"active": true, "eventsubType": message.Payload.Subscription.Type}
+			data := channelPointRuleData(rule, rewardTitle, user, input, message.Payload.Subscription.Type)
+			data["active"] = true
 			return []events.Event{events.NewBRB(
 				"twitch",
 				renderChannelPointText(rule.Title, user+" redeemed channel points", user, rewardTitle, input),
@@ -497,7 +509,7 @@ func EventsForChannelPointRedemption(message EventSubMessage, rules interactions
 				renderChannelPointText(rule.Message, defaultChannelPointMessage(rewardTitle, input), user, rewardTitle, input),
 				events.SeveritySuccess,
 			)
-			event.Data = map[string]any{"eventsubType": message.Payload.Subscription.Type}
+			event.Data = channelPointRuleData(rule, rewardTitle, user, input, message.Payload.Subscription.Type)
 			return []events.Event{event}
 		}
 	}
@@ -507,6 +519,24 @@ func EventsForChannelPointRedemption(message EventSubMessage, rules interactions
 		return nil
 	}
 	return []events.Event{alert}
+}
+
+func channelPointRuleCoolingDown(rule interactions.ChannelPointRule, rewardTitle string, now time.Time) bool {
+	key := strings.ToLower(strings.TrimSpace(rewardTitle))
+	if key == "" {
+		return false
+	}
+	if raw, ok := channelPointCooldowns.Load(key); ok {
+		if last, ok := raw.(time.Time); ok && now.Sub(last) < time.Duration(rule.CooldownSeconds)*time.Second {
+			return true
+		}
+	}
+	channelPointCooldowns.Store(key, now)
+	return false
+}
+
+func channelPointRuleData(rule interactions.ChannelPointRule, rewardTitle, user, input, eventsubType string) map[string]any {
+	return map[string]any{"eventsubType": eventsubType, "reward": capRunes(rewardTitle, 180), "user": capRunes(user, 180), "input": capRunes(input, 180), "cooldownSeconds": rule.CooldownSeconds, "fulfillmentNote": rule.FulfillmentNote}
 }
 
 func renderChannelPointText(template, fallback, user, reward, input string) string {

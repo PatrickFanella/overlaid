@@ -162,7 +162,7 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="hud-kicker">Channel point rewards</p>
-              <p className="mt-1 text-xs text-zinc-400">Exact title matches can alert, BRB, clear, or ignore.</p>
+              <p className="mt-1 text-xs text-zinc-400">Exact title matches can alert, BRB, clear, or ignore, with optional cooldowns and fulfillment notes.</p>
             </div>
             <button className="hud-chip" type="button" onClick={addReward}>
               Add reward
@@ -192,6 +192,10 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
                       <span className="hud-kicker">Enabled</span>
                       <input type="checkbox" checked={rule.enabled} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { enabled: event.target.checked }))} />
                     </label>
+                    <label className="grid gap-1 text-xs text-zinc-300">
+                      <span className="hud-kicker">Cooldown seconds</span>
+                      <input className="hud-input" type="number" min={0} max={86400} value={rule.cooldownSeconds ?? 0} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { cooldownSeconds: Number(event.target.value) }))} />
+                    </label>
                     <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
                       <span className="hud-kicker">Title override</span>
                       <input className="hud-input" type="text" value={rule.title ?? ''} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { title: event.target.value }))} placeholder="Optional alert title" />
@@ -199,6 +203,10 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
                     <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
                       <span className="hud-kicker">Message override</span>
                       <textarea className="hud-input min-h-20 font-mono text-xs" value={rule.message ?? ''} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { message: event.target.value }))} placeholder="Optional alert message" />
+                    </label>
+                    <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
+                      <span className="hud-kicker">Fulfillment note</span>
+                      <input className="hud-input" type="text" value={rule.fulfillmentNote ?? ''} onChange={(event) => setRules((current) => updateTwitchRewardRule(current, index, { fulfillmentNote: event.target.value }))} placeholder="Optional operator note" />
                     </label>
                   </div>
                   <button className="hud-chip self-start" type="button" onClick={() => setRules((current) => ({ ...current, channelPointRules: current.channelPointRules.filter((_, itemIndex) => itemIndex !== index) }))}>
