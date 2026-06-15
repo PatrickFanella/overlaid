@@ -185,6 +185,19 @@ func TestCommandProcessorCustomCommandReportsUnknownTemplateVariables(t *testing
 	}
 }
 
+func TestCommandProcessorCustomChatOnlyCommand(t *testing.T) {
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Custom: []CustomCommand{{Name: "discord", Enabled: true, Response: "Join {user}", Action: "ticker", ResponseMode: "chat", RoleRequired: "viewer"}}})
+
+	got := processor.Handle(ChatCommand{Name: "discord"}, ChatCommandUser{Name: "Viewer"})
+	if len(got) != 1 {
+		t.Fatalf("event count=%d, want 1: %#v", len(got), got)
+	}
+	chat, ok := got[0].Data["chatResponse"].(map[string]any)
+	if !ok || chat["message"] != "Join Viewer" || got[0].Data["responseMode"] != "chat" {
+		t.Fatalf("expected chat response metadata, got %#v", got[0].Data)
+	}
+}
+
 func TestCommandProcessorCustomCommandPermissionAndCooldown(t *testing.T) {
 	current := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
 	processor := NewCommandProcessor(CommandProcessorConfig{Now: func() time.Time { return current }, Custom: []CustomCommand{{Name: "so", Enabled: true, Response: "Follow them", Action: "alert", RoleRequired: "moderator", CooldownSeconds: 30}}})

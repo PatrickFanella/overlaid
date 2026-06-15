@@ -17,7 +17,7 @@ Implemented now:
 - Enabled timers publish safe ticker or alert overlay events when due.
 - `/dashboard/bot` overview, command manager, counters/quotes manager, moderation dry-run panel, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
-- Custom Twitch commands can publish safe ticker or alert overlay responses with bounded template variables.
+- Custom Twitch commands can publish safe ticker/alert overlays, guarded outbound Twitch chat replies, or both, with bounded template variables.
 
 Not implemented yet:
 
@@ -70,7 +70,9 @@ Custom commands are intentionally safer and smaller than FossaBot's full command
 - Actions are `ticker` or `alert` only.
 - Required roles are `viewer`, `moderator`, or `broadcaster`.
 - Cooldowns are per custom command and live in memory until API restart.
-- Commands do not execute scripts, send outbound chat, call external APIs, or run OBS actions.
+- Response mode is `overlay`, `chat`, or `both`. `chat` uses Twitch Helix `POST /helix/chat/messages` server-side with the stored OAuth token.
+- Chat replies require `user:write:chat`; if Twitch status reports that scope missing, re-run Twitch login and re-consent.
+- Commands do not execute scripts, call arbitrary APIs, or run OBS actions.
 - Command saves refresh the in-memory Twitch command processor immediately.
 
 Supported template variables:
@@ -89,7 +91,7 @@ To test a custom command:
 
 1. Create `!discord` in `/dashboard/bot` with response `Join {user}: https://example.test {args}`.
 2. Send `!discord today` in Twitch chat.
-3. Confirm `/overlay/ticker` or `/overlay/alerts` shows the configured response.
+3. Confirm `/overlay/ticker` or `/overlay/alerts` shows the configured response for `overlay`/`both` modes, or Twitch chat receives the rendered response for `chat`/`both` modes.
 4. Confirm `/dashboard/bot` audit records the command with result `allowed`.
 
 ## Timer behavior

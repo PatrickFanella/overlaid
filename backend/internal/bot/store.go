@@ -53,6 +53,7 @@ type Command struct {
 	Enabled         bool      `json:"enabled"`
 	Response        string    `json:"response"`
 	Action          string    `json:"action"`
+	ResponseMode    string    `json:"responseMode"`
 	RoleRequired    string    `json:"roleRequired"`
 	CooldownSeconds int       `json:"cooldownSeconds"`
 	CreatedAt       time.Time `json:"createdAt"`
@@ -365,7 +366,7 @@ func (s *Store) ListCommands(ctx context.Context) ([]Command, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at
+		SELECT id, name, enabled, response, action, COALESCE(response_mode, 'overlay'), role_required, cooldown_seconds, created_at, updated_at
 		FROM bot_commands
 		ORDER BY name ASC
 	`)
@@ -407,7 +408,7 @@ func (s *Store) SetCommandEnabled(ctx context.Context, id string, enabled bool) 
 	row := s.db.QueryRowContext(ctx, `
 		UPDATE bot_commands SET enabled = $2, updated_at = now()
 		WHERE id = $1
-		RETURNING id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at
+		RETURNING id, name, enabled, response, action, COALESCE(response_mode, 'overlay'), role_required, cooldown_seconds, created_at, updated_at
 	`, id, enabled)
 	return scanCommand(row)
 }
@@ -531,20 +532,20 @@ func (s *Store) insertTimer(ctx context.Context, timer Timer) (Timer, error) {
 
 func (s *Store) insertCommand(ctx context.Context, command Command) (Command, error) {
 	row := s.db.QueryRowContext(ctx, `
-		INSERT INTO bot_commands (name, enabled, response, action, role_required, cooldown_seconds)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at
-	`, command.Name, command.Enabled, command.Response, command.Action, command.RoleRequired, command.CooldownSeconds)
+		INSERT INTO bot_commands (name, enabled, response, action, response_mode, role_required, cooldown_seconds)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, name, enabled, response, action, COALESCE(response_mode, 'overlay'), role_required, cooldown_seconds, created_at, updated_at
+	`, command.Name, command.Enabled, command.Response, command.Action, command.ResponseMode, command.RoleRequired, command.CooldownSeconds)
 	return scanCommand(row)
 }
 
 func (s *Store) updateCommand(ctx context.Context, command Command) (Command, error) {
 	row := s.db.QueryRowContext(ctx, `
 		UPDATE bot_commands
-		SET name = $2, enabled = $3, response = $4, action = $5, role_required = $6, cooldown_seconds = $7, updated_at = now()
+		SET name = $2, enabled = $3, response = $4, action = $5, response_mode = $6, role_required = $7, cooldown_seconds = $8, updated_at = now()
 		WHERE id = $1
-		RETURNING id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at
-	`, strings.TrimSpace(command.ID), command.Name, command.Enabled, command.Response, command.Action, command.RoleRequired, command.CooldownSeconds)
+		RETURNING id, name, enabled, response, action, COALESCE(response_mode, 'overlay'), role_required, cooldown_seconds, created_at, updated_at
+	`, strings.TrimSpace(command.ID), command.Name, command.Enabled, command.Response, command.Action, command.ResponseMode, command.RoleRequired, command.CooldownSeconds)
 	return scanCommand(row)
 }
 
@@ -580,7 +581,7 @@ type commandScanner interface {
 
 func scanCommand(row commandScanner) (Command, error) {
 	var command Command
-	if err := row.Scan(&command.ID, &command.Name, &command.Enabled, &command.Response, &command.Action, &command.RoleRequired, &command.CooldownSeconds, &command.CreatedAt, &command.UpdatedAt); err != nil {
+	if err := row.Scan(&command.ID, &command.Name, &command.Enabled, &command.Response, &command.Action, &command.ResponseMode, &command.RoleRequired, &command.CooldownSeconds, &command.CreatedAt, &command.UpdatedAt); err != nil {
 		return Command{}, err
 	}
 	return command, nil
@@ -755,6 +756,7 @@ func NormalizeCommand(command Command) (Command, error) {
 	command.Name = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(command.Name, "!")))
 	command.Response = strings.TrimSpace(command.Response)
 	command.Action = normalizeToken(command.Action, "ticker")
+	command.ResponseMode = normalizeToken(command.ResponseMode, "overlay")
 	command.RoleRequired = normalizeToken(command.RoleRequired, "viewer")
 	if command.Name == "" {
 		return Command{}, errors.New("command name is required")
@@ -775,6 +777,11 @@ func NormalizeCommand(command Command) (Command, error) {
 	case "ticker", "alert":
 	default:
 		return Command{}, fmt.Errorf("unsupported command action %q", command.Action)
+	}
+	switch command.ResponseMode {
+	case "overlay", "chat", "both":
+	default:
+		return Command{}, fmt.Errorf("unsupported command response mode %q", command.ResponseMode)
 	}
 	switch command.RoleRequired {
 	case "viewer", "moderator", "broadcaster", "operator", "system":
@@ -962,6 +969,7 @@ CREATE TABLE IF NOT EXISTS bot_commands (
   enabled boolean NOT NULL DEFAULT true,
   response text NOT NULL DEFAULT '',
   action text NOT NULL DEFAULT 'response',
+  response_mode text NOT NULL DEFAULT 'overlay',
   role_required text NOT NULL DEFAULT 'viewer',
   cooldown_seconds integer NOT NULL DEFAULT 10,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -969,6 +977,7 @@ CREATE TABLE IF NOT EXISTS bot_commands (
 );
 
 ALTER TABLE bot_commands ALTER COLUMN action SET DEFAULT 'ticker';
+ALTER TABLE bot_commands ADD COLUMN IF NOT EXISTS response_mode text NOT NULL DEFAULT 'overlay';
 
 CREATE TABLE IF NOT EXISTS bot_timers (
   id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),

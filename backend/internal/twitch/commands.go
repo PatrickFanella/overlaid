@@ -28,6 +28,7 @@ type CustomCommand struct {
 	Enabled         bool
 	Response        string
 	Action          string
+	ResponseMode    string
 	RoleRequired    string
 	CooldownSeconds int
 }
@@ -246,10 +247,18 @@ func (p *CommandProcessor) handleCustomCommand(original ChatCommand, resolved Ch
 	}
 	template := bot.RenderTemplate(custom.Response, p.templateContext(custom.Response, original, resolved, user))
 	action, ok := customActionEvent(custom, user, template.Text, template.UnknownVariables)
+	mode := normalizeResponseMode(custom.ResponseMode)
+	accepted := p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"custom": true, "action": custom.Action, "responseMode": mode, "unknownVariables": template.UnknownVariables})
+	if mode == "chat" || mode == "both" {
+		accepted.Data["chatResponse"] = map[string]any{"message": template.Text, "command": custom.Name}
+	}
+	if mode == "chat" {
+		return []events.Event{accepted}
+	}
 	if !ok {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command ignored", map[string]any{"custom": true, "action": custom.Action})}
 	}
-	return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"custom": true, "action": custom.Action, "unknownVariables": template.UnknownVariables}), action}
+	return []events.Event{accepted, action}
 }
 
 func (p *CommandProcessor) templateContext(response string, original ChatCommand, resolved ChatCommand, user ChatCommandUser) bot.TemplateContext {
@@ -452,6 +461,7 @@ func customCommandMap(commands []CustomCommand) map[string]CustomCommand {
 		if command.Action == "" {
 			command.Action = "ticker"
 		}
+		command.ResponseMode = normalizeResponseMode(command.ResponseMode)
 		command.RoleRequired = strings.ToLower(strings.TrimSpace(command.RoleRequired))
 		if command.RoleRequired == "" {
 			command.RoleRequired = "viewer"
@@ -462,4 +472,13 @@ func customCommandMap(commands []CustomCommand) map[string]CustomCommand {
 		items[command.Name] = command
 	}
 	return items
+}
+
+func normalizeResponseMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "chat", "both":
+		return strings.ToLower(strings.TrimSpace(mode))
+	default:
+		return "overlay"
+	}
 }

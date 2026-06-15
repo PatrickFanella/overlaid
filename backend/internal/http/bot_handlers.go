@@ -107,6 +107,7 @@ type botCommandRequest struct {
 	Enabled         bool   `json:"enabled"`
 	Response        string `json:"response"`
 	Action          string `json:"action"`
+	ResponseMode    string `json:"responseMode"`
 	RoleRequired    string `json:"roleRequired"`
 	CooldownSeconds int    `json:"cooldownSeconds"`
 }
@@ -458,7 +459,7 @@ func (s *Server) botCommandSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	command, err := s.botStore.SaveCommand(r.Context(), bot.Command{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Response: request.Response, Action: request.Action, RoleRequired: request.RoleRequired, CooldownSeconds: request.CooldownSeconds})
+	command, err := s.botStore.SaveCommand(r.Context(), bot.Command{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Response: request.Response, Action: request.Action, ResponseMode: request.ResponseMode, RoleRequired: request.RoleRequired, CooldownSeconds: request.CooldownSeconds})
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {

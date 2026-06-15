@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS bot_commands (
   enabled boolean NOT NULL DEFAULT true,
   response text NOT NULL DEFAULT '',
   action text NOT NULL DEFAULT 'response',
+  response_mode text NOT NULL DEFAULT 'overlay',
   role_required text NOT NULL DEFAULT 'viewer',
   cooldown_seconds integer NOT NULL DEFAULT 10,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -94,6 +95,7 @@ CREATE TABLE IF NOT EXISTS bot_commands (
 );
 
 ALTER TABLE bot_commands ALTER COLUMN action SET DEFAULT 'ticker';
+ALTER TABLE bot_commands ADD COLUMN IF NOT EXISTS response_mode text NOT NULL DEFAULT 'overlay';
 
 CREATE TABLE IF NOT EXISTS bot_timers (
   id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),

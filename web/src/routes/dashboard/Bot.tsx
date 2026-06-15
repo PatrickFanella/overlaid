@@ -58,6 +58,7 @@ type CommandDraft = {
   name: string;
   response: string;
   action: 'ticker' | 'alert';
+  responseMode: 'overlay' | 'chat' | 'both';
   roleRequired: 'viewer' | 'moderator' | 'broadcaster';
   cooldownSeconds: number;
   enabled: boolean;
@@ -83,7 +84,7 @@ type ModerationDraft = {
 };
 
 const defaultTimerDraft: TimerDraft = { name: '', intervalSeconds: 300, response: '', action: 'ticker', enabled: true };
-const defaultCommandDraft: CommandDraft = { name: '', response: '', action: 'ticker', roleRequired: 'viewer', cooldownSeconds: 10, enabled: true };
+const defaultCommandDraft: CommandDraft = { name: '', response: '', action: 'ticker', responseMode: 'overlay', roleRequired: 'viewer', cooldownSeconds: 10, enabled: true };
 const defaultCounterDraft = { name: '', value: 0 };
 const defaultQuoteDraft = { text: '', author: '' };
 const defaultModerationDraft: ModerationDraft = { name: '', enabled: true, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
@@ -408,13 +409,21 @@ function BotCommandsPanel({
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
       <p className="hud-label">Bot commands</p>
-      <p className="mt-1 text-sm text-zinc-300">Create safe Twitch chat responses. Custom commands can only publish ticker or alert overlays; they do not run scripts, call APIs, or send outbound chat.</p>
+      <p className="mt-1 text-sm text-zinc-300">Create safe Twitch chat responses. Custom commands can publish ticker/alert overlays, send guarded Twitch chat replies, or both. They do not run scripts, call arbitrary APIs, or trigger OBS actions.</p>
       {commands?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">commands unavailable :: {commands.loadError}</p> : null}
 
-      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_8rem_10rem_8rem]">
+      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_8rem_8rem_10rem_8rem]">
         <label className="grid gap-1 text-xs text-zinc-300">
           Command name
           <input className="hud-input" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="discord" />
+        </label>
+        <label className="grid gap-1 text-xs text-zinc-300">
+          Response mode
+          <select className="hud-input" value={draft.responseMode} onChange={(event) => onDraftChange({ ...draft, responseMode: event.target.value as CommandDraft['responseMode'] })}>
+            <option value="overlay">Overlay</option>
+            <option value="chat">Chat</option>
+            <option value="both">Both</option>
+          </select>
         </label>
         <label className="grid gap-1 text-xs text-zinc-300">
           Action
@@ -460,7 +469,7 @@ function BotCommandsPanel({
               <strong className="text-cyan-100">!{command.name}</strong>
               <span className="hud-chip hud-chip--square">{command.enabled ? 'enabled' : 'paused'}</span>
             </div>
-            <p className="mt-1 text-zinc-300">{command.action} · {command.roleRequired}+ · {command.cooldownSeconds}s cooldown</p>
+            <p className="mt-1 text-zinc-300">{command.action} · {command.responseMode || 'overlay'} · {command.roleRequired}+ · {command.cooldownSeconds}s cooldown</p>
             <p className="mt-1 text-zinc-400">{command.response}</p>
             <div className="mt-2 flex gap-2">
               <button className="hud-button hud-button--small" type="button" onClick={() => onToggle(command)}>{command.enabled ? 'Pause' : 'Enable'}</button>

@@ -30,13 +30,13 @@ Implemented and verified in committed slices:
 - Bot audit storage, runtime permissions, existing Twitch command audit, and `/dashboard/bot` audit/status view.
 - Timer CRUD, dashboard management, safe template rendering, and enabled timer runtime dispatch through ticker/alert events.
 - Safe custom response commands with role/cooldown checks, template variables, dashboard management, and preview rendering.
+- Guarded outbound Twitch chat replies for custom commands through `user:write:chat`, with per-command response mode `overlay`, `chat`, or `both`.
 - Counters and quotes with dashboard/API management, chat commands, and `{count:name}` / `{quote:random}` variables.
 - Channel-point rule enrichment with cooldown seconds and fulfillment notes.
 - Moderation foundation: blocked-term rules, dry-run matching, guarded manual Twitch delete/timeout/ban/unban actions with required scopes, and nuke-style dry-run planning over recent chat history.
 
 Deliberately carried forward:
 
-- Outbound Twitch chat replies.
 - Arbitrary/custom API variables.
 - Twitch reward creation/fulfillment management through Helix.
 - Automatic moderation enforcement from rules.

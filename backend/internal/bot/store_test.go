@@ -66,11 +66,11 @@ func TestNormalizeTimerRejectsUnsafeValues(t *testing.T) {
 }
 
 func TestNormalizeCommand(t *testing.T) {
-	command, err := NormalizeCommand(Command{Name: " !Shout_Out ", Enabled: true, Response: "  Follow the channel  ", Action: " ALERT ", RoleRequired: " MODERATOR ", CooldownSeconds: 30})
+	command, err := NormalizeCommand(Command{Name: " !Shout_Out ", Enabled: true, Response: "  Follow the channel  ", Action: " ALERT ", ResponseMode: " BOTH ", RoleRequired: " MODERATOR ", CooldownSeconds: 30})
 	if err != nil {
 		t.Fatalf("expected valid command, got %v", err)
 	}
-	if command.Name != "shout_out" || command.Response != "Follow the channel" || command.Action != "alert" || command.RoleRequired != "moderator" || command.CooldownSeconds != 30 {
+	if command.Name != "shout_out" || command.Response != "Follow the channel" || command.Action != "alert" || command.ResponseMode != "both" || command.RoleRequired != "moderator" || command.CooldownSeconds != 30 {
 		t.Fatalf("unexpected normalized command: %#v", command)
 	}
 }
@@ -85,6 +85,7 @@ func TestNormalizeCommandRejectsUnsafeValues(t *testing.T) {
 		{name: "reserved name", command: Command{Name: "alert", Response: "ok", Action: "ticker", RoleRequired: "viewer"}},
 		{name: "empty response", command: Command{Name: "hello", Action: "ticker", RoleRequired: "viewer"}},
 		{name: "unsupported action", command: Command{Name: "hello", Response: "ok", Action: "ban", RoleRequired: "viewer"}},
+		{name: "unsupported response mode", command: Command{Name: "hello", Response: "ok", Action: "ticker", ResponseMode: "whisper", RoleRequired: "viewer"}},
 		{name: "unsupported role", command: Command{Name: "hello", Response: "ok", Action: "ticker", RoleRequired: "admin"}},
 		{name: "bad cooldown", command: Command{Name: "hello", Response: "ok", Action: "ticker", RoleRequired: "viewer", CooldownSeconds: 4000}},
 	}

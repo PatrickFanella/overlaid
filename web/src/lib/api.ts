@@ -84,6 +84,7 @@ export type BotCommand = {
   enabled: boolean;
   response: string;
   action: 'ticker' | 'alert' | string;
+  responseMode: 'overlay' | 'chat' | 'both' | string;
   roleRequired: 'viewer' | 'moderator' | 'broadcaster' | string;
   cooldownSeconds: number;
   createdAt: string;
@@ -118,6 +119,7 @@ export type BotCommandPayload = {
   enabled: boolean;
   response: string;
   action: 'ticker' | 'alert';
+  responseMode: 'overlay' | 'chat' | 'both';
   roleRequired: 'viewer' | 'moderator' | 'broadcaster';
   cooldownSeconds: number;
 };
