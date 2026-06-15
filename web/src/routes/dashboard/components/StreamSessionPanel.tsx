@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { endStreamSession, fetchStreamSessionReport, startStreamSession, type StreamSession, type StreamSessionReport, type StreamSessionResponse } from '../../../lib/api';
 import { createRehearsalSteps } from '../../../lib/rehearsal';
+import { formatSessionReportSummary } from '../../../lib/sessionReports';
 import { EventHistoryPanel } from './EventHistoryPanel';
 
 type StreamSessionPanelProps = {
@@ -69,6 +70,23 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
     }
   }
 
+  async function copyLatestReportSummary(sessionId: string) {
+    setBusy(true);
+    setReportError('');
+    setMessage('Copying latest report summary…');
+    try {
+      const next = report?.session.id === sessionId ? report : await fetchStreamSessionReport(sessionId, 100, apiBaseUrl, operatorSecret);
+      setReport(next);
+      await copyText(formatSessionReportSummary(next));
+      setMessage('Latest report summary copied.');
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'Unable to copy report summary.');
+      setMessage('');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function runPreflightRehearsal() {
     setBusy(true);
     setReport(null);
@@ -122,6 +140,7 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
 
   const current = status?.current;
   const recent = status?.recent ?? [];
+  const latestSession = recent[0] ?? current;
 
   return (
     <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
@@ -135,6 +154,7 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
       </div>
 
       {error || status?.loadError ? <p className="mt-3 text-sm text-rose-300">{error || status?.loadError}</p> : null}
+      {latestSession ? <LatestReportSummary session={latestSession} report={report?.session.id === latestSession.id ? report : null} busy={busy} onOpen={() => void loadReport(latestSession.id)} onCopy={() => void copyLatestReportSummary(latestSession.id)} /> : null}
       {current ? <SessionCard session={current} label="Current" /> : <p className="mt-3 text-sm text-zinc-400">No active session. Start one before rehearsal or going live.</p>}
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -202,6 +222,32 @@ function SessionCard({ session, label }: { session: StreamSession; label: string
   );
 }
 
+function LatestReportSummary({ session, report, busy, onOpen, onCopy }: { session: StreamSession; report: StreamSessionReport | null; busy: boolean; onOpen: () => void; onCopy: () => void }) {
+  const degradedSnapshots = report?.snapshots.filter((snapshot) => snapshot.status !== 'ok').length ?? 0;
+  return (
+    <article className="hud-panel hud-corners hud-panel--flat hud-compact-card mt-3 hud-accent-cyan">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="hud-kicker">Latest report · {session.id.slice(0, 8)}</p>
+          <p className="mt-1 text-sm font-bold text-white">{session.title}</p>
+          <p className="mt-1 text-xs text-zinc-400">
+            {session.eventCount} tagged events · {session.endedAt ? `ended ${new Date(session.endedAt).toLocaleString()}` : 'still open'}
+            {report ? ` · ${report.snapshots.length} snapshots · ${degradedSnapshots} degraded` : ''}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy} onClick={onOpen}>
+            Open latest report
+          </button>
+          <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy} onClick={onCopy}>
+            Copy summary
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function ReadinessSnapshotGrid({ snapshots }: { snapshots: StreamSessionReport['snapshots'] }) {
   return (
     <div className="grid gap-2 md:grid-cols-2">
@@ -229,4 +275,12 @@ function ReadinessSnapshotGrid({ snapshots }: { snapshots: StreamSessionReport['
 
 function isStreamSession(value: StreamSession | StreamSessionResponse): value is StreamSession {
   return 'id' in value;
+}
+
+async function copyText(value: string) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  throw new Error('Clipboard is unavailable in this browser context.');
 }
