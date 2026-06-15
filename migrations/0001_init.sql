@@ -57,3 +57,50 @@ CREATE TABLE IF NOT EXISTS stream_session_readiness_snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS stream_session_readiness_snapshots_session_idx ON stream_session_readiness_snapshots (session_id, captured_at ASC);
+
+CREATE TABLE IF NOT EXISTS bot_audit_events (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  source text NOT NULL,
+  actor_id text NOT NULL DEFAULT '',
+  actor_login text NOT NULL DEFAULT '',
+  actor_display_name text NOT NULL DEFAULT '',
+  actor_role text NOT NULL DEFAULT 'viewer',
+  trigger text NOT NULL DEFAULT '',
+  command text NOT NULL DEFAULT '',
+  action text NOT NULL DEFAULT '',
+  result text NOT NULL,
+  reason text NOT NULL DEFAULT '',
+  event_id text REFERENCES stream_events(id) ON DELETE SET NULL,
+  stream_session_id text REFERENCES stream_sessions(id) ON DELETE SET NULL,
+  data jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS bot_audit_events_created_at_idx ON bot_audit_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS bot_audit_events_source_idx ON bot_audit_events (source);
+CREATE INDEX IF NOT EXISTS bot_audit_events_command_idx ON bot_audit_events (command);
+CREATE INDEX IF NOT EXISTS bot_audit_events_session_idx ON bot_audit_events (stream_session_id);
+
+CREATE TABLE IF NOT EXISTS bot_commands (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  name text NOT NULL UNIQUE,
+  enabled boolean NOT NULL DEFAULT true,
+  response text NOT NULL DEFAULT '',
+  action text NOT NULL DEFAULT 'response',
+  role_required text NOT NULL DEFAULT 'viewer',
+  cooldown_seconds integer NOT NULL DEFAULT 10,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS bot_timers (
+  id text PRIMARY KEY DEFAULT encode(gen_random_bytes(16), 'hex'),
+  name text NOT NULL UNIQUE,
+  enabled boolean NOT NULL DEFAULT true,
+  interval_seconds integer NOT NULL DEFAULT 300,
+  response text NOT NULL DEFAULT '',
+  action text NOT NULL DEFAULT 'ticker',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  last_run_at timestamptz
+);
