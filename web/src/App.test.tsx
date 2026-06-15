@@ -32,6 +32,7 @@ import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
 import { TwitchInteractionsManager } from './routes/dashboard/components/TwitchInteractionsManager';
 import { RecoveryConsolePanel } from './routes/dashboard/components/RecoveryConsolePanel';
 import { SessionLogPanel } from './routes/dashboard/components/SessionLogPanel';
+import { validateQuickActionsAgainstOBS } from './lib/obsValidation';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -763,6 +764,21 @@ describe('quick action sequence utilities', () => {
     expect(html).toContain('success');
     expect(html).toContain('Refresh Alerts');
     expect(html).toContain('Action completed. (120ms)');
+  });
+
+  it('validates quick-action scene and input names against OBS', () => {
+    const issues = validateQuickActionsAgainstOBS(
+      [
+        { id: 'main', label: 'Go Main', kind: 'setScene', sceneName: 'Missing Scene' },
+        { id: 'alerts', label: 'Refresh Alerts', kind: 'refreshSource', inputName: 'ALERTS' },
+      ],
+      ['40_MAIN'],
+      ['ALERTS'],
+    );
+
+    expect(issues).toEqual([
+      { actionId: 'main', label: 'Go Main', field: 'sceneName', value: 'Missing Scene', message: 'Missing OBS scene: Missing Scene' },
+    ]);
   });
 
   it('resolves atomic quick actions in sequence order', () => {

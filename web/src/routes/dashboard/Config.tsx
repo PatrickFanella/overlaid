@@ -10,6 +10,7 @@ import {
   type QuickAction,
 } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
+import { validateQuickActionsAgainstOBS, type OBSValidationIssue } from '../../lib/obsValidation';
 import { DashboardShell } from './DashboardShell';
 import { AutomationProfileManager } from './components/AutomationProfileManager';
 import { TwitchInteractionsManager } from './components/TwitchInteractionsManager';
@@ -22,8 +23,10 @@ export function DashboardConfigPage() {
   const [sharedConfigStatus, setSharedConfigStatus] = useState('');
   const [obsImportStatus, setOBSImportStatus] = useState('');
   const [obsSceneNames, setOBSSceneNames] = useState<string[]>([]);
+  const [obsInputNames, setOBSInputNames] = useState<string[]>([]);
   const [obsBrowserInputNames, setOBSBrowserInputNames] = useState<string[]>([]);
   const [obsAssignments, setOBSAssignments] = useState<OBSAssignments>({ mainScene: '', brbScene: '', alertsSource: '' });
+  const [obsValidationIssues, setOBSValidationIssues] = useState<OBSValidationIssue[]>([]);
 
   useEffect(() => {
     setOperatorSecret(loadOperatorSecret());
@@ -74,11 +77,14 @@ export function DashboardConfigPage() {
     try {
       const [scenes, inputs] = await Promise.all([fetchOBSScenes(apiBaseUrl), fetchOBSInputs(apiBaseUrl)]);
       const sceneNames = scenes.scenes.map((scene) => scene.sceneName);
+      const inputNames = inputs.map((input) => input.inputName);
       const browserInputNames = inputs.filter((input) => isBrowserInput(input)).map((input) => input.inputName);
       const nextAssignments = suggestOBSAssignments(sceneNames, browserInputNames, config);
       setOBSSceneNames(sceneNames);
+      setOBSInputNames(inputNames);
       setOBSBrowserInputNames(browserInputNames);
       setOBSAssignments(nextAssignments);
+      setOBSValidationIssues(validateQuickActionsAgainstOBS(config.quickActions, sceneNames, inputNames));
       setOBSImportStatus('OBS names loaded. Review assignments, then apply.');
     } catch (error) {
       setOBSImportStatus(error instanceof Error ? error.message : 'Failed to load OBS names.');
@@ -88,7 +94,18 @@ export function DashboardConfigPage() {
   function applyOBSAssignments() {
     const next = applyOBSAssignmentsToConfig(config, obsAssignments);
     updateConfig(next);
+    setOBSValidationIssues(validateQuickActionsAgainstOBS(next.quickActions, obsSceneNames, obsInputNames));
     setOBSImportStatus('Applied OBS assignments to quick actions. Use Save shared if you want other browsers to pull them.');
+  }
+
+  function validateOBSAssignments() {
+    if (obsSceneNames.length === 0 && obsInputNames.length === 0) {
+      setOBSImportStatus('Load from OBS before validating quick actions.');
+      return;
+    }
+    const issues = validateQuickActionsAgainstOBS(config.quickActions, obsSceneNames, obsInputNames);
+    setOBSValidationIssues(issues);
+    setOBSImportStatus(issues.length === 0 ? 'All OBS quick-action scene/source names are valid.' : `${issues.length} OBS assignment issue(s) found.`);
   }
 
   function setMprisDecision(mprisDecision: DashboardConfig['mprisDecision']) {
@@ -168,6 +185,9 @@ export function DashboardConfigPage() {
             <button className="hud-action-button hud-action-button--compact" type="button" disabled={!obsAssignments.mainScene && !obsAssignments.brbScene && !obsAssignments.alertsSource} onClick={applyOBSAssignments}>
               Apply assignments
             </button>
+            <button className="hud-action-button hud-action-button--compact" type="button" onClick={validateOBSAssignments}>
+              Validate quick actions
+            </button>
           </div>
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -175,6 +195,20 @@ export function DashboardConfigPage() {
           <AssignmentSelect label="BRB / standby scene" value={obsAssignments.brbScene} options={obsSceneNames} onChange={(brbScene) => setOBSAssignments((current) => ({ ...current, brbScene }))} />
           <AssignmentSelect label="Alerts browser source" value={obsAssignments.alertsSource} options={obsBrowserInputNames} onChange={(alertsSource) => setOBSAssignments((current) => ({ ...current, alertsSource }))} />
         </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className={`hud-chip hud-chip--square ${obsValidationIssues.length === 0 && (obsSceneNames.length > 0 || obsInputNames.length > 0) ? 'hud-accent-emerald' : obsValidationIssues.length > 0 ? 'hud-accent-rose' : ''}`}>
+            {obsSceneNames.length || obsInputNames.length ? `${obsValidationIssues.length} OBS issues` : 'OBS not loaded'}
+          </span>
+          <span className="hud-chip hud-chip--square">{obsSceneNames.length} scenes</span>
+          <span className="hud-chip hud-chip--square">{obsInputNames.length} inputs</span>
+        </div>
+        {obsValidationIssues.length > 0 ? (
+          <ul className="mt-3 grid gap-1 rounded-2xl border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-xs text-rose-100">
+            {obsValidationIssues.slice(0, 8).map((issue) => (
+              <li key={`${issue.actionId}:${issue.field}:${issue.value}`}>{issue.label}: {issue.message}</li>
+            ))}
+          </ul>
+        ) : null}
         {obsImportStatus ? <p className="mt-3 text-xs text-zinc-300">{obsImportStatus}</p> : null}
       </section>
 
