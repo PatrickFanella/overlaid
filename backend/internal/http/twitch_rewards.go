@@ -55,6 +55,20 @@ type twitchRedemptionStatusResponse struct {
 	Status string `json:"status"`
 	Result string `json:"result"`
 }
+type twitchRewardCreateRequest struct {
+	Title             string `json:"title"`
+	Prompt            string `json:"prompt,omitempty"`
+	Cost              int    `json:"cost"`
+	Enabled           bool   `json:"enabled"`
+	UserInputRequired bool   `json:"userInputRequired"`
+}
+type twitchRewardDeleteRequest struct {
+	Confirm bool `json:"confirm"`
+}
+type twitchRewardMutationResponse struct {
+	Reward *twitchReward `json:"reward,omitempty"`
+	Result string        `json:"result"`
+}
 
 func (s *Server) twitchRewards(w http.ResponseWriter, r *http.Request) {
 	rewards, err := s.listTwitchRewards(r.Context(), r.URL.Query().Get("manageable") != "false")
@@ -63,6 +77,35 @@ func (s *Server) twitchRewards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, twitchRewardsResponse{Rewards: rewards})
+}
+
+func (s *Server) twitchRewardCreate(w http.ResponseWriter, r *http.Request) {
+	var request twitchRewardCreateRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	reward, err := s.createTwitchReward(r.Context(), request)
+	if err != nil {
+		http.Error(w, err.Error(), twitchRewardsHTTPStatus(err))
+		return
+	}
+	writeJSON(w, twitchRewardMutationResponse{Reward: reward, Result: "created"})
+}
+
+func (s *Server) twitchRewardDelete(w http.ResponseWriter, r *http.Request) {
+	var request twitchRewardDeleteRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if !request.Confirm {
+		http.Error(w, "confirm is required to delete a Twitch reward", http.StatusBadRequest)
+		return
+	}
+	if err := s.deleteTwitchReward(r.Context(), r.PathValue("rewardId")); err != nil {
+		http.Error(w, err.Error(), twitchRewardsHTTPStatus(err))
+		return
+	}
+	writeJSON(w, twitchRewardMutationResponse{Result: "deleted"})
 }
 
 func (s *Server) twitchRewardRedemptions(w http.ResponseWriter, r *http.Request) {
@@ -167,6 +210,58 @@ func (s *Server) updateTwitchRedemptionStatus(ctx context.Context, rewardID, red
 	}
 	query := url.Values{"broadcaster_id": {token.UserID}, "reward_id": {strings.TrimSpace(rewardID)}, "id": {strings.TrimSpace(redemptionID)}}
 	return s.twitchRewardsRequest(ctx, http.MethodPatch, twitchRewardsEndpoint+"/redemptions?"+query.Encode(), token.AccessToken, map[string]string{"status": status}, http.StatusOK, nil)
+}
+
+func (s *Server) createTwitchReward(ctx context.Context, request twitchRewardCreateRequest) (*twitchReward, error) {
+	token, err := s.rewardToken(ctx, "channel:manage:redemptions")
+	if err != nil {
+		return nil, err
+	}
+	title := strings.TrimSpace(request.Title)
+	prompt := strings.TrimSpace(request.Prompt)
+	if title == "" || len(title) > 45 {
+		return nil, fmt.Errorf("reward title must be 1-45 characters")
+	}
+	if request.Cost < 1 {
+		return nil, fmt.Errorf("reward cost must be at least 1")
+	}
+	if len(prompt) > 200 {
+		return nil, fmt.Errorf("reward prompt must be 200 characters or fewer")
+	}
+	payload := map[string]any{
+		"title":                  title,
+		"cost":                   request.Cost,
+		"is_enabled":             request.Enabled,
+		"is_user_input_required": request.UserInputRequired,
+	}
+	if prompt != "" {
+		payload["prompt"] = prompt
+	}
+	query := url.Values{"broadcaster_id": {token.UserID}}
+	var decoded struct {
+		Data []twitchReward `json:"data"`
+	}
+	if err := s.twitchRewardsRequest(ctx, http.MethodPost, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, payload, http.StatusOK, &decoded); err != nil {
+		return nil, err
+	}
+	if len(decoded.Data) == 0 {
+		return nil, fmt.Errorf("twitch rewards failed: create returned no reward")
+	}
+	decoded.Data[0].Manageable = true
+	return &decoded.Data[0], nil
+}
+
+func (s *Server) deleteTwitchReward(ctx context.Context, rewardID string) error {
+	token, err := s.rewardToken(ctx, "channel:manage:redemptions")
+	if err != nil {
+		return err
+	}
+	rewardID = strings.TrimSpace(rewardID)
+	if rewardID == "" {
+		return fmt.Errorf("reward id is required")
+	}
+	query := url.Values{"broadcaster_id": {token.UserID}, "id": {rewardID}}
+	return s.twitchRewardsRequest(ctx, http.MethodDelete, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, nil, http.StatusNoContent, nil)
 }
 
 func (s *Server) twitchRewardsRequest(ctx context.Context, method, targetURL, accessToken string, payload any, successStatus int, out any) error {

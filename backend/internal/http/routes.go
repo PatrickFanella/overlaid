@@ -13,6 +13,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/twitch/interactions", s.requireOperator(s.twitchInteractions))
 	s.mux.HandleFunc("PUT /api/twitch/interactions", s.requireOperator(s.putTwitchInteractions))
 	s.mux.HandleFunc("GET /api/twitch/rewards", s.requireOperator(s.twitchRewards))
+	s.mux.HandleFunc("POST /api/twitch/rewards", s.requireOperator(s.twitchRewardCreate))
+	s.mux.HandleFunc("DELETE /api/twitch/rewards/{rewardId}", s.requireOperator(s.twitchRewardDelete))
 	s.mux.HandleFunc("GET /api/twitch/rewards/{rewardId}/redemptions", s.requireOperator(s.twitchRewardRedemptions))
 	s.mux.HandleFunc("POST /api/twitch/rewards/{rewardId}/redemptions/{redemptionId}", s.requireOperator(s.twitchRewardRedemptionStatus))
 	s.mux.HandleFunc("GET /api/dashboard/config", s.requireOperator(s.dashboardConfigGet))

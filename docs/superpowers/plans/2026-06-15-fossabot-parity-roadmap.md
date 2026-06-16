@@ -34,15 +34,13 @@ Implemented and verified in committed slices:
 - Operator-configured custom API variables using `{api:name}` with GET-only HTTPS fetching, caps, caching, and private-host blocking.
 - Counters and quotes with dashboard/API management, chat commands, and `{count:name}` / `{quote:random}` variables.
 - Channel-point rule enrichment with cooldown seconds and fulfillment notes.
-- Twitch reward inventory and unfulfilled redemption queue controls for fulfill/cancel actions.
+- Twitch reward inventory, minimal reward creation/deletion, and unfulfilled redemption queue controls for fulfill/cancel actions.
 - Moderation foundation: blocked-term rules, dry-run matching, opt-in automatic enforcement, guarded manual Twitch delete/timeout/ban/unban actions with required scopes, and nuke-style dry-run planning over recent chat history.
 
 Deliberately carried forward:
 
 - Arbitrary inline/custom API URLs supplied by chat or templates.
-- Twitch reward creation/deletion management through Helix.
-- Safer enforcement UX for bulk/nuke workflows.
-- Full nuke execution/radiation/rollback workflow.
+- Advanced Twitch reward fields and safer disable/pause-first lifecycle controls.
 - Cloud-hosted uptime parity with FossaBot.
 
 ---
@@ -258,8 +256,8 @@ Build the spine before adding feature breadth.
 
 - Expand exact-title rules into richer reward mappings.
 - Add per-reward cooldowns and templates.
-- Add reward queue view and fulfillment notes.
-- Optionally create/manage Twitch rewards only after scoped API research.
+- Reward queue shows fulfillment notes alongside selected rewards and matching redemptions.
+- Twitch reward management has minimal create/delete controls after scoped API research; advanced fields and safer disable/pause lifecycle remain follow-up.
 
 ---
 

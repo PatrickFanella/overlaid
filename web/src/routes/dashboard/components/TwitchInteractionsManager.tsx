@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  createTwitchReward,
+  deleteTwitchReward,
   fetchTwitchInteractions,
   fetchTwitchRewardRedemptions,
   fetchTwitchRewards,
@@ -39,6 +41,8 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
   const [redemptions, setRedemptions] = useState<TwitchRedemption[]>([]);
   const [selectedRewardId, setSelectedRewardId] = useState('');
   const [rewardError, setRewardError] = useState('');
+  const [rewardDraft, setRewardDraft] = useState({ title: '', prompt: '', cost: 100, enabled: false, userInputRequired: false });
+  const [deleteRewardConfirmed, setDeleteRewardConfirmed] = useState(false);
   const selectedReward = useMemo(() => rewards.find((reward) => reward.id === selectedRewardId), [rewards, selectedRewardId]);
   const selectedRewardRule = useMemo(() => (selectedReward ? findMatchingChannelPointRule(rules.channelPointRules, selectedReward.title) : undefined), [rules.channelPointRules, selectedReward]);
   const redemptionsWithRules = useMemo(
@@ -121,6 +125,7 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
       const response = await fetchTwitchRewards(apiBaseUrl, operatorSecret);
       setRewards(response.rewards ?? []);
       setSelectedRewardId(response.rewards?.[0]?.id ?? '');
+      setDeleteRewardConfirmed(false);
       setRewardError('');
     } catch (error) {
       setRewardError(error instanceof Error ? error.message : 'Failed to load rewards.');
@@ -144,6 +149,35 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
       await loadRedemptions(redemption.reward.id || selectedRewardId);
     } catch (error) {
       setRewardError(error instanceof Error ? error.message : 'Failed to update redemption.');
+    }
+  }
+
+  async function createReward() {
+    if (!rewardDraft.title.trim()) {
+      setRewardError('Reward title is required.');
+      return;
+    }
+    if (rewardDraft.cost < 1) {
+      setRewardError('Reward cost must be at least 1.');
+      return;
+    }
+    try {
+      await createTwitchReward(rewardDraft, apiBaseUrl, operatorSecret);
+      setRewardDraft({ title: '', prompt: '', cost: 100, enabled: false, userInputRequired: false });
+      await loadRewards();
+    } catch (error) {
+      setRewardError(error instanceof Error ? error.message : 'Failed to create reward.');
+    }
+  }
+
+  async function deleteReward() {
+    if (!selectedRewardId || !deleteRewardConfirmed) return;
+    try {
+      await deleteTwitchReward(selectedRewardId, apiBaseUrl, operatorSecret);
+      setRedemptions([]);
+      await loadRewards();
+    } catch (error) {
+      setRewardError(error instanceof Error ? error.message : 'Failed to delete reward.');
     }
   }
 
@@ -272,15 +306,45 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="hud-kicker">Reward queue</p>
-            <p className="mt-1 text-xs text-zinc-400">Load manageable rewards and fulfill/cancel unfulfilled redemptions. Creation/deletion stays out of this safe pass.</p>
+            <p className="mt-1 text-xs text-zinc-400">Load manageable rewards, create simple rewards, and fulfill/cancel unfulfilled redemptions. Delete requires confirmation and can fulfill pending redemptions on Twitch.</p>
           </div>
           <button className="hud-chip" type="button" onClick={loadRewards}>Load rewards</button>
         </div>
         {rewardError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">{rewardError}</p> : null}
+        <div className="mt-3 grid gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3 md:grid-cols-[1fr_8rem_auto_auto] md:items-end">
+          <label className="grid gap-1 text-xs text-zinc-300">
+            <span className="hud-kicker">New reward title</span>
+            <input className="hud-input" type="text" maxLength={45} value={rewardDraft.title} onChange={(event) => setRewardDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Hydrate break" />
+          </label>
+          <label className="grid gap-1 text-xs text-zinc-300">
+            <span className="hud-kicker">Cost</span>
+            <input className="hud-input" type="number" min={1} value={rewardDraft.cost} onChange={(event) => setRewardDraft((current) => ({ ...current, cost: Number(event.target.value) }))} />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <input type="checkbox" checked={rewardDraft.enabled} onChange={(event) => setRewardDraft((current) => ({ ...current, enabled: event.target.checked }))} />
+            Enabled
+          </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <input type="checkbox" checked={rewardDraft.userInputRequired} onChange={(event) => setRewardDraft((current) => ({ ...current, userInputRequired: event.target.checked }))} />
+            Require input
+          </label>
+          <label className="grid gap-1 text-xs text-zinc-300 md:col-span-3">
+            <span className="hud-kicker">Prompt</span>
+            <input className="hud-input" type="text" maxLength={200} value={rewardDraft.prompt} onChange={(event) => setRewardDraft((current) => ({ ...current, prompt: event.target.value }))} placeholder="Optional viewer prompt" />
+          </label>
+          <button className="hud-chip self-end" type="button" onClick={createReward} disabled={!rewardDraft.title.trim()}>
+            Create reward
+          </button>
+        </div>
         {rewards.length > 0 ? (
           <div className="mt-3 flex flex-wrap items-end gap-2">
-            <label className="grid min-w-64 gap-1 text-xs text-zinc-300"><span className="hud-kicker">Reward</span><select className="hud-input" value={selectedRewardId} onChange={(event) => setSelectedRewardId(event.target.value)}>{rewards.map((reward) => <option key={reward.id} value={reward.id}>{reward.title} · {reward.cost}</option>)}</select></label>
+            <label className="grid min-w-64 gap-1 text-xs text-zinc-300"><span className="hud-kicker">Reward</span><select className="hud-input" value={selectedRewardId} onChange={(event) => { setSelectedRewardId(event.target.value); setDeleteRewardConfirmed(false); }}>{rewards.map((reward) => <option key={reward.id} value={reward.id}>{reward.title} · {reward.cost}</option>)}</select></label>
             <button className="hud-chip" type="button" onClick={() => loadRedemptions()}>Load unfulfilled</button>
+            <label className="flex items-center gap-2 text-xs text-amber-100">
+              <input type="checkbox" checked={deleteRewardConfirmed} onChange={(event) => setDeleteRewardConfirmed(event.target.checked)} />
+              Confirm delete
+            </label>
+            <button className="hud-chip" type="button" onClick={deleteReward} disabled={!deleteRewardConfirmed || !selectedRewardId}>Delete selected</button>
           </div>
         ) : null}
         {selectedReward ? (
