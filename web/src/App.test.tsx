@@ -16,7 +16,7 @@ import {
 } from './lib/dashboardConfig';
 import { formatQuickActionRunResult, getConfirmableActionLabel, getVisibleQuickActions, nextConfirmableActionState } from './lib/controlActions';
 import { buildHideBRBPayload, buildShowBRBPayload, parseBRBItems } from './lib/brbPayloads';
-import { normalizeImportedTwitchInteractionRules, updateTwitchAliasRule, updateTwitchRewardRule } from './lib/twitchInteractionRules';
+import { findMatchingChannelPointRule, normalizeImportedTwitchInteractionRules, updateTwitchAliasRule, updateTwitchRewardRule } from './lib/twitchInteractionRules';
 import {
   exportDashboardConfig,
   getActiveAutomationProfile,
@@ -957,5 +957,18 @@ describe('twitch interaction rule helpers', () => {
     expect(original.channelPointRules[0].action).toBe('ignore');
     expect(updatedAliasRules.chatAliases[0]).not.toBe(original.chatAliases[0]);
     expect(updatedRewardRules.channelPointRules[0]).not.toBe(original.channelPointRules[0]);
+  });
+
+  it('finds enabled channel point rules for reward queue notes', () => {
+    const rule = findMatchingChannelPointRule(
+      [
+        { rewardTitle: 'Hydrate', action: 'ignore', enabled: false, fulfillmentNote: 'disabled note' },
+        { rewardTitle: ' Hydrate ', action: 'alert', enabled: true, fulfillmentNote: 'Check the water timer.' },
+      ],
+      'hydrate',
+    );
+
+    expect(rule?.fulfillmentNote).toBe('Check the water timer.');
+    expect(findMatchingChannelPointRule([], 'hydrate')).toBeUndefined();
   });
 });

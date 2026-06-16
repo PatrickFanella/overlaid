@@ -50,11 +50,14 @@ Examples:
 
 The config page can load manageable Twitch rewards, then load unfulfilled redemptions for a selected reward. Fulfill/cancel controls call Twitch Helix redemption status updates with `channel:manage:redemptions`.
 
+When a loaded reward or redemption title matches an enabled channel point rule, the reward queue shows the saved fulfillment note next to the selected reward context and each matching redemption. Use this for operator-only instructions such as “refund if no input”, “read aloud after current segment”, or “check OBS scene before fulfilling”.
+
 Safety boundaries:
 
 - Reward creation/deletion is not exposed in this pass.
 - Reward listing defaults to manageable rewards only.
 - Fulfill/cancel only applies to explicit operator-selected unfulfilled redemptions.
+- Fulfillment notes are display-only guidance; they do not automatically fulfill, cancel, refund, or create rewards.
 - If Twitch status shows `missingScopes` for `channel:manage:redemptions`, re-run Twitch login and re-consent before fulfillment controls can work.
 
 ## Backup and recovery

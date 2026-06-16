@@ -14,6 +14,7 @@ import {
 import {
   aliasCommands,
   createEmptyTwitchInteractionRules,
+  findMatchingChannelPointRule,
   normalizeImportedTwitchInteractionRules,
   rewardActions,
   updateTwitchAliasRule,
@@ -38,6 +39,12 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
   const [redemptions, setRedemptions] = useState<TwitchRedemption[]>([]);
   const [selectedRewardId, setSelectedRewardId] = useState('');
   const [rewardError, setRewardError] = useState('');
+  const selectedReward = useMemo(() => rewards.find((reward) => reward.id === selectedRewardId), [rewards, selectedRewardId]);
+  const selectedRewardRule = useMemo(() => (selectedReward ? findMatchingChannelPointRule(rules.channelPointRules, selectedReward.title) : undefined), [rules.channelPointRules, selectedReward]);
+  const redemptionsWithRules = useMemo(
+    () => redemptions.map((redemption) => ({ redemption, matchedRule: findMatchingChannelPointRule(rules.channelPointRules, redemption.reward.title) })),
+    [redemptions, rules.channelPointRules],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -276,9 +283,35 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
             <button className="hud-chip" type="button" onClick={() => loadRedemptions()}>Load unfulfilled</button>
           </div>
         ) : null}
+        {selectedReward ? (
+          <div className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-3 text-xs text-zinc-200">
+            <p className="hud-kicker">Selected reward context</p>
+            <p className="mt-1 font-semibold text-cyan-100">
+              {selectedReward.title} · {selectedReward.cost}
+            </p>
+            {selectedRewardRule?.fulfillmentNote ? <p className="mt-1 text-zinc-200">Fulfillment note: {selectedRewardRule.fulfillmentNote}</p> : <p className="mt-1 text-zinc-400">No saved channel-point rule match.</p>}
+          </div>
+        ) : null}
         <div className="mt-3 grid gap-2">
           {redemptions.length === 0 ? <p className="text-xs text-zinc-400">No unfulfilled redemptions loaded.</p> : null}
-          {redemptions.map((redemption) => <article key={redemption.id} className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/5 p-3 text-xs"><p className="font-semibold text-fuchsia-100">{redemption.user_name || redemption.user_login} · {redemption.reward.title}</p><p className="mt-1 text-zinc-300">{redemption.user_input || 'No input'}</p><p className="mt-1 text-zinc-500">{redemption.status} · {redemption.redeemed_at}</p><div className="mt-2 flex gap-2"><button className="hud-chip" type="button" onClick={() => updateRedemption(redemption, 'FULFILLED')}>Fulfill</button><button className="hud-chip" type="button" onClick={() => updateRedemption(redemption, 'CANCELED')}>Cancel</button></div></article>)}
+          {redemptionsWithRules.map(({ redemption, matchedRule }) => (
+            <article key={redemption.id} className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/5 p-3 text-xs">
+              <p className="font-semibold text-fuchsia-100">
+                {redemption.user_name || redemption.user_login} · {redemption.reward.title}
+              </p>
+              {matchedRule?.fulfillmentNote ? <p className="mt-1 text-zinc-200">Fulfillment note: {matchedRule.fulfillmentNote}</p> : null}
+              <p className="mt-1 text-zinc-300">{redemption.user_input || 'No input'}</p>
+              <p className="mt-1 text-zinc-500">{redemption.status} · {redemption.redeemed_at}</p>
+              <div className="mt-2 flex gap-2">
+                <button className="hud-chip" type="button" onClick={() => updateRedemption(redemption, 'FULFILLED')}>
+                  Fulfill
+                </button>
+                <button className="hud-chip" type="button" onClick={() => updateRedemption(redemption, 'CANCELED')}>
+                  Cancel
+                </button>
+              </div>
+            </article>
+          ))}
         </div>
       </div>
 

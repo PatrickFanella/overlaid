@@ -80,3 +80,14 @@ export function updateTwitchRewardRule(rules: TwitchInteractionRules, index: num
   next.channelPointRules[index] = { ...next.channelPointRules[index], ...patch };
   return next;
 }
+
+function normalizeRewardTitle(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function findMatchingChannelPointRule(rules: ChannelPointRule[], rewardTitle: string) {
+  const normalizedRewardTitle = normalizeRewardTitle(rewardTitle);
+  if (!normalizedRewardTitle) return undefined;
+
+  return rules.find((rule) => rule.enabled && normalizeRewardTitle(rule.rewardTitle) === normalizedRewardTitle);
+}
