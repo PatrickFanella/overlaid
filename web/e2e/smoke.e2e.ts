@@ -9,15 +9,15 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByText('Live ops cockpit')).toBeVisible();
     await expect(page.getByText('Rehearsal audit')).toBeVisible();
 
-    await page.goto('/dashboard/config');
-    await expect(page.getByText('OBS import')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
-    await expect(page.getByText('Reward queue', { exact: true })).toBeVisible();
-
     await page.goto('/dashboard/control');
     await expect(page.getByRole('heading', { name: 'Stream control', exact: true })).toBeVisible();
     await expect(page.getByText('Quick actions', { exact: true })).toBeVisible();
 
+    await page.goto('/overlay/alerts');
+    await expect(page.getByText('Alert feed')).toBeVisible();
+  });
+
+  test('shows bot operations safety surfaces', async ({ page }) => {
     await page.goto('/dashboard/bot');
     await expect(page.getByText('Bot operations')).toBeVisible();
     await expect(page.getByText('Bot commands', { exact: true })).toBeVisible();
@@ -25,10 +25,17 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByText('Bot API variables', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot moderation dry-run', { exact: true })).toBeVisible();
     await expect(page.getByText('Nuke dry-run planner', { exact: true })).toBeVisible();
+    await expect(page.getByText('I reviewed this dry-run plan')).toBeVisible();
     await expect(page.getByText('Bot timers', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot audit', { exact: true })).toBeVisible();
+  });
 
-    await page.goto('/overlay/alerts');
-    await expect(page.getByText('Alert feed')).toBeVisible();
+  test('shows twitch reward queue lifecycle controls', async ({ page }) => {
+    await page.goto('/dashboard/config');
+    await expect(page.getByText('OBS import')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
+    await expect(page.getByText('Reward queue', { exact: true })).toBeVisible();
+    await expect(page.getByText('Load manageable rewards, create simple rewards')).toBeVisible();
+    await expect(page.getByText('Delete requires confirmation')).toBeVisible();
   });
 });
