@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"strings"
 	"sync"
@@ -40,6 +41,22 @@ type AuditRecorder interface {
 	RecordAudit(context.Context, AuditEvent) (AuditEvent, error)
 }
 
+type AuditOutcome struct {
+	Source           Source
+	ActorID          string
+	ActorLogin       string
+	ActorDisplayName string
+	ActorRole        Role
+	Trigger          string
+	Command          string
+	Action           string
+	Result           Result
+	Reason           string
+	EventID          string
+	StreamSessionID  string
+	Data             map[string]any
+}
+
 type Runtime struct {
 	recorder AuditRecorder
 	mu       sync.RWMutex
@@ -51,7 +68,7 @@ func NewRuntime(recorder AuditRecorder) *Runtime {
 }
 
 func (r *Runtime) Allowed(actor Role, required Role) bool {
-	return roleRank(NormalizeRole(actor)) >= roleRank(NormalizeRole(required))
+	return RoleAllows(actor, required)
 }
 
 func (r *Runtime) Record(ctx context.Context, event AuditEvent) {
@@ -61,6 +78,36 @@ func (r *Runtime) Record(ctx context.Context, event AuditEvent) {
 	if _, err := r.recorder.RecordAudit(ctx, event); err != nil {
 		r.setLastError(err.Error())
 		log.Printf("bot audit record failed: %v", err)
+	}
+}
+
+func (r *Runtime) RecordOutcome(ctx context.Context, outcome AuditOutcome) {
+	r.Record(ctx, AuditEventFromOutcome(outcome))
+}
+
+func AuditEventFromOutcome(outcome AuditOutcome) AuditEvent {
+	encoded := json.RawMessage(nil)
+	if outcome.Data != nil {
+		data, err := json.Marshal(outcome.Data)
+		if err != nil {
+			data = json.RawMessage(`{}`)
+		}
+		encoded = data
+	}
+	return AuditEvent{
+		Source:           string(outcome.Source),
+		ActorID:          strings.TrimSpace(outcome.ActorID),
+		ActorLogin:       strings.TrimSpace(outcome.ActorLogin),
+		ActorDisplayName: strings.TrimSpace(outcome.ActorDisplayName),
+		ActorRole:        string(NormalizeRole(outcome.ActorRole)),
+		Trigger:          strings.TrimSpace(outcome.Trigger),
+		Command:          strings.TrimSpace(outcome.Command),
+		Action:           strings.TrimSpace(outcome.Action),
+		Result:           string(outcome.Result),
+		Reason:           strings.TrimSpace(outcome.Reason),
+		EventID:          strings.TrimSpace(outcome.EventID),
+		StreamSessionID:  strings.TrimSpace(outcome.StreamSessionID),
+		Data:             encoded,
 	}
 }
 
@@ -92,6 +139,10 @@ func NormalizeRole(role Role) Role {
 	default:
 		return RoleViewer
 	}
+}
+
+func RoleAllows(actor Role, required Role) bool {
+	return roleRank(NormalizeRole(actor)) >= roleRank(NormalizeRole(required))
 }
 
 func roleRank(role Role) int {

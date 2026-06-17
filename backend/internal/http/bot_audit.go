@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
@@ -26,25 +25,22 @@ func (s *Server) recordBotAuditForEvent(ctx context.Context, event events.Event)
 	if boolData(data, "isBroadcaster") {
 		actorRole = bot.RoleBroadcaster
 	}
-	auditData, err := json.Marshal(map[string]any{
+	auditData := map[string]any{
 		"originalCommand": stringData(data, "originalCommand"),
 		"args":            stringData(data, "args"),
 		"alias":           boolData(data, "alias"),
 		"custom":          boolData(data, "custom"),
 		"eventSeverity":   string(event.Severity),
-	})
-	if err != nil {
-		auditData = json.RawMessage(`{}`)
 	}
-	s.botRuntime.Record(ctx, bot.AuditEvent{
-		Source:           string(bot.SourceChat),
+	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
+		Source:           bot.SourceChat,
 		ActorLogin:       stringData(data, "login"),
 		ActorDisplayName: stringData(data, "user"),
-		ActorRole:        string(actorRole),
+		ActorRole:        actorRole,
 		Trigger:          "!" + firstNonEmptyString(stringData(data, "originalCommand"), command),
 		Command:          command,
 		Action:           action,
-		Result:           botResultForCommandEvent(event),
+		Result:           bot.Result(botResultForCommandEvent(event)),
 		Reason:           botReasonForCommandEvent(event),
 		EventID:          event.ID,
 		StreamSessionID:  s.activeSessionID(),

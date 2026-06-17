@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"strings"
 	"time"
@@ -68,15 +67,12 @@ func (s TimerScheduler) recordAudit(ctx context.Context, timer Timer, event even
 	if s.Store == nil {
 		return
 	}
-	data, err := json.Marshal(map[string]any{"unknownVariables": render.UnknownVariables})
-	if err != nil {
-		data = json.RawMessage(`{}`)
-	}
 	sessionID := ""
 	if s.StreamSessionID != nil {
 		sessionID = s.StreamSessionID()
 	}
-	if _, err := s.Store.RecordAudit(ctx, AuditEvent{Source: string(SourceTimer), ActorRole: string(RoleSystem), Trigger: timer.Name, Command: timer.Name, Action: timer.Action, Result: string(ResultAllowed), Reason: "timer_due", EventID: event.ID, StreamSessionID: sessionID, Data: data}); err != nil {
+	auditEvent := AuditEventFromOutcome(AuditOutcome{Source: SourceTimer, ActorRole: RoleSystem, Trigger: timer.Name, Command: timer.Name, Action: timer.Action, Result: ResultAllowed, Reason: "timer_due", EventID: event.ID, StreamSessionID: sessionID, Data: map[string]any{"unknownVariables": render.UnknownVariables}})
+	if _, err := s.Store.RecordAudit(ctx, auditEvent); err != nil {
 		log.Printf("failed to record bot timer audit: %v", err)
 	}
 }

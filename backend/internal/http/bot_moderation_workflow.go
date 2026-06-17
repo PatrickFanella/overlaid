@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -348,8 +347,7 @@ func (w *moderationWorkflow) recordNukeWorkflowAudit(ctx context.Context, action
 	if err != nil || s.botRuntime == nil {
 		return
 	}
-	encoded, _ := json.Marshal(data)
-	s.botRuntime.Record(ctx, bot.AuditEvent{Source: string(bot.SourceDashboard), ActorRole: string(bot.RoleOperator), Trigger: "nuke_workflow", Command: action, Action: action, Result: result, Reason: reason, StreamSessionID: s.activeSessionID(), Data: encoded})
+	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "nuke_workflow", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
 }
 
 func (w *moderationWorkflow) recordModerationActionAudit(ctx context.Context, request botModerationActionRequest, result, reason string) {
@@ -358,8 +356,8 @@ func (w *moderationWorkflow) recordModerationActionAudit(ctx context.Context, re
 		return
 	}
 	data := map[string]any{"targetUserId": strings.TrimSpace(request.TargetUserID), "targetUserLogin": strings.TrimSpace(request.TargetUserLogin), "messageId": strings.TrimSpace(request.MessageID), "durationSeconds": request.DurationSeconds}
-	encoded, _ := json.Marshal(data)
-	s.botRuntime.Record(ctx, bot.AuditEvent{Source: string(bot.SourceDashboard), ActorRole: string(bot.RoleOperator), Trigger: "moderation_action", Command: strings.ToLower(strings.TrimSpace(request.Action)), Action: strings.ToLower(strings.TrimSpace(request.Action)), Result: result, Reason: reason, StreamSessionID: s.activeSessionID(), Data: encoded})
+	action := strings.ToLower(strings.TrimSpace(request.Action))
+	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "moderation_action", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
 }
 
 func twitchEventString(event events.Event, key string) string {

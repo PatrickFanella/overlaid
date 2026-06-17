@@ -422,22 +422,7 @@ func chatCommandRole(user ChatCommandUser) string {
 }
 
 func roleAllows(actual, required string) bool {
-	return roleRank(actual) >= roleRank(required)
-}
-
-func roleRank(role string) int {
-	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "system":
-		return 5
-	case "operator":
-		return 4
-	case "broadcaster":
-		return 3
-	case "moderator":
-		return 2
-	default:
-		return 1
-	}
+	return bot.RoleAllows(bot.Role(actual), bot.Role(required))
 }
 
 func truncateCommandText(text string, limit int) string {

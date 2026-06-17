@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -38,6 +39,29 @@ func TestRuntimeAllowsRankedRoles(t *testing.T) {
 		if got := runtime.Allowed(tc.actor, tc.required); got != tc.want {
 			t.Fatalf("Allowed(%s,%s)=%v want %v", tc.actor, tc.required, got, tc.want)
 		}
+		if got := RoleAllows(tc.actor, tc.required); got != tc.want {
+			t.Fatalf("RoleAllows(%s,%s)=%v want %v", tc.actor, tc.required, got, tc.want)
+		}
+	}
+}
+
+func TestAuditEventFromOutcomeNormalizesAndEncodesData(t *testing.T) {
+	event := AuditEventFromOutcome(AuditOutcome{Source: SourceDashboard, ActorRole: Role(" MODERATOR "), Trigger: " trigger ", Command: " command ", Action: " action ", Result: ResultAllowed, Reason: " reason ", EventID: " event ", StreamSessionID: " session ", Data: map[string]any{"ok": true}})
+	if event.Source != "dashboard" || event.ActorRole != "moderator" || event.Trigger != "trigger" || event.Command != "command" || event.StreamSessionID != "session" {
+		t.Fatalf("unexpected normalized audit event: %#v", event)
+	}
+	var decoded map[string]bool
+	if err := json.Unmarshal(event.Data, &decoded); err != nil || !decoded["ok"] {
+		t.Fatalf("unexpected audit data: data=%s err=%v", event.Data, err)
+	}
+}
+
+func TestRuntimeRecordsAuditOutcomes(t *testing.T) {
+	recorder := &fakeAuditRecorder{}
+	runtime := NewRuntime(recorder)
+	runtime.RecordOutcome(context.Background(), AuditOutcome{Source: SourceChat, Command: "alert", Result: ResultAllowed, Data: map[string]any{"alias": true}})
+	if len(recorder.events) != 1 || recorder.events[0].Command != "alert" {
+		t.Fatalf("expected recorded audit outcome, got %#v", recorder.events)
 	}
 }
 
