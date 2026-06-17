@@ -194,3 +194,27 @@
 9. **Safety tests and runbook closeout** — lock workflow contracts and update docs to match the new seams.
 
 Each slice must finish with focused checks, `make verify` when appropriate, and a commit.
+
+---
+
+## Slice 6 closeout
+
+**Status:** Implemented.
+
+**Committed in this slice:**
+
+- Deepened `web/src/lib/api.ts` around a shared JSON request helper for bot operations plus Twitch interactions/reward flows.
+- Kept exported API names/types intact while normalizing request method, base URL, headers, JSON body encoding, and non-OK detail extraction.
+- Strengthened `web/src/App.test.tsx` with request-contract coverage for shared API encoding and error-detail propagation.
+
+**Verification:**
+
+- Passed: `pnpm --dir web run format`
+- Passed: `pnpm --dir web run test`
+- Passed: `make verify`
+
+**Deferred intentionally:**
+
+- More aggressive extraction of `Bot.tsx` panels and other frontend route Modules.
+- Further API client deepening beyond bot/Twitch interaction and reward families.
+- Any broader workflow-module refactors not required to lock the slice-6 contract.

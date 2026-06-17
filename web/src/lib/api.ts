@@ -316,160 +316,265 @@ export async function fetchTwitchStatus(explicitBaseUrl?: string) {
 }
 
 export async function fetchBotStatus(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/bot/status', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) {
-    throw new Error(`bot status failed: ${response.status}`);
-  }
-  return (await response.json()) as BotStatus;
+  return requestJSON<BotStatus>('/api/bot/status', {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'bot status',
+  });
 }
 
 export async function fetchBotAudit(limit = 50, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl(`/api/bot/audit?limit=${encodeURIComponent(String(limit))}`, explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) {
-    throw new Error(`bot audit failed: ${response.status}`);
-  }
-  return (await response.json()) as BotAuditResponse;
+  return requestJSON<BotAuditResponse>(`/api/bot/audit?limit=${encodeURIComponent(String(limit))}`, {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'bot audit',
+  });
 }
 
 export async function fetchBotTimers(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/bot/timers', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) {
-    throw new Error(`bot timers failed: ${response.status}`);
-  }
-  return (await response.json()) as BotTimersResponse;
+  return requestJSON<BotTimersResponse>('/api/bot/timers', {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'bot timers',
+  });
 }
 
 export async function fetchBotCommands(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/bot/commands', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) {
-    throw new Error(`bot commands failed: ${response.status}`);
-  }
-  return (await response.json()) as BotCommandsResponse;
+  return requestJSON<BotCommandsResponse>('/api/bot/commands', {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'bot commands',
+  });
 }
 
 export async function saveBotCommand(payload: BotCommandPayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/commands', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotCommand;
+  return requestJSON<BotCommand>('/api/bot/commands', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'save bot command',
+  });
 }
 
 export async function setBotCommandEnabled(id: string, enabled: boolean, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await sendJSON('PUT', `/api/bot/commands/${encodeURIComponent(id)}`, { enabled }, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotCommand;
+  return requestJSON<BotCommand>(`/api/bot/commands/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    explicitBaseUrl,
+    operatorSecret,
+    body: { enabled },
+    errorLabel: 'set bot command enabled',
+  });
 }
 
 export async function deleteBotCommand(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl(`/api/bot/commands/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(`delete bot command failed: ${response.status}${detail.trim() ? ` — ${detail.trim()}` : ''}`);
-  }
+  await requestJSON(`/api/bot/commands/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    explicitBaseUrl,
+    operatorSecret,
+    expectJson: false,
+    errorLabel: 'delete bot command',
+  });
 }
 
 export async function saveBotTimer(payload: BotTimerPayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/timers', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotTimer;
+  return requestJSON<BotTimer>('/api/bot/timers', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'save bot timer',
+  });
 }
 
 export async function setBotTimerEnabled(id: string, enabled: boolean, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await sendJSON('PUT', `/api/bot/timers/${encodeURIComponent(id)}`, { enabled }, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotTimer;
+  return requestJSON<BotTimer>(`/api/bot/timers/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    explicitBaseUrl,
+    operatorSecret,
+    body: { enabled },
+    errorLabel: 'set bot timer enabled',
+  });
 }
 
 export async function deleteBotTimer(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl(`/api/bot/timers/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(`delete bot timer failed: ${response.status}${detail.trim() ? ` — ${detail.trim()}` : ''}`);
-  }
+  await requestJSON(`/api/bot/timers/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    explicitBaseUrl,
+    operatorSecret,
+    expectJson: false,
+    errorLabel: 'delete bot timer',
+  });
 }
 
 export async function fetchBotCounters(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/bot/counters', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`bot counters failed: ${response.status}`);
-  return (await response.json()) as BotCountersResponse;
+  return requestJSON<BotCountersResponse>('/api/bot/counters', {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'bot counters',
+  });
 }
 
 export async function saveBotCounter(payload: BotCounterPayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/counters', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotCounter;
+  return requestJSON<BotCounter>('/api/bot/counters', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'save bot counter',
+  });
 }
 
 export async function deleteBotCounter(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl(`/api/bot/counters/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`delete bot counter failed: ${response.status}`);
+  await requestJSON(`/api/bot/counters/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    explicitBaseUrl,
+    operatorSecret,
+    expectJson: false,
+    errorLabel: 'delete bot counter',
+  });
 }
 
 export async function fetchBotQuotes(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/bot/quotes', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`bot quotes failed: ${response.status}`);
-  return (await response.json()) as BotQuotesResponse;
+  return requestJSON<BotQuotesResponse>('/api/bot/quotes', {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'bot quotes',
+  });
 }
 
 export async function fetchBotAPIVariables(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/bot/api-variables', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`bot api variables failed: ${response.status}`);
-  return (await response.json()) as BotAPIVariablesResponse;
+  return requestJSON<BotAPIVariablesResponse>('/api/bot/api-variables', {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'bot api variables',
+  });
 }
 
 export async function saveBotAPIVariable(payload: BotAPIVariablePayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/api-variables', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotAPIVariable;
+  return requestJSON<BotAPIVariable>('/api/bot/api-variables', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'save bot api variable',
+  });
 }
 
 export async function deleteBotAPIVariable(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl(`/api/bot/api-variables/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`delete bot api variable failed: ${response.status}`);
+  await requestJSON(`/api/bot/api-variables/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    explicitBaseUrl,
+    operatorSecret,
+    expectJson: false,
+    errorLabel: 'delete bot api variable',
+  });
 }
 
 export async function saveBotQuote(payload: BotQuotePayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/quotes', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotQuote;
+  return requestJSON<BotQuote>('/api/bot/quotes', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'save bot quote',
+  });
 }
 
 export async function deleteBotQuote(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl(`/api/bot/quotes/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`delete bot quote failed: ${response.status}`);
+  await requestJSON(`/api/bot/quotes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    explicitBaseUrl,
+    operatorSecret,
+    expectJson: false,
+    errorLabel: 'delete bot quote',
+  });
 }
 
 export async function fetchBotModerationRules(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/bot/moderation/rules', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`bot moderation rules failed: ${response.status}`);
-  return (await response.json()) as BotModerationRulesResponse;
+  return requestJSON<BotModerationRulesResponse>('/api/bot/moderation/rules', {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'bot moderation rules',
+  });
 }
 
 export async function saveBotModerationRule(payload: BotModerationRulePayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/moderation/rules', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotModerationRule;
+  return requestJSON<BotModerationRule>('/api/bot/moderation/rules', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'save bot moderation rule',
+  });
 }
 
 export async function deleteBotModerationRule(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl(`/api/bot/moderation/rules/${encodeURIComponent(id)}`, explicitBaseUrl), { method: 'DELETE', headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`bot moderation rule delete failed: ${response.status}`);
+  await requestJSON(`/api/bot/moderation/rules/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    explicitBaseUrl,
+    operatorSecret,
+    expectJson: false,
+    errorLabel: 'bot moderation rule delete',
+  });
 }
 
 export async function dryRunBotModeration(payload: { message: string; username: string }, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/moderation/dry-run', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotModerationDryRunResponse;
+  return requestJSON<BotModerationDryRunResponse>('/api/bot/moderation/dry-run', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'dry run bot moderation',
+  });
 }
 
 export async function executeBotModerationAction(payload: BotModerationActionPayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/moderation/action', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotModerationActionResponse;
+  return requestJSON<BotModerationActionResponse>('/api/bot/moderation/action', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'execute bot moderation action',
+  });
 }
 
 export async function dryRunBotNuke(payload: BotNukeDryRunPayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/moderation/nuke/dry-run', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotNukeDryRunResponse;
+  return requestJSON<BotNukeDryRunResponse>('/api/bot/moderation/nuke/dry-run', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'dry run bot nuke',
+  });
 }
 
 export async function executeBotNuke(payload: BotNukeDryRunPayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/moderation/nuke/execute', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotNukeExecuteResponse;
+  return requestJSON<BotNukeExecuteResponse>('/api/bot/moderation/nuke/execute', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'execute bot nuke',
+  });
 }
 
 export async function rollbackBotNukeRadiation(ruleId: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/bot/moderation/nuke/radiation/rollback', { ruleId, confirm: true }, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as BotNukeRollbackResponse;
+  return requestJSON<BotNukeRollbackResponse>('/api/bot/moderation/nuke/radiation/rollback', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: { ruleId, confirm: true },
+    errorLabel: 'rollback bot nuke radiation',
+  });
 }
 
 export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {
@@ -485,38 +590,42 @@ export async function fetchTwitchInteractions(
 ) {
   const explicitBaseUrl = typeof explicitBaseUrlOrOptions === 'string' ? explicitBaseUrlOrOptions : explicitBaseUrlOrOptions?.baseUrl;
   const secret = operatorSecret ?? (typeof explicitBaseUrlOrOptions === 'string' ? undefined : explicitBaseUrlOrOptions?.operatorSecret);
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (secret?.trim()) {
-    headers['X-Overlay-Operator-Secret'] = secret.trim();
-  }
-
-  const response = await fetch(apiUrl('/api/twitch/interactions', explicitBaseUrl), { headers });
-  if (!response.ok) {
-    throw new Error(`Twitch interactions failed: ${response.status}`);
-  }
-
-  return (await response.json()) as TwitchInteractionsResponse;
+  return requestJSON<TwitchInteractionsResponse>('/api/twitch/interactions', {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret: secret,
+    errorLabel: 'Twitch interactions',
+  });
 }
 
 export async function fetchTwitchRewards(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/twitch/rewards', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`Twitch rewards failed: ${response.status}`);
-  return (await response.json()) as TwitchRewardsResponse;
+  return requestJSON<TwitchRewardsResponse>('/api/twitch/rewards', {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'Twitch rewards',
+  });
 }
 
 export async function createTwitchReward(payload: TwitchRewardCreatePayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/twitch/rewards', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as TwitchRewardMutationResponse;
+  return requestJSON<TwitchRewardMutationResponse>('/api/twitch/rewards', {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'create Twitch reward',
+  });
 }
 
 export async function deleteTwitchReward(rewardId: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl(`/api/twitch/rewards/${encodeURIComponent(rewardId)}`, explicitBaseUrl), {
+  return requestJSON<TwitchRewardMutationResponse>(`/api/twitch/rewards/${encodeURIComponent(rewardId)}`, {
     method: 'DELETE',
-    headers: { ...operatorHeaders(operatorSecret), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ confirm: true }),
+    explicitBaseUrl,
+    operatorSecret,
+    body: { confirm: true },
+    includeDetail: true,
+    errorLabel: 'Twitch reward delete',
   });
-  if (!response.ok) throw new Error(`Twitch reward delete failed: ${response.status}`);
-  return (await response.json()) as TwitchRewardMutationResponse;
 }
 
 export async function updateTwitchReward(
@@ -525,19 +634,32 @@ export async function updateTwitchReward(
   explicitBaseUrl?: string,
   operatorSecret?: string,
 ) {
-  const response = await sendJSON('PATCH', `/api/twitch/rewards/${encodeURIComponent(rewardId)}`, payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as TwitchRewardMutationResponse;
+  return requestJSON<TwitchRewardMutationResponse>(`/api/twitch/rewards/${encodeURIComponent(rewardId)}`, {
+    method: 'PATCH',
+    explicitBaseUrl,
+    operatorSecret,
+    body: payload,
+    errorLabel: 'update Twitch reward',
+  });
 }
 
 export async function fetchTwitchRewardRedemptions(rewardId: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl(`/api/twitch/rewards/${encodeURIComponent(rewardId)}/redemptions?status=UNFULFILLED`, explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) throw new Error(`Twitch redemptions failed: ${response.status}`);
-  return (await response.json()) as TwitchRedemptionsResponse;
+  return requestJSON<TwitchRedemptionsResponse>(`/api/twitch/rewards/${encodeURIComponent(rewardId)}/redemptions?status=UNFULFILLED`, {
+    method: 'GET',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'Twitch redemptions',
+  });
 }
 
 export async function updateTwitchRedemptionStatus(rewardId: string, redemptionId: string, status: 'FULFILLED' | 'CANCELED', explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON(`/api/twitch/rewards/${encodeURIComponent(rewardId)}/redemptions/${encodeURIComponent(redemptionId)}`, { status }, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as { status: string; result: string };
+  return requestJSON<{ status: string; result: string }>(`/api/twitch/rewards/${encodeURIComponent(rewardId)}/redemptions/${encodeURIComponent(redemptionId)}`, {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    body: { status },
+    errorLabel: 'update Twitch redemption status',
+  });
 }
 
 export async function fetchOBSStatus(explicitBaseUrl?: string) {
@@ -677,8 +799,13 @@ export async function setBRBStatus(payload: BRBPayload, explicitBaseUrl?: string
 }
 
 export async function saveTwitchInteractions(payload: TwitchInteractionRules, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await sendJSON('PUT', '/api/twitch/interactions', { rules: payload }, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as TwitchInteractionsResponse;
+  return requestJSON<TwitchInteractionsResponse>('/api/twitch/interactions', {
+    method: 'PUT',
+    explicitBaseUrl,
+    operatorSecret,
+    body: { rules: payload },
+    errorLabel: 'save Twitch interactions',
+  });
 }
 
 export async function sendWebhook(source: string, payload: AlertPayload, explicitBaseUrl?: string, webhookSecret?: string) {
@@ -689,6 +816,43 @@ type PostJSONOptions = {
   operatorSecret?: string;
   webhookSecret?: string;
 };
+
+type RequestJSONOptions = PostJSONOptions & {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  body?: Record<string, unknown>;
+  errorLabel: string;
+  includeDetail?: boolean;
+  expectJson?: boolean;
+};
+
+async function requestJSON(path: string, options: RequestJSONOptions & { explicitBaseUrl?: string; expectJson: false }): Promise<void>;
+async function requestJSON<T>(path: string, options: RequestJSONOptions & { explicitBaseUrl?: string; expectJson?: true }): Promise<T>;
+async function requestJSON<T>(path: string, options: RequestJSONOptions & { explicitBaseUrl?: string }) {
+  const headers = operatorHeaders(options.operatorSecret);
+  if (options.webhookSecret?.trim()) {
+    headers['X-Overlay-Webhook-Secret'] = options.webhookSecret.trim();
+  }
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(apiUrl(path, options.explicitBaseUrl), {
+    method: options.method,
+    headers,
+    ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+  });
+
+  if (!response.ok) {
+    const detail = options.includeDetail === false ? '' : await response.text().catch(() => '');
+    throw new Error(`${options.errorLabel} failed: ${response.status}${detail.trim() ? ` — ${detail.trim()}` : ''}`);
+  }
+
+  if (options.expectJson === false) {
+    return;
+  }
+
+  return (await response.json()) as T;
+}
 
 function operatorHeaders(operatorSecret?: string) {
   const headers: Record<string, string> = { Accept: 'application/json' };

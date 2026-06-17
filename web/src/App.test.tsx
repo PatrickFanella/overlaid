@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { dashboardRoutes } from './lib/dashboardRoutes';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
-import { fetchTwitchInteractions, type StreamSessionReport } from './lib/api';
+import { deleteTwitchReward, fetchBotStatus, fetchTwitchInteractions, saveBotCommand, type StreamSessionReport } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
 import {
   defaultDashboardConfig,
@@ -385,22 +385,82 @@ describe('overlay event utilities', () => {
     await fetchTwitchInteractions(undefined, 'operator-secret');
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://example.test/api/twitch/interactions', {
+      method: 'GET',
       headers: {
         Accept: 'application/json',
         'X-Overlay-Operator-Secret': 'operator-secret',
       },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://example.test/api/twitch/interactions', {
+      method: 'GET',
       headers: {
         Accept: 'application/json',
         'X-Overlay-Operator-Secret': 'operator-secret',
       },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(3, 'http://localhost:8080/api/twitch/interactions', {
+      method: 'GET',
       headers: {
         Accept: 'application/json',
         'X-Overlay-Operator-Secret': 'operator-secret',
       },
+    });
+  });
+
+  it('shares request encoding and error detail handling across bot and twitch helpers', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ available: true, commandCount: 0, timerCount: 0, counterCount: 0, quoteCount: 0, auditCount: 0 }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'cmd-1' }) })
+      .mockResolvedValueOnce({ ok: false, status: 418, text: async () => 'quota exceeded' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchBotStatus('http://example.test', 'operator-secret');
+    await saveBotCommand(
+      { name: 'Go Live', enabled: true, response: '!', action: 'ticker', responseMode: 'overlay', roleRequired: 'viewer', cooldownSeconds: 30 },
+      'http://example.test',
+      'operator-secret',
+    );
+
+    await expect(deleteTwitchReward('reward-1', 'http://example.test', 'operator-secret')).rejects.toThrow(
+      'Twitch reward delete failed: 418 — quota exceeded',
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://example.test/api/bot/status', {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-Overlay-Operator-Secret': 'operator-secret',
+      },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://example.test/api/bot/commands', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Overlay-Operator-Secret': 'operator-secret',
+      },
+      body: JSON.stringify({
+        name: 'Go Live',
+        enabled: true,
+        response: '!',
+        action: 'ticker',
+        responseMode: 'overlay',
+        roleRequired: 'viewer',
+        cooldownSeconds: 30,
+      }),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(3, 'http://example.test/api/twitch/rewards/reward-1', {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Overlay-Operator-Secret': 'operator-secret',
+      },
+      body: JSON.stringify({ confirm: true }),
     });
   });
 });
