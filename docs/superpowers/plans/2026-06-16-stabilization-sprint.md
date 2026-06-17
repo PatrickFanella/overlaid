@@ -31,6 +31,16 @@ Out of scope for this stabilization sprint:
 - New bot feature breadth.
 - Production deploy/push.
 
+## Sprint closeout
+
+- Docs QA checklists updated for bot ops, reward lifecycle, and live QA.
+- Browser smoke covers route presence plus bot/reward safety surfaces.
+- SSR tests lock key operator safety copy.
+- Operator UI copy now emphasizes dry-run/capped nuke execution and delete-last reward lifecycle safety.
+- Final verification passed: `make verify`, `make smoke`, and `make smoke-browser`.
+- Accepted smoke environment note: `/readyz` reported degraded OBS checks because OBS WebSocket was not reachable locally; the smoke command still passed and the degradation is environmental.
+- Deferred: advanced reward fields, cloud architecture, and broader productization/release notes.
+
 ---
 
 ## File structure
