@@ -777,7 +777,7 @@ function BotModerationPanel({
 
       <div className="mt-4 border border-cyan-400/30 bg-black/40 p-2">
         <p className="text-xs uppercase tracking-wide text-cyan-100">Nuke dry-run planner</p>
-        <p className="mt-1 text-xs text-zinc-400">Scans recent persisted Twitch chat history. Execute can delete matching messages or timeout matching users after explicit operator confirmation.</p>
+        <p className="mt-1 text-xs text-zinc-400">Dry-run first. Execute requires confirmation, is capped, and only delete/timeout are supported.</p>
         <div className="mt-2 grid gap-2 md:grid-cols-[1fr_8rem_8rem_auto]">
           <input className="hud-input" value={nukeDraft.pattern} onChange={(event) => onNukeDraftChange({ ...nukeDraft, pattern: event.target.value, confirm: false })} placeholder="phrase or regex" />
           <input className="hud-input" type="number" min={1} max={360} value={nukeDraft.lookbackMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, lookbackMinutes: Number(event.target.value), confirm: false })} />

@@ -380,6 +380,7 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
         ) : null}
         {rewards.length > 0 ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
+            <p className="text-xs text-amber-100">Delete is last resort. Pause or disable first when the reward should be reversible.</p>
             <label className="flex items-center gap-2 text-xs text-amber-100">
               <input type="checkbox" checked={deleteRewardConfirmed} onChange={(event) => setDeleteRewardConfirmed(event.target.checked)} />
               Confirm delete
