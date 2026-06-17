@@ -1,18 +1,13 @@
 package httpapi
 
 import (
-	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
-	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 )
 
 type botStatusResponse struct {
@@ -356,39 +351,10 @@ func (s *Server) botModerationNukeExecute(w http.ResponseWriter, r *http.Request
 		http.Error(w, "nuke action must be delete or timeout", http.StatusBadRequest)
 		return
 	}
-	if err := s.validateNukeRadiationRequest(request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	matches, err := s.planNukeDryRun(request)
+	response, err := s.executeNukeWorkflow(r.Context(), request, action)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
-	}
-	if len(matches) > 50 {
-		matches = matches[:50]
-	}
-	response := botNukeExecuteResponse{Matches: matches, Attempted: len(matches), Action: action}
-	if request.RadiationMinutes > 0 {
-		rule, err := s.createNukeRadiationRule(r.Context(), request, action)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		response.RadiationRule = &rule
-	}
-	for _, match := range matches {
-		mod := botModerationActionRequest{Action: action, TargetUserID: match.UserID, TargetUserLogin: match.User, MessageID: match.MessageID, DurationSeconds: request.DurationSeconds, Reason: "nuke:" + strings.TrimSpace(request.Pattern)}
-		if action == "timeout" && mod.DurationSeconds == 0 {
-			mod.DurationSeconds = 60
-		}
-		if _, err := s.executeTwitchModerationAction(r.Context(), mod); err != nil {
-			response.Failed++
-			s.recordModerationActionAudit(r.Context(), mod, "failed", err.Error())
-			continue
-		}
-		response.Succeeded++
-		s.recordModerationActionAudit(r.Context(), mod, "allowed", "nuke_execute")
 	}
 	writeJSON(w, response)
 }
@@ -406,7 +372,7 @@ func (s *Server) botModerationNukeRollback(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "confirm is required", http.StatusBadRequest)
 		return
 	}
-	rule, err := s.botStore.DisableNukeRadiationRule(r.Context(), request.RuleID)
+	rule, err := s.rollbackNukeRadiation(r.Context(), request.RuleID)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
@@ -415,126 +381,7 @@ func (s *Server) botModerationNukeRollback(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), status)
 		return
 	}
-	s.recordNukeWorkflowAudit(r.Context(), "nuke_rollback", "allowed", "radiation_disabled", map[string]any{"ruleId": rule.ID, "ruleName": rule.Name, "pattern": rule.Pattern})
 	writeJSON(w, botNukeRollbackResponse{Rule: rule})
-}
-
-func (s *Server) validateNukeRadiationRequest(request botNukeDryRunRequest) error {
-	if request.RadiationMinutes == 0 {
-		return nil
-	}
-	if s.botStore == nil {
-		return errors.New("bot moderation unavailable")
-	}
-	if request.RadiationMinutes < 1 || request.RadiationMinutes > 120 {
-		return errors.New("radiation window must be between 1 and 120 minutes")
-	}
-	return nil
-}
-
-func (s *Server) createNukeRadiationRule(ctx context.Context, request botNukeDryRunRequest, action string) (bot.ModerationRule, error) {
-	if err := s.validateNukeRadiationRequest(request); err != nil {
-		return bot.ModerationRule{}, err
-	}
-	expiresAt := time.Now().UTC().Add(time.Duration(request.RadiationMinutes) * time.Minute)
-	rule, err := s.botStore.SaveModerationRule(ctx, bot.ModerationRule{
-		Name:          "nuke_radiation_" + strconv.FormatInt(time.Now().UTC().UnixNano(), 10),
-		Enabled:       true,
-		Enforce:       true,
-		Pattern:       request.Pattern,
-		MatchTarget:   "message",
-		CaseSensitive: request.CaseSensitive,
-		Regex:         request.Regex,
-		Action:        action,
-		Reason:        "radiation:nuke:" + strings.TrimSpace(request.Pattern),
-		Source:        "nuke_radiation",
-		ExpiresAt:     &expiresAt,
-	})
-	if err != nil {
-		return bot.ModerationRule{}, err
-	}
-	s.recordNukeWorkflowAudit(ctx, "nuke_radiation", "allowed", "radiation_created", map[string]any{"ruleId": rule.ID, "ruleName": rule.Name, "pattern": rule.Pattern, "action": rule.Action, "expiresAt": rule.ExpiresAt})
-	return rule, nil
-}
-
-func (s *Server) recordNukeWorkflowAudit(ctx context.Context, action, result, reason string, data map[string]any) {
-	if s.botRuntime == nil {
-		return
-	}
-	encoded, _ := json.Marshal(data)
-	s.botRuntime.Record(ctx, bot.AuditEvent{Source: string(bot.SourceDashboard), ActorRole: string(bot.RoleOperator), Trigger: "nuke_workflow", Command: action, Action: action, Result: result, Reason: reason, StreamSessionID: s.activeSessionID(), Data: encoded})
-}
-
-func (s *Server) planNukeDryRun(request botNukeDryRunRequest) ([]botNukeDryRunMatch, error) {
-	if s.history == nil {
-		return nil, errors.New("event history unavailable")
-	}
-	pattern := strings.TrimSpace(request.Pattern)
-	if pattern == "" {
-		return nil, errors.New("nuke pattern is required")
-	}
-	if len(pattern) > 200 {
-		return nil, errors.New("nuke pattern must be 200 characters or less")
-	}
-	limit := request.Limit
-	if limit <= 0 || limit > 250 {
-		limit = 100
-	}
-	lookback := request.LookbackMinutes
-	if lookback <= 0 || lookback > 360 {
-		lookback = 30
-	}
-	var compiled *regexp.Regexp
-	if request.Regex {
-		compiledPattern := pattern
-		if !request.CaseSensitive {
-			compiledPattern = "(?i)" + compiledPattern
-		}
-		var err error
-		compiled, err = regexp.Compile(compiledPattern)
-		if err != nil {
-			return nil, err
-		}
-	} else if !request.CaseSensitive {
-		pattern = strings.ToLower(pattern)
-	}
-	cutoff := time.Now().UTC().Add(-time.Duration(lookback) * time.Minute)
-	matches := []botNukeDryRunMatch{}
-	for _, event := range s.history.List(limit) {
-		if event.Type != events.EventTypeChatMessage || event.CreatedAt.Before(cutoff) {
-			continue
-		}
-		message := event.Message
-		candidate := message
-		if !request.CaseSensitive && !request.Regex {
-			candidate = strings.ToLower(candidate)
-		}
-		matched := false
-		if request.Regex {
-			matched = compiled.MatchString(candidate)
-		} else {
-			matched = strings.Contains(candidate, pattern)
-		}
-		if !matched {
-			continue
-		}
-		matches = append(matches, botNukeDryRunMatch{EventID: event.ID, MessageID: twitchMessageIDFromEvent(event), UserID: twitchEventString(event, "chatter_user_id"), User: event.Title, Message: event.Message, CreatedAt: event.CreatedAt.Format(time.RFC3339)})
-	}
-	return matches, nil
-}
-
-func twitchMessageIDFromEvent(event events.Event) string {
-	if value, ok := event.Data["messageId"].(string); ok {
-		return strings.TrimSpace(value)
-	}
-	if nested, ok := event.Data["twitchEvent"].(map[string]any); ok {
-		for _, key := range []string{"message_id", "id"} {
-			if value, ok := nested[key].(string); ok && strings.TrimSpace(value) != "" {
-				return strings.TrimSpace(value)
-			}
-		}
-	}
-	return ""
 }
 
 func (s *Server) botQuoteSave(w http.ResponseWriter, r *http.Request) {
