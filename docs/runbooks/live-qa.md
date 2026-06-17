@@ -58,13 +58,17 @@ Expected evidence:
 2. Confirm EventSub diagnostics show expected subscription count.
 3. If `missing scopes` appears, re-run Twitch login and re-consent.
 4. From a broadcaster/moderator account, send a safe chat command such as `!alert command smoke`.
-5. Trigger a configured channel-point test if available off-stream.
+5. Open `/dashboard/bot` and confirm bot status, recent audit, commands, timers, counters/quotes, API variables, moderation dry-run, and nuke planner panels render.
+6. Open `/dashboard/config`, load Twitch rewards, and verify the reward queue shows manageable rewards without requiring deletion.
+7. Trigger a configured channel-point test if available off-stream.
 
 Expected evidence:
 
 - [ ] `/overlay/debug` shows incoming Twitch diagnostics.
-- [ ] Chat command from broadcaster/moderator produces the expected safe overlay event.
-- [ ] Viewer/non-moderator commands are denied and recorded as diagnostics.
+- [ ] Chat command from broadcaster/moderator produces the expected safe overlay or chat event.
+- [ ] Viewer/non-moderator commands are denied and recorded as diagnostics/audit events.
+- [ ] `/dashboard/bot` shows recent audit entries for command/moderation checks without exposing tokens or raw EventSub payloads.
+- [ ] Reward queue can load manageable rewards and shows lifecycle state, fulfillment notes, and reversible pause/disable controls before delete.
 - [ ] EventSub reconnect attempts and last disconnect remain stable during the pass.
 
 ## Phase 5: recovery drill

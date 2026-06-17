@@ -21,10 +21,26 @@ Implemented now:
 - Custom Twitch commands can publish safe ticker/alert overlays, guarded outbound Twitch chat replies, or both, with bounded template variables.
 - Templates can use operator-configured `{api:name}` variables for read-only HTTPS GET data.
 
-Not implemented yet:
+Implemented in later FossaBot parity slices:
 
-- Nuke-style multi-message workflows.
-- Twitch reward creation/deletion through Helix management APIs.
+- Nuke-style dry-run, guarded delete/timeout execution, temporary radiation windows, and rollback.
+- Twitch reward inventory, minimal creation/deletion, pause/resume, enable/disable, redemption fulfillment/canceling, and fulfillment-note visibility through the Twitch interaction rules page.
+
+Still carried forward:
+
+- Advanced Twitch reward fields such as cooldowns, per-stream/user limits, and other non-minimal Helix settings.
+- Cloud-hosted uptime parity; see `docs/superpowers/plans/2026-06-16-fossabot-uptime-parity-options.md` before changing deployment architecture.
+
+## Stabilization QA checklist
+
+- [ ] `/dashboard/bot` loads with bot status and recent audit.
+- [ ] A safe custom command can be previewed without sending chat.
+- [ ] A timer can be enabled/paused without losing its response text.
+- [ ] Counter and quote panels show empty states or configured items clearly.
+- [ ] API variable cards show cache/status/error state without exposing secret-looking keys.
+- [ ] Moderation dry-run can test a sample message without enforcing.
+- [ ] Nuke planner confirmation resets after changing plan fields.
+- [ ] Active radiation windows show expiry and rollback controls only for nuke radiation rules.
 
 ## Fast checks
 

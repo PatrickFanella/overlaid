@@ -54,6 +54,15 @@ Open routes at the deployed web origin, for example `http://<host>:5173`. Check 
 - [ ] Import/export textareas stay readable and do not expose operator secret values.
 - [ ] Configuration panels stay readable on a standard laptop viewport.
 - [ ] No form controls are clipped by cards or columns.
+- [ ] Reward queue lifecycle controls show pause/resume and enable/disable before the delete confirmation controls.
+- [ ] Fulfillment notes are visible for matched rewards/redemptions and read as operator-only guidance.
+
+### `/dashboard/bot`
+
+- [ ] Bot status, audit, commands, timers, counters/quotes, API variables, moderation dry-run, nuke planner, and active radiation windows are visible without horizontal scrolling.
+- [ ] Destructive actions such as manual moderation, nuke execute, radiation rollback, and delete controls require clear confirmation or explicit operator input.
+- [ ] Dry-run results and audit entries are readable in dense cases and do not expose secrets, OAuth tokens, cookies, or raw EventSub payloads.
+- [ ] Empty states explain what to configure next instead of looking broken.
 
 ### Control/config interaction checks
 

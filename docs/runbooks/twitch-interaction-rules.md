@@ -52,6 +52,14 @@ The config page can load manageable Twitch rewards, create simple custom rewards
 
 When a loaded reward or redemption title matches an enabled channel point rule, the reward queue shows the saved fulfillment note next to the selected reward context and each matching redemption. Use this for operator-only instructions such as “refund if no input”, “read aloud after current segment”, or “check OBS scene before fulfilling”.
 
+Stabilization QA evidence:
+
+- [ ] Loading rewards defaults to manageable rewards.
+- [ ] Selected reward context shows enabled/disabled, paused/not paused, and out-of-stock state when Twitch returns it.
+- [ ] Pause/resume and enable/disable controls preserve the selected reward after refresh.
+- [ ] Delete remains separated behind an operator confirmation checkbox.
+- [ ] Fulfillment notes appear for matched selected rewards and matching redemptions, but do not trigger fulfillment automatically.
+
 Safety boundaries:
 
 - Reward creation is intentionally minimal: title, cost, optional prompt, enabled, and user-input-required only. Advanced Twitch reward fields stay in Twitch for now.
