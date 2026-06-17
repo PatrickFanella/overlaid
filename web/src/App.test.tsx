@@ -178,6 +178,15 @@ describe('App routing', () => {
     expect(html).toContain('Overlay noise controls');
   });
 
+  it('renders bot operations safety guidance', () => {
+    const html = renderToString(<App pathname="/dashboard/bot" />);
+
+    expect(html).toContain('Bot operations');
+    expect(html).toContain('Nuke dry-run planner');
+    expect(html).toContain('I reviewed this dry-run plan');
+    expect(html).toContain('Radiation minutes');
+  });
+
   it('renders the twitch interactions manager shell on the server without fetching', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -189,6 +198,15 @@ describe('App routing', () => {
     expect(html).toContain('Channel point rewards');
     expect(html).toContain('Operator secret required to save');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('renders reward queue safety guidance', () => {
+    const html = renderToString(<TwitchInteractionsManager apiBaseUrl="http://example.test" operatorSecret="secret" />);
+
+    expect(html).toContain('Reward queue');
+    expect(html).toContain('Load manageable rewards, create simple rewards');
+    expect(html).toContain('Delete requires confirmation');
+    expect(html).toContain('New reward title');
   });
 
   it('renders the build info panel on the server without fetching', () => {
