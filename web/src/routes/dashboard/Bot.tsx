@@ -27,93 +27,48 @@ import {
   saveBotTimer,
   setBotCommandEnabled,
   setBotTimerEnabled,
-  type BotAuditResponse,
-  type BotAPIVariable,
   type BotAPIVariablesResponse,
-  type BotCommand,
   type BotCommandsResponse,
-  type BotCounter,
   type BotCountersResponse,
   type BotModerationDryRunResponse,
-  type BotModerationRule,
   type BotModerationRulesResponse,
   type BotNukeDryRunResponse,
   type BotNukeExecuteResponse,
-  type BotQuote,
   type BotQuotesResponse,
-  type BotStatus,
-  type BotTimer,
   type BotTimersResponse,
+  type BotAPIVariable,
+  type BotCommand,
+  type BotCounter,
+  type BotModerationRule,
+  type BotQuote,
+  type BotTimer,
 } from '../../lib/api';
 import { loadOperatorSecret } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { DashboardShell } from './DashboardShell';
-
-type BotPageState = {
-  status: BotStatus | null;
-  audit: BotAuditResponse | null;
-  commands: BotCommandsResponse | null;
-  counters: BotCountersResponse | null;
-  quotes: BotQuotesResponse | null;
-  apiVariables: BotAPIVariablesResponse | null;
-  moderation: BotModerationRulesResponse | null;
-  moderationDryRun: BotModerationDryRunResponse | null;
-  timers: BotTimersResponse | null;
-  loading: boolean;
-  error: string;
-};
-
-type CommandDraft = {
-  name: string;
-  response: string;
-  action: 'ticker' | 'alert';
-  responseMode: 'overlay' | 'chat' | 'both';
-  roleRequired: 'viewer' | 'moderator' | 'broadcaster';
-  cooldownSeconds: number;
-  enabled: boolean;
-};
-
-type TimerDraft = {
-  name: string;
-  intervalSeconds: number;
-  response: string;
-  action: 'ticker' | 'alert';
-  enabled: boolean;
-};
-
-type ModerationDraft = {
-  name: string;
-  enabled: boolean;
-  enforce: boolean;
-  pattern: string;
-  matchTarget: 'message' | 'username' | 'both';
-  caseSensitive: boolean;
-  regex: boolean;
-  action: 'flag' | 'delete' | 'timeout' | 'ban';
-  reason: string;
-};
-
-type NukeDraft = {
-  pattern: string;
-  regex: boolean;
-  caseSensitive: boolean;
-  lookbackMinutes: number;
-  limit: number;
-  action: 'delete' | 'timeout';
-  durationSeconds: number;
-  confirm: boolean;
-  radiationMinutes: number;
-};
-
-const defaultTimerDraft: TimerDraft = { name: '', intervalSeconds: 300, response: '', action: 'ticker', enabled: true };
-const defaultCommandDraft: CommandDraft = { name: '', response: '', action: 'ticker', responseMode: 'overlay', roleRequired: 'viewer', cooldownSeconds: 10, enabled: true };
-const defaultCounterDraft = { name: '', value: 0 };
-const defaultQuoteDraft = { text: '', author: '' };
-const defaultAPIVariableDraft = { name: '', enabled: true, url: '', responseSelector: '', fallback: '', cacheTtlSeconds: 60, timeoutMs: 1500 };
-const defaultModerationDraft: ModerationDraft = { name: '', enabled: true, enforce: false, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
-const defaultModerationTest = { username: '', message: '' };
-const defaultModerationAction = { action: 'timeout' as const, targetUserId: '', targetUserLogin: '', messageId: '', durationSeconds: 60, reason: '' };
-const defaultNukeDraft: NukeDraft = { pattern: '', regex: false, caseSensitive: false, lookbackMinutes: 30, limit: 100, action: 'delete', durationSeconds: 60, confirm: false, radiationMinutes: 0 };
+import { BotStatusSummary } from './bot/BotStatusSummary';
+import {
+  defaultAPIVariableDraft,
+  defaultCommandDraft,
+  defaultCounterDraft,
+  defaultModerationAction,
+  defaultModerationDraft,
+  defaultModerationTest,
+  defaultNukeDraft,
+  defaultQuoteDraft,
+  defaultTimerDraft,
+  type APIVariableDraft,
+  type BotPageState,
+  type CommandDraft,
+  type CounterDraft,
+  type ModerationActionDraft,
+  type ModerationDraft,
+  type ModerationTestDraft,
+  type NukeDraft,
+  type QuoteDraft,
+  type TimerDraft,
+} from './bot/types';
+import { renderCommandPreview } from './bot/renderCommandPreview';
 
 export function DashboardBotPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
@@ -350,10 +305,7 @@ export function DashboardBotPage() {
         {state.error ? <p className="mt-2 border border-red-400/40 bg-black px-2 py-1 text-xs text-rose-200">{state.error}</p> : null}
       </section>
 
-      <section className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
-        <BotStatusPanel status={state.status} />
-        <BotAuditPanel audit={state.audit} />
-      </section>
+      <BotStatusSummary status={state.status} audit={state.audit} />
 
       <BotCommandsPanel
         draft={commandDraft}
@@ -420,47 +372,6 @@ export function DashboardBotPage() {
         onDelete={handleDeleteTimer}
       />
     </DashboardShell>
-  );
-}
-
-function BotStatusPanel({ status }: { status: BotStatus | null }) {
-  return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <p className="hud-label">Bot runtime</p>
-      <div className="mt-2 grid gap-1">
-        <Line label="storage" value={status ? (status.available ? 'available' : 'unavailable') : 'unknown'} />
-        <Line label="commands" value={String(status?.commandCount ?? 0)} />
-        <Line label="timers" value={String(status?.timerCount ?? 0)} />
-        <Line label="counters" value={String(status?.counterCount ?? 0)} />
-        <Line label="quotes" value={String(status?.quoteCount ?? 0)} />
-        <Line label="audit events" value={String(status?.auditCount ?? 0)} />
-      </div>
-      {status?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">load error :: {status.loadError}</p> : null}
-      {status?.lastAuditError ? <p className="mt-2 border border-red-400/40 bg-black px-2 py-1 text-xs text-rose-200">audit error :: {status.lastAuditError}</p> : null}
-    </section>
-  );
-}
-
-function BotAuditPanel({ audit }: { audit: BotAuditResponse | null }) {
-  const events = audit?.events ?? [];
-  return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <p className="hud-label">Bot audit</p>
-      {audit?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">audit unavailable :: {audit.loadError}</p> : null}
-      {events.length === 0 ? <p className="mt-2 text-sm text-zinc-400">No bot audit events yet.</p> : null}
-      <div className="mt-2 grid gap-2">
-        {events.map((event) => (
-          <article key={event.id} className="border border-zinc-700 bg-black/40 p-2 text-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <strong className="text-cyan-100">{event.trigger || event.command || event.action || 'bot action'}</strong>
-              <span className="hud-chip hud-chip--square">{event.result}</span>
-            </div>
-            <p className="mt-1 text-zinc-300">{event.actorDisplayName || event.actorLogin || event.source} · {event.reason || 'no reason'}</p>
-            <p className="mt-1 text-zinc-500">{event.createdAt}</p>
-          </article>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -559,24 +470,6 @@ function BotCommandsPanel({
   );
 }
 
-function renderCommandPreview(draft: CommandDraft) {
-  const values: Record<string, string> = {
-    user: 'TestViewer',
-    displayName: 'TestViewer',
-    channel: 'patrick__eff',
-    args: 'sample args',
-    command: draft.name.trim().replace(/^!/, '') || 'command',
-    'nowPlaying.title': '',
-    'nowPlaying.artist': '',
-    'quote:random': 'Example quote — ExampleAuthor',
-  };
-  return draft.response.replace(/\{([^{}]+)\}/g, (_match, key: string) => {
-    if (key.startsWith('count:')) return '0';
-    if (key.startsWith('api:')) return 'API preview';
-    return values[key] ?? '';
-  }).trim().slice(0, 400);
-}
-
 function BotCommunityPanel({
   counters,
   quotes,
@@ -591,10 +484,10 @@ function BotCommunityPanel({
 }: {
   counters: BotCountersResponse | null;
   quotes: BotQuotesResponse | null;
-  counterDraft: { name: string; value: number };
-  quoteDraft: { text: string; author: string };
-  onCounterDraftChange: (draft: { name: string; value: number }) => void;
-  onQuoteDraftChange: (draft: { text: string; author: string }) => void;
+  counterDraft: CounterDraft;
+  quoteDraft: QuoteDraft;
+  onCounterDraftChange: (draft: CounterDraft) => void;
+  onQuoteDraftChange: (draft: QuoteDraft) => void;
   onSaveCounter: () => void;
   onDeleteCounter: (counter: BotCounter) => void;
   onSaveQuote: () => void;
@@ -632,7 +525,7 @@ function BotCommunityPanel({
   );
 }
 
-function BotAPIVariablesPanel({ variables, draft, onDraftChange, onSave, onDelete }: { variables: BotAPIVariablesResponse | null; draft: typeof defaultAPIVariableDraft; onDraftChange: (draft: typeof defaultAPIVariableDraft) => void; onSave: () => void; onDelete: (variable: BotAPIVariable) => void }) {
+function BotAPIVariablesPanel({ variables, draft, onDraftChange, onSave, onDelete }: { variables: BotAPIVariablesResponse | null; draft: APIVariableDraft; onDraftChange: (draft: APIVariableDraft) => void; onSave: () => void; onDelete: (variable: BotAPIVariable) => void }) {
   const items = variables?.variables ?? [];
   const canSave = draft.name.trim() !== '' && draft.url.trim().startsWith('https://');
   return (
@@ -695,18 +588,18 @@ function BotModerationPanel({
 }: {
   rules: BotModerationRulesResponse | null;
   draft: ModerationDraft;
-  test: { username: string; message: string };
+  test: ModerationTestDraft;
   dryRun: BotModerationDryRunResponse | null;
-  actionDraft: typeof defaultModerationAction;
+  actionDraft: ModerationActionDraft;
   actionResult: string;
-  nukeDraft: typeof defaultNukeDraft;
+  nukeDraft: NukeDraft;
   nukeResult: BotNukeDryRunResponse | null;
   nukeExecuteResult: BotNukeExecuteResponse | null;
   nukeRollbackResult: string;
   onDraftChange: (draft: ModerationDraft) => void;
-  onTestChange: (test: { username: string; message: string }) => void;
-  onActionChange: (draft: typeof defaultModerationAction) => void;
-  onNukeDraftChange: (draft: typeof defaultNukeDraft) => void;
+  onTestChange: (test: ModerationTestDraft) => void;
+  onActionChange: (draft: ModerationActionDraft) => void;
+  onNukeDraftChange: (draft: NukeDraft) => void;
   onSave: () => void;
   onDelete: (rule: BotModerationRule) => void;
   onDryRun: () => void;
@@ -758,7 +651,7 @@ function BotModerationPanel({
         <p className="text-xs uppercase tracking-wide text-amber-100">Manual Twitch moderation action</p>
         <p className="mt-1 text-xs text-zinc-400">Requires Twitch moderation scopes. Use only after dry-run evidence; failed/successful attempts are written to bot audit.</p>
         <div className="mt-2 grid gap-2 md:grid-cols-[9rem_1fr_1fr_8rem]">
-          <select className="hud-input" value={actionDraft.action} onChange={(event) => onActionChange({ ...actionDraft, action: event.target.value as typeof defaultModerationAction.action })}>
+          <select className="hud-input" value={actionDraft.action} onChange={(event) => onActionChange({ ...actionDraft, action: event.target.value as ModerationActionDraft['action'] })}>
             <option value="delete">Delete message</option>
             <option value="timeout">Timeout user</option>
             <option value="ban">Ban user</option>
@@ -889,8 +782,4 @@ function BotTimersPanel({
       </div>
     </section>
   );
-}
-
-function Line({ label, value }: { label: string; value: string }) {
-  return <div className="hud-terminal-line"><span className="hud-terminal-key">{label}</span><span className="hud-terminal-value">{value}</span></div>;
 }
