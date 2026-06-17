@@ -41,7 +41,7 @@ Deliberately carried forward:
 
 - Arbitrary inline/custom API URLs supplied by chat or templates.
 - Advanced Twitch reward fields and safer disable/pause-first lifecycle controls.
-- Cloud-hosted uptime parity with FossaBot.
+- Cloud-hosted uptime parity with FossaBot; see `docs/superpowers/plans/2026-06-16-fossabot-uptime-parity-options.md` before changing deployment architecture.
 
 ---
 
