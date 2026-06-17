@@ -48,14 +48,15 @@ Examples:
 
 ## Reward queue
 
-The config page can load manageable Twitch rewards, create simple custom rewards, delete a selected manageable reward after confirmation, then load unfulfilled redemptions for a selected reward. Create/delete and fulfill/cancel controls call Twitch Helix with `channel:manage:redemptions`.
+The config page can load manageable Twitch rewards, create simple custom rewards, pause/resume or enable/disable a selected reward, delete a selected manageable reward after confirmation, then load unfulfilled redemptions for a selected reward. Reward lifecycle, create/delete, and fulfill/cancel controls call Twitch Helix with `channel:manage:redemptions`.
 
 When a loaded reward or redemption title matches an enabled channel point rule, the reward queue shows the saved fulfillment note next to the selected reward context and each matching redemption. Use this for operator-only instructions such as “refund if no input”, “read aloud after current segment”, or “check OBS scene before fulfilling”.
 
 Safety boundaries:
 
 - Reward creation is intentionally minimal: title, cost, optional prompt, enabled, and user-input-required only. Advanced Twitch reward fields stay in Twitch for now.
-- Reward deletion requires an operator confirmation checkbox. Twitch can mark pending unfulfilled redemptions as fulfilled when a reward is deleted, so prefer disabling/pausing in Twitch when you need a reversible change.
+- Pause/resume and enable/disable are the preferred reversible lifecycle controls for temporary changes.
+- Reward deletion requires an operator confirmation checkbox. Twitch can mark pending unfulfilled redemptions as fulfilled when a reward is deleted, so prefer pause/disable before delete.
 - Reward listing defaults to manageable rewards only.
 - Fulfill/cancel only applies to explicit operator-selected unfulfilled redemptions.
 - Fulfillment notes are display-only guidance; they do not automatically fulfill, cancel, refund, or create rewards.

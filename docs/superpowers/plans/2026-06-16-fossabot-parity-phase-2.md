@@ -17,6 +17,13 @@
 
 ## Current baseline
 
+Phase 2 status after committed cleanup:
+
+- Shipped: backend `PATCH /api/twitch/rewards/{rewardId}` lifecycle updates for `enabled` and `paused`.
+- Shipped: dashboard pause/resume and enable/disable controls before delete.
+- Shipped: uptime parity options document at `docs/superpowers/plans/2026-06-16-fossabot-uptime-parity-options.md`.
+- Deferred: Task 3 advanced reward fields; keep cooldowns, per-stream/user limits, and other non-minimal Helix settings as follow-up.
+
 Already implemented and committed before this Phase 2 plan:
 
 - Bot audit/status dashboard, timers, custom commands, template variables, chat replies, API variables, counters, and quotes.
@@ -26,7 +33,7 @@ Already implemented and committed before this Phase 2 plan:
 
 Remaining roadmap items from `docs/superpowers/plans/2026-06-15-fossabot-parity-roadmap.md`:
 
-- Advanced Twitch reward fields and safer disable/pause-first lifecycle controls.
+- Advanced Twitch reward fields such as cooldowns, per-stream/user limits, and other non-minimal Helix settings.
 - Cloud-hosted uptime parity with FossaBot.
 
 Out of scope unless explicitly requested:
