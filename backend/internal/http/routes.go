@@ -14,6 +14,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/twitch/interactions", s.requireOperator(s.putTwitchInteractions))
 	s.mux.HandleFunc("GET /api/twitch/rewards", s.requireOperator(s.twitchRewards))
 	s.mux.HandleFunc("POST /api/twitch/rewards", s.requireOperator(s.twitchRewardCreate))
+	s.mux.HandleFunc("PATCH /api/twitch/rewards/{rewardId}", s.requireOperator(s.twitchRewardUpdate))
 	s.mux.HandleFunc("DELETE /api/twitch/rewards/{rewardId}", s.requireOperator(s.twitchRewardDelete))
 	s.mux.HandleFunc("GET /api/twitch/rewards/{rewardId}/redemptions", s.requireOperator(s.twitchRewardRedemptions))
 	s.mux.HandleFunc("POST /api/twitch/rewards/{rewardId}/redemptions/{redemptionId}", s.requireOperator(s.twitchRewardRedemptionStatus))
@@ -70,7 +71,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", s.config.AllowedOrigin)
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Overlay-Operator-Secret,X-Overlay-Webhook-Secret")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

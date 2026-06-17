@@ -65,6 +65,10 @@ type twitchRewardCreateRequest struct {
 type twitchRewardDeleteRequest struct {
 	Confirm bool `json:"confirm"`
 }
+type twitchRewardUpdateRequest struct {
+	Enabled *bool `json:"enabled,omitempty"`
+	Paused  *bool `json:"paused,omitempty"`
+}
 type twitchRewardMutationResponse struct {
 	Reward *twitchReward `json:"reward,omitempty"`
 	Result string        `json:"result"`
@@ -106,6 +110,19 @@ func (s *Server) twitchRewardDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, twitchRewardMutationResponse{Result: "deleted"})
+}
+
+func (s *Server) twitchRewardUpdate(w http.ResponseWriter, r *http.Request) {
+	var request twitchRewardUpdateRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	reward, err := s.updateTwitchReward(r.Context(), r.PathValue("rewardId"), request)
+	if err != nil {
+		http.Error(w, err.Error(), twitchRewardsHTTPStatus(err))
+		return
+	}
+	writeJSON(w, twitchRewardMutationResponse{Reward: reward, Result: "updated"})
 }
 
 func (s *Server) twitchRewardRedemptions(w http.ResponseWriter, r *http.Request) {
@@ -246,6 +263,39 @@ func (s *Server) createTwitchReward(ctx context.Context, request twitchRewardCre
 	}
 	if len(decoded.Data) == 0 {
 		return nil, fmt.Errorf("twitch rewards failed: create returned no reward")
+	}
+	decoded.Data[0].Manageable = true
+	return &decoded.Data[0], nil
+}
+
+func (s *Server) updateTwitchReward(ctx context.Context, rewardID string, request twitchRewardUpdateRequest) (*twitchReward, error) {
+	token, err := s.rewardToken(ctx, "channel:manage:redemptions")
+	if err != nil {
+		return nil, err
+	}
+	rewardID = strings.TrimSpace(rewardID)
+	if rewardID == "" {
+		return nil, fmt.Errorf("reward id is required")
+	}
+	payload := map[string]any{}
+	if request.Enabled != nil {
+		payload["is_enabled"] = *request.Enabled
+	}
+	if request.Paused != nil {
+		payload["is_paused"] = *request.Paused
+	}
+	if len(payload) == 0 {
+		return nil, fmt.Errorf("at least one reward field is required")
+	}
+	query := url.Values{"broadcaster_id": {token.UserID}, "id": {rewardID}}
+	var decoded struct {
+		Data []twitchReward `json:"data"`
+	}
+	if err := s.twitchRewardsRequest(ctx, http.MethodPatch, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, payload, http.StatusOK, &decoded); err != nil {
+		return nil, err
+	}
+	if len(decoded.Data) == 0 {
+		return nil, fmt.Errorf("twitch rewards failed: update returned no reward")
 	}
 	decoded.Data[0].Manageable = true
 	return &decoded.Data[0], nil

@@ -83,6 +83,62 @@ func TestTwitchRewardCreatePostsReward(t *testing.T) {
 	}
 }
 
+func TestTwitchRewardUpdateRequiresManageScope(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client"}, events.NewBus(4))
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:read:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123", Login: "broadcaster"}
+
+	_, err := server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{Enabled: boolPtr(true)})
+	if err == nil || !strings.Contains(err.Error(), "channel:manage:redemptions") {
+		t.Fatalf("expected missing manage scope, got %v", err)
+	}
+}
+
+func TestTwitchRewardUpdateValidatesPatch(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client"}, events.NewBus(4))
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:manage:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123", Login: "broadcaster"}
+
+	if _, err := server.updateTwitchReward(t.Context(), "   ", twitchRewardUpdateRequest{Enabled: boolPtr(true)}); err == nil || !strings.Contains(err.Error(), "reward id is required") {
+		t.Fatalf("expected reward id validation error, got %v", err)
+	}
+	if _, err := server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{}); err == nil || !strings.Contains(err.Error(), "at least one reward field is required") {
+		t.Fatalf("expected payload validation error, got %v", err)
+	}
+}
+
+func TestTwitchRewardUpdatePatchesLifecycle(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:manage:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123", Login: "broadcaster"}
+
+	var body string
+	oldClient := twitchHTTPClient
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodPatch {
+			t.Fatalf("expected PATCH, got %s", req.Method)
+		}
+		if got := req.URL.Query().Get("broadcaster_id"); got != "123" {
+			t.Fatalf("expected broadcaster_id=123, got %q", got)
+		}
+		if got := req.URL.Query().Get("id"); got != "reward-1" {
+			t.Fatalf("expected reward id, got %q", got)
+		}
+		data, _ := io.ReadAll(req.Body)
+		body = string(data)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"reward-1","title":"Hydrate","cost":100,"is_enabled":false,"is_paused":true}]}`)), Header: make(http.Header)}, nil
+	})}
+	t.Cleanup(func() { twitchHTTPClient = oldClient })
+
+	reward, err := server.updateTwitchReward(t.Context(), " reward-1 ", twitchRewardUpdateRequest{Enabled: boolPtr(false), Paused: boolPtr(true)})
+	if err != nil {
+		t.Fatalf("update reward: %v", err)
+	}
+	if reward.ID != "reward-1" || !reward.Manageable || !reward.Paused || reward.Enabled {
+		t.Fatalf("unexpected reward: %#v", reward)
+	}
+	if !strings.Contains(body, `"is_enabled":false`) || !strings.Contains(body, `"is_paused":true`) {
+		t.Fatalf("unexpected update body: %s", body)
+	}
+}
+
 func TestTwitchRewardDeleteRequiresConfirm(t *testing.T) {
 	server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
 	rec := httptest.NewRecorder()
@@ -118,4 +174,8 @@ func TestTwitchRewardDeleteCallsHelix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete reward: %v", err)
 	}
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
