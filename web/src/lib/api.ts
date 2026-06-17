@@ -167,6 +167,7 @@ export type TwitchInteractionsResponse = {
 export type TwitchReward = { id: string; title: string; prompt?: string; cost: number; is_enabled?: boolean; is_paused?: boolean; is_in_stock?: boolean; manageable?: boolean };
 export type TwitchRewardsResponse = { rewards: TwitchReward[] };
 export type TwitchRewardCreatePayload = { title: string; prompt?: string; cost: number; enabled: boolean; userInputRequired: boolean };
+export type TwitchRewardUpdatePayload = { enabled?: boolean; paused?: boolean };
 export type TwitchRewardMutationResponse = { reward?: TwitchReward; result: string };
 export type TwitchRedemption = { id: string; user_login?: string; user_name?: string; user_input?: string; status: string; redeemed_at: string; reward: { id: string; title: string; cost: number } };
 export type TwitchRedemptionsResponse = { redemptions: TwitchRedemption[] };
@@ -518,6 +519,16 @@ export async function deleteTwitchReward(rewardId: string, explicitBaseUrl?: str
   return (await response.json()) as TwitchRewardMutationResponse;
 }
 
+export async function updateTwitchReward(
+  rewardId: string,
+  payload: TwitchRewardUpdatePayload,
+  explicitBaseUrl?: string,
+  operatorSecret?: string,
+) {
+  const response = await sendJSON('PATCH', `/api/twitch/rewards/${encodeURIComponent(rewardId)}`, payload, explicitBaseUrl, { operatorSecret });
+  return (await response.json()) as TwitchRewardMutationResponse;
+}
+
 export async function fetchTwitchRewardRedemptions(rewardId: string, explicitBaseUrl?: string, operatorSecret?: string) {
   const response = await fetch(apiUrl(`/api/twitch/rewards/${encodeURIComponent(rewardId)}/redemptions?status=UNFULFILLED`, explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
   if (!response.ok) throw new Error(`Twitch redemptions failed: ${response.status}`);
@@ -692,7 +703,7 @@ async function postJSON(path: string, payload: Record<string, unknown>, explicit
 }
 
 async function sendJSON(
-  method: 'POST' | 'PUT',
+  method: 'POST' | 'PUT' | 'PATCH',
   path: string,
   payload: Record<string, unknown>,
   explicitBaseUrl?: string,

@@ -6,6 +6,7 @@ import {
   fetchTwitchRewardRedemptions,
   fetchTwitchRewards,
   saveTwitchInteractions,
+  updateTwitchReward,
   updateTwitchRedemptionStatus,
   type ChatAliasRule,
   type ChannelPointRule,
@@ -120,11 +121,13 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
     }
   }
 
-  async function loadRewards() {
+  async function loadRewards(preferredRewardId = selectedRewardId) {
     try {
       const response = await fetchTwitchRewards(apiBaseUrl, operatorSecret);
-      setRewards(response.rewards ?? []);
-      setSelectedRewardId(response.rewards?.[0]?.id ?? '');
+      const loadedRewards = response.rewards ?? [];
+      const nextSelectedRewardId = loadedRewards.find((reward) => reward.id === preferredRewardId)?.id ?? loadedRewards[0]?.id ?? '';
+      setRewards(loadedRewards);
+      setSelectedRewardId(nextSelectedRewardId);
       setDeleteRewardConfirmed(false);
       setRewardError('');
     } catch (error) {
@@ -178,6 +181,16 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
       await loadRewards();
     } catch (error) {
       setRewardError(error instanceof Error ? error.message : 'Failed to delete reward.');
+    }
+  }
+
+  async function updateSelectedRewardLifecycle(patch: { enabled?: boolean; paused?: boolean }) {
+    if (!selectedReward) return;
+    try {
+      await updateTwitchReward(selectedReward.id, patch, apiBaseUrl, operatorSecret);
+      await loadRewards(selectedReward.id);
+    } catch (error) {
+      setRewardError(error instanceof Error ? error.message : 'Failed to update reward lifecycle.');
     }
   }
 
@@ -308,7 +321,7 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
             <p className="hud-kicker">Reward queue</p>
             <p className="mt-1 text-xs text-zinc-400">Load manageable rewards, create simple rewards, and fulfill/cancel unfulfilled redemptions. Delete requires confirmation and can fulfill pending redemptions on Twitch.</p>
           </div>
-          <button className="hud-chip" type="button" onClick={loadRewards}>Load rewards</button>
+          <button className="hud-chip" type="button" onClick={() => loadRewards()}>Load rewards</button>
         </div>
         {rewardError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">{rewardError}</p> : null}
         <div className="mt-3 grid gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3 md:grid-cols-[1fr_8rem_auto_auto] md:items-end">
@@ -340,11 +353,6 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <label className="grid min-w-64 gap-1 text-xs text-zinc-300"><span className="hud-kicker">Reward</span><select className="hud-input" value={selectedRewardId} onChange={(event) => { setSelectedRewardId(event.target.value); setDeleteRewardConfirmed(false); }}>{rewards.map((reward) => <option key={reward.id} value={reward.id}>{reward.title} · {reward.cost}</option>)}</select></label>
             <button className="hud-chip" type="button" onClick={() => loadRedemptions()}>Load unfulfilled</button>
-            <label className="flex items-center gap-2 text-xs text-amber-100">
-              <input type="checkbox" checked={deleteRewardConfirmed} onChange={(event) => setDeleteRewardConfirmed(event.target.checked)} />
-              Confirm delete
-            </label>
-            <button className="hud-chip" type="button" onClick={deleteReward} disabled={!deleteRewardConfirmed || !selectedRewardId}>Delete selected</button>
           </div>
         ) : null}
         {selectedReward ? (
@@ -353,7 +361,30 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
             <p className="mt-1 font-semibold text-cyan-100">
               {selectedReward.title} · {selectedReward.cost}
             </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="hud-chip">{selectedReward.is_enabled === false ? 'Disabled' : 'Enabled'}</span>
+              <span className="hud-chip">{selectedReward.is_paused ? 'Paused' : 'Not paused'}</span>
+              {selectedReward.is_in_stock === false ? <span className="hud-chip">Out of stock</span> : null}
+            </div>
             {selectedRewardRule?.fulfillmentNote ? <p className="mt-1 text-zinc-200">Fulfillment note: {selectedRewardRule.fulfillmentNote}</p> : <p className="mt-1 text-zinc-400">No saved channel-point rule match.</p>}
+            <p className="mt-1 text-zinc-300">Pause or disable first when you need a reversible change. Delete remains destructive and may fulfill pending redemptions on Twitch.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button className="hud-chip" type="button" onClick={() => updateSelectedRewardLifecycle({ paused: !selectedReward.is_paused })}>
+                {selectedReward.is_paused ? 'Resume reward' : 'Pause reward'}
+              </button>
+              <button className="hud-chip" type="button" onClick={() => updateSelectedRewardLifecycle({ enabled: selectedReward.is_enabled === false })}>
+                {selectedReward.is_enabled === false ? 'Enable reward' : 'Disable reward'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {rewards.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
+            <label className="flex items-center gap-2 text-xs text-amber-100">
+              <input type="checkbox" checked={deleteRewardConfirmed} onChange={(event) => setDeleteRewardConfirmed(event.target.checked)} />
+              Confirm delete
+            </label>
+            <button className="hud-chip" type="button" onClick={deleteReward} disabled={!deleteRewardConfirmed || !selectedRewardId}>Delete selected</button>
           </div>
         ) : null}
         <div className="mt-3 grid gap-2">
