@@ -34,3 +34,20 @@ func TestRenderTemplateAPIVariables(t *testing.T) {
 		t.Fatalf("rendered=%q", result.Text)
 	}
 }
+
+func TestAPIVariableResolverNormalizesAndLimitsNames(t *testing.T) {
+	resolver := NewAPIVariableResolver(nil)
+	results := resolver.ResolveAPIVariables([]string{" Weather ", "weather", "Quote", "One", "Two", "Three"})
+	if len(results) != 3 {
+		t.Fatalf("result count=%d, want 3", len(results))
+	}
+	for _, name := range []string{"weather", "quote", "one"} {
+		result, ok := results[name]
+		if !ok {
+			t.Fatalf("missing result for %q: %#v", name, results)
+		}
+		if result.Name != name || result.Status != "unavailable" {
+			t.Fatalf("unexpected result for %q: %#v", name, result)
+		}
+	}
+}

@@ -31,3 +31,26 @@ func TestRenderTemplateCapsRenderedResponse(t *testing.T) {
 		t.Fatalf("expected 400-rune cap, got %d", len([]rune(result.Text)))
 	}
 }
+
+func TestTemplateVariableDiscoveryNormalizesAndDedupes(t *testing.T) {
+	template := "{USER} {user} {Count:Hype} {count:hype} {API:Weather} {api:weather} {Quote:Random} {quote:random}"
+
+	if got := TemplateVariableNames(template); len(got) != 4 || got[0] != "user" || got[1] != "count:hype" || got[2] != "api:weather" || got[3] != "quote:random" {
+		t.Fatalf("unexpected template variables: %#v", got)
+	}
+	if got := CountVariableNames(template); len(got) != 1 || got[0] != "hype" {
+		t.Fatalf("unexpected count variables: %#v", got)
+	}
+	if got := APIVariableNames(template); len(got) != 1 || got[0] != "weather" {
+		t.Fatalf("unexpected api variables: %#v", got)
+	}
+	if !UsesRandomQuote(template) {
+		t.Fatal("expected random quote usage to be detected")
+	}
+}
+
+func TestUsesRandomQuoteRejectsSimilarNames(t *testing.T) {
+	if UsesRandomQuote("{quote:randomness} {quote:Randomish}") {
+		t.Fatal("similar names should not count as random quote usage")
+	}
+}

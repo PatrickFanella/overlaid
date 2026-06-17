@@ -28,6 +28,67 @@ type TemplateResult struct {
 	UnknownVariables []string
 }
 
+func TemplateVariableNames(template string) []string {
+	return templateVariableNames(template, func(name string) (string, bool) {
+		return name, true
+	})
+}
+
+func CountVariableNames(template string) []string {
+	return templateVariableNames(template, func(name string) (string, bool) {
+		if !strings.HasPrefix(name, "count:") {
+			return "", false
+		}
+		return strings.TrimSpace(strings.TrimPrefix(name, "count:")), true
+	})
+}
+
+func APIVariableNames(template string) []string {
+	return templateVariableNames(template, func(name string) (string, bool) {
+		if !strings.HasPrefix(name, "api:") {
+			return "", false
+		}
+		return strings.TrimSpace(strings.TrimPrefix(name, "api:")), true
+	})
+}
+
+func UsesRandomQuote(template string) bool {
+	for _, name := range TemplateVariableNames(template) {
+		if name == "quote:random" {
+			return true
+		}
+	}
+	return false
+}
+
+func templateVariableNames(template string, filter func(string) (string, bool)) []string {
+	seen := map[string]struct{}{}
+	result := []string{}
+	for _, match := range templateVariablePattern.FindAllStringSubmatch(template, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(match[1]))
+		if name == "" {
+			continue
+		}
+		filtered, ok := filter(name)
+		if !ok {
+			continue
+		}
+		filtered = strings.ToLower(strings.TrimSpace(filtered))
+		if filtered == "" {
+			continue
+		}
+		if _, ok := seen[filtered]; ok {
+			continue
+		}
+		seen[filtered] = struct{}{}
+		result = append(result, filtered)
+	}
+	return result
+}
+
 func RenderTemplate(template string, context TemplateContext) TemplateResult {
 	unknownSet := map[string]struct{}{}
 	rendered := templateVariablePattern.ReplaceAllStringFunc(template, func(match string) string {

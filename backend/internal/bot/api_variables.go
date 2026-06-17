@@ -43,6 +43,14 @@ type apiVariableCacheEntry struct {
 	expiresAt time.Time
 }
 
+type APIVariableResolver struct {
+	store *Store
+}
+
+func NewAPIVariableResolver(store *Store) *APIVariableResolver {
+	return &APIVariableResolver{store: store}
+}
+
 type apiVariableScanner interface{ Scan(dest ...any) error }
 
 func (s *Store) ListAPIVariables(ctx context.Context) ([]APIVariable, error) {
@@ -151,8 +159,32 @@ func isPublicIP(ip net.IP) bool {
 	return ip != nil && ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !ip.IsLinkLocalMulticast() && !ip.IsUnspecified()
 }
 
+func (r *APIVariableResolver) ResolveAPIVariables(names []string) map[string]APIVariableResult {
+	if r == nil {
+		return map[string]APIVariableResult{}
+	}
+	return resolveAPIVariables(r.store, names)
+}
+
 func (s *Store) ResolveAPIVariables(names []string) map[string]APIVariableResult {
+	return resolveAPIVariables(s, names)
+}
+
+func resolveAPIVariables(store *Store, names []string) map[string]APIVariableResult {
 	out := map[string]APIVariableResult{}
+	unique := normalizeAPIVariableNames(names)
+	if len(unique) == 0 {
+		return out
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for _, name := range unique {
+		out[name] = store.resolveAPIVariable(ctx, name)
+	}
+	return out
+}
+
+func normalizeAPIVariableNames(names []string) []string {
 	unique := []string{}
 	seen := map[string]struct{}{}
 	for _, name := range names {
@@ -169,15 +201,7 @@ func (s *Store) ResolveAPIVariables(names []string) map[string]APIVariableResult
 			break
 		}
 	}
-	if len(unique) == 0 {
-		return out
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	for _, name := range unique {
-		out[name] = s.resolveAPIVariable(ctx, name)
-	}
-	return out
+	return unique
 }
 
 func (s *Store) resolveAPIVariable(ctx context.Context, name string) APIVariableResult {

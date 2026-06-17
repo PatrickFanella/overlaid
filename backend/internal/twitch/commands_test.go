@@ -10,8 +10,10 @@ import (
 )
 
 type fakeCommunityStore struct {
-	counter bot.Counter
-	quote   bot.Quote
+	counter          bot.Counter
+	quote            bot.Quote
+	countCalls       []string
+	randomQuoteCalls int
 }
 
 func (f *fakeCommunityStore) IncrementCounter(name string, delta int) (bot.Counter, error) {
@@ -19,12 +21,14 @@ func (f *fakeCommunityStore) IncrementCounter(name string, delta int) (bot.Count
 	return f.counter, nil
 }
 func (f *fakeCommunityStore) CounterValue(name string) (bot.Counter, bool, error) {
+	f.countCalls = append(f.countCalls, name)
 	if f.counter.Name == name {
 		return f.counter, true, nil
 	}
 	return bot.Counter{}, false, nil
 }
 func (f *fakeCommunityStore) RandomQuote() (bot.Quote, bool, error) {
+	f.randomQuoteCalls++
 	if f.quote.Text == "" {
 		return bot.Quote{}, false, nil
 	}
@@ -35,6 +39,19 @@ func (f *fakeCommunityStore) AddQuote(text string, author string) (bot.Quote, er
 	return f.quote, nil
 }
 func (f *fakeCommunityStore) DeleteQuote(id string) error { f.quote = bot.Quote{}; return nil }
+
+type fakeAPIVariableStore struct {
+	calls []string
+}
+
+func (f *fakeAPIVariableStore) ResolveAPIVariables(names []string) map[string]bot.APIVariableResult {
+	f.calls = append(f.calls, names...)
+	results := make(map[string]bot.APIVariableResult, len(names))
+	for _, name := range names {
+		results[name] = bot.APIVariableResult{Name: name, Value: strings.ToUpper(name), Status: "fetched"}
+	}
+	return results
+}
 
 func TestParseChatCommand(t *testing.T) {
 	tests := []struct {
@@ -248,6 +265,26 @@ func TestCommandProcessorCommunityTemplateVariables(t *testing.T) {
 	got := processor.Handle(ChatCommand{Name: "stats"}, ChatCommandUser{Name: "Viewer"})
 	if len(got) != 2 || got[1].Message != "hype=7 quote=stay awhile — Deckard" {
 		t.Fatalf("unexpected community template response: %#v", got)
+	}
+}
+
+func TestCommandProcessorTemplateContextUsesTemplateDiscoveryHelpers(t *testing.T) {
+	community := &fakeCommunityStore{counter: bot.Counter{Name: "hype", Value: 7}, quote: bot.Quote{Text: "stay awhile", Author: "Deckard"}}
+	apiStore := &fakeAPIVariableStore{}
+	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Community: community, APIVariables: apiStore, Custom: []CustomCommand{{Name: "stats", Enabled: true, Response: "{API:Weather} {api:weather} {Count:Hype} {count:hype} {Quote:Random}", Action: "ticker", RoleRequired: "viewer"}}})
+
+	got := processor.Handle(ChatCommand{Name: "stats"}, ChatCommandUser{Name: "Viewer"})
+	if len(got) != 2 || got[1].Message != "WEATHER WEATHER 7 7 stay awhile — Deckard" {
+		t.Fatalf("unexpected discovered template response: %#v", got)
+	}
+	if len(apiStore.calls) != 1 || apiStore.calls[0] != "weather" {
+		t.Fatalf("unexpected api variable discovery: %#v", apiStore.calls)
+	}
+	if len(community.countCalls) != 1 || community.countCalls[0] != "hype" {
+		t.Fatalf("unexpected count variable discovery: %#v", community.countCalls)
+	}
+	if community.randomQuoteCalls != 1 {
+		t.Fatalf("expected random quote lookup once, got %d", community.randomQuoteCalls)
 	}
 }
 

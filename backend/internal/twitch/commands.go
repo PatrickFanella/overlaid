@@ -1,7 +1,6 @@
 package twitch
 
 import (
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,9 +43,6 @@ type CommunityStore interface {
 type APIVariableStore interface {
 	ResolveAPIVariables(names []string) map[string]bot.APIVariableResult
 }
-
-var countTemplatePattern = regexp.MustCompile(`\{count:([a-z0-9_-]+)\}`)
-var apiTemplatePattern = regexp.MustCompile(`\{api:([a-z0-9_-]+)\}`)
 
 type CommandProcessorConfig struct {
 	Cooldown     time.Duration
@@ -271,12 +267,7 @@ func (p *CommandProcessor) handleCustomCommand(original ChatCommand, resolved Ch
 func (p *CommandProcessor) templateContext(response string, original ChatCommand, resolved ChatCommand, user ChatCommandUser) bot.TemplateContext {
 	ctx := bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: p.channel, Args: original.Args, Command: resolved.Name, Counts: map[string]int{}}
 	if p.apiVariables != nil {
-		names := []string{}
-		for _, match := range apiTemplatePattern.FindAllStringSubmatch(strings.ToLower(response), -1) {
-			if len(match) >= 2 {
-				names = append(names, match[1])
-			}
-		}
+		names := bot.APIVariableNames(response)
 		results := p.apiVariables.ResolveAPIVariables(names)
 		if len(results) > 0 {
 			ctx.APIVariables = map[string]string{}
@@ -288,15 +279,12 @@ func (p *CommandProcessor) templateContext(response string, original ChatCommand
 	if p.community == nil {
 		return ctx
 	}
-	for _, match := range countTemplatePattern.FindAllStringSubmatch(strings.ToLower(response), -1) {
-		if len(match) < 2 {
-			continue
-		}
-		if counter, ok, err := p.community.CounterValue(match[1]); err == nil && ok {
-			ctx.Counts[match[1]] = counter.Value
+	for _, name := range bot.CountVariableNames(response) {
+		if counter, ok, err := p.community.CounterValue(name); err == nil && ok {
+			ctx.Counts[name] = counter.Value
 		}
 	}
-	if strings.Contains(strings.ToLower(response), "{quote:random}") {
+	if bot.UsesRandomQuote(response) {
 		if quote, ok, err := p.community.RandomQuote(); err == nil && ok {
 			ctx.QuoteRandom = quote.Text
 			if quote.Author != "" {
