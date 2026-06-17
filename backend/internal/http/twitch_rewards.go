@@ -1,12 +1,9 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -163,25 +160,11 @@ func twitchRewardsHTTPStatus(err error) int {
 }
 
 func (s *Server) rewardToken(ctx context.Context, scope string) (*twitchTokenInfo, error) {
-	token, ok := s.ensureTwitchToken(ctx)
-	if !ok || strings.TrimSpace(token.AccessToken) == "" || strings.TrimSpace(token.UserID) == "" {
-		return nil, fmt.Errorf("%w: authenticated Twitch token required", errTwitchRewardsUnavailable)
-	}
-	if !hasScope(token.Scope, scope) {
-		return nil, fmt.Errorf("%w: %s", errTwitchRewardsMissingScope, scope)
-	}
-	return token, nil
+	return s.requireTwitchHelixToken(ctx, errTwitchRewardsUnavailable, errTwitchRewardsMissingScope, scope, scope)
 }
 
 func (s *Server) rewardReadToken(ctx context.Context) (*twitchTokenInfo, error) {
-	token, ok := s.ensureTwitchToken(ctx)
-	if !ok || strings.TrimSpace(token.AccessToken) == "" || strings.TrimSpace(token.UserID) == "" {
-		return nil, fmt.Errorf("%w: authenticated Twitch token required", errTwitchRewardsUnavailable)
-	}
-	if !hasScope(token.Scope, "channel:read:redemptions") && !hasScope(token.Scope, "channel:manage:redemptions") {
-		return nil, fmt.Errorf("%w: channel:read:redemptions", errTwitchRewardsMissingScope)
-	}
-	return token, nil
+	return s.requireTwitchHelixToken(ctx, errTwitchRewardsUnavailable, errTwitchRewardsMissingScope, "channel:read:redemptions", "channel:read:redemptions", "channel:manage:redemptions")
 }
 
 func (s *Server) listTwitchRewards(ctx context.Context, manageable bool) ([]twitchReward, error) {
@@ -196,7 +179,7 @@ func (s *Server) listTwitchRewards(ctx context.Context, manageable bool) ([]twit
 	var decoded struct {
 		Data []twitchReward `json:"data"`
 	}
-	if err := s.twitchRewardsRequest(ctx, http.MethodGet, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, nil, http.StatusOK, &decoded); err != nil {
+	if err := s.twitchHelixJSONRequest(ctx, http.MethodGet, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, nil, http.StatusOK, 4096, "twitch rewards failed", &decoded); err != nil {
 		return nil, err
 	}
 	for i := range decoded.Data {
@@ -214,7 +197,7 @@ func (s *Server) listTwitchRewardRedemptions(ctx context.Context, rewardID, stat
 	var decoded struct {
 		Data []twitchRedemption `json:"data"`
 	}
-	if err := s.twitchRewardsRequest(ctx, http.MethodGet, twitchRewardsEndpoint+"/redemptions?"+query.Encode(), token.AccessToken, nil, http.StatusOK, &decoded); err != nil {
+	if err := s.twitchHelixJSONRequest(ctx, http.MethodGet, twitchRewardsEndpoint+"/redemptions?"+query.Encode(), token.AccessToken, nil, http.StatusOK, 4096, "twitch rewards failed", &decoded); err != nil {
 		return nil, err
 	}
 	return decoded.Data, nil
@@ -226,7 +209,7 @@ func (s *Server) updateTwitchRedemptionStatus(ctx context.Context, rewardID, red
 		return err
 	}
 	query := url.Values{"broadcaster_id": {token.UserID}, "reward_id": {strings.TrimSpace(rewardID)}, "id": {strings.TrimSpace(redemptionID)}}
-	return s.twitchRewardsRequest(ctx, http.MethodPatch, twitchRewardsEndpoint+"/redemptions?"+query.Encode(), token.AccessToken, map[string]string{"status": status}, http.StatusOK, nil)
+	return s.twitchHelixJSONRequest(ctx, http.MethodPatch, twitchRewardsEndpoint+"/redemptions?"+query.Encode(), token.AccessToken, map[string]string{"status": status}, http.StatusOK, 4096, "twitch rewards failed", nil)
 }
 
 func (s *Server) createTwitchReward(ctx context.Context, request twitchRewardCreateRequest) (*twitchReward, error) {
@@ -258,7 +241,7 @@ func (s *Server) createTwitchReward(ctx context.Context, request twitchRewardCre
 	var decoded struct {
 		Data []twitchReward `json:"data"`
 	}
-	if err := s.twitchRewardsRequest(ctx, http.MethodPost, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, payload, http.StatusOK, &decoded); err != nil {
+	if err := s.twitchHelixJSONRequest(ctx, http.MethodPost, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, payload, http.StatusOK, 4096, "twitch rewards failed", &decoded); err != nil {
 		return nil, err
 	}
 	if len(decoded.Data) == 0 {
@@ -291,7 +274,7 @@ func (s *Server) updateTwitchReward(ctx context.Context, rewardID string, reques
 	var decoded struct {
 		Data []twitchReward `json:"data"`
 	}
-	if err := s.twitchRewardsRequest(ctx, http.MethodPatch, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, payload, http.StatusOK, &decoded); err != nil {
+	if err := s.twitchHelixJSONRequest(ctx, http.MethodPatch, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, payload, http.StatusOK, 4096, "twitch rewards failed", &decoded); err != nil {
 		return nil, err
 	}
 	if len(decoded.Data) == 0 {
@@ -311,39 +294,5 @@ func (s *Server) deleteTwitchReward(ctx context.Context, rewardID string) error 
 		return fmt.Errorf("reward id is required")
 	}
 	query := url.Values{"broadcaster_id": {token.UserID}, "id": {rewardID}}
-	return s.twitchRewardsRequest(ctx, http.MethodDelete, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, nil, http.StatusNoContent, nil)
-}
-
-func (s *Server) twitchRewardsRequest(ctx context.Context, method, targetURL, accessToken string, payload any, successStatus int, out any) error {
-	var body io.Reader
-	if payload != nil {
-		data, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(data)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, targetURL, body)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Client-Id", s.config.TwitchClientID)
-	req.Header.Set("Accept", "application/json")
-	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := twitchHTTPClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	if resp.StatusCode != successStatus {
-		return fmt.Errorf("twitch rewards failed: status=%d detail=%s", resp.StatusCode, sanitizeAuthErrorDetail(string(data)))
-	}
-	if out != nil {
-		return json.Unmarshal(data, out)
-	}
-	return nil
+	return s.twitchHelixJSONRequest(ctx, http.MethodDelete, twitchRewardsEndpoint+"?"+query.Encode(), token.AccessToken, nil, http.StatusNoContent, 4096, "twitch rewards failed", nil)
 }

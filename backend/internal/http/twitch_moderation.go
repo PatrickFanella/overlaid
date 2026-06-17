@@ -1,12 +1,10 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -60,9 +58,9 @@ func (s *Server) executeTwitchModerationAction(ctx context.Context, request botM
 	if action == "" {
 		return botModerationActionResponse{}, errors.New("moderation action is required")
 	}
-	token, ok := s.ensureTwitchToken(ctx)
-	if !ok || strings.TrimSpace(token.AccessToken) == "" || strings.TrimSpace(token.UserID) == "" {
-		return botModerationActionResponse{}, fmt.Errorf("%w: authenticated Twitch token required", errTwitchModerationUnavailable)
+	token, err := s.requireTwitchHelixToken(ctx, errTwitchModerationUnavailable, errTwitchModerationMissingScope, "")
+	if err != nil {
+		return botModerationActionResponse{}, err
 	}
 	moderatorID := token.UserID
 	broadcasterID := token.UserID
@@ -74,8 +72,9 @@ func (s *Server) executeTwitchModerationAction(ctx context.Context, request botM
 		if strings.TrimSpace(request.MessageID) == "" {
 			return botModerationActionResponse{}, errors.New("messageId is required for delete")
 		}
-		if !hasScope(token.Scope, "moderator:manage:chat_messages") {
-			return botModerationActionResponse{}, fmt.Errorf("%w: moderator:manage:chat_messages", errTwitchModerationMissingScope)
+		token, err = s.requireTwitchHelixToken(ctx, errTwitchModerationUnavailable, errTwitchModerationMissingScope, "moderator:manage:chat_messages", "moderator:manage:chat_messages")
+		if err != nil {
+			return botModerationActionResponse{}, err
 		}
 		if err := s.deleteTwitchChatMessage(ctx, token.AccessToken, broadcasterID, moderatorID, request.MessageID); err != nil {
 			return botModerationActionResponse{}, err
@@ -84,8 +83,9 @@ func (s *Server) executeTwitchModerationAction(ctx context.Context, request botM
 		if strings.TrimSpace(request.TargetUserID) == "" {
 			return botModerationActionResponse{}, errors.New("targetUserId is required")
 		}
-		if !hasScope(token.Scope, "moderator:manage:banned_users") {
-			return botModerationActionResponse{}, fmt.Errorf("%w: moderator:manage:banned_users", errTwitchModerationMissingScope)
+		token, err = s.requireTwitchHelixToken(ctx, errTwitchModerationUnavailable, errTwitchModerationMissingScope, "moderator:manage:banned_users", "moderator:manage:banned_users")
+		if err != nil {
+			return botModerationActionResponse{}, err
 		}
 		duration := request.DurationSeconds
 		if action == "timeout" {
@@ -102,8 +102,9 @@ func (s *Server) executeTwitchModerationAction(ctx context.Context, request botM
 		if strings.TrimSpace(request.TargetUserID) == "" {
 			return botModerationActionResponse{}, errors.New("targetUserId is required")
 		}
-		if !hasScope(token.Scope, "moderator:manage:banned_users") {
-			return botModerationActionResponse{}, fmt.Errorf("%w: moderator:manage:banned_users", errTwitchModerationMissingScope)
+		token, err = s.requireTwitchHelixToken(ctx, errTwitchModerationUnavailable, errTwitchModerationMissingScope, "moderator:manage:banned_users", "moderator:manage:banned_users")
+		if err != nil {
+			return botModerationActionResponse{}, err
 		}
 		if err := s.unbanTwitchUser(ctx, token.AccessToken, broadcasterID, moderatorID, request.TargetUserID); err != nil {
 			return botModerationActionResponse{}, err
@@ -116,7 +117,7 @@ func (s *Server) executeTwitchModerationAction(ctx context.Context, request botM
 
 func (s *Server) deleteTwitchChatMessage(ctx context.Context, accessToken, broadcasterID, moderatorID, messageID string) error {
 	query := url.Values{"broadcaster_id": {broadcasterID}, "moderator_id": {moderatorID}, "message_id": {strings.TrimSpace(messageID)}}
-	return s.twitchModerationRequest(ctx, http.MethodDelete, twitchModerationEndpoint+"/chat?"+query.Encode(), accessToken, nil, http.StatusNoContent)
+	return s.twitchHelixJSONRequest(ctx, http.MethodDelete, twitchModerationEndpoint+"/chat?"+query.Encode(), accessToken, nil, http.StatusNoContent, 512, "twitch moderation failed", nil)
 }
 
 func (s *Server) banOrTimeoutTwitchUser(ctx context.Context, accessToken, broadcasterID, moderatorID, userID string, duration int, reason string) error {
@@ -125,43 +126,12 @@ func (s *Server) banOrTimeoutTwitchUser(ctx context.Context, accessToken, broadc
 	if duration > 0 {
 		body["data"].(map[string]any)["duration"] = duration
 	}
-	return s.twitchModerationRequest(ctx, http.MethodPost, twitchModerationEndpoint+"/bans?"+query.Encode(), accessToken, body, http.StatusOK)
+	return s.twitchHelixJSONRequest(ctx, http.MethodPost, twitchModerationEndpoint+"/bans?"+query.Encode(), accessToken, body, http.StatusOK, 512, "twitch moderation failed", nil)
 }
 
 func (s *Server) unbanTwitchUser(ctx context.Context, accessToken, broadcasterID, moderatorID, userID string) error {
 	query := url.Values{"broadcaster_id": {broadcasterID}, "moderator_id": {moderatorID}, "user_id": {strings.TrimSpace(userID)}}
-	return s.twitchModerationRequest(ctx, http.MethodDelete, twitchModerationEndpoint+"/bans?"+query.Encode(), accessToken, nil, http.StatusNoContent)
-}
-
-func (s *Server) twitchModerationRequest(ctx context.Context, method, targetURL, accessToken string, payload any, successStatus int) error {
-	var body io.Reader
-	if payload != nil {
-		data, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(data)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, targetURL, body)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Client-Id", s.config.TwitchClientID)
-	req.Header.Set("Accept", "application/json")
-	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := twitchHTTPClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != successStatus {
-		data, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("twitch moderation failed: status=%d detail=%s", resp.StatusCode, sanitizeAuthErrorDetail(string(data)))
-	}
-	return nil
+	return s.twitchHelixJSONRequest(ctx, http.MethodDelete, twitchModerationEndpoint+"/bans?"+query.Encode(), accessToken, nil, http.StatusNoContent, 512, "twitch moderation failed", nil)
 }
 
 func (s *Server) recordModerationActionAudit(ctx context.Context, request botModerationActionRequest, result, reason string) {
