@@ -87,6 +87,8 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/dashboard" />);
 
     expect(html).toContain('Broadcast ops console');
+    expect(html).toContain('Mission control');
+    expect(html).toContain('Monitor first');
     expect(html).toContain('System status');
     expect(html).toContain('Twitch login');
     expect(html).toContain('Build info');
