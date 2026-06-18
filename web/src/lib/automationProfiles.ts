@@ -1,5 +1,6 @@
 import type { AutomationProfile, DashboardConfig, QuickAction, StreamPreset } from './dashboardConfig';
 import { normalizeDashboardConfig } from './dashboardConfig';
+import { normalizePanelLayouts } from './dashboardLayout';
 
 export type AutomationProfileWarning = { profileId: string; message: string };
 
@@ -81,6 +82,7 @@ function serializeDashboardConfig(config: DashboardConfig): DashboardConfig {
       streamPresetIds: [...profile.streamPresetIds],
     })),
     activeAutomationProfileId: config.activeAutomationProfileId,
+    panelLayouts: normalizePanelLayouts(config.panelLayouts),
     controlWidgets: [...config.controlWidgets],
     display: { ...config.display },
     customCSS: config.customCSS,

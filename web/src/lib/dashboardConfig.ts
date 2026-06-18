@@ -1,3 +1,5 @@
+import { defaultPanelLayouts, normalizePanelLayouts, type PanelLayouts } from './dashboardLayout';
+
 export type SetupChecklistItem = {
   id: string;
   title: string;
@@ -53,6 +55,7 @@ export type DashboardConfig = {
   quickActions: QuickAction[];
   automationProfiles: AutomationProfile[];
   activeAutomationProfileId: string;
+  panelLayouts: PanelLayouts;
   controlWidgets: ControlWidget[];
   display: DisplayConfig;
   customCSS: string;
@@ -275,6 +278,7 @@ export const defaultDashboardConfig: DashboardConfig = {
     },
   ],
   activeAutomationProfileId: 'full-console',
+  panelLayouts: defaultPanelLayouts,
   quickActions: [
     { id: 'main-scene', label: 'Go Main', kind: 'setScene', sceneName: '40_MAIN' },
     { id: 'preset-main', label: 'Run Main preset', kind: 'runPreset', presetId: 'main', sceneName: '40_MAIN', confirm: true },
@@ -389,6 +393,7 @@ export function normalizeDashboardConfig(parsed: Partial<DashboardConfig>): Dash
     quickActions: mergeQuickActions(persistedQuickActions),
     automationProfiles: mergedProfiles,
     activeAutomationProfileId,
+    panelLayouts: normalizePanelLayouts(parsed.panelLayouts),
     controlWidgets: Array.isArray(parsed.controlWidgets)
       ? parsed.controlWidgets
           .map((widget, index) => sanitizeControlWidget(widget, defaultDashboardConfig.controlWidgets[index] ?? defaultDashboardConfig.controlWidgets[0]))

@@ -6,6 +6,12 @@ import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
 import { deleteTwitchReward, fetchBotStatus, fetchTwitchInteractions, saveBotCommand, type StreamSessionReport } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
 import {
+  defaultPanelLayouts,
+  movePanelLayoutItem,
+  normalizePanelLayouts,
+  togglePanelLayoutItem,
+} from './lib/dashboardLayout';
+import {
   defaultDashboardConfig,
   loadDashboardConfig,
   loadOperatorSecret,
@@ -512,6 +518,73 @@ describe('dashboard config loading', () => {
     saveDashboardConfig(config);
 
     expect(loadDashboardConfig().activeAutomationProfileId).toBe('main-live');
+  });
+
+  it('normalizes panel layouts by preserving locked defaults and merging safe persisted items', () => {
+    const layouts = normalizePanelLayouts({
+      live: [
+        { id: 'event-history', visible: false, order: 1 },
+        { id: 'unknown-panel', visible: false, order: 2 },
+      ],
+    });
+
+    expect(layouts.live.find((item) => item.id === 'event-history')).toMatchObject({ visible: false });
+    expect(layouts.live.some((item) => item.id === 'unknown-panel')).toBe(false);
+    expect(layouts.live.map((item) => item.id)).toContain('readiness');
+  });
+
+  it('moves and toggles configurable panel layout items without dropping other panels', () => {
+    const moved = movePanelLayoutItem(defaultPanelLayouts.live, 'event-history', 'up');
+    const eventIndex = moved.findIndex((item) => item.id === 'event-history');
+    const sessionLogIndex = moved.findIndex((item) => item.id === 'session-log');
+
+    expect(eventIndex).toBeLessThan(sessionLogIndex);
+
+    const toggled = togglePanelLayoutItem(moved, 'event-history');
+    expect(toggled.find((item) => item.id === 'event-history')).toMatchObject({ visible: false });
+    expect(toggled).toHaveLength(defaultPanelLayouts.live.length);
+  });
+
+  it('round-trips panel layouts through dashboard config localStorage', () => {
+    const localStorage = new Map<string, string>();
+
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => localStorage.get(key) ?? null,
+        setItem: (key: string, value: string) => localStorage.set(key, value),
+        removeItem: (key: string) => localStorage.delete(key),
+      },
+      sessionStorage: {
+        getItem: () => null,
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      },
+    });
+
+    const config = normalizeDashboardConfig({
+      ...defaultDashboardConfig,
+      panelLayouts: {
+        ...defaultPanelLayouts,
+        live: defaultPanelLayouts.live.map((item) => (item.id === 'event-history' ? { ...item, visible: false } : item)),
+      },
+    });
+    saveDashboardConfig(config);
+
+    expect(loadDashboardConfig().panelLayouts.live.find((item) => item.id === 'event-history')).toMatchObject({ visible: false });
+  });
+
+  it('preserves panel layouts through dashboard config export/import', () => {
+    const config = normalizeDashboardConfig({
+      ...defaultDashboardConfig,
+      panelLayouts: {
+        ...defaultPanelLayouts,
+        live: defaultPanelLayouts.live.map((item) => (item.id === 'event-history' ? { ...item, visible: false } : item)),
+      },
+    });
+
+    const imported = importDashboardConfig(exportDashboardConfig(config));
+
+    expect(imported.panelLayouts.live.find((item) => item.id === 'event-history')).toMatchObject({ visible: false });
   });
 
   it('stores operator secret in sessionStorage only', () => {
