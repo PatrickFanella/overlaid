@@ -207,6 +207,10 @@ describe('App routing', () => {
     expect(html).toContain('Load manageable rewards, create simple rewards');
     expect(html).toContain('Delete requires confirmation');
     expect(html).toContain('New reward title');
+    expect(html).toContain('Global cooldown seconds');
+    expect(html).toContain('Max per stream');
+    expect(html).toContain('Max per user/stream');
+    expect(html).toContain('zero to disable optional limits');
   });
 
   it('renders the build info panel on the server without fetching', () => {

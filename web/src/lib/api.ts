@@ -164,10 +164,43 @@ export type TwitchInteractionsResponse = {
   loadError?: string;
 };
 
-export type TwitchReward = { id: string; title: string; prompt?: string; cost: number; is_enabled?: boolean; is_paused?: boolean; is_in_stock?: boolean; manageable?: boolean };
+export type TwitchReward = {
+  id: string;
+  title: string;
+  prompt?: string;
+  cost: number;
+  is_enabled?: boolean;
+  is_paused?: boolean;
+  is_in_stock?: boolean;
+  is_user_input_required?: boolean;
+  is_global_cooldown_enabled?: boolean;
+  global_cooldown_seconds?: number;
+  is_max_per_stream_enabled?: boolean;
+  max_per_stream?: number;
+  is_max_per_user_per_stream_enabled?: boolean;
+  max_per_user_per_stream?: number;
+  manageable?: boolean;
+};
 export type TwitchRewardsResponse = { rewards: TwitchReward[] };
-export type TwitchRewardCreatePayload = { title: string; prompt?: string; cost: number; enabled: boolean; userInputRequired: boolean };
-export type TwitchRewardUpdatePayload = { enabled?: boolean; paused?: boolean };
+export type TwitchRewardCreatePayload = {
+  title: string;
+  prompt?: string;
+  cost: number;
+  enabled: boolean;
+  userInputRequired: boolean;
+  globalCooldownSeconds?: number;
+  maxPerStream?: number;
+  maxPerUserPerStream?: number;
+};
+export type TwitchRewardUpdatePayload = {
+  enabled?: boolean;
+  paused?: boolean;
+  prompt?: string;
+  userInputRequired?: boolean;
+  globalCooldownSeconds?: number;
+  maxPerStream?: number;
+  maxPerUserPerStream?: number;
+};
 export type TwitchRewardMutationResponse = { reward?: TwitchReward; result: string };
 export type TwitchRedemption = { id: string; user_login?: string; user_name?: string; user_input?: string; status: string; redeemed_at: string; reward: { id: string; title: string; cost: number } };
 export type TwitchRedemptionsResponse = { redemptions: TwitchRedemption[] };
