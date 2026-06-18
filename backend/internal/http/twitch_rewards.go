@@ -20,14 +20,21 @@ type twitchRewardsResponse struct {
 	Rewards []twitchReward `json:"rewards"`
 }
 type twitchReward struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Prompt     string `json:"prompt"`
-	Cost       int    `json:"cost"`
-	Enabled    bool   `json:"is_enabled"`
-	Paused     bool   `json:"is_paused"`
-	InStock    bool   `json:"is_in_stock"`
-	Manageable bool   `json:"manageable,omitempty"`
+	ID                         string `json:"id"`
+	Title                      string `json:"title"`
+	Prompt                     string `json:"prompt"`
+	Cost                       int    `json:"cost"`
+	Enabled                    bool   `json:"is_enabled"`
+	Paused                     bool   `json:"is_paused"`
+	InStock                    bool   `json:"is_in_stock"`
+	UserInputRequired          bool   `json:"is_user_input_required"`
+	GlobalCooldownEnabled      bool   `json:"is_global_cooldown_enabled"`
+	GlobalCooldownSeconds      int    `json:"global_cooldown_seconds"`
+	MaxPerStreamEnabled        bool   `json:"is_max_per_stream_enabled"`
+	MaxPerStream               int    `json:"max_per_stream"`
+	MaxPerUserPerStreamEnabled bool   `json:"is_max_per_user_per_stream_enabled"`
+	MaxPerUserPerStream        int    `json:"max_per_user_per_stream"`
+	Manageable                 bool   `json:"manageable,omitempty"`
 }
 type twitchRedemptionsResponse struct {
 	Redemptions []twitchRedemption `json:"redemptions"`
@@ -53,18 +60,26 @@ type twitchRedemptionStatusResponse struct {
 	Result string `json:"result"`
 }
 type twitchRewardCreateRequest struct {
-	Title             string `json:"title"`
-	Prompt            string `json:"prompt,omitempty"`
-	Cost              int    `json:"cost"`
-	Enabled           bool   `json:"enabled"`
-	UserInputRequired bool   `json:"userInputRequired"`
+	Title                 string `json:"title"`
+	Prompt                string `json:"prompt,omitempty"`
+	Cost                  int    `json:"cost"`
+	Enabled               bool   `json:"enabled"`
+	UserInputRequired     bool   `json:"userInputRequired"`
+	GlobalCooldownSeconds int    `json:"globalCooldownSeconds,omitempty"`
+	MaxPerStream          int    `json:"maxPerStream,omitempty"`
+	MaxPerUserPerStream   int    `json:"maxPerUserPerStream,omitempty"`
 }
 type twitchRewardDeleteRequest struct {
 	Confirm bool `json:"confirm"`
 }
 type twitchRewardUpdateRequest struct {
-	Enabled *bool `json:"enabled,omitempty"`
-	Paused  *bool `json:"paused,omitempty"`
+	Enabled               *bool   `json:"enabled,omitempty"`
+	Paused                *bool   `json:"paused,omitempty"`
+	Prompt                *string `json:"prompt,omitempty"`
+	UserInputRequired     *bool   `json:"userInputRequired,omitempty"`
+	GlobalCooldownSeconds *int    `json:"globalCooldownSeconds,omitempty"`
+	MaxPerStream          *int    `json:"maxPerStream,omitempty"`
+	MaxPerUserPerStream   *int    `json:"maxPerUserPerStream,omitempty"`
 }
 type twitchRewardMutationResponse struct {
 	Reward *twitchReward `json:"reward,omitempty"`
@@ -167,6 +182,51 @@ func (s *Server) rewardReadToken(ctx context.Context) (*twitchTokenInfo, error) 
 	return s.requireTwitchHelixToken(ctx, errTwitchRewardsUnavailable, errTwitchRewardsMissingScope, "channel:read:redemptions", "channel:read:redemptions", "channel:manage:redemptions")
 }
 
+func addRewardLimitPayload(payload map[string]any, globalCooldownSeconds, maxPerStream, maxPerUserPerStream int) error {
+	if globalCooldownSeconds < 0 {
+		return fmt.Errorf("global cooldown seconds must be zero or greater")
+	}
+	if maxPerStream < 0 {
+		return fmt.Errorf("max per stream must be zero or greater")
+	}
+	if maxPerUserPerStream < 0 {
+		return fmt.Errorf("max per user per stream must be zero or greater")
+	}
+	if globalCooldownSeconds > 0 {
+		if globalCooldownSeconds < 60 {
+			return fmt.Errorf("global cooldown seconds must be 0 or at least 60")
+		}
+		payload["is_global_cooldown_enabled"] = true
+		payload["global_cooldown_seconds"] = globalCooldownSeconds
+	}
+	if maxPerStream > 0 {
+		payload["is_max_per_stream_enabled"] = true
+		payload["max_per_stream"] = maxPerStream
+	}
+	if maxPerUserPerStream > 0 {
+		payload["is_max_per_user_per_stream_enabled"] = true
+		payload["max_per_user_per_stream"] = maxPerUserPerStream
+	}
+	return nil
+}
+
+func addRewardLimitPatch(payload map[string]any, field, enabledKey, valueKey string, value *int) error {
+	if value == nil {
+		return nil
+	}
+	if *value < 0 {
+		return fmt.Errorf("%s must be zero or greater", field)
+	}
+	if field == "global cooldown seconds" && *value > 0 && *value < 60 {
+		return fmt.Errorf("global cooldown seconds must be 0 or at least 60")
+	}
+	payload[enabledKey] = *value > 0
+	if *value > 0 {
+		payload[valueKey] = *value
+	}
+	return nil
+}
+
 func (s *Server) listTwitchRewards(ctx context.Context, manageable bool) ([]twitchReward, error) {
 	token, err := s.rewardReadToken(ctx)
 	if err != nil {
@@ -237,6 +297,9 @@ func (s *Server) createTwitchReward(ctx context.Context, request twitchRewardCre
 	if prompt != "" {
 		payload["prompt"] = prompt
 	}
+	if err := addRewardLimitPayload(payload, request.GlobalCooldownSeconds, request.MaxPerStream, request.MaxPerUserPerStream); err != nil {
+		return nil, err
+	}
 	query := url.Values{"broadcaster_id": {token.UserID}}
 	var decoded struct {
 		Data []twitchReward `json:"data"`
@@ -266,6 +329,25 @@ func (s *Server) updateTwitchReward(ctx context.Context, rewardID string, reques
 	}
 	if request.Paused != nil {
 		payload["is_paused"] = *request.Paused
+	}
+	if request.Prompt != nil {
+		prompt := strings.TrimSpace(*request.Prompt)
+		if len(prompt) > 200 {
+			return nil, fmt.Errorf("reward prompt must be 200 characters or fewer")
+		}
+		payload["prompt"] = prompt
+	}
+	if request.UserInputRequired != nil {
+		payload["is_user_input_required"] = *request.UserInputRequired
+	}
+	if err := addRewardLimitPatch(payload, "global cooldown seconds", "is_global_cooldown_enabled", "global_cooldown_seconds", request.GlobalCooldownSeconds); err != nil {
+		return nil, err
+	}
+	if err := addRewardLimitPatch(payload, "max per stream", "is_max_per_stream_enabled", "max_per_stream", request.MaxPerStream); err != nil {
+		return nil, err
+	}
+	if err := addRewardLimitPatch(payload, "max per user per stream", "is_max_per_user_per_stream_enabled", "max_per_user_per_stream", request.MaxPerUserPerStream); err != nil {
+		return nil, err
 	}
 	if len(payload) == 0 {
 		return nil, fmt.Errorf("at least one reward field is required")

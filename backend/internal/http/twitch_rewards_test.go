@@ -83,6 +83,108 @@ func TestTwitchRewardCreatePostsReward(t *testing.T) {
 	}
 }
 
+func TestTwitchRewardCreatePostsAdvancedLimits(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:manage:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123", Login: "broadcaster"}
+
+	var body string
+	oldClient := twitchHTTPClient
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		data, _ := io.ReadAll(req.Body)
+		body = string(data)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"reward-1","title":"Hydrate","cost":100,"is_global_cooldown_enabled":true,"global_cooldown_seconds":60,"is_max_per_stream_enabled":true,"max_per_stream":3,"is_max_per_user_per_stream_enabled":true,"max_per_user_per_stream":1}]}`)), Header: make(http.Header)}, nil
+	})}
+	t.Cleanup(func() { twitchHTTPClient = oldClient })
+
+	reward, err := server.createTwitchReward(t.Context(), twitchRewardCreateRequest{Title: "Hydrate", Cost: 100, GlobalCooldownSeconds: 60, MaxPerStream: 3, MaxPerUserPerStream: 1})
+	if err != nil {
+		t.Fatalf("create reward: %v", err)
+	}
+	if reward.GlobalCooldownSeconds != 60 || reward.MaxPerStream != 3 || reward.MaxPerUserPerStream != 1 {
+		t.Fatalf("decoded advanced limits = %#v", reward)
+	}
+	for _, want := range []string{`"is_global_cooldown_enabled":true`, `"global_cooldown_seconds":60`, `"is_max_per_stream_enabled":true`, `"max_per_stream":3`, `"is_max_per_user_per_stream_enabled":true`, `"max_per_user_per_stream":1`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in body: %s", want, body)
+		}
+	}
+}
+
+func TestTwitchRewardUpdatePatchesAdvancedLimits(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:manage:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123", Login: "broadcaster"}
+
+	var body string
+	oldClient := twitchHTTPClient
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		data, _ := io.ReadAll(req.Body)
+		body = string(data)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"reward-1","title":"Hydrate","cost":100,"prompt":"Bring water","is_user_input_required":true,"is_global_cooldown_enabled":false,"is_max_per_stream_enabled":true,"max_per_stream":5,"is_max_per_user_per_stream_enabled":false}]}`)), Header: make(http.Header)}, nil
+	})}
+	t.Cleanup(func() { twitchHTTPClient = oldClient })
+
+	prompt := "Bring water"
+	userInputRequired := true
+	globalCooldownSeconds := 0
+	maxPerStream := 5
+	maxPerUserPerStream := 0
+	reward, err := server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{Prompt: &prompt, UserInputRequired: &userInputRequired, GlobalCooldownSeconds: &globalCooldownSeconds, MaxPerStream: &maxPerStream, MaxPerUserPerStream: &maxPerUserPerStream})
+	if err != nil {
+		t.Fatalf("update reward: %v", err)
+	}
+	if reward.Prompt != prompt || !reward.UserInputRequired || reward.MaxPerStream != 5 {
+		t.Fatalf("decoded updated reward = %#v", reward)
+	}
+	for _, want := range []string{`"prompt":"Bring water"`, `"is_user_input_required":true`, `"is_global_cooldown_enabled":false`, `"is_max_per_stream_enabled":true`, `"max_per_stream":5`, `"is_max_per_user_per_stream_enabled":false`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in body: %s", want, body)
+		}
+	}
+	if strings.Contains(body, `"global_cooldown_seconds":`) || strings.Contains(body, `"max_per_user_per_stream":`) {
+		t.Fatalf("disabled limits should not send value fields: %s", body)
+	}
+}
+
+func TestTwitchRewardCreateRejectsInvalidAdvancedLimits(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:manage:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123", Login: "broadcaster"}
+
+	if _, err := server.createTwitchReward(t.Context(), twitchRewardCreateRequest{Title: "Hydrate", Cost: 100, GlobalCooldownSeconds: -1}); err == nil || !strings.Contains(err.Error(), "global cooldown seconds must be zero or greater") {
+		t.Fatalf("expected global cooldown validation error, got %v", err)
+	}
+	if _, err := server.createTwitchReward(t.Context(), twitchRewardCreateRequest{Title: "Hydrate", Cost: 100, MaxPerStream: -1}); err == nil || !strings.Contains(err.Error(), "max per stream must be zero or greater") {
+		t.Fatalf("expected max per stream validation error, got %v", err)
+	}
+	if _, err := server.createTwitchReward(t.Context(), twitchRewardCreateRequest{Title: "Hydrate", Cost: 100, MaxPerUserPerStream: -1}); err == nil || !strings.Contains(err.Error(), "max per user per stream must be zero or greater") {
+		t.Fatalf("expected max per user validation error, got %v", err)
+	}
+	if _, err := server.createTwitchReward(t.Context(), twitchRewardCreateRequest{Title: "Hydrate", Cost: 100, GlobalCooldownSeconds: 30}); err == nil || !strings.Contains(err.Error(), "global cooldown seconds must be 0 or at least 60") {
+		t.Fatalf("expected global cooldown minimum error, got %v", err)
+	}
+}
+
+func TestTwitchRewardUpdateRejectsInvalidAdvancedLimits(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:manage:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123", Login: "broadcaster"}
+
+	negativeGlobalCooldown := -1
+	if _, err := server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{GlobalCooldownSeconds: &negativeGlobalCooldown}); err == nil || !strings.Contains(err.Error(), "global cooldown seconds must be zero or greater") {
+		t.Fatalf("expected global cooldown validation error, got %v", err)
+	}
+	shortGlobalCooldown := 30
+	if _, err := server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{GlobalCooldownSeconds: &shortGlobalCooldown}); err == nil || !strings.Contains(err.Error(), "global cooldown seconds must be 0 or at least 60") {
+		t.Fatalf("expected global cooldown minimum error, got %v", err)
+	}
+	negativeMaxPerStream := -1
+	if _, err := server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{MaxPerStream: &negativeMaxPerStream}); err == nil || !strings.Contains(err.Error(), "max per stream must be zero or greater") {
+		t.Fatalf("expected max per stream validation error, got %v", err)
+	}
+	negativeMaxPerUser := -1
+	if _, err := server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{MaxPerUserPerStream: &negativeMaxPerUser}); err == nil || !strings.Contains(err.Error(), "max per user per stream must be zero or greater") {
+		t.Fatalf("expected max per user validation error, got %v", err)
+	}
+}
+
 func TestTwitchRewardUpdateRequiresManageScope(t *testing.T) {
 	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client"}, events.NewBus(4))
 	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:read:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123", Login: "broadcaster"}
