@@ -37,6 +37,15 @@ Open routes at the deployed web origin, for example `http://<host>:5173`. Check 
 - [ ] Twitch, EventSub, OBS, operator-secret, event-history, and interaction-rule indicators are easy to scan.
 - [ ] Degraded states are obvious without horizontal scrolling.
 
+### Controlled workspace customization
+
+- [ ] `/dashboard/live` shows `Customize panel layout`, `Reset layout`, and copy that locked safety panels stay fixed.
+- [ ] Reorder/hide controls affect only safe panels; recovery and stream-session controls remain fixed.
+- [ ] `/dashboard/bot` keeps moderation/nuke guardrails visible outside customizable bot panels.
+- [ ] `/dashboard/config` keeps operator secret and webhook secret controls locked outside customizable config panels.
+- [ ] Reset restores default order and visibility.
+- [ ] Keyboard focus remains visible on Up, Down, Hide/Show, and Reset buttons.
+
 ### `/dashboard/setup`
 
 - [ ] Setup checklist is readable from top to bottom.

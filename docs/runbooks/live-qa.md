@@ -90,6 +90,12 @@ After rehearsal or live stream:
 - [ ] Record recurring failures in the relevant runbook or issue tracker.
 - [ ] Back up Postgres and `api-data` if the session created important operational history.
 
+Controlled workspace customization evidence:
+
+- [ ] Capture the default `/dashboard/live` layout before rehearsal.
+- [ ] If layout customization is used, reset to default before handoff or document the operator-specific order in evidence notes.
+- [ ] Confirm locked safety panels remain visible: recovery links and stream session controls.
+
 ## Latest QA status
 
 Current status: automated checks and one-click rehearsal coverage are in place. Real-stream QA should continue to use this runbook, because Twitch chat, channel-point redemptions, OBS scene collections, and browser-source behavior depend on the live operator environment.

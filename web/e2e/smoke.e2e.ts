@@ -14,7 +14,7 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByText('Rehearsal audit')).toBeVisible();
     await expect(page.getByText('Customize panel layout')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Reset layout' })).toBeVisible();
-    await expect(page.getByText('Locked safety panels stay fixed')).toBeVisible();
+    await expect(page.getByText('Locked safety panels stay fixed outside this list.', { exact: true })).toBeVisible();
 
     await page.goto('/dashboard/control');
     await expect(page.getByRole('heading', { name: 'Stream control', exact: true }).first()).toBeVisible();
@@ -42,7 +42,7 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByText('Configure deliberately')).toBeVisible();
     await expect(page.getByText('Customize panel layout')).toBeVisible();
     await expect(page.getByText('Secret controls stay locked')).toBeVisible();
-    await expect(page.getByText('OBS import')).toBeVisible();
+    await expect(page.getByText('OBS import').nth(1)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
     await expect(page.getByText('Reward queue', { exact: true })).toBeVisible();
     await expect(page.getByText('Load manageable rewards, create simple rewards')).toBeVisible();

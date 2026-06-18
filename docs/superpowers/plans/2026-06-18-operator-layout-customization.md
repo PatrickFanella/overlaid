@@ -886,3 +886,12 @@ git commit -m "docs: close operator layout customization sprint"
 - Bot and Config explicitly keep destructive or secret-bearing controls locked.
 - Layout state uses existing localStorage-backed `DashboardConfig`, avoiding backend schema churn.
 - Verification uses repo-standard gates: `make verify`, `make smoke`, `make smoke-browser`.
+
+## Sprint closeout
+
+- Added controlled panel customization guidance for Live, Bot, and Config safe panels.
+- Locked safety-critical panels remained fixed: recovery/session controls, bot moderation/nuke guardrails, and secret controls.
+- Added dashboard config persistence and reset behavior.
+- Final verification passed: `make verify`, `make smoke`, and `make smoke-browser` passed. The first browser smoke run caught duplicate text locators; locators were tightened and the rerun passed.
+- Local readiness note: `/readyz` remained degraded for local EventSub/OBS reachability/auth, matching the known local environment; smoke targets still passed.
+- Deferred: free drag/drop, resizing, overlapping widgets, shared server-side operator profiles, and customization of destructive controls.
