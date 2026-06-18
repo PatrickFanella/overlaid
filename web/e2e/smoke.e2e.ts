@@ -40,6 +40,8 @@ test.describe('operator browser smoke', () => {
   test('shows twitch reward queue lifecycle controls', async ({ page }) => {
     await page.goto('/dashboard/config');
     await expect(page.getByText('Configure deliberately')).toBeVisible();
+    await expect(page.getByText('Customize panel layout')).toBeVisible();
+    await expect(page.getByText('Secret controls stay locked')).toBeVisible();
     await expect(page.getByText('OBS import')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
     await expect(page.getByText('Reward queue', { exact: true })).toBeVisible();

@@ -191,6 +191,8 @@ describe('App routing', () => {
     expect(html).toContain('Configure deliberately');
     expect(html).toContain('Operator config');
     expect(html).toContain('Secrets stay in browser session state');
+    expect(html).toContain('Customize panel layout');
+    expect(html).toContain('Secret controls stay locked');
     expect(html).toContain('Secret header');
     expect(html).toContain('Automation profiles');
     expect(html).toContain('Twitch interaction rules');
@@ -200,6 +202,7 @@ describe('App routing', () => {
     expect(html).toContain('operator secret is not exported');
     expect(html).toContain('MPRIS decision');
     expect(html).toContain('Overlay noise controls');
+    expect(html).toContain('Delete requires confirmation');
   });
 
   it('renders bot operations safety guidance', () => {
