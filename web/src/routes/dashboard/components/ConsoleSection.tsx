@@ -12,7 +12,7 @@ type ConsoleSectionProps = {
 
 export function ConsoleSection({ eyebrow, title, description, accent = 'cyan', danger = false, actions, children }: ConsoleSectionProps) {
   return (
-    <section className={`hud-panel hud-corners hud-panel--flat ${danger ? 'hud-danger-zone' : `hud-accent-${accent}`} rounded-sm p-3`}>
+    <section className={`hud-panel hud-panel--flat ${danger ? 'hud-danger-zone' : `hud-accent-${accent}`} rounded-2xl p-4`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <p className="hud-label">{eyebrow}</p>

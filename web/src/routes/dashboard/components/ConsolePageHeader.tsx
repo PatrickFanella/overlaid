@@ -11,7 +11,7 @@ type ConsolePageHeaderProps = {
 
 export function ConsolePageHeader({ eyebrow, title, description, accent = 'cyan', chips = [], actions }: ConsolePageHeaderProps) {
   return (
-    <section className={`hud-panel hud-corners hud-panel--flat hud-accent-${accent} rounded-sm p-3`}>
+    <section className={`hud-panel hud-panel--flat hud-accent-${accent} rounded-2xl p-4`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <p className="hud-label">{eyebrow}</p>

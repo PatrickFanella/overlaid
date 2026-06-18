@@ -40,10 +40,10 @@ export function CustomizablePanelLayout({
 
   return (
     <section className="grid gap-3">
-      <div className="hud-panel hud-panel--flat hud-corners border border-fuchsia-400/30 p-4">
+      <div className="hud-panel hud-panel--flat border border-zinc-700/50 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="hud-section-title text-fuchsia-200">Workspace layout</p>
+            <p className="hud-label">Workspace layout</p>
             <h2 className="text-lg font-semibold text-zinc-100">{title}</h2>
             <p className="mt-1 max-w-2xl text-sm text-zinc-400">{description}</p>
           </div>
@@ -56,7 +56,7 @@ export function CustomizablePanelLayout({
 
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {orderedItems.map((item, index) => (
-            <article key={item.id} className="hud-compact-card flex items-center justify-between gap-2">
+            <article key={item.id} className="hud-compact-card flex items-center justify-between gap-2 border border-zinc-800/80 bg-black/10">
               <div>
                 <p className="text-sm font-semibold text-zinc-100">{item.title}</p>
                 <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">{item.visible ? 'visible' : 'hidden'}</p>
