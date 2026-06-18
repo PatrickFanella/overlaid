@@ -208,6 +208,8 @@ describe('App routing', () => {
     expect(html).toContain('Operate with guardrails');
     expect(html).toContain('Bot operations');
     expect(html).toContain('guarded destructive actions');
+    expect(html).toContain('Customize panel layout');
+    expect(html).toContain('Moderation guardrails stay locked');
     expect(html).toContain('Nuke dry-run planner');
     expect(html).toContain('I reviewed this dry-run plan');
     expect(html).toContain('Radiation minutes');

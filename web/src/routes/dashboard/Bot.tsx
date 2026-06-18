@@ -70,10 +70,14 @@ import {
   type TimerDraft,
 } from './bot/types';
 import { renderCommandPreview } from './bot/renderCommandPreview';
+import { CustomizablePanelLayout } from './components/CustomizablePanelLayout';
+import type { PanelLayoutItem } from '../../lib/dashboardLayout';
+import { loadDashboardConfig, saveDashboardConfig } from '../../lib/dashboardConfig';
 
 export function DashboardBotPage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const operatorSecret = loadOperatorSecret();
+  const [config, setConfig] = useState(() => loadDashboardConfig());
   const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, counters: null, quotes: null, apiVariables: null, moderation: null, moderationDryRun: null, timers: null, loading: false, error: '' });
   const [commandDraft, setCommandDraft] = useState<CommandDraft>(defaultCommandDraft);
   const [draft, setDraft] = useState<TimerDraft>(defaultTimerDraft);
@@ -90,6 +94,14 @@ export function DashboardBotPage() {
   const [nukeResult, setNukeResult] = useState<BotNukeDryRunResponse | null>(null);
   const [nukeExecuteResult, setNukeExecuteResult] = useState<BotNukeExecuteResponse | null>(null);
   const [nukeRollbackResult, setNukeRollbackResult] = useState('');
+
+  function updateBotPanelLayout(items: PanelLayoutItem[]) {
+    setConfig((current) => {
+      const next = { ...current, panelLayouts: { ...current.panelLayouts, bot: items } };
+      saveDashboardConfig(next);
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -316,35 +328,70 @@ export function DashboardBotPage() {
 
       <BotStatusSummary status={state.status} audit={state.audit} />
 
-      <BotCommandsPanel
-        draft={commandDraft}
-        commands={state.commands}
-        saving={savingCommand}
-        onDraftChange={setCommandDraft}
-        onSave={handleSaveCommand}
-        onToggle={handleToggleCommand}
-        onDelete={handleDeleteCommand}
-      />
-
-      <BotCommunityPanel
-        counters={state.counters}
-        quotes={state.quotes}
-        counterDraft={counterDraft}
-        quoteDraft={quoteDraft}
-        onCounterDraftChange={setCounterDraft}
-        onQuoteDraftChange={setQuoteDraft}
-        onSaveCounter={handleSaveCounter}
-        onDeleteCounter={handleDeleteCounter}
-        onSaveQuote={handleSaveQuote}
-        onDeleteQuote={handleDeleteQuote}
-      />
-
-      <BotAPIVariablesPanel
-        variables={state.apiVariables}
-        draft={apiVariableDraft}
-        onDraftChange={setAPIVariableDraft}
-        onSave={handleSaveAPIVariable}
-        onDelete={handleDeleteAPIVariable}
+      <CustomizablePanelLayout
+        page="bot"
+        items={config.panelLayouts.bot}
+        onChange={updateBotPanelLayout}
+        description="Reorder or hide safe bot panels. Moderation guardrails stay locked."
+        panels={[
+          {
+            id: 'commands',
+            node: (
+              <BotCommandsPanel
+                draft={commandDraft}
+                commands={state.commands}
+                saving={savingCommand}
+                onDraftChange={setCommandDraft}
+                onSave={handleSaveCommand}
+                onToggle={handleToggleCommand}
+                onDelete={handleDeleteCommand}
+              />
+            ),
+          },
+          {
+            id: 'community',
+            node: (
+              <BotCommunityPanel
+                counters={state.counters}
+                quotes={state.quotes}
+                counterDraft={counterDraft}
+                quoteDraft={quoteDraft}
+                onCounterDraftChange={setCounterDraft}
+                onQuoteDraftChange={setQuoteDraft}
+                onSaveCounter={handleSaveCounter}
+                onDeleteCounter={handleDeleteCounter}
+                onSaveQuote={handleSaveQuote}
+                onDeleteQuote={handleDeleteQuote}
+              />
+            ),
+          },
+          {
+            id: 'api-variables',
+            node: (
+              <BotAPIVariablesPanel
+                variables={state.apiVariables}
+                draft={apiVariableDraft}
+                onDraftChange={setAPIVariableDraft}
+                onSave={handleSaveAPIVariable}
+                onDelete={handleDeleteAPIVariable}
+              />
+            ),
+          },
+          {
+            id: 'timers',
+            node: (
+              <BotTimersPanel
+                draft={draft}
+                timers={state.timers}
+                saving={savingTimer}
+                onDraftChange={setDraft}
+                onSave={handleSaveTimer}
+                onToggle={handleToggleTimer}
+                onDelete={handleDeleteTimer}
+              />
+            ),
+          },
+        ]}
       />
 
       <BotModerationPanel
@@ -369,16 +416,6 @@ export function DashboardBotPage() {
         onNukeDryRun={handleNukeDryRun}
         onNukeExecute={handleNukeExecute}
         onNukeRollback={handleNukeRollback}
-      />
-
-      <BotTimersPanel
-        draft={draft}
-        timers={state.timers}
-        saving={savingTimer}
-        onDraftChange={setDraft}
-        onSave={handleSaveTimer}
-        onToggle={handleToggleTimer}
-        onDelete={handleDeleteTimer}
       />
     </DashboardShell>
   );
