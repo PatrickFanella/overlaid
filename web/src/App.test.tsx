@@ -114,7 +114,9 @@ describe('App routing', () => {
   it('renders the dashboard live preflight route', () => {
     const html = renderToString(<App pathname="/dashboard/live" />);
 
+    expect(html).toContain('Live command');
     expect(html).toContain('Live ops cockpit');
+    expect(html).toContain('Check readiness, recover production issues');
     expect(html).toContain('Recovery console');
     expect(html).toContain('no destructive browser actions');
     expect(html).toContain('Production recovery');

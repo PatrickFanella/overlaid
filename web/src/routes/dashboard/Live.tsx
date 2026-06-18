@@ -15,6 +15,7 @@ import { loadDashboardConfig, loadOperatorSecret } from '../../lib/dashboardConf
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { loadSessionLog, type SessionLogEntry } from '../../lib/sessionLog';
 import { DashboardShell } from './DashboardShell';
+import { ConsolePageHeader } from './components/ConsolePageHeader';
 import { EventSubDiagnostics } from './components/EventSubDiagnostics';
 import { EventHistoryPanel } from './components/EventHistoryPanel';
 import { LivePreflight } from './components/LivePreflight';
@@ -93,24 +94,29 @@ export function DashboardLivePage() {
 
   return (
     <DashboardShell activePath="/dashboard/live">
-      <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-        <p className="hud-label">Live</p>
-        <h2 className="hud-section-title">Live ops cockpit</h2>
-        <p className="hud-copy mt-1 text-xs text-zinc-300">Use this before going live to catch missing auth, EventSub, OBS, operator, or setup steps.</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <span className="hud-chip hud-chip--square">{status.loading ? 'checking' : 'checked'}</span>
-          {status.error ? <span className="hud-chip hud-chip--square hud-accent-amber">{status.error}</span> : null}
-        </div>
-      </section>
+      <ConsolePageHeader
+        eyebrow="Live command"
+        title="Live ops cockpit"
+        description="Check readiness, recover production issues, review EventSub, and keep session evidence visible before going live."
+        accent="emerald"
+        chips={[status.loading ? 'checking' : 'checked', 'recovery links ready']}
+        actions={status.error ? <span className="hud-chip hud-chip--square hud-accent-amber">{status.error}</span> : null}
+      />
 
-      <RecoveryConsolePanel />
-      <BuildInfoPanel apiBaseUrl={apiBaseUrl} />
-      <ReadinessPanel report={status.readiness} loading={status.loading} error={status.readinessError} />
-      <StreamSessionPanel apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} status={status.session} loading={status.loading} error={status.sessionError} onChange={(session) => setStatus((current) => ({ ...current, session }))} />
-      <LivePreflight twitch={status.twitch} obs={status.obs} config={config} operatorSecret={operatorSecret} />
-      <EventSubDiagnostics status={status.twitch} />
-      <LiveChecklistSummary items={config.setupChecklist} />
-      <SessionLogPanel entries={sessionLog} />
+      <div className="hud-dashboard-grid hud-dashboard-grid--two">
+        <div className="grid gap-3">
+          <RecoveryConsolePanel />
+          <ReadinessPanel report={status.readiness} loading={status.loading} error={status.readinessError} />
+          <LivePreflight twitch={status.twitch} obs={status.obs} config={config} operatorSecret={operatorSecret} />
+          <EventSubDiagnostics status={status.twitch} />
+        </div>
+        <div className="grid gap-3">
+          <BuildInfoPanel apiBaseUrl={apiBaseUrl} />
+          <StreamSessionPanel apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} status={status.session} loading={status.loading} error={status.sessionError} onChange={(session) => setStatus((current) => ({ ...current, session }))} />
+          <LiveChecklistSummary items={config.setupChecklist} />
+          <SessionLogPanel entries={sessionLog} />
+        </div>
+      </div>
       <EventHistoryPanel events={status.history?.events ?? []} loading={status.loading} error={status.historyError} />
     </DashboardShell>
   );
