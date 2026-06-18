@@ -3,14 +3,14 @@ import { expect, test } from '@playwright/test';
 test.describe('operator browser smoke', () => {
   test('loads critical dashboard and overlay routes', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.getByText('Broadcast ops console')).toBeVisible();
+    await expect(page.locator('header').getByText('Broadcast ops console')).toBeVisible();
     const dashboardNav = page.getByRole('navigation', { name: 'Dashboard sections' });
     await expect(dashboardNav.getByText('Monitor', { exact: true })).toBeVisible();
     await expect(dashboardNav.getByText('Operate', { exact: true })).toBeVisible();
     await expect(dashboardNav.getByText('Configure', { exact: true })).toBeVisible();
 
     await page.goto('/dashboard/live');
-    await expect(page.getByText('Live ops cockpit')).toBeVisible();
+    await expect(page.getByText('Live command')).toBeVisible();
     await expect(page.getByText('Rehearsal audit')).toBeVisible();
 
     await page.goto('/dashboard/control');

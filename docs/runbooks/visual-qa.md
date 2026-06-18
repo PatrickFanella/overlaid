@@ -12,6 +12,15 @@ Manual route-by-route checklist for confirming overlay and dashboard rendering a
 
 Open routes at the deployed web origin, for example `http://<host>:5173`. Check dashboard routes at a standard desktop/laptop viewport and overlay routes at a 16:9 OBS canvas such as 1920×1080.
 
+## Broadcast ops console checks
+
+- [ ] Dashboard shell renders `Broadcast ops console` and groups navigation into Monitor, Setup, Operate, and Configure.
+- [ ] `/dashboard` shows the Mission control header, system status, build info, and route guide without pushing primary links below the fold on desktop.
+- [ ] `/dashboard/live` prioritizes recovery/readiness/preflight before secondary evidence panels.
+- [ ] `/dashboard/bot` shows `Operate with guardrails`; destructive nuke/radiation controls are visually distinct from commands, counters, quotes, and timers.
+- [ ] `/dashboard/config` shows `Configure deliberately`; Twitch reward delete controls remain separated behind confirmation and lower visual priority than pause/disable/update controls.
+- [ ] Keyboard focus remains visible on buttons, chips, inputs, and route navigation.
+
 ## Dashboard routes
 
 ### `/dashboard`
