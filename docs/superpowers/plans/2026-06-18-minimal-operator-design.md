@@ -530,3 +530,19 @@ git commit -m "docs: close minimal operator design sprint"
 - Placeholder scan: No task uses “TBD,” “TODO,” “similar to,” or unspecified code changes.
 - Type consistency: Existing component names and strings match current files. Plan avoids class-name tests and keeps copy stable unless explicitly noted.
 - Risk posture: This plan changes dashboard visual primitives broadly but scopes CSS under `.hud-shell--dashboard` to avoid overlay regressions. It intentionally keeps behavior stable and commits in CSS/primitive slices so regressions are easy to isolate.
+
+## Closeout
+
+- Commits completed so far, per `git log --oneline -10`:
+  - `1e1b3e0` `style: simplify console primitives`
+  - `de9d1ab` `style: simplify dashboard shell`
+  - `51807f1` `style: quiet dashboard primitives`
+  - `6a49694` `style: add minimal operator design tokens`
+  - Earlier planning docs remain in history, including `23f084e` `docs: plan minimal operator design` and `f89790a` `docs: close operator layout customization sprint`.
+- Final verification passed:
+  - `make verify` passed: frontend install/typecheck/lint, Go vet/tests, Vitest 78 tests, Go build, and web build.
+  - `make docker-build` rebuilt/restarted the API and web containers successfully.
+  - `make smoke` passed: health/version/dashboard/overlay checks passed. `/readyz` remained degraded only for local Twitch EventSub not connected; OBS reachability/auth were OK in this run. Twitch auth still reported moderator scopes in `missingScopes`, matching the known local auth-state issue from prior sprints.
+  - `make smoke-browser` passed: 3 Playwright operator smoke tests passed.
+  - Removed generated `web/test-results/.last-run.json` from the working tree.
+- Deferred items carried forward from the plan: theme toggle, per-operator theme choice, bounded panel resizing, drag/drop docking, and shared server-side layouts.

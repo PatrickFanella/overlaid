@@ -141,3 +141,13 @@ Overlay routes should remain sparse and broadcast-safe. Generic diagnostic or co
 - [ ] Recheck the routes you changed most recently.
 - [ ] Confirm typography, spacing, and contrast are still consistent.
 - [ ] If a route regressed, capture the exact route and viewport before changing code.
+
+## Minimal operator style checks
+
+- Dashboard shell uses a quiet near-monochrome style: no scanline overlay, no neon corner brackets, no heavy offset shadows.
+- Overlay routes retain their existing broadcast HUD style; this sprint only applies minimal styling under `.hud-shell--dashboard`.
+- Grouped dashboard navigation remains visible and keyboard-focusable.
+- `Customize panel layout`, `Reset layout`, and locked-panel copy remain visible on Live/Bot/Config.
+- Danger zones remain visually distinct from ordinary panels, especially the bot nuke planner and delete-confirmation areas.
+- Minimal style does not remove operator/webhook secret controls, Twitch login, reward queue safety copy, or moderation confirmations.
+- Monospace remains available for logs, IDs, JSON, terminal rows, and payload-like data.
