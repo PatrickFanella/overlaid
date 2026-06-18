@@ -34,13 +34,13 @@ Implemented and verified in committed slices:
 - Operator-configured custom API variables using `{api:name}` with GET-only HTTPS fetching, caps, caching, and private-host blocking.
 - Counters and quotes with dashboard/API management, chat commands, and `{count:name}` / `{quote:random}` variables.
 - Channel-point rule enrichment with cooldown seconds and fulfillment notes.
-- Twitch reward inventory, reversible pause/disable lifecycle controls, minimal reward creation/deletion, and unfulfilled redemption queue controls for fulfill/cancel actions.
+- Twitch reward inventory, reversible pause/disable lifecycle controls, guarded bounded reward fields, minimal reward creation/deletion, and unfulfilled redemption queue controls for fulfill/cancel actions.
 - Moderation foundation: blocked-term rules, dry-run matching, opt-in automatic enforcement, guarded manual Twitch delete/timeout/ban/unban actions with required scopes, and nuke-style dry-run planning over recent chat history.
 
 Deliberately carried forward:
 
 - Arbitrary inline/custom API URLs supplied by chat or templates.
-- Advanced Twitch reward fields such as cooldowns, per-stream/user limits, and other non-minimal Helix settings.
+- Twitch reward fields still intentionally deferred: skip-request-queue, image/background styling, reward image upload, and any automatic fulfillment behavior. Common guarded fields now live in the reward queue runbook.
 - Cloud-hosted uptime parity with FossaBot; see `docs/superpowers/plans/2026-06-16-fossabot-uptime-parity-options.md` before changing deployment architecture.
 
 ---

@@ -22,7 +22,8 @@ Phase 2 status after committed cleanup:
 - Shipped: backend `PATCH /api/twitch/rewards/{rewardId}` lifecycle updates for `enabled` and `paused`.
 - Shipped: dashboard pause/resume and enable/disable controls before delete.
 - Shipped: uptime parity options document at `docs/superpowers/plans/2026-06-16-fossabot-uptime-parity-options.md`.
-- Deferred: Task 3 advanced reward fields; keep cooldowns, per-stream/user limits, and other non-minimal Helix settings as follow-up.
+- Shipped: guarded advanced reward fields for global cooldown seconds, max per stream, max per user per stream, prompt edits, and user-input-required edits.
+- Deferred: high-risk/nonessential reward fields such as `should_redemptions_skip_request_queue`, image/background styling, reward image upload, and any automatic fulfillment behavior.
 
 Already implemented and committed before this Phase 2 plan:
 
@@ -33,8 +34,13 @@ Already implemented and committed before this Phase 2 plan:
 
 Remaining roadmap items from `docs/superpowers/plans/2026-06-15-fossabot-parity-roadmap.md`:
 
-- Advanced Twitch reward fields such as cooldowns, per-stream/user limits, and other non-minimal Helix settings.
+- High-risk/nonessential Twitch reward fields such as skip-request-queue, image/background styling, reward image upload, and automatic fulfillment behavior.
 - Cloud-hosted uptime parity with FossaBot.
+
+### Advanced reward fields closeout
+
+- Shipped guarded advanced Twitch reward fields: global cooldown seconds, max per stream, max per user per stream, prompt edits, and user-input-required edits.
+- Still deferred: `should_redemptions_skip_request_queue`, image/background styling, reward image upload, and any automatic fulfillment behavior.
 
 Out of scope unless explicitly requested:
 
@@ -705,11 +711,13 @@ git commit -m "docs: update fossabot phase 2 status"
 
 ## Recommended execution order
 
+Historical note: Tasks 1, 2, 3, 4, and 5 have now shipped or been closed out. This order is retained as implementation history rather than active guidance.
+
 1. Task 1 — backend reversible reward update API.
 2. Task 2 — dashboard pause/resume/enable/disable controls.
 3. Stop and run `make verify && make smoke-browser`.
 4. Task 4 — uptime options document.
-5. Decide whether Task 3 advanced reward fields are still worth doing immediately, or save them for later.
+5. Task 3 — advanced reward fields, now shipped in `docs/superpowers/plans/2026-06-17-advanced-twitch-reward-fields.md`.
 6. Task 5 — cleanup after whichever Phase 2 slices actually ship.
 
 ## Risk notes

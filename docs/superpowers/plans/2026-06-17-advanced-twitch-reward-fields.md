@@ -42,7 +42,7 @@ Twitch documented bounds used by this sprint:
 - `title`: max 45 characters, unique per broadcaster.
 - `cost`: minimum 1.
 - `prompt`: max 200 characters; include a prompt when viewer input is required.
-- `global_cooldown_seconds`: minimum 1 when enabled; use at least 60 seconds when operators expect Twitch UX to display it.
+- `global_cooldown_seconds`: Twitch's raw minimum is 1 when enabled, but this app enforces `0` or `>=60` because Twitch requires at least 60 seconds for the cooldown to appear in its UX.
 - `max_per_stream`: minimum 1 when enabled.
 - `max_per_user_per_stream`: minimum 1 when enabled.
 - Deleting a reward marks any `UNFULFILLED` redemptions as `FULFILLED` in Twitch, so delete remains last resort.
@@ -691,7 +691,7 @@ In `docs/superpowers/plans/2026-06-16-fossabot-parity-phase-2.md`, add a closeou
 In `docs/superpowers/plans/2026-06-15-fossabot-parity-roadmap.md`, change the carried-forward advanced reward field language to:
 
 ```markdown
-- Twitch reward fields still intentionally deferred: skip-request-queue, image/background styling, and any automatic fulfillment behavior. Common guarded fields now live in the reward queue runbook.
+- Twitch reward fields still intentionally deferred: skip-request-queue, background color/image styling, reward image upload, and any automatic fulfillment behavior. Common guarded fields now live in the reward queue runbook.
 ```
 
 - [ ] **Step 4: Close this sprint plan**
@@ -779,3 +779,10 @@ Expected: clean working tree after commits; latest commits include backend, fron
 - Spec coverage: covers the explicit deferred advanced reward field sprint from Phase 2 and keeps high-risk Helix fields out of scope.
 - Placeholder scan: no TBD/TODO/fill-in instructions; every code-changing step includes exact code or exact target behavior.
 - Type consistency: backend JSON names are camelCase request fields mapped to Twitch snake_case Helix payload keys; frontend types use existing API naming conventions.
+
+## Sprint closeout
+
+- Backend create/update payloads support paired Twitch limit fields and prompt/user-input updates.
+- Frontend reward queue can create and update common advanced reward fields while keeping pause/disable before delete.
+- Docs now distinguish supported guarded fields from intentionally deferred high-risk fields.
+- Verification passed so far: focused Go reward tests, frontend format/test, backend/frontend slice reviews, and `git diff --check`.

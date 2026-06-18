@@ -48,7 +48,7 @@ Examples:
 
 ## Reward queue
 
-The config page can load manageable Twitch rewards, create simple custom rewards, pause/resume or enable/disable a selected reward, delete a selected manageable reward after confirmation, then load unfulfilled redemptions for a selected reward. Reward lifecycle, create/delete, and fulfill/cancel controls call Twitch Helix with `channel:manage:redemptions`.
+The config page can load manageable Twitch rewards, create custom rewards with guarded optional limits, pause/resume or enable/disable a selected reward, delete a selected manageable reward after confirmation, then load unfulfilled redemptions for a selected reward. Reward lifecycle, create/delete, and fulfill/cancel controls call Twitch Helix with `channel:manage:redemptions`.
 
 When a loaded reward or redemption title matches an enabled channel point rule, the reward queue shows the saved fulfillment note next to the selected reward context and each matching redemption. Use this for operator-only instructions such as “refund if no input”, “read aloud after current segment”, or “check OBS scene before fulfilling”.
 
@@ -59,10 +59,11 @@ Stabilization QA evidence:
 - [ ] Pause/resume and enable/disable controls preserve the selected reward after refresh.
 - [ ] Delete remains separated behind an operator confirmation checkbox.
 - [ ] Fulfillment notes appear for matched selected rewards and matching redemptions, but do not trigger fulfillment automatically.
+- [ ] Advanced reward fields use `0` as disabled in the dashboard, backend update calls send disabled paired flags, and pause/disable remains the preferred reversible control before delete.
 
 Safety boundaries:
 
-- Reward creation is intentionally minimal: title, cost, optional prompt, enabled, and user-input-required only. Advanced Twitch reward fields stay in Twitch for now.
+- Reward creation supports title/cost/prompt/enabled/user-input-required plus guarded cooldown and max redemption limits: global cooldown seconds, max per stream, and max per user per stream. Reward updates support enabled/paused/prompt/user-input-required plus those guarded limits; title and cost changes stay in Twitch for now. Use `0` to disable optional limit fields. High-risk fields such as `should_redemptions_skip_request_queue`, background color/image styling, and reward image upload stay in Twitch for now.
 - Pause/resume and enable/disable are the preferred reversible lifecycle controls for temporary changes.
 - Reward deletion requires an operator confirmation checkbox. Twitch can mark pending unfulfilled redemptions as fulfilled when a reward is deleted, so prefer pause/disable before delete.
 - Reward listing defaults to manageable rewards only.
