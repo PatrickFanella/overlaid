@@ -277,6 +277,33 @@ body {
   box-shadow: 0 0 0 2px #000, 0 0 10px color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 70%, transparent);
 }
 
+.hud-led--ok {
+  --hud-accent: var(--hud-emerald);
+}
+
+.hud-led--warn {
+  --hud-accent: var(--hud-amber);
+}
+
+.hud-led--danger {
+  --hud-accent: var(--hud-rose);
+}
+
+.hud-console-frame {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.hud-console-header {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.hud-route-group {
+  display: grid;
+  gap: 0.4rem;
+}
+
 .hud-grid {
   display: grid;
   gap: 1rem;
@@ -447,6 +474,7 @@ body {
   z-index: 20;
 }
 
+.hud-button,
 .hud-action-button {
   border: 2px solid var(--hud-line);
   border-radius: 2px;
@@ -460,9 +488,16 @@ body {
     transform 160ms ease;
 }
 
+.hud-button--small,
 .hud-action-button--compact {
   padding: 0.45rem 0.6rem;
   font-size: 0.82rem;
+}
+
+.hud-button--danger {
+  --hud-accent: var(--hud-rose);
+  border-color: color-mix(in oklab, var(--hud-rose) 58%, #000);
+  background: color-mix(in oklab, var(--hud-rose) 10%, #000);
 }
 
 .hud-compact-card {
@@ -470,6 +505,7 @@ body {
   padding: 0.65rem;
 }
 
+.hud-button:hover,
 .hud-action-button:hover {
   border-color: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 50%, var(--hud-line));
   background: color-mix(in oklab, var(--hud-accent, var(--hud-cyan)) 11%, #000);
@@ -501,9 +537,16 @@ body {
   overflow-wrap: anywhere;
 }
 
+.hud-button:disabled,
 .hud-action-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.hud-danger-zone {
+  --hud-accent: var(--hud-rose);
+  border-color: color-mix(in oklab, var(--hud-rose) 68%, #000) !important;
+  background: color-mix(in oklab, var(--hud-rose) 7%, var(--hud-terminal));
 }
 
 @keyframes hud-enter {

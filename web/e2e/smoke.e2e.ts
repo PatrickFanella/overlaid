@@ -3,14 +3,18 @@ import { expect, test } from '@playwright/test';
 test.describe('operator browser smoke', () => {
   test('loads critical dashboard and overlay routes', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.getByText('over-laid command center')).toBeVisible();
+    await expect(page.getByText('Broadcast ops console')).toBeVisible();
+    const dashboardNav = page.getByRole('navigation', { name: 'Dashboard sections' });
+    await expect(dashboardNav.getByText('Monitor', { exact: true })).toBeVisible();
+    await expect(dashboardNav.getByText('Operate', { exact: true })).toBeVisible();
+    await expect(dashboardNav.getByText('Configure', { exact: true })).toBeVisible();
 
     await page.goto('/dashboard/live');
     await expect(page.getByText('Live ops cockpit')).toBeVisible();
     await expect(page.getByText('Rehearsal audit')).toBeVisible();
 
     await page.goto('/dashboard/control');
-    await expect(page.getByRole('heading', { name: 'Stream control', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Stream control', exact: true }).first()).toBeVisible();
     await expect(page.getByText('Quick actions', { exact: true })).toBeVisible();
 
     await page.goto('/overlay/alerts');
@@ -19,7 +23,7 @@ test.describe('operator browser smoke', () => {
 
   test('shows bot operations safety surfaces', async ({ page }) => {
     await page.goto('/dashboard/bot');
-    await expect(page.getByText('Bot operations')).toBeVisible();
+    await expect(page.getByText('Broadcast ops console')).toBeVisible();
     await expect(page.getByText('Bot commands', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot counters and quotes', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot API variables', { exact: true })).toBeVisible();

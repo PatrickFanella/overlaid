@@ -48,9 +48,18 @@ describe('App routing', () => {
   it.each(dashboardRoutes)('renders declared dashboard route $path', (route) => {
     const html = renderToString(<App pathname={route.path} />);
 
-    expect(html).toContain('Dashboard');
+    expect(html).toContain('Broadcast ops console');
     expect(html).toContain(route.navLabel);
     expect(html).toContain(route.landmarkText);
+  });
+
+  it('renders the broadcast ops console shell hierarchy', () => {
+    const html = renderToString(<App pathname="/dashboard" />);
+
+    expect(html).toContain('Broadcast ops console');
+    expect(html).toContain('Monitor');
+    expect(html).toContain('Operate');
+    expect(html).toContain('Configure');
   });
 
   it.each(overlayRoutes)('renders declared overlay route $path', (route) => {
@@ -77,7 +86,7 @@ describe('App routing', () => {
   it('renders the dashboard overview route', () => {
     const html = renderToString(<App pathname="/dashboard" />);
 
-    expect(html).toContain('over-laid command center');
+    expect(html).toContain('Broadcast ops console');
     expect(html).toContain('System status');
     expect(html).toContain('Twitch login');
     expect(html).toContain('Build info');

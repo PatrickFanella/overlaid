@@ -1,11 +1,22 @@
+export type DashboardRouteGroup = 'monitor' | 'setup' | 'operate' | 'configure';
+
 export type DashboardRoute = {
   path: string;
   navLabel: string;
   title: string;
   description: string;
   landmarkText: string;
-  intent: 'monitor' | 'setup' | 'operate' | 'configure';
+  intent: DashboardRouteGroup;
+  groupLabel: 'Monitor' | 'Setup' | 'Operate' | 'Configure';
+  priority: 'primary' | 'secondary';
 };
+
+export const dashboardRouteGroups: { label: DashboardRoute['groupLabel']; intent: DashboardRouteGroup }[] = [
+  { label: 'Monitor', intent: 'monitor' },
+  { label: 'Setup', intent: 'setup' },
+  { label: 'Operate', intent: 'operate' },
+  { label: 'Configure', intent: 'configure' },
+];
 
 export const dashboardRoutes: DashboardRoute[] = [
   {
@@ -15,6 +26,8 @@ export const dashboardRoutes: DashboardRoute[] = [
     description: 'Status, build identity, and route guide for choosing the right operator surface.',
     landmarkText: 'Ops route guide',
     intent: 'monitor',
+    groupLabel: 'Monitor',
+    priority: 'primary',
   },
   {
     path: '/dashboard/live',
@@ -23,6 +36,8 @@ export const dashboardRoutes: DashboardRoute[] = [
     description: 'Recovery cockpit with readiness, runbook links, build info, EventSub diagnostics, checklist, session log, and event history.',
     landmarkText: 'Recovery console',
     intent: 'monitor',
+    groupLabel: 'Monitor',
+    priority: 'primary',
   },
   {
     path: '/dashboard/setup',
@@ -31,6 +46,8 @@ export const dashboardRoutes: DashboardRoute[] = [
     description: 'Setup checklist, browser-source URLs, and stream preset guidance.',
     landmarkText: 'Checklist',
     intent: 'setup',
+    groupLabel: 'Setup',
+    priority: 'secondary',
   },
   {
     path: '/dashboard/sources',
@@ -39,6 +56,8 @@ export const dashboardRoutes: DashboardRoute[] = [
     description: 'OBS browser-source URLs, active-profile preset view, and custom CSS copy helpers.',
     landmarkText: 'Stream presets',
     intent: 'setup',
+    groupLabel: 'Setup',
+    priority: 'secondary',
   },
   {
     path: '/dashboard/control',
@@ -47,6 +66,8 @@ export const dashboardRoutes: DashboardRoute[] = [
     description: 'Operator quick actions, rehearsals, BRB controls, OBS controls, and session log.',
     landmarkText: 'Session log',
     intent: 'operate',
+    groupLabel: 'Operate',
+    priority: 'primary',
   },
   {
     path: '/dashboard/bot',
@@ -55,6 +76,8 @@ export const dashboardRoutes: DashboardRoute[] = [
     description: 'Twitch bot audit, future custom commands, timers, counters, and moderation controls.',
     landmarkText: 'Bot audit',
     intent: 'operate',
+    groupLabel: 'Operate',
+    priority: 'primary',
   },
   {
     path: '/dashboard/config',
@@ -63,6 +86,8 @@ export const dashboardRoutes: DashboardRoute[] = [
     description: 'Operator secret, automation profiles, Twitch interaction rules, MPRIS decision, and overlay noise controls.',
     landmarkText: 'Twitch interaction rules',
     intent: 'configure',
+    groupLabel: 'Configure',
+    priority: 'primary',
   },
 ];
 
