@@ -26,9 +26,9 @@ export function DashboardShell({ activePath, children }: DashboardShellProps) {
   }
 
   return (
-    <main className="hud-shell hud-shell--dashboard hud-scanlines min-h-screen text-zinc-100">
-      <section className="hud-console-frame mx-auto max-w-[1180px]">
-        <header className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
+    <main className="hud-shell hud-shell--dashboard min-h-screen text-zinc-100">
+      <section className="hud-console-frame mx-auto max-w-[1200px]">
+        <header className="hud-panel hud-panel--flat rounded-2xl p-4">
           <div className="hud-console-header lg:grid lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.4fr)_auto] lg:items-start">
             <div className="min-w-0">
               <p className="hud-label">Broadcast ops console</p>
@@ -47,7 +47,7 @@ export function DashboardShell({ activePath, children }: DashboardShellProps) {
                       {routes.map((route) => (
                         <a
                           key={route.path}
-                          className={`hud-chip hud-chip--square ${activePath === route.path ? 'border-cyan-200/80 bg-cyan-300/15 text-cyan-50' : ''}`}
+                          className={`hud-button hud-button--small ${activePath === route.path ? 'border-zinc-100/40 bg-white/10 text-zinc-50' : 'text-zinc-400'}`}
                           href={route.path}
                           aria-current={activePath === route.path ? 'page' : undefined}
                         >

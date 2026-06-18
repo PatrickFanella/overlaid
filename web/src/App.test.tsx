@@ -63,6 +63,7 @@ describe('App routing', () => {
     const html = renderToString(<App pathname="/dashboard" />);
 
     expect(html).toContain('Broadcast ops console');
+    expect(html).toContain('Setup');
     expect(html).toContain('Monitor');
     expect(html).toContain('Operate');
     expect(html).toContain('Configure');
