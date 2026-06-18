@@ -123,6 +123,9 @@ describe('App routing', () => {
     expect(html).toContain('Live command');
     expect(html).toContain('Live ops cockpit');
     expect(html).toContain('Check readiness, recover production issues');
+    expect(html).toContain('Customize panel layout');
+    expect(html).toContain('Reset layout');
+    expect(html).toContain('Locked safety panels stay fixed');
     expect(html).toContain('Recovery console');
     expect(html).toContain('no destructive browser actions');
     expect(html).toContain('Production recovery');

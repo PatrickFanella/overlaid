@@ -12,6 +12,9 @@ test.describe('operator browser smoke', () => {
     await page.goto('/dashboard/live');
     await expect(page.getByText('Live command')).toBeVisible();
     await expect(page.getByText('Rehearsal audit')).toBeVisible();
+    await expect(page.getByText('Customize panel layout')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reset layout' })).toBeVisible();
+    await expect(page.getByText('Locked safety panels stay fixed')).toBeVisible();
 
     await page.goto('/dashboard/control');
     await expect(page.getByRole('heading', { name: 'Stream control', exact: true }).first()).toBeVisible();

@@ -11,11 +11,12 @@ import {
   type StreamSessionResponse,
   type TwitchStatus,
 } from '../../lib/api';
-import { loadDashboardConfig, loadOperatorSecret } from '../../lib/dashboardConfig';
+import { loadDashboardConfig, loadOperatorSecret, saveDashboardConfig } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { loadSessionLog, type SessionLogEntry } from '../../lib/sessionLog';
 import { DashboardShell } from './DashboardShell';
 import { ConsolePageHeader } from './components/ConsolePageHeader';
+import { CustomizablePanelLayout } from './components/CustomizablePanelLayout';
 import { EventSubDiagnostics } from './components/EventSubDiagnostics';
 import { EventHistoryPanel } from './components/EventHistoryPanel';
 import { LivePreflight } from './components/LivePreflight';
@@ -25,6 +26,7 @@ import { ReadinessPanel } from './components/ReadinessPanel';
 import { SessionLogPanel } from './components/SessionLogPanel';
 import { BuildInfoPanel } from './components/BuildInfoPanel';
 import { StreamSessionPanel } from './components/StreamSessionPanel';
+import type { PanelLayoutItem } from '../../lib/dashboardLayout';
 
 type LiveStatus = {
   twitch: TwitchStatus | null;
@@ -41,7 +43,7 @@ type LiveStatus = {
 
 export function DashboardLivePage() {
   const apiBaseUrl = getOverlayApiBaseUrl();
-  const config = loadDashboardConfig();
+  const [config, setConfig] = useState(() => loadDashboardConfig());
   const operatorSecret = loadOperatorSecret();
   const [sessionLog] = useState<SessionLogEntry[]>(() => loadSessionLog());
   const [status, setStatus] = useState<LiveStatus>({
@@ -92,12 +94,20 @@ export function DashboardLivePage() {
     };
   }, [apiBaseUrl, operatorSecret]);
 
+  function updateLivePanelLayout(items: PanelLayoutItem[]) {
+    setConfig((current) => {
+      const next = { ...current, panelLayouts: { ...current.panelLayouts, live: items } };
+      saveDashboardConfig(next);
+      return next;
+    });
+  }
+
   return (
     <DashboardShell activePath="/dashboard/live">
       <ConsolePageHeader
         eyebrow="Live command"
         title="Live ops cockpit"
-        description="Check readiness, recover production issues, review EventSub, and keep session evidence visible before going live."
+        description="Check readiness, recover production issues, review EventSub, and keep session evidence available before going live."
         accent="emerald"
         chips={[status.loading ? 'checking' : 'checked', 'recovery links ready']}
         actions={status.error ? <span className="hud-chip hud-chip--square hud-accent-amber">{status.error}</span> : null}
@@ -106,18 +116,32 @@ export function DashboardLivePage() {
       <div className="hud-dashboard-grid hud-dashboard-grid--two">
         <div className="grid gap-3">
           <RecoveryConsolePanel />
-          <ReadinessPanel report={status.readiness} loading={status.loading} error={status.readinessError} />
-          <LivePreflight twitch={status.twitch} obs={status.obs} config={config} operatorSecret={operatorSecret} />
-          <EventSubDiagnostics status={status.twitch} />
+          <CustomizablePanelLayout
+            page="live"
+            items={config.panelLayouts.live}
+            onChange={updateLivePanelLayout}
+            panels={[
+              { id: 'readiness', node: <ReadinessPanel report={status.readiness} loading={status.loading} error={status.readinessError} /> },
+              { id: 'preflight', node: <LivePreflight twitch={status.twitch} obs={status.obs} config={config} operatorSecret={operatorSecret} /> },
+              { id: 'eventsub', node: <EventSubDiagnostics status={status.twitch} /> },
+              { id: 'build-info', node: <BuildInfoPanel apiBaseUrl={apiBaseUrl} /> },
+              { id: 'checklist', node: <LiveChecklistSummary items={config.setupChecklist} /> },
+              { id: 'session-log', node: <SessionLogPanel entries={sessionLog} /> },
+              { id: 'event-history', node: <EventHistoryPanel events={status.history?.events ?? []} loading={status.loading} error={status.historyError} /> },
+            ]}
+          />
         </div>
-        <div className="grid gap-3">
-          <BuildInfoPanel apiBaseUrl={apiBaseUrl} />
-          <StreamSessionPanel apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} status={status.session} loading={status.loading} error={status.sessionError} onChange={(session) => setStatus((current) => ({ ...current, session }))} />
-          <LiveChecklistSummary items={config.setupChecklist} />
-          <SessionLogPanel entries={sessionLog} />
+        <div className="grid content-start gap-3">
+          <StreamSessionPanel
+            apiBaseUrl={apiBaseUrl}
+            operatorSecret={operatorSecret}
+            status={status.session}
+            loading={status.loading}
+            error={status.sessionError}
+            onChange={(session) => setStatus((current) => ({ ...current, session }))}
+          />
         </div>
       </div>
-      <EventHistoryPanel events={status.history?.events ?? []} loading={status.loading} error={status.historyError} />
     </DashboardShell>
   );
 }
