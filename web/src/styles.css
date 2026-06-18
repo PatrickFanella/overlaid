@@ -32,6 +32,21 @@
   --hud-orange: var(--dracula-orange);
   --hud-rose: var(--dracula-red);
   --hud-shadow: 5px 5px 0 #000;
+
+  --minimal-bg: #0b0d10;
+  --minimal-surface-0: #0f1216;
+  --minimal-surface-1: #151922;
+  --minimal-surface-2: #1d2430;
+  --minimal-border-subtle: rgba(226, 232, 240, 0.12);
+  --minimal-border-strong: rgba(226, 232, 240, 0.22);
+  --minimal-text: #f4f7fb;
+  --minimal-muted: #9aa4b2;
+  --minimal-faint: #687385;
+  --minimal-accent: #d7dde8;
+  --minimal-success: #6ee7b7;
+  --minimal-warning: #fbbf24;
+  --minimal-danger: #fb7185;
+
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   background: transparent;
 }
@@ -69,10 +84,25 @@ body {
 
 .hud-shell--dashboard {
   padding: 12px;
-  background:
-    radial-gradient(circle at 0 0, color-mix(in oklab, var(--dracula-purple) 13%, transparent), transparent 36rem),
-    radial-gradient(circle at 100% 0, color-mix(in oklab, var(--dracula-pink) 10%, transparent), transparent 34rem),
-    var(--dracula-background);
+  --hud-bg: var(--minimal-bg);
+  --hud-panel: var(--minimal-surface-1);
+  --hud-panel-strong: var(--minimal-surface-2);
+  --hud-terminal: var(--minimal-surface-0);
+  --hud-line: var(--minimal-border-strong);
+  --hud-line-soft: var(--minimal-border-subtle);
+  --hud-text: var(--minimal-text);
+  --hud-muted: var(--minimal-muted);
+  --hud-cyan: var(--minimal-accent);
+  --hud-fuchsia: #c4b5fd;
+  --hud-purple: #a78bfa;
+  --hud-emerald: var(--minimal-success);
+  --hud-amber: var(--minimal-warning);
+  --hud-orange: #fb923c;
+  --hud-rose: var(--minimal-danger);
+  --hud-shadow: none;
+  background: var(--minimal-bg);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .hud-shell--compact {
