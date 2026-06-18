@@ -23,7 +23,7 @@ test.describe('operator browser smoke', () => {
 
   test('shows bot operations safety surfaces', async ({ page }) => {
     await page.goto('/dashboard/bot');
-    await expect(page.getByText('Broadcast ops console')).toBeVisible();
+    await expect(page.getByText('Operate with guardrails')).toBeVisible();
     await expect(page.getByText('Bot commands', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot counters and quotes', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot API variables', { exact: true })).toBeVisible();
@@ -36,6 +36,7 @@ test.describe('operator browser smoke', () => {
 
   test('shows twitch reward queue lifecycle controls', async ({ page }) => {
     await page.goto('/dashboard/config');
+    await expect(page.getByText('Configure deliberately')).toBeVisible();
     await expect(page.getByText('OBS import')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
     await expect(page.getByText('Reward queue', { exact: true })).toBeVisible();

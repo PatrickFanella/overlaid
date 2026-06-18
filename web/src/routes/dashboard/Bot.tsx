@@ -46,6 +46,7 @@ import {
 import { loadOperatorSecret } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { DashboardShell } from './DashboardShell';
+import { ConsolePageHeader } from './components/ConsolePageHeader';
 import { BotStatusSummary } from './bot/BotStatusSummary';
 import {
   defaultAPIVariableDraft,
@@ -297,6 +298,14 @@ export function DashboardBotPage() {
 
   return (
     <DashboardShell activePath="/dashboard/bot">
+      <ConsolePageHeader
+        eyebrow="Operate with guardrails"
+        title="Bot operations"
+        description="Manage bot commands, community data, API variables, timers, moderation dry-runs, and guarded destructive actions."
+        accent="amber"
+        chips={[state.loading ? 'loading bot state' : 'bot state loaded', operatorSecret ? 'operator secret loaded' : 'operator secret missing']}
+      />
+
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <p className="hud-label">Bot operations</p>
         <h2 className="hud-title hud-title--compact mt-1">FossaBot parity spine</h2>
@@ -668,9 +677,9 @@ function BotModerationPanel({
         </div>
       </div>
 
-      <div className="mt-4 border border-cyan-400/30 bg-black/40 p-2">
-        <p className="text-xs uppercase tracking-wide text-cyan-100">Nuke dry-run planner</p>
-        <p className="mt-1 text-xs text-zinc-400">Dry-run first. Execute requires confirmation, is capped, and only delete/timeout are supported.</p>
+      <div className="hud-danger-zone mt-4 border p-2">
+        <p className="text-xs uppercase tracking-wide text-rose-100">Nuke dry-run planner</p>
+        <p className="mt-1 text-xs text-amber-100">Dry-run first. Execute requires confirmation, is capped, and only delete/timeout are supported.</p>
         <div className="mt-2 grid gap-2 md:grid-cols-[1fr_8rem_8rem_auto]">
           <input className="hud-input" value={nukeDraft.pattern} onChange={(event) => onNukeDraftChange({ ...nukeDraft, pattern: event.target.value, confirm: false })} placeholder="phrase or regex" />
           <input className="hud-input" type="number" min={1} max={360} value={nukeDraft.lookbackMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, lookbackMinutes: Number(event.target.value), confirm: false })} />
@@ -689,7 +698,7 @@ function BotModerationPanel({
           </select>
           <input className="hud-input" type="number" min={1} value={nukeDraft.durationSeconds} onChange={(event) => onNukeDraftChange({ ...nukeDraft, durationSeconds: Number(event.target.value), confirm: false })} />
           <input className="hud-input" type="number" min={0} max={120} value={nukeDraft.radiationMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, radiationMinutes: Number(event.target.value), confirm: false })} placeholder="radiation min" />
-          <button className="hud-button" type="button" disabled={!canExecuteNuke} onClick={onNukeExecute}>Execute planned nuke</button>
+          <button className="hud-button hud-button--danger" type="button" disabled={!canExecuteNuke} onClick={onNukeExecute}>Execute planned nuke</button>
         </div>
         <p className="mt-1 text-xs text-zinc-500">Radiation minutes optionally enforces this pattern for future messages for up to 120 minutes. Future timeout radiation uses the standard 60-second timeout.</p>
         {nukeResult ? <p className="mt-2 text-xs text-zinc-300">planned matches :: {nukeResult.matches.length}</p> : null}

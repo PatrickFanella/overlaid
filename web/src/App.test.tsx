@@ -179,7 +179,9 @@ describe('App routing', () => {
   it('renders the dashboard config route', () => {
     const html = renderToString(<App pathname="/dashboard/config" />);
 
+    expect(html).toContain('Configure deliberately');
     expect(html).toContain('Operator config');
+    expect(html).toContain('Secrets stay in browser session state');
     expect(html).toContain('Secret header');
     expect(html).toContain('Automation profiles');
     expect(html).toContain('Twitch interaction rules');
@@ -194,7 +196,9 @@ describe('App routing', () => {
   it('renders bot operations safety guidance', () => {
     const html = renderToString(<App pathname="/dashboard/bot" />);
 
+    expect(html).toContain('Operate with guardrails');
     expect(html).toContain('Bot operations');
+    expect(html).toContain('guarded destructive actions');
     expect(html).toContain('Nuke dry-run planner');
     expect(html).toContain('I reviewed this dry-run plan');
     expect(html).toContain('Radiation minutes');

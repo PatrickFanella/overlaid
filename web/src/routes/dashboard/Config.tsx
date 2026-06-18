@@ -12,6 +12,7 @@ import {
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { validateQuickActionsAgainstOBS, type OBSValidationIssue } from '../../lib/obsValidation';
 import { DashboardShell } from './DashboardShell';
+import { ConsolePageHeader } from './components/ConsolePageHeader';
 import { AutomationProfileManager } from './components/AutomationProfileManager';
 import { TwitchInteractionsManager } from './components/TwitchInteractionsManager';
 
@@ -120,6 +121,14 @@ export function DashboardConfigPage() {
 
   return (
     <DashboardShell activePath="/dashboard/config">
+      <ConsolePageHeader
+        eyebrow="Configure deliberately"
+        title="Operator config"
+        description="Edit local operator preferences, OBS mappings, Twitch interaction rules, and overlay display behavior. Secrets stay in browser session state."
+        accent="purple"
+        chips={[`API ${apiBaseUrl}`, operatorSecret ? 'operator secret loaded' : 'operator secret missing']}
+      />
+
       <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
