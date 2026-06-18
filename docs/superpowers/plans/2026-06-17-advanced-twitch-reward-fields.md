@@ -785,4 +785,5 @@ Expected: clean working tree after commits; latest commits include backend, fron
 - Backend create/update payloads support paired Twitch limit fields and prompt/user-input updates.
 - Frontend reward queue can create and update common advanced reward fields while keeping pause/disable before delete.
 - Docs now distinguish supported guarded fields from intentionally deferred high-risk fields.
-- Verification passed so far: focused Go reward tests, frontend format/test, backend/frontend slice reviews, and `git diff --check`.
+- Verification passed: focused Go reward tests, frontend format/test, backend/frontend/docs slice reviews, `git diff --check`, `make verify`, `make smoke`, and `make smoke-browser`.
+- Local smoke note: `/readyz` remained degraded for local EventSub/OBS reachability/auth in this environment, but the smoke targets passed and reward-management routes rendered.
