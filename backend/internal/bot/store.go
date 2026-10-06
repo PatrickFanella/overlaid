@@ -17,24 +17,6 @@ type Store struct {
 	apiVariables *APIVariableResolver
 }
 
-type AuditEvent struct {
-	ID               string          `json:"id"`
-	CreatedAt        time.Time       `json:"createdAt"`
-	Source           string          `json:"source"`
-	ActorID          string          `json:"actorId,omitempty"`
-	ActorLogin       string          `json:"actorLogin,omitempty"`
-	ActorDisplayName string          `json:"actorDisplayName,omitempty"`
-	ActorRole        string          `json:"actorRole,omitempty"`
-	Trigger          string          `json:"trigger,omitempty"`
-	Command          string          `json:"command,omitempty"`
-	Action           string          `json:"action,omitempty"`
-	Result           string          `json:"result"`
-	Reason           string          `json:"reason,omitempty"`
-	EventID          string          `json:"eventId,omitempty"`
-	StreamSessionID  string          `json:"streamSessionId,omitempty"`
-	Data             json.RawMessage `json:"data,omitempty"`
-}
-
 type Timer struct {
 	ID              string     `json:"id"`
 	Name            string     `json:"name"`
@@ -780,52 +762,6 @@ func NormalizeTimer(timer Timer) (Timer, error) {
 	return timer, nil
 }
 
-// Timer responses are text. When the text is JSON, inspect every key, including
-// duplicate object members that would disappear when decoding into a map.
-func containsJSONSecretKey(response string) bool {
-	if !json.Valid([]byte(response)) {
-		return false
-	}
-	decoder := json.NewDecoder(strings.NewReader(response))
-	decoder.UseNumber()
-	// k: object key, v: object value, a: array element.
-	stack := []byte{}
-	for {
-		token, err := decoder.Token()
-		if err != nil {
-			return false
-		}
-		if delim, ok := token.(json.Delim); ok {
-			switch delim {
-			case '{', '[':
-				if len(stack) > 0 && stack[len(stack)-1] == 'v' {
-					stack[len(stack)-1] = 'k'
-				}
-				if delim == '{' {
-					stack = append(stack, 'k')
-				} else {
-					stack = append(stack, 'a')
-				}
-			case '}', ']':
-				stack = stack[:len(stack)-1]
-			}
-			continue
-		}
-		if len(stack) == 0 {
-			continue
-		}
-		switch stack[len(stack)-1] {
-		case 'k':
-			if key, ok := token.(string); ok && isForbiddenKey(key) {
-				return true
-			}
-			stack[len(stack)-1] = 'v'
-		case 'v':
-			stack[len(stack)-1] = 'k'
-		}
-	}
-}
-
 func isBotNameInitial(initial byte) bool {
 	return (initial >= 'a' && initial <= 'z') || (initial >= '0' && initial <= '9')
 }
@@ -856,25 +792,6 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func normalizeAuditEvent(event AuditEvent) AuditEvent {
-	event.Source = normalizeToken(event.Source, "unknown")
-	event.ActorID = strings.TrimSpace(event.ActorID)
-	event.ActorLogin = strings.TrimSpace(event.ActorLogin)
-	event.ActorDisplayName = strings.TrimSpace(event.ActorDisplayName)
-	event.ActorRole = normalizeToken(event.ActorRole, "viewer")
-	event.Trigger = strings.TrimSpace(event.Trigger)
-	event.Command = strings.TrimSpace(strings.TrimPrefix(event.Command, "!"))
-	event.Action = normalizeToken(event.Action, "none")
-	event.Result = normalizeToken(event.Result, "unknown")
-	event.Reason = strings.TrimSpace(event.Reason)
-	event.EventID = strings.TrimSpace(event.EventID)
-	event.StreamSessionID = strings.TrimSpace(event.StreamSessionID)
-	if len(event.Data) == 0 {
-		event.Data = json.RawMessage(`{}`)
-	}
-	return event
-}
-
 func normalizeToken(value, fallback string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "" {
@@ -888,65 +805,6 @@ func nullableJSON(payload json.RawMessage) any {
 		return json.RawMessage(`{}`)
 	}
 	return payload
-}
-
-func ValidateAuditData(payload json.RawMessage) error {
-	if len(payload) == 0 || string(payload) == "null" {
-		return nil
-	}
-	var decoded any
-	decoder := json.NewDecoder(strings.NewReader(string(payload)))
-	decoder.UseNumber()
-	if err := decoder.Decode(&decoded); err != nil {
-		return err
-	}
-	if !isJSONObject(decoded) {
-		return errors.New("bot audit data must be a JSON object")
-	}
-	if containsSecretKey(decoded) {
-		return errors.New("bot audit data must not contain secrets")
-	}
-	return nil
-}
-
-func isJSONObject(value any) bool {
-	_, ok := value.(map[string]any)
-	return ok
-}
-
-func containsSecretKey(value any) bool {
-	switch v := value.(type) {
-	case map[string]any:
-		for key, nested := range v {
-			if isForbiddenKey(key) || containsSecretKey(nested) {
-				return true
-			}
-		}
-	case []any:
-		for _, nested := range v {
-			if containsSecretKey(nested) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func isForbiddenKey(key string) bool {
-	lower := strings.ToLower(strings.TrimSpace(key))
-	if lower == "" {
-		return false
-	}
-	for _, needle := range []string{"secret", "token", "password", "authorization", "cookie"} {
-		if strings.Contains(lower, needle) {
-			return true
-		}
-	}
-	compact := strings.ReplaceAll(strings.ReplaceAll(lower, "_", ""), "-", "")
-	if strings.Contains(compact, "apikey") || strings.Contains(compact, "privatekey") {
-		return true
-	}
-	return false
 }
 
 const createTablesSQL = `

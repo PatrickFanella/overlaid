@@ -509,3 +509,10 @@ Full verification, 17 browser workflows, Bot/Twitch/HTTP race tests with isolate
 All dashboard operation families now use one transport for auth headers, JSON requests, error details, optional empty responses, and labelled parsing failures. Session/login receipts and OBS/recovery reads keep their public APIs; webhook credentials remain separate from operator credentials.
 
 Full verification passed with 111 frontend tests, all 17 browser workflows passed, and runtime smoke passed. Health and Sessions also loaded against disposable Postgres in the collaborative browser. External Twitch/OBS availability remains unchanged.
+
+
+### Overnight progress: complete audit payload validation
+
+Audit JSON validation now checks the complete input and every member before duplicate-key normalization. Reproduced gaps involving overwritten nested secret fields and trailing JSON/text are rejected. Audit type/normalization/payload policy moved out of SQL storage, and audit/timer JSON use the same key scanner.
+
+Full verification, 19 browser workflows, Bot/HTTP/Twitch race tests with isolated Postgres contracts, and rebuilt runtime smoke passed. Rejected audit writes leave no rows; safe duplicate members retain JSONB normalization.
