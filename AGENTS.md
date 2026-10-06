@@ -25,3 +25,8 @@ make verify
 ```
 
 Use narrower commands only when an issue explicitly asks for a smaller check.
+
+## Operations conventions
+
+- Keep `/healthz` as cheap process liveness for Compose. Monitoring must parse `/readyz` JSON, using `cmd/probe` or equivalent, because HTTP 200 can contain degraded readiness.
+- `make build` includes the read-only `over-laid-probe` binary. Probe defaults require the full report; deployments can select explicitly required named checks. Missing named checks fail.

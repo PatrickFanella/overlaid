@@ -111,6 +111,8 @@ For post-build route checks and styling changes, use `docs/runbooks/visual-qa.md
 
 `/healthz` stays the cheap liveness check used by Compose healthchecks. `curl http://localhost:8080/readyz` is the operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, retained state, event history, or Twitch interaction rules need attention.
 
+`make build` also builds `bin/over-laid-probe`, a read-only readiness monitor. `make probe` fails when the JSON report is degraded even if HTTP returns 200. Select explicit requirements with `make probe API_PORT=8081 PROBE_CHECKS=process,postgres,bot_runtime` when monitoring local bot storage before Twitch/OBS setup. Missing checks fail rather than silently passing. See [uptime monitoring](docs/runbooks/uptime-monitoring.md) for exit codes, external probes, and alerting policy.
+
 ### OBS browser source
 
 Open the operator dashboard at:

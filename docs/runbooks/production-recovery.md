@@ -24,6 +24,7 @@ docker compose logs -f web
 - `/healthz` is liveness only. Compose healthchecks use it.
 - `/readyz` is operator diagnostics. It reports dependency status and can return HTTP 200 with `status: degraded`.
 - Use `/readyz` to see whether OBS, Twitch auth, EventSub, retained state, event history, or Twitch interaction rules need attention.
+- Use `bin/over-laid-probe` (built by `make build-probe`) when a monitor needs an exit code from that JSON report; see [uptime monitoring](uptime-monitoring.md). HTTP 200 alone does not mean dependencies are ready.
 - When `DATABASE_URL` is set, `/readyz` includes `postgres`, `dashboard_config`, and `stream_sessions` checks; event history, Twitch interaction rules, shared dashboard config, stream session audit records, and session readiness snapshots depend on the database.
 - `/dashboard/health` is the human-readable view of the same readiness data, plus recent operator context and the persisted event history panel.
 - Destructive recovery remains CLI-only; use the dashboard to assess and route, then follow the runbook commands for any backup, restore, delete, or re-authentication steps.

@@ -481,3 +481,10 @@ Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race test
 The processor now parses/resolves aliases and delegates to community, custom, and built-in executors. Community storage behavior and built-in action/cooldown decisions no longer belong to the dispatcher. Shared event constructors preserve diagnostic metadata, and all role decisions use the bot role policy. Public processor behavior, zero-value compatibility, community precedence, alias cooldowns, and isolation across command families are covered by workflow tests. The architecture plan records the final owners.
 
 Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS behavior remains unavailable for the known external setup.
+
+
+### Overnight progress: self-hosted readiness probe
+
+Option A now has a bounded, read-only monitoring probe that interprets readiness JSON rather than relying on HTTP status. It supports full-report and explicitly selected checks, fails on missing/invalid checks, handles timeouts/interrupts, and includes completion/help/version modes. Build/Makefile, README, agent conventions, and uptime/recovery guidance identify its contract. The dedicated uptime plan retains off-host scheduler/alert delivery and live external-service checks as deployment work.
+
+Validation: `make verify`, all 17 browser smoke workflows, probe race tests, and `make smoke API_PORT=8081` passed. Native probes correctly rejected overall Twitch/OBS degradation while accepting required local Postgres/bot checks; missing named checks failed. Signal exits and Linux startup were verified, and macOS/Windows cross-builds passed.
