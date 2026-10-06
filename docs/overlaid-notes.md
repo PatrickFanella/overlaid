@@ -23,16 +23,20 @@
 
 ---
 
-## Implementation status
+## Implementation status, October 6
 
-- Theme/style: implemented with semantic HUD utility classes in `web/src/styles.css`, the Neubrutal HUD design direction, Dracula colors, and terminal-style overlay/dashboard surfaces.
-- Dashboard split: implemented with `/dashboard`, `/dashboard/live`, `/dashboard/setup`, `/dashboard/sources`, `/dashboard/control`, and `/dashboard/config`.
-- Setup workflow: implemented on `/dashboard/setup`; checklist state persists locally and completed items can be hidden.
-- Operator secret: moved to `/dashboard/config` and stored in browser session storage.
-- Overlay URLs/presets: moved to `/dashboard/setup` and `/dashboard/sources` with copyable source URLs and editable stream presets.
-- Stream control route: implemented on `/dashboard/control` with sample events, rehearsal runner, BRB controls, OBS controls, and editable/confirmable quick actions.
-- Live readiness: implemented on `/dashboard/live` with Twitch auth, EventSub, OBS, operator-secret, and setup preflight checks.
-- Runtime diagnostics: Twitch EventSub diagnostics are exposed through backend status and dashboard UI.
-- Overlay behavior: alerts/chat/ticker have configurable noise controls; goals/ticker/BRB state is retained and replayed to reconnecting browser sources.
-- Deployment: production guardrails, Compose health checks/restart policy, and live preflight runbook are documented.
-- Live QA: user completed a live QA pass; status is OK so far.
+The original notes above are preserved as design history. Current source uses these surfaces:
+
+- Theme/style: overlays use SUBCULT `sc-*` primitives and `web/src/styles/overlay.css`; the operator desk uses `desk-*` primitives and `web/src/styles/desk.css`. Both stylesheets enter Tailwind's components layer. The earlier shared HUD/Dracula dashboard direction has been superseded.
+- Dashboard split: the primary routes are On air (`/dashboard`), Scenes, Chat, Overlays, Health, Settings, and Sessions. Earlier `/dashboard/live`, `/dashboard/control`, `/dashboard/setup`, `/dashboard/sources`, `/dashboard/bot`, and `/dashboard/config` paths resolve through the legacy-route map.
+- Setup workflow: the checklist lives on `/dashboard/overlays`; state persists locally, completed items hide by default, and a completion notice remains visible. Operators can show completed items to revise them.
+- Operator secret: Settings edits the secret, fills the password field from browser session storage, and indicates whether it is loaded. Shared dashboard preferences exclude secrets.
+- Overlay URLs/presets: Overlays contains copyable source URLs, demo previews, editable presets, and custom CSS snippets.
+- Stream controls: Scenes contains OBS controls, sample events, rehearsal, and configurable/confirmable quick actions. On air contains the live session summary, BRB, and quick-action workflow.
+- Readiness/recovery: Health contains backend readiness, Twitch/EventSub diagnostics, build identity, and the fixed recovery console. Sessions contains reports, readiness snapshots, operator action logs, and persisted history.
+- Bot operations: Chat contains commands, timers, API variables, counters/quotes, moderation/nuke, interaction rules, and reward queue operations.
+- Overlay behavior: alerts/chat/ticker have configurable noise controls; goals/ticker/BRB state is retained and replayed after reconnect. All overlays have useful `?demo=1` rendering.
+- Packaging/recovery: Compose dependencies, packaged non-root runtime/volume repair, local process recovery, backup targets, and isolated restore have recorded evidence in `docs/qa/`.
+- Live QA: an earlier user-reported pass was OK. The overnight changes still require the actual live Twitch/OBS and production environment checks in `docs/runbooks/live-qa.md`; local fixtures do not replace those checks.
+
+See [the current roadmap acceptance map](qa/2026-10-06-roadmap-acceptance.md) for local verification and remaining external gates.

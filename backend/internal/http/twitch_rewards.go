@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 )
 
 const twitchRewardsEndpoint = "https://api.twitch.tv/helix/channel_points/custom_rewards"
@@ -285,13 +286,13 @@ func (s *Server) createTwitchReward(ctx context.Context, request twitchRewardCre
 	}
 	title := strings.TrimSpace(request.Title)
 	prompt := strings.TrimSpace(request.Prompt)
-	if title == "" || len(title) > 45 {
+	if title == "" || utf8.RuneCountInString(title) > 45 {
 		return nil, fmt.Errorf("reward title must be 1-45 characters")
 	}
 	if request.Cost < 1 {
 		return nil, fmt.Errorf("reward cost must be at least 1")
 	}
-	if len(prompt) > 200 {
+	if utf8.RuneCountInString(prompt) > 200 {
 		return nil, fmt.Errorf("reward prompt must be 200 characters or fewer")
 	}
 	payload := map[string]any{
@@ -338,7 +339,7 @@ func (s *Server) updateTwitchReward(ctx context.Context, rewardID string, reques
 	}
 	if request.Prompt != nil {
 		prompt := strings.TrimSpace(*request.Prompt)
-		if len(prompt) > 200 {
+		if utf8.RuneCountInString(prompt) > 200 {
 			return nil, fmt.Errorf("reward prompt must be 200 characters or fewer")
 		}
 		payload["prompt"] = prompt

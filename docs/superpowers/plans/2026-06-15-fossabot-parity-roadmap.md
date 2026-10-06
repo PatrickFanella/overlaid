@@ -25,6 +25,8 @@ The parity roadmap adds FossaBot-style bot breadth without weakening the existin
 
 ## Current status
 
+The [October 6 acceptance map](../../qa/2026-10-06-roadmap-acceptance.md) reconciles every milestone with current code/tests and separates completed local contracts from pending live/production gates.
+
 Implemented and verified in committed slices:
 
 - Bot audit storage, runtime permissions, existing Twitch command audit, and `/dashboard/bot` audit/status view.
@@ -516,3 +518,10 @@ Full verification passed with 111 frontend tests, all 17 browser workflows passe
 Audit JSON validation now checks the complete input and every member before duplicate-key normalization. Reproduced gaps involving overwritten nested secret fields and trailing JSON/text are rejected. Audit type/normalization/payload policy moved out of SQL storage, and audit/timer JSON use the same key scanner.
 
 Full verification, 19 browser workflows, Bot/HTTP/Twitch race tests with isolated Postgres contracts, and rebuilt runtime smoke passed. Rejected audit writes leave no rows; safe duplicate members retain JSONB normalization.
+
+
+### Overnight progress: reward Unicode limits and roadmap acceptance
+
+Reward title and prompt validation now counts Unicode code points after trimming. The previous API byte limit rejected valid CJK/emoji text, while HTML maxlength limited astral characters by UTF-16 units. The dashboard now shows validation errors before dispatch, and create/edit boundary fixtures preserve valid Unicode text and reject over-limit writes without reaching Twitch.
+
+`make verify` passed with 113 frontend tests, all 22 browser workflows passed, the Postgres-enabled HTTP race suite passed, and rebuilt runtime smoke passed. The [acceptance map](../../qa/2026-10-06-roadmap-acceptance.md) links implementation evidence for every roadmap checkbox and records the external Twitch/OBS and production gates. The original user notes now describe current routes and styles.

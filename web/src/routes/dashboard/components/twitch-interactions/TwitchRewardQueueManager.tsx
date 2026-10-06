@@ -64,7 +64,8 @@ function rewardEditDraftFromReward(reward?: TwitchReward): RewardEditDraft {
   };
 }
 
-function validateRewardLimits(values: { globalCooldownSeconds: number; maxPerStream: number; maxPerUserPerStream: number }) {
+function validateRewardLimits(values: { prompt: string; globalCooldownSeconds: number; maxPerStream: number; maxPerUserPerStream: number }) {
+  if (Array.from(values.prompt.trim()).length > 200) return 'Reward prompt must be 200 characters or fewer.';
   if (!Number.isFinite(values.globalCooldownSeconds)) return 'Global cooldown seconds must be a number.';
   if (!Number.isFinite(values.maxPerStream)) return 'Max per stream must be a number.';
   if (!Number.isFinite(values.maxPerUserPerStream)) return 'Max per user/stream must be a number.';
@@ -184,6 +185,10 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
       setRewardError('Reward title is required.');
       return;
     }
+    if (Array.from(rewardDraft.title.trim()).length > 45) {
+      setRewardError('Reward title must be 1-45 characters.');
+      return;
+    }
     if (!Number.isFinite(rewardDraft.cost)) {
       setRewardError('Reward cost must be a number.');
       return;
@@ -270,7 +275,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
       <SubPanel title="New reward">
         <div className="grid gap-3 md:grid-cols-4 md:items-end">
           <Field label="New reward title" className="md:col-span-2">
-            <input className="desk-input" type="text" maxLength={45} value={rewardDraft.title} onChange={(event) => setRewardDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Hydrate break" />
+            <input className="desk-input" type="text" value={rewardDraft.title} onChange={(event) => setRewardDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Hydrate break" />
           </Field>
           <Field label="Cost">
             <input
@@ -290,7 +295,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
             <Check label="Require input" checked={rewardDraft.userInputRequired} onChange={(checked) => setRewardDraft((current) => ({ ...current, userInputRequired: checked }))} />
           </div>
           <Field label="Prompt" className="md:col-span-4">
-            <input className="desk-input" type="text" maxLength={200} value={rewardDraft.prompt} onChange={(event) => setRewardDraft((current) => ({ ...current, prompt: event.target.value }))} placeholder="Optional viewer prompt" />
+            <input className="desk-input" type="text" value={rewardDraft.prompt} onChange={(event) => setRewardDraft((current) => ({ ...current, prompt: event.target.value }))} placeholder="Optional viewer prompt" />
           </Field>
           <Field label="Global cooldown seconds">
             <input
@@ -393,7 +398,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
           </div>
           <div className="grid gap-3 md:grid-cols-3 md:items-end">
             <Field label="Prompt" className="md:col-span-3">
-              <input className="desk-input" type="text" maxLength={200} value={rewardEditDraft.prompt} onChange={(event) => setRewardEditDraft((current) => ({ ...current, prompt: event.target.value }))} />
+              <input className="desk-input" type="text" value={rewardEditDraft.prompt} onChange={(event) => setRewardEditDraft((current) => ({ ...current, prompt: event.target.value }))} />
             </Field>
             <Check
               label="Require viewer input"

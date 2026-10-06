@@ -415,6 +415,49 @@ test.describe('operator browser smoke', () => {
     await expect(queue.getByText('Fulfillment note: Stable reward note')).toHaveCount(2);
   });
 
+  test('counts Unicode reward text consistently before create and edit writes', async ({ page }) => {
+    const title = '🌊'.repeat(45);
+    const prompt = '水🌊'.repeat(100);
+    let writes = 0;
+    let reward = { id: 'unicode-reward', title, cost: 100, prompt, is_enabled: false };
+    await page.route('**/api/twitch/rewards**', async (route) => {
+      const method = route.request().method();
+      if (method === 'POST') {
+        writes++;
+        expect(route.request().postDataJSON()).toMatchObject({ title, prompt });
+        await route.fulfill({ json: { reward } });
+      } else if (method === 'PATCH') {
+        writes++;
+        expect(route.request().postDataJSON()).toEqual({ prompt: '🌊'.repeat(200) });
+        reward = { ...reward, prompt: '🌊'.repeat(200) };
+        await route.fulfill({ json: { reward } });
+      } else await route.fulfill({ json: { rewards: [reward] } });
+    });
+    await page.goto('/dashboard/chat');
+    const queue = page.locator('#reward-queue');
+    await queue.getByLabel('New reward title').fill(title + '🌊');
+    await queue.getByRole('button', { name: 'Create reward', exact: true }).click();
+    await expect(queue.getByText('Reward title must be 1-45 characters.', { exact: true })).toBeVisible();
+    expect(writes).toBe(0);
+    await queue.getByLabel('New reward title').fill(title);
+    await queue.getByLabel('Prompt', { exact: true }).first().fill(prompt + '水');
+    await queue.getByRole('button', { name: 'Create reward', exact: true }).click();
+    await expect(queue.getByText('Reward prompt must be 200 characters or fewer.', { exact: true })).toBeVisible();
+    expect(writes).toBe(0);
+    await queue.getByLabel('Prompt', { exact: true }).first().fill(prompt);
+    await queue.getByRole('button', { name: 'Create reward', exact: true }).click();
+    await expect(queue.getByText('Reward created.', { exact: true })).toBeVisible();
+    expect(writes).toBe(1);
+    await queue.getByLabel('Prompt', { exact: true }).last().fill('🌊'.repeat(201));
+    await queue.getByRole('button', { name: 'Save reward fields', exact: true }).click();
+    await expect(queue.getByText('Reward prompt must be 200 characters or fewer.', { exact: true })).toBeVisible();
+    expect(writes).toBe(1);
+    await queue.getByLabel('Prompt', { exact: true }).last().fill('🌊'.repeat(200));
+    await queue.getByRole('button', { name: 'Save reward fields', exact: true }).click();
+    await expect(queue.getByText('Reward fields saved.', { exact: true })).toBeVisible();
+    expect(writes).toBe(2);
+  });
+
   test('guards reward writes and preserves successful receipts when reload fails', async ({ page }) => {
     let releaseOldLoad!: () => void;
     const oldLoading = new Promise<void>((resolve) => { releaseOldLoad = resolve; });
