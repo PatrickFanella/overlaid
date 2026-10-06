@@ -101,3 +101,8 @@ Controlled workspace customization evidence:
 Current status: automated checks and one-click rehearsal coverage are in place. Real-stream QA should continue to use this runbook, because Twitch chat, channel-point redemptions, OBS scene collections, and browser-source behavior depend on the live operator environment.
 
 When updating this status, include date, deployed commit, rehearsal/session report ID, OBS collection used, and any accepted degraded readiness checks. Do not paste secrets, OAuth tokens, or webhook payloads.
+
+
+### October 6 local process recovery evidence
+
+The disposable native API/Postgres drill passed against source commit `13b4886`. See [the recorded drill](../qa/2026-10-06-local-recovery-drill.md) for the session ID, replay/history checks, probe transitions, cleanup, and accepted degraded checks. This verifies local process recovery; OBS browser-source reload, live Twitch reconnect, Docker deployment, and production outage recovery still require their actual environments.

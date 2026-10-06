@@ -759,3 +759,8 @@ Integration contracts verify eight successful starts with one active session, re
 Session reports now use a read-only repeatable-read transaction for the session summary, event list, and readiness snapshots, with one five-second deadline. Private query readers support both ordinary reads and the report transaction. The event list remains bounded independently of the total count. A canceled/failed read rolls back, and session lookups preserve query errors instead of turning them into missing-row responses.
 
 A controlled isolated Postgres fixture gates event projection after the summary read, then commits a new event, end snapshot, and ended session. Before the fix the report returned a count of one with two events and the later end snapshot. The corrected report contains the original state throughout; its next bounded read contains the new committed evidence. The same gate verifies deadline cancellation. Validation: `make verify`, all 21 browser workflows, Sessions/HTTP race tests with Postgres fixtures, and rebuilt runtime smoke at port 8081 passed.
+
+
+## October 6 local process recovery drill
+
+The native API was stopped and restarted against the disposable Postgres and retained-state files. A real stopped-process probe failure preceded a successful recovery probe. BRB/goals/ticker SSE replay and the open-session report matched exactly across the restart; a new event retained the active session tag, and ending the rehearsal produced both readiness phases with zero dropped deliveries. Fixtures were cleared and no session remained active. [Recorded evidence](../../qa/2026-10-06-local-recovery-drill.md) distinguishes these completed local gates from pending live OBS/Twitch and deployed outage recovery.
