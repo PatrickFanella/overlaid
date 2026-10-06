@@ -106,7 +106,7 @@ Supported template variables:
 - `{channel}` — configured Twitch channel.
 - `{args}` — text after the command name.
 - `{command}` — resolved command name without `!`.
-- `{nowPlaying.title}` / `{nowPlaying.artist}` — reserved now-playing variables; currently render empty until now-playing context is wired into the bot runtime.
+- `{nowPlaying.title}` / `{nowPlaying.artist}` — current title/artist from the API's media event pipeline. Paused playback retains its track; stopped playback clears it. Before fresh media arrives, including after API restart, these variables render empty. The command preview uses sample song/artist values.
 - `{count:name}` — current value for a stored counter, or `0` when missing.
 - `{quote:random}` — random stored quote, including author when present.
 - `{api:name}` — operator-configured read-only HTTPS API variable output or fallback.

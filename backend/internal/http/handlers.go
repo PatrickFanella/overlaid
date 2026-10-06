@@ -524,6 +524,7 @@ func (s *Server) publishEventSubEvent(event events.Event) {
 }
 
 func (s *Server) publishEvent(event events.Event) {
+	s.nowPlaying.Observe(event)
 	s.sendOutboundChatForEvent(context.Background(), event)
 	s.recordBotAuditForEvent(context.Background(), event)
 	if s.bus != nil {

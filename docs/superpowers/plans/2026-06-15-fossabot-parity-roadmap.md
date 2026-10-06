@@ -97,6 +97,16 @@ Verification passed: the complete backend race suite with optional Postgres test
 
 ---
 
+## October 6 now-playing command variables
+
+Custom commands now receive a concurrent snapshot of title/artist from the current media event pipeline. MPRIS metadata stays separate from decorated overlay copy and album text. Paused playback retains its track; stopped playback clears the snapshot. API restart starts empty until fresh media arrives. Local tests drive MPRIS-shaped events through the server into overlay and chat-response templates without a media player, Twitch, or database credentials. Snapshot tests cover concurrent reads/writes and metadata bounds.
+
+The dashboard preview now includes sample now-playing values, matches the backend's case-insensitive variable syntax, and caps Unicode output by characters. Browser coverage checks media placeholders and the 400-character cap.
+
+Verification passed: bot/HTTP/Twitch race tests, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, and `make smoke API_PORT=8081`. The collaborative browser displayed the mixed-case now-playing preview against the native dashboard, and the unsaved test draft was cleared.
+
+---
+
 ## File structure
 
 ### Backend domain
@@ -262,9 +272,9 @@ Build the spine before adding feature breadth.
 - Create: `backend/internal/bot/templates.go`
 - Test: `backend/internal/bot/templates_test.go`
 
-- [ ] Implement safe variables: `{user}`, `{displayName}`, `{channel}`, `{args}`, `{command}`, `{nowPlaying.title}`, `{nowPlaying.artist}`.
+- [x] Implement safe variables: `{user}`, `{displayName}`, `{channel}`, `{args}`, `{command}`, `{nowPlaying.title}`, `{nowPlaying.artist}` (October 6: current media snapshot wired into command execution).
 - [x] Unknown variables render as empty strings and are recorded in audit data (October 6: command-to-audit test and session linkage).
-- [ ] Limit rendered response length to 400 characters.
+- [x] Limit rendered response length to 400 characters (backend rune cap and Unicode dashboard-preview coverage).
 - [ ] Commit: `feat: render bot command templates`.
 
 ### Task C3: Chat execution for custom response commands

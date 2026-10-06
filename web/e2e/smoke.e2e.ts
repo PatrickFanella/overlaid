@@ -285,6 +285,11 @@ test.describe('operator browser smoke', () => {
     await expect(panel.getByLabel('Response mode')).toHaveValue('both');
     await expect(panel.getByLabel('Required role')).toHaveValue('moderator');
     await expect(panel.getByLabel('Enabled', { exact: true })).not.toBeChecked();
+    await panel.locator('textarea').fill('{NOWPLAYING.TITLE} by {nowPlaying.artist} for {DISPLAYNAME}');
+    await expect(panel.getByText('Example song by Example artist for TestViewer', { exact: true })).toBeVisible();
+    await panel.locator('textarea').fill('界'.repeat(401));
+    await expect(panel.getByText('界'.repeat(400), { exact: true })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Save changes' })).toBeDisabled();
     await panel.locator('textarea').fill('Abandoned edit');
     await panel.getByRole('button', { name: 'Cancel edit' }).click();
     await expect(panel.locator('textarea')).toHaveValue('');

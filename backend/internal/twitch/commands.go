@@ -52,6 +52,7 @@ type CommandProcessorConfig struct {
 	Channel      string
 	Community    CommunityStore
 	APIVariables APIVariableStore
+	NowPlaying   func() bot.NowPlayingMetadata
 }
 
 type CommandProcessor struct {
@@ -64,6 +65,7 @@ type CommandProcessor struct {
 	channel      string
 	community    CommunityStore
 	apiVariables APIVariableStore
+	nowPlaying   func() bot.NowPlayingMetadata
 }
 
 func ParseChatCommand(text string) (ChatCommand, bool) {
@@ -97,7 +99,7 @@ func NewCommandProcessor(config CommandProcessorConfig) *CommandProcessor {
 	if cooldown < 0 {
 		cooldown = 0
 	}
-	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases), custom: customCommandMap(config.Custom), channel: strings.TrimSpace(config.Channel), community: config.Community, apiVariables: config.APIVariables}
+	return &CommandProcessor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time), aliases: cloneAliases(config.Aliases), custom: customCommandMap(config.Custom), channel: strings.TrimSpace(config.Channel), community: config.Community, apiVariables: config.APIVariables, nowPlaying: config.NowPlaying}
 }
 
 func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []events.Event {
@@ -266,6 +268,11 @@ func (p *CommandProcessor) handleCustomCommand(original ChatCommand, resolved Ch
 
 func (p *CommandProcessor) templateContext(response string, original ChatCommand, resolved ChatCommand, user ChatCommandUser) bot.TemplateContext {
 	ctx := bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: p.channel, Args: original.Args, Command: resolved.Name, Counts: map[string]int{}}
+	if p.nowPlaying != nil {
+		metadata := p.nowPlaying()
+		ctx.NowPlayingTitle = metadata.Title
+		ctx.NowPlayingArtist = metadata.Artist
+	}
 	if p.apiVariables != nil {
 		names := bot.APIVariableNames(response)
 		results := p.apiVariables.ResolveAPIVariables(names)
