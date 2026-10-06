@@ -195,6 +195,25 @@
 
 Each slice must finish with focused checks, `make verify` when appropriate, and a commit.
 
+
+## Current implementation map — October 6
+
+This map describes the current code. The dated slice notes below preserve the verification history; references there to “next” work describe the state at that checkpoint.
+
+| Plan area | Current ownership and evidence |
+| --- | --- |
+| Shared Helix adapter | `http/twitch_helix.go` owns token/scope checks and JSON request/response handling used by rewards and moderation; fake Helix contracts cover errors and authorization. |
+| Moderation workflow | `http/bot_moderation_workflow.go` owns manual actions, enforcement, nuke planning/execution/radiation/rollback, and outcomes. `bot/moderation_rules.go` owns matching policy. Backend workflow contracts and browser confirmation/pending/retry checks cover the adapters. |
+| Bot storage separation | `bot.Store` retains Postgres CRUD/schema/scanning. Configuration normalization, audit payloads, moderation matching, templates, and API fetching/cache policy live in separate modules. Existing offline validation tests and isolated Postgres CRUD/audit contracts cover both sides. |
+| Templates and API variables | `bot.TemplateRenderer` owns dependency discovery/assembly and rendering caps; `APIVariableResolver` owns bounded resolution/cache/fallback through repository and HTTP adapters. Offline dependency/safety tests and command integration contracts cover this seam. |
+| Commands and runtime/audit | The command dispatcher delegates to built-in, community, and custom executors. Shared role policy and outcome construction live in `bot/runtime.go`, with bounded audit queuing and explicit flush. Role/cooldown/reload/audit tests cover the public interfaces. |
+| Bot dashboard | Feature hooks own commands, timers, community tools, API variables, and moderation state; `BotWorkspace` coordinates summary and layout. Browser workflows cover writes, failures, stale responses, confirmations, and receipts. |
+| Twitch interaction split | `TwitchInteractionRulesEditor` owns durable editing; `TwitchRewardQueueManager` and `useRewardOperation` own live operations and serialization. Browser fixtures cover the independent failure modes. |
+| Frontend transport | `apiRequest.ts` owns fetch/auth/base URL/body/error handling for all `api.ts` operation families. Request contracts cover protected/public operations, malformed JSON, and no-content responses. |
+| Safety/runbook closeout | The bot and reward runbooks describe current guardrails; browser workflows exercise dangerous operations without live writes. Live Twitch/OBS verification still requires external credentials/services. |
+
+The local architecture implementation is in place. Remaining external validation does not block offline work: real Twitch delivery/moderation/reward lifecycle, OBS integration, and deployed monitoring remain unverified. The frontend's TypeScript template preview remains a separate local implementation; no new shared cross-language renderer is required by this plan.
+
 ---
 
 ## Slice 6 closeout
@@ -348,3 +367,10 @@ Request-contract tests cover public/protected reads, encoded scene/session/sourc
 `audit.go` now owns the audit record type, field normalization, and complete-object payload validation; `Store` keeps SQL persistence and reads. `json_policy.go` supplies one token-based secret-key scanner for audit data and timer JSON text. This scanner checks every object member before duplicate-key normalization can discard earlier nested content. Safe duplicate members retain normal Postgres JSONB semantics; literal words in string values remain allowed.
 
 Failing-before-fix tests reproduced overwritten nested secret keys and acceptance of trailing JSON/text. The validator now requires one complete valid JSON object and rejects secret-looking keys, including escaped keys and nested arrays. Errors omit payload content. An isolated Postgres test confirms rejected writes create no rows and safe duplicate members round-trip through JSONB. `make verify` passed with 113 frontend tests, all 19 browser workflows passed, Bot/HTTP/Twitch race tests with Postgres fixtures passed, and rebuilt runtime smoke passed at port 8081.
+
+
+## October 6 bot configuration policy ownership
+
+`configuration.go` now owns command, timer, counter, and quote types and normalization, including safe names, role/action/mode allowlists, reserved command names, duration/text limits, and timer secret-key policy. `Store` invokes those functions at persistence boundaries and retains only storage behavior for these records. Public types/functions and behavior are unchanged. This closes the remaining configuration policy in finding 3 without adding pass-through repository abstractions.
+
+Existing offline normalization and isolated Postgres CRUD contracts exercise the same public interfaces after the move. Validation: `make verify`, all 21 browser smoke workflows, and Bot race tests with isolated Postgres fixtures passed.
