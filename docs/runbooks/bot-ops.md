@@ -201,6 +201,8 @@ Nuke planning and guarded execution are available from `/dashboard/chat`:
 
 ## Session bot audit review
 
+Counter and quote panels load independently and keep separate drafts, pending controls, errors, and results. A failed write keeps its draft for retry. Successful writes update the visible rows immediately; a later status/audit refresh failure keeps the success result and reports the refresh error. A failed initial list request remains visible because one successful write cannot prove the rest of the list is complete.
+
 Dashboard counter and quote create, update, and delete actions record success or failure in bot audit. Records use source `dashboard`, role `operator`, and the active stream session ID. Counter records include the saved name and value; quote records include only the record ID, without quote text or author content.
 
 1. Start a rehearsal session, then create, update, and delete a verification counter and quote.

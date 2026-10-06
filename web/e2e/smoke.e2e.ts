@@ -232,6 +232,96 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
   });
 
+  test('isolates counter and quote writes, preserves failed drafts, and retains successful receipts', async ({ page }) => {
+    let releaseCounter!: () => void;
+    const delayedCounter = new Promise<void>((resolve) => { releaseCounter = resolve; });
+    let counterWrites = 0;
+    let quoteDeletes = 0;
+    let auditUnavailable = false;
+    let counter: { id: string; name: string; value: number } | null = null;
+    let quote: { id: string; text: string; author: string } | null = null;
+    await page.route('**/api/bot/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const method = route.request().method();
+      if (path.endsWith('/counters') && method === 'POST') {
+        counterWrites += 1;
+        if (counterWrites === 1) {
+          await delayedCounter;
+          await route.fulfill({ status: 503, body: 'counter write unavailable' });
+        } else {
+          counter = { id: 'counter-1', ...route.request().postDataJSON() };
+          auditUnavailable = true;
+          await route.fulfill({ json: counter });
+        }
+        return;
+      }
+      if (path.endsWith('/quotes') && method === 'POST') {
+        quote = { id: 'quote-1', ...route.request().postDataJSON() };
+        await route.fulfill({ json: quote });
+        return;
+      }
+      if (path.endsWith('/quotes/quote-1') && method === 'DELETE') {
+        quoteDeletes += 1;
+        if (quoteDeletes === 1) await route.fulfill({ status: 503, body: 'quote delete unavailable' });
+        else { quote = null; await route.fulfill({ status: 204 }); }
+        return;
+      }
+      if (path.endsWith('/counters/counter-1') && method === 'DELETE') {
+        counter = null;
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      if (path.endsWith('/quotes') || path.endsWith('/api-variables') || (path.endsWith('/audit') && auditUnavailable)) {
+        await route.fulfill({ status: 503, body: 'read temporarily unavailable' });
+        return;
+      }
+      const responses: Record<string, unknown> = {
+        status: { available: true, commandCount: 0, timerCount: 0, counterCount: counter ? 1 : 0, quoteCount: quote ? 1 : 0, auditCount: quote ? 1 : 0 },
+        counters: { counters: [] }, timers: { timers: [] }, commands: { commands: [] }, rules: { rules: [] },
+        audit: { events: quote ? [{ id: 'audit-quote', createdAt: '2026-10-06T05:00:00Z', source: 'dashboard', result: 'allowed', reason: 'quote_configuration_changed', trigger: 'quote_configuration' }] : [] },
+      };
+      await route.fulfill({ json: responses[path.split('/').at(-1)!] ?? {} });
+    });
+    await page.goto('/dashboard/chat');
+    const panel = page.locator('#bot-community');
+    const counters = panel.locator('.desk-sub').filter({ has: page.getByText('Counters', { exact: true }) });
+    const quotes = panel.locator('.desk-sub').filter({ has: page.getByText('Quotes', { exact: true }) });
+    await expect(quotes.getByText(/Quotes unavailable:/)).toBeVisible();
+    await expect(quotes.getByText('No quotes yet.')).toHaveCount(0);
+    await counters.getByLabel('Counter name').fill('hype');
+    await counters.getByLabel('Value', { exact: true }).fill('7');
+    await counters.getByRole('button', { name: 'Save counter', exact: true }).click();
+    await expect(counters.getByRole('button', { name: 'Saving counter…' })).toBeDisabled();
+    await expect(counters.getByLabel('Counter name')).toBeDisabled();
+    await quotes.getByLabel('Quote text').fill('Saved during counter write');
+    await quotes.getByLabel('Author').fill('Operator');
+    await quotes.getByRole('button', { name: 'Save quote', exact: true }).click();
+    await expect(quotes.getByText('Quote saved.', { exact: true })).toBeVisible();
+    await expect(quotes.getByText('Saved during counter write', { exact: true })).toBeVisible();
+    await expect(page.getByText('dashboard · quote_configuration_changed')).toBeVisible();
+    releaseCounter();
+    await expect(counters.getByRole('alert')).toContainText('counter write unavailable');
+    await expect(counters.getByLabel('Counter name')).toHaveValue('hype');
+    await expect(counters.getByLabel('Value', { exact: true })).toHaveValue('7');
+    await expect(quotes.getByRole('alert')).toHaveCount(0);
+    await counters.getByRole('button', { name: 'Save counter', exact: true }).click();
+    await expect(counters.getByText('Counter saved.', { exact: true })).toBeVisible();
+    await expect(counters.getByText('hype · 7', { exact: true })).toBeVisible();
+    await expect(counters.getByRole('alert')).toContainText('Counter operation succeeded. Status/audit refresh failed:');
+    await expect(counters.getByLabel('Counter name')).toHaveValue('');
+    await counters.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(counters.getByText('Counter deleted.', { exact: true })).toBeVisible();
+    await expect(counters.getByText('hype · 7', { exact: true })).toHaveCount(0);
+    await quotes.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(quotes.getByRole('alert')).toContainText('quote delete unavailable');
+    await expect(quotes.getByText('Saved during counter write', { exact: true })).toBeVisible();
+    await quotes.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(quotes.getByText('Quote deleted.', { exact: true })).toBeVisible();
+    await expect(quotes.getByText('Saved during counter write', { exact: true })).toHaveCount(0);
+    expect(counterWrites).toBe(2);
+    expect(quoteDeletes).toBe(2);
+  });
+
   test('reviews and exports session bot actions with bounded and unavailable audit diagnostics', async ({ page }) => {
     let unavailable = false;
     const session = { id: 'session-report-1', title: 'Community audit rehearsal', kind: 'rehearsal', startedAt: '2026-10-06T05:00:00Z', endedAt: '2026-10-06T05:01:00Z', eventCount: 0 };

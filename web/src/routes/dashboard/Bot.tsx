@@ -1,10 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   deleteBotCommand,
-  deleteBotCounter,
   deleteBotAPIVariable,
   deleteBotModerationRule,
-  deleteBotQuote,
   dryRunBotModeration,
   dryRunBotNuke,
   executeBotNuke,
@@ -12,24 +10,18 @@ import {
   fetchBotAudit,
   fetchBotAPIVariables,
   fetchBotCommands,
-  fetchBotCounters,
   fetchBotModerationRules,
-  fetchBotQuotes,
   fetchBotStatus,
   rollbackBotNukeRadiation,
   saveBotCommand,
-  saveBotCounter,
   saveBotAPIVariable,
   saveBotModerationRule,
-  saveBotQuote,
   setBotCommandEnabled,
   type BotNukeDryRunResponse,
   type BotNukeExecuteResponse,
   type BotAPIVariable,
   type BotCommand,
-  type BotCounter,
   type BotModerationRule,
-  type BotQuote,
 } from '../../lib/api';
 import { loadOperatorSecret } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
@@ -38,12 +30,10 @@ import { loadBotWorkspace } from './bot/loadBotWorkspace';
 import {
   defaultAPIVariableDraft,
   defaultCommandDraft,
-  defaultCounterDraft,
   defaultModerationAction,
   defaultModerationDraft,
   defaultModerationTest,
   defaultNukeDraft,
-  defaultQuoteDraft,
   type BotPageState,
   type CommandDraft,
   type ModerationDraft,
@@ -58,16 +48,17 @@ import { BotAPIVariablesPanel } from './bot/BotAPIVariablesPanel';
 import { BotModerationPanel } from './bot/BotModerationPanel';
 import { BotTimersPanel } from './bot/BotTimersPanel';
 import { useBotTimers } from './bot/useBotTimers';
+import { useBotCommunity } from './bot/useBotCommunity';
 
 export function BotWorkspace() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const operatorSecret = loadOperatorSecret();
   const [config, setConfig] = useState(() => loadDashboardConfig());
-  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, counters: null, quotes: null, apiVariables: null, moderation: null, moderationDryRun: null, loading: false, error: '' });
+  const workspaceGeneration = useRef(0);
+  const summaryRequest = useRef(0);
+  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, apiVariables: null, moderation: null, moderationDryRun: null, loading: false, error: '' });
   const [commandDraft, setCommandDraft] = useState<CommandDraft>(defaultCommandDraft);
   const [savingCommand, setSavingCommand] = useState(false);
-  const [counterDraft, setCounterDraft] = useState(defaultCounterDraft);
-  const [quoteDraft, setQuoteDraft] = useState(defaultQuoteDraft);
   const [apiVariableDraft, setAPIVariableDraft] = useState(defaultAPIVariableDraft);
   const [moderationDraft, setModerationDraft] = useState<ModerationDraft>(defaultModerationDraft);
   const [moderationTest, setModerationTest] = useState(defaultModerationTest);
@@ -79,6 +70,7 @@ export function BotWorkspace() {
   const [nukeRollbackResult, setNukeRollbackResult] = useState('');
 
   const timers = useBotTimers(apiBaseUrl, operatorSecret, refreshBotSummary);
+  const community = useBotCommunity(apiBaseUrl, operatorSecret, refreshBotSummary);
 
   function updateBotPanelLayout(items: PanelLayoutItem[]) {
     setConfig((current) => {
@@ -90,6 +82,7 @@ export function BotWorkspace() {
 
   useEffect(() => {
     let cancelled = false;
+    workspaceGeneration.current += 1;
     async function load() {
       setState((current) => ({ ...current, status: null, audit: null, loading: true, error: '' }));
       const loaded = await loadBotWorkspace(apiBaseUrl, operatorSecret);
@@ -100,12 +93,17 @@ export function BotWorkspace() {
     void load();
     return () => {
       cancelled = true;
+      workspaceGeneration.current += 1;
     };
   }, [apiBaseUrl, operatorSecret]);
 
   async function refreshBotSummary() {
+    const generation = workspaceGeneration.current;
+    const request = ++summaryRequest.current;
     const [status, audit] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret)]);
-    setState((current) => ({ ...current, status, audit }));
+    if (generation === workspaceGeneration.current && request === summaryRequest.current) {
+      setState((current) => ({ ...current, status, audit }));
+    }
   }
 
   async function refreshCommands() {
@@ -113,9 +111,9 @@ export function BotWorkspace() {
     setState((current) => ({ ...current, status, commands }));
   }
 
-  async function refreshCommunity() {
-    const [status, counters, quotes, apiVariables, audit] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotAPIVariables(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret)]);
-    setState((current) => ({ ...current, status, counters, quotes, apiVariables, audit }));
+  async function refreshAPIVariables() {
+    const [status, apiVariables] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAPIVariables(apiBaseUrl, operatorSecret)]);
+    setState((current) => ({ ...current, status, apiVariables }));
   }
 
   async function refreshModeration() {
@@ -189,33 +187,13 @@ export function BotWorkspace() {
     }
   }
 
-  async function handleSaveCounter() {
-    try { await saveBotCounter(counterDraft, apiBaseUrl, operatorSecret); setCounterDraft(defaultCounterDraft); await refreshCommunity(); }
-    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'counter save failed' })); }
-  }
-
-  async function handleDeleteCounter(counter: BotCounter) {
-    try { await deleteBotCounter(counter.id, apiBaseUrl, operatorSecret); await refreshCommunity(); }
-    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'counter delete failed' })); }
-  }
-
-  async function handleSaveQuote() {
-    try { await saveBotQuote(quoteDraft, apiBaseUrl, operatorSecret); setQuoteDraft(defaultQuoteDraft); await refreshCommunity(); }
-    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'quote save failed' })); }
-  }
-
-  async function handleDeleteQuote(quote: BotQuote) {
-    try { await deleteBotQuote(quote.id, apiBaseUrl, operatorSecret); await refreshCommunity(); }
-    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'quote delete failed' })); }
-  }
-
   async function handleSaveAPIVariable() {
-    try { await saveBotAPIVariable(apiVariableDraft, apiBaseUrl, operatorSecret); setAPIVariableDraft(defaultAPIVariableDraft); await refreshCommunity(); }
+    try { await saveBotAPIVariable(apiVariableDraft, apiBaseUrl, operatorSecret); setAPIVariableDraft(defaultAPIVariableDraft); await refreshAPIVariables(); }
     catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'api variable save failed' })); }
   }
 
   async function handleDeleteAPIVariable(variable: BotAPIVariable) {
-    try { await deleteBotAPIVariable(variable.id, apiBaseUrl, operatorSecret); await refreshCommunity(); }
+    try { await deleteBotAPIVariable(variable.id, apiBaseUrl, operatorSecret); await refreshAPIVariables(); }
     catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'api variable delete failed' })); }
   }
 
@@ -287,18 +265,7 @@ export function BotWorkspace() {
           {
             id: 'community',
             node: (
-              <BotCommunityPanel
-                counters={state.counters}
-                quotes={state.quotes}
-                counterDraft={counterDraft}
-                quoteDraft={quoteDraft}
-                onCounterDraftChange={setCounterDraft}
-                onQuoteDraftChange={setQuoteDraft}
-                onSaveCounter={handleSaveCounter}
-                onDeleteCounter={handleDeleteCounter}
-                onSaveQuote={handleSaveQuote}
-                onDeleteQuote={handleDeleteQuote}
-              />
+              <BotCommunityPanel {...community} />
             ),
           },
           {

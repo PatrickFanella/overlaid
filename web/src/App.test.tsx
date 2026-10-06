@@ -491,7 +491,7 @@ describe('overlay event utilities', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'operator access required' }));
     const state = await loadBotWorkspace('http://example.test', '');
     expect(state.status?.available).toBe(false);
-    for (const panel of [state.status, state.audit, state.commands, state.counters, state.quotes, state.apiVariables, state.moderation]) {
+    for (const panel of [state.status, state.audit, state.commands, state.apiVariables, state.moderation]) {
       expect(panel?.loadError).toContain('operator access required');
     }
     expect(state.loading).toBe(false);

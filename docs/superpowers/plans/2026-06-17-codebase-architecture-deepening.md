@@ -240,3 +240,11 @@ Verification passed: `make verify`, including 92 frontend tests, and all seven `
 The editor updates the existing timer ID, preserves paused state and the last scheduled run, supports cancel, and retains drafts after failed saves. Browser coverage exercises those behaviors, pending controls, and an initial load that finishes after a successful timer action. Newer status/audit data survives that late load.
 
 Verification passed: `make verify`, all eight `make smoke-browser` checks, and `make smoke API_PORT=8081`. A collaborative-browser edit against disposable Postgres updated the same timer ID and wrote a `timer_update` audit row. Live Twitch/OBS verification remains pending.
+
+## October 6 community operation state
+
+`bot/useBotCommunity.ts` now owns separate counter and quote collections, drafts, loading, mutations, pending controls, and local errors/results. Community requests no longer depend on the workspace loader or API-variable availability. Drafts survive failed writes and panel hide/show; successful responses update rows immediately. Failed status/audit refreshes retain the success receipt. A failed initial list still carries its warning after a write, because the visible collection may be incomplete.
+
+Shared summary refreshes ignore responses after a workspace change and responses from older overlapping refreshes. Commands, API variables, and moderation remain in workspace state and are the next parts of the route split.
+
+Verification passed: `make verify` (93 frontend tests and the Go suite) and all ten `make smoke-browser` checks. Browser coverage includes quote writes during a pending counter request, failed counter draft retention, delete retry, audit refresh, and a successful receipt after a failed refresh. The collaborative browser created and deleted both community records against disposable Postgres.

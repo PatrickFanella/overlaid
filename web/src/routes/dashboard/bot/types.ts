@@ -2,10 +2,8 @@ import type {
   BotAPIVariablesResponse,
   BotAuditResponse,
   BotCommandsResponse,
-  BotCountersResponse,
   BotModerationDryRunResponse,
   BotModerationRulesResponse,
-  BotQuotesResponse,
   BotStatus,
 } from '../../../lib/api';
 
@@ -13,8 +11,6 @@ export type BotPageState = {
   status: BotStatus | null;
   audit: BotAuditResponse | null;
   commands: BotCommandsResponse | null;
-  counters: BotCountersResponse | null;
-  quotes: BotQuotesResponse | null;
   apiVariables: BotAPIVariablesResponse | null;
   moderation: BotModerationRulesResponse | null;
   moderationDryRun: BotModerationDryRunResponse | null;

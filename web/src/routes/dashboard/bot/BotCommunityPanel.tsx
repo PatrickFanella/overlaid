@@ -1,32 +1,13 @@
-import type { BotCounter, BotCountersResponse, BotQuote, BotQuotesResponse } from '../../../lib/api';
-import type { CounterDraft, QuoteDraft } from './types';
+import type { BotCommunityState } from './useBotCommunity';
 import { Empty, Field, Notice, Panel, SubPanel } from '../ui';
 
-export function BotCommunityPanel({
-  counters,
-  quotes,
-  counterDraft,
-  quoteDraft,
-  onCounterDraftChange,
-  onQuoteDraftChange,
-  onSaveCounter,
-  onDeleteCounter,
-  onSaveQuote,
-  onDeleteQuote,
-}: {
-  counters: BotCountersResponse | null;
-  quotes: BotQuotesResponse | null;
-  counterDraft: CounterDraft;
-  quoteDraft: QuoteDraft;
-  onCounterDraftChange: (draft: CounterDraft) => void;
-  onQuoteDraftChange: (draft: QuoteDraft) => void;
-  onSaveCounter: () => void;
-  onDeleteCounter: (counter: BotCounter) => void;
-  onSaveQuote: () => void;
-  onDeleteQuote: (quote: BotQuote) => void;
-}) {
-  const counterItems = counters?.counters ?? [];
-  const quoteItems = quotes?.quotes ?? [];
+export function BotCommunityPanel({ counters, quotes }: BotCommunityState) {
+  const counterItems = counters.collection?.items ?? [];
+  const quoteItems = quotes.collection?.items ?? [];
+  const counterDraft = counters.draft;
+  const quoteDraft = quotes.draft;
+  const counterBusy = counters.loading || Boolean(counters.pending);
+  const quoteBusy = quotes.loading || Boolean(quotes.pending);
   return (
     <Panel
       id="bot-community"
@@ -40,21 +21,24 @@ export function BotCommunityPanel({
     >
       <div className="grid gap-4 lg:grid-cols-2">
         <SubPanel title="Counters">
-          {counters?.loadError ? <Notice tone="warn">Counters unavailable: {counters.loadError}</Notice> : null}
+          {counters.loading ? <p className="desk-note">Loading counters…</p> : null}
+          {counters.error ? <Notice tone="bad" role="alert">{counters.error}</Notice> : null}
+          {counters.result ? <Notice tone="ok" role="status">{counters.result}</Notice> : null}
+          {counters.collection?.loadError ? <Notice tone="warn">Counters unavailable: {counters.collection.loadError}</Notice> : null}
           <div className="grid gap-3 md:grid-cols-[1fr_7rem]">
             <Field label="Counter name">
-              <input className="desk-input desk-input--mono" value={counterDraft.name} onChange={(event) => onCounterDraftChange({ ...counterDraft, name: event.target.value })} placeholder="hype" />
+              <input className="desk-input desk-input--mono" disabled={counterBusy} value={counterDraft.name} onChange={(event) => counters.onDraftChange({ ...counterDraft, name: event.target.value })} placeholder="hype" />
             </Field>
             <Field label="Value">
-              <input className="desk-input" type="number" value={counterDraft.value} onChange={(event) => onCounterDraftChange({ ...counterDraft, value: Number(event.target.value) })} />
+              <input className="desk-input" type="number" disabled={counterBusy} value={counterDraft.value} onChange={(event) => counters.onDraftChange({ ...counterDraft, value: Number(event.target.value) })} />
             </Field>
           </div>
           <div>
-            <button className="desk-btn desk-btn--primary" type="button" disabled={counterDraft.name.trim() === ''} onClick={onSaveCounter}>
-              Save counter
+            <button className="desk-btn desk-btn--primary" type="button" disabled={counterBusy || counterDraft.name.trim() === '' || !Number.isSafeInteger(counterDraft.value)} onClick={counters.onSave}>
+              {counters.pending?.action === 'save' ? 'Saving counter…' : 'Save counter'}
             </button>
           </div>
-          {counterItems.length === 0 ? (
+          {!counters.loading && !counters.collection?.loadError && counterItems.length === 0 ? (
             <Empty>No counters yet.</Empty>
           ) : (
             <ul className="desk-rows">
@@ -64,8 +48,8 @@ export function BotCommunityPanel({
                     <p className="desk-row__title">
                       <span className="mono">{counter.name}</span> · {counter.value}
                     </p>
-                    <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => onDeleteCounter(counter)}>
-                      Delete
+                    <button className="desk-btn desk-btn--small desk-btn--danger" type="button" disabled={counterBusy} onClick={() => counters.onDelete(counter)}>
+                      {counters.pending?.action === 'delete' && counters.pending.id === counter.id ? 'Deleting…' : 'Delete'}
                     </button>
                   </div>
                 </li>
@@ -75,19 +59,22 @@ export function BotCommunityPanel({
         </SubPanel>
 
         <SubPanel title="Quotes">
-          {quotes?.loadError ? <Notice tone="warn">Quotes unavailable: {quotes.loadError}</Notice> : null}
+          {quotes.loading ? <p className="desk-note">Loading quotes…</p> : null}
+          {quotes.error ? <Notice tone="bad" role="alert">{quotes.error}</Notice> : null}
+          {quotes.result ? <Notice tone="ok" role="status">{quotes.result}</Notice> : null}
+          {quotes.collection?.loadError ? <Notice tone="warn">Quotes unavailable: {quotes.collection.loadError}</Notice> : null}
           <Field label="Author" hint="Optional.">
-            <input className="desk-input" value={quoteDraft.author} onChange={(event) => onQuoteDraftChange({ ...quoteDraft, author: event.target.value })} placeholder="author optional" />
+            <input className="desk-input" disabled={quoteBusy} value={quoteDraft.author} onChange={(event) => quotes.onDraftChange({ ...quoteDraft, author: event.target.value })} placeholder="author optional" />
           </Field>
           <Field label="Quote text">
-            <textarea className="desk-input" value={quoteDraft.text} onChange={(event) => onQuoteDraftChange({ ...quoteDraft, text: event.target.value })} placeholder="quote text" />
+            <textarea className="desk-input" disabled={quoteBusy} value={quoteDraft.text} onChange={(event) => quotes.onDraftChange({ ...quoteDraft, text: event.target.value })} placeholder="quote text" />
           </Field>
           <div>
-            <button className="desk-btn desk-btn--primary" type="button" disabled={quoteDraft.text.trim() === ''} onClick={onSaveQuote}>
-              Save quote
+            <button className="desk-btn desk-btn--primary" type="button" disabled={quoteBusy || quoteDraft.text.trim() === ''} onClick={quotes.onSave}>
+              {quotes.pending?.action === 'save' ? 'Saving quote…' : 'Save quote'}
             </button>
           </div>
-          {quoteItems.length === 0 ? (
+          {!quotes.loading && !quotes.collection?.loadError && quoteItems.length === 0 ? (
             <Empty>No quotes yet.</Empty>
           ) : (
             <ul className="desk-rows">
@@ -96,8 +83,8 @@ export function BotCommunityPanel({
                   <p className="desk-row__text">{quote.text}</p>
                   <div className="desk-row__line">
                     <span className="desk-row__meta">{quote.author || 'unknown'}</span>
-                    <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => onDeleteQuote(quote)}>
-                      Delete
+                    <button className="desk-btn desk-btn--small desk-btn--danger" type="button" disabled={quoteBusy} onClick={() => quotes.onDelete(quote)}>
+                      {quotes.pending?.action === 'delete' && quotes.pending.id === quote.id ? 'Deleting…' : 'Delete'}
                     </button>
                   </div>
                 </li>
