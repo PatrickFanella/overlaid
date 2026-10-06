@@ -110,7 +110,7 @@ func TestRecentAuditPersistencePostgres(t *testing.T) {
 			t.Fatalf("audit metadata lost: %s, %v", event.Data, err)
 		}
 	}
-	for _, payload := range []string{`[]`, `{"accessToken":"DO_NOT_STORE"}`, `{"items":[{"nested":{"Authorization":"DO_NOT_STORE"}}]}`} {
+	for _, payload := range []string{`[]`, `{"accessToken":"DO_NOT_STORE"}`, `{"items":[{"nested":{"Authorization":"DO_NOT_STORE"}}]}`, `{"nested":{"api_key":"DO_NOT_STORE"}}`, `{"items":[{"PRIVATE-KEY":"DO_NOT_STORE"}]}`} {
 		if _, err := store.RecordAudit(ctx, AuditEvent{Source: "chat", Result: "allowed", Data: json.RawMessage(payload)}); err == nil {
 			t.Fatalf("unsafe audit payload accepted: %s", payload)
 		}

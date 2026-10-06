@@ -1013,6 +1013,10 @@ func isForbiddenKey(key string) bool {
 			return true
 		}
 	}
+	compact := strings.ReplaceAll(strings.ReplaceAll(lower, "_", ""), "-", "")
+	if strings.Contains(compact, "apikey") || strings.Contains(compact, "privatekey") {
+		return true
+	}
 	return false
 }
 

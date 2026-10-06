@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
@@ -115,6 +116,71 @@ func TestCustomCommandAuditRetainsUnknownVariablesWithoutRawPayload(t *testing.T
 	}
 }
 
+func TestTwitchCommandExecutionAuditsEveryOutcome(t *testing.T) {
+	bus := events.NewBus(16)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+	recorder := &recordingBotAuditStore{}
+	server.botRuntime = bot.NewRuntime(recorder)
+	server.history = activeHistoryStub{sessionID: "active-session"}
+	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Now: func() time.Time { return time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC) }, Aliases: map[string]string{"hydrate": "alert"}})
+	streamer := twitch.ChatCommandUser{Name: "Streamer", Login: "streamer", IsBroadcaster: true, IsModerator: true}
+	for _, test := range []struct {
+		name                           string
+		command                        twitch.ChatCommand
+		user                           twitch.ChatCommandUser
+		result, reason, role, resolved string
+		count                          int
+	}{
+		{"accepted alias", twitch.ChatCommand{Name: "hydrate", Args: "Hello"}, streamer, "allowed", "accepted", "broadcaster", "alert", 2},
+		{"cooldown", twitch.ChatCommand{Name: "hydrate", Args: "Again"}, streamer, "cooldown", "cooldown", "broadcaster", "alert", 1},
+		{"denied", twitch.ChatCommand{Name: "clear"}, twitch.ChatCommandUser{Name: "Viewer", Login: "viewer"}, "denied", "permission_denied", "viewer", "clear", 1},
+		{"invalid arguments", twitch.ChatCommand{Name: "alert"}, streamer, "failed", "invalid_command", "broadcaster", "alert", 1},
+		{"unsupported command", twitch.ChatCommand{Name: "dance"}, streamer, "denied", "unsupported_command", "broadcaster", "dance", 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			produced := server.twitchCommandProcessor.Handle(test.command, test.user)
+			if len(produced) != test.count {
+				t.Fatalf("command events=%#v, want %d", produced, test.count)
+			}
+			produced[0].Data["accessToken"] = "PRIVATE_TOKEN"
+			produced[0].Data["rawEventSub"] = "PRIVATE_RAW_PAYLOAD"
+			before := len(recorder.events)
+			for _, event := range produced {
+				server.publishEventSubEvent(event)
+			}
+			if len(recorder.events) != before+1 {
+				t.Fatalf("expected exactly one command audit, got %#v", recorder.events[before:])
+			}
+			audit := recorder.events[before]
+			if audit.Source != "chat" || audit.Command != test.resolved || audit.Action != test.resolved || audit.Result != test.result || audit.Reason != test.reason || audit.ActorRole != test.role || audit.ActorLogin != test.user.Login || audit.Trigger != "!"+test.command.Name || audit.EventID != produced[0].ID || audit.StreamSessionID != "active-session" {
+				t.Fatalf("unexpected command audit: %#v", audit)
+			}
+			if strings.Contains(string(audit.Data), "PRIVATE_") {
+				t.Fatalf("private payload entered audit: %s", audit.Data)
+			}
+			var metadata struct {
+				OriginalCommand string `json:"originalCommand"`
+				Alias           bool   `json:"alias"`
+			}
+			if err := json.Unmarshal(audit.Data, &metadata); err != nil || metadata.OriginalCommand != test.command.Name || metadata.Alias != (test.command.Name != test.resolved) {
+				t.Fatalf("alias metadata lost: %s, %v", audit.Data, err)
+			}
+			for _, event := range produced {
+				select {
+				case delivered := <-client.Events:
+					if delivered.ID != event.ID {
+						t.Fatalf("wrong delivered event: %#v", delivered)
+					}
+				default:
+					t.Fatal("audited command event was not delivered")
+				}
+			}
+		})
+	}
+}
+
 type activeHistoryStub struct {
 	sessionID string
 }
@@ -171,14 +237,18 @@ func TestRecordBotAuditForDeniedTwitchCommand(t *testing.T) {
 	}
 }
 
-func TestBotStatusRequiresOperator(t *testing.T) {
+func TestBotStatusAndAuditRequireOperator(t *testing.T) {
 	server := NewServer(configForBotTest("secret"), events.NewBus(4))
-	rec := httptest.NewRecorder()
-
-	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/bot/status", nil))
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 without operator secret, got %d", rec.Code)
+	for _, path := range []string{"/api/bot/status", "/api/bot/audit?limit=50"} {
+		for _, secret := range []string{"", "wrong-secret"} {
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request.Header.Set("X-Overlay-Operator-Secret", secret)
+			rec := httptest.NewRecorder()
+			server.Handler().ServeHTTP(rec, request)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("%s accepted missing/incorrect operator credentials: %d", path, rec.Code)
+			}
+		}
 	}
 }
 

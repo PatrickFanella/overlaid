@@ -18,6 +18,7 @@ Implemented now:
 - Enabled timers publish safe ticker or alert overlay events when due.
 - `/dashboard/chat` overview, command manager, counters/quotes manager, moderation dry-run panel, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
+- Audit data rejects recursively nested token, password, authorization, cookie, secret, API-key, and private-key names. Public-key fields remain valid.
 - Custom Twitch commands can publish safe ticker/alert overlays, guarded outbound Twitch chat replies, or both, with bounded template variables.
 - Templates can use operator-configured `{api:name}` variables for read-only HTTPS GET data.
 

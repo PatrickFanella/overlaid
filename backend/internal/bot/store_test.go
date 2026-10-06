@@ -26,6 +26,21 @@ func TestValidateAuditDataRejectsSecretLookingKeysRecursively(t *testing.T) {
 	}
 }
 
+func TestValidateAuditDataRejectsAPIAndPrivateKeyForms(t *testing.T) {
+	for _, key := range []string{"apiKey", "API_KEY", "X-Api-Key", "privateKey", "private_key", "PRIVATE-KEY"} {
+		payload, err := json.Marshal(map[string]any{"nested": []any{map[string]any{key: "DO_NOT_STORE"}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := ValidateAuditData(payload); err == nil {
+			t.Fatalf("credential key %q accepted", key)
+		}
+	}
+	if err := ValidateAuditData(json.RawMessage(`{"publicKey":"public","retainedStateKey":"goals","apiVariableName":"weather"}`)); err != nil {
+		t.Fatalf("ordinary metadata rejected: %v", err)
+	}
+}
+
 func TestNormalizeAuditEvent(t *testing.T) {
 	event := normalizeAuditEvent(AuditEvent{Source: " CHAT ", ActorRole: " MODERATOR ", Command: "!Alert", Action: " ALERT ", Result: " ALLOWED "})
 	if event.Source != "chat" || event.ActorRole != "moderator" || event.Command != "Alert" || event.Action != "alert" || event.Result != "allowed" {

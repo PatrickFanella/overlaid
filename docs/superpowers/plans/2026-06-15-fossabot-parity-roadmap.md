@@ -107,6 +107,18 @@ Verification passed: bot/HTTP/Twitch race tests, `make verify` (93 frontend test
 
 ---
 
+## October 6 core audit evidence closeout
+
+Actual command execution now has a publication-to-audit outcome matrix covering accepted aliases, cooldowns, role denial, invalid arguments, and unsupported commands. Tests confirm exactly one diagnostic audit per attempt, delivered bus events, original/resolved command metadata, actor identity, active-session links, and exclusion of injected token/raw payload fields. Status and audit endpoints reject missing and incorrect operator credentials.
+
+Audit validation now rejects API-key and private-key names in camel case, underscore, and header forms, including nested arrays. Unit and real Postgres tests verify rejection before persistence while accepting public keys and ordinary metadata. Core schema, store methods, status counts, legacy bot-route navigation, and original implementation commits have been inspected; the corresponding checklist entries now reflect that evidence.
+
+Verification passed: bot/HTTP/Twitch race tests with Postgres integration tests enabled, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, and `make smoke API_PORT=8081`. Native bot status reports configured storage and command/timer/audit counts.
+
+A2's nonblocking recording requirement remains open: audit errors are nonfatal and missing storage no longer panics, but `Runtime.Record` still waits synchronously for a recorder. A stalled writer can delay subsequent command publication. This needs an execution-path change before the item can be closed.
+
+---
+
 ## File structure
 
 ### Backend domain
@@ -150,15 +162,15 @@ Build the spine before adding feature breadth.
 - Create: `backend/internal/bot/store.go`
 - Test: `backend/internal/bot/store_test.go`
 
-- [ ] Add tables:
+- [x] Add tables:
   - `bot_audit_events(id, created_at, source, actor_id, actor_login, actor_display_name, actor_role, trigger, command, action, result, reason, event_id, stream_session_id, data jsonb)`
   - `bot_commands(id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at)`
   - `bot_timers(id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at)`
-- [ ] Implement `bot.Store` with `NewPostgres(databaseURL string)`, `Load()`, `RecordAudit(ctx, AuditEvent)`, `RecentAudit(ctx, limit)`, and `Close()`.
+- [x] Implement `bot.Store` with `NewPostgres(databaseURL string)`, `Load()`, `RecordAudit(ctx, AuditEvent)`, `RecentAudit(ctx, limit)`, and `Close()`.
 - [x] Add tests proving audit events are inserted newest-first and secret-looking keys are rejected from audit `data` (October 6: isolated Postgres round trip, bounded ordering, ties, and recursive rejection).
-- [ ] Run `cd backend && go test ./internal/bot`.
-- [ ] Run `make verify`.
-- [ ] Commit: `feat: add bot audit storage`.
+- [x] Run `cd backend && go test ./internal/bot`.
+- [x] Run `make verify`.
+- [x] Commit: `feat: add bot audit storage` (`4a3dd6d`; October 6 storage-contract verification).
 
 ### Task A2: Bot runtime roles and audit model
 
@@ -170,9 +182,9 @@ Build the spine before adding feature breadth.
 - [x] Define sources: `chat`, `channel_point`, `dashboard`, `timer`, `webhook`.
 - [x] Implement role comparison so broadcaster/operator/system can run everything, moderator can run moderator-safe commands, viewer can only run viewer-safe response commands (October 6: full role matrix and custom-command execution tests).
 - [ ] Implement `Runtime.Record(ctx, AuditEvent)` wrapper that never blocks command execution if audit storage is unavailable.
-- [ ] Test allowed/denied role decisions and audit fallback behavior.
-- [ ] Run `cd backend && go test ./internal/bot`.
-- [ ] Commit: `feat: add bot runtime permissions`.
+- [x] Test allowed/denied role decisions and audit fallback behavior (role matrix, unavailable store, failed-write delivery tests).
+- [x] Run `cd backend && go test ./internal/bot`.
+- [x] Commit: `feat: add bot runtime permissions` (`d030b9e`; privileged-role correction `ab76809`).
 
 ### Task A3: Route existing Twitch commands through bot audit
 
@@ -182,12 +194,12 @@ Build the spine before adding feature breadth.
 - Modify: `backend/internal/http/server.go`
 - Test: existing Twitch tests plus new command audit tests.
 
-- [ ] Keep current behavior for `!alert`, `!clear`, `!brb`, and `!back`.
-- [ ] Emit bot audit events for allowed, denied, cooldown, and invalid command attempts.
-- [ ] Include active `sessionId` when a stream session is active.
-- [ ] Do not expose Twitch tokens or raw EventSub payloads in audit data.
-- [ ] Run `cd backend && go test ./internal/twitch ./internal/http ./internal/bot`.
-- [ ] Commit: `feat: audit twitch bot commands`.
+- [x] Keep current behavior for `!alert`, `!clear`, `!brb`, and `!back`.
+- [x] Emit bot audit events for allowed, denied, cooldown, and invalid command attempts.
+- [x] Include active `sessionId` when a stream session is active.
+- [x] Do not expose Twitch tokens or raw EventSub payloads in audit data.
+- [x] Run `cd backend && go test ./internal/twitch ./internal/http ./internal/bot`.
+- [x] Commit: `feat: audit twitch bot commands` (`60aa037`; October 6 execution-to-audit outcome matrix).
 
 ### Task A4: Bot status/audit API and dashboard visibility
 
@@ -199,12 +211,12 @@ Build the spine before adding feature breadth.
 - Modify: `web/src/App.tsx`
 - Test: backend HTTP tests and frontend route tests.
 
-- [ ] Add `GET /api/bot/status` with storage readiness, command count, timer count, and recent audit count.
-- [ ] Add operator-protected `GET /api/bot/audit?limit=50`.
-- [ ] Add `/dashboard/bot` route with a bot overview and recent audit panel.
-- [ ] Link Bot route from dashboard navigation/route guide.
-- [ ] Run `make verify` and `make smoke-browser`.
-- [ ] Commit: `feat: add bot dashboard audit view`.
+- [x] Add `GET /api/bot/status` with storage readiness, command count, timer count, and recent audit count.
+- [x] Add operator-protected `GET /api/bot/audit?limit=50`.
+- [x] Add `/dashboard/bot` route with a bot overview and recent audit panel (legacy alias now opens `/dashboard/chat`).
+- [x] Link Bot route from dashboard navigation/route guide.
+- [x] Run `make verify` and `make smoke-browser`.
+- [x] Commit: `feat: add bot dashboard audit view` (`2a82f8d`; current route and auth contracts verified).
 
 ---
 
@@ -235,7 +247,7 @@ Build the spine before adding feature breadth.
 - [x] Publish timer output into existing event pipeline as safe overlay/ticker/alert events (October 6: real bus/history scheduler fixture).
 - [x] Record audit event for each timer execution (October 6: persisted event/session links and template diagnostics).
 - [x] Keep scheduler disabled when bot storage is unavailable (startup guard and scheduler dependency checks).
-- [ ] Commit: `feat: run bot timers`.
+- [x] Commit: `feat: run bot timers` (`80898df`; scheduler contracts and cancellation correction `481c3a0`).
 
 ### Task B3: Timer dashboard
 
@@ -247,7 +259,7 @@ Build the spine before adding feature breadth.
 - [x] Add timer list, enable/disable, and a saved-timer interval/response/action editor with cancellation and retry.
 - [x] Add a manual “Run once” operator action backed by `POST /api/bot/timers/{id}/run`.
 - [x] Show last scheduled run time and refresh the audit after manual execution.
-- [ ] Commit: `feat: manage bot timers`.
+- [x] Commit: `feat: manage bot timers` (`af32236`; audited Run once and saved editor verified October 6).
 
 ---
 
@@ -275,7 +287,7 @@ Build the spine before adding feature breadth.
 - [x] Implement safe variables: `{user}`, `{displayName}`, `{channel}`, `{args}`, `{command}`, `{nowPlaying.title}`, `{nowPlaying.artist}` (October 6: current media snapshot wired into command execution).
 - [x] Unknown variables render as empty strings and are recorded in audit data (October 6: command-to-audit test and session linkage).
 - [x] Limit rendered response length to 400 characters (backend rune cap and Unicode dashboard-preview coverage).
-- [ ] Commit: `feat: render bot command templates`.
+- [x] Commit: `feat: render bot command templates` (`006e27b`; media context `636c395`).
 
 ### Task C3: Chat execution for custom response commands
 
