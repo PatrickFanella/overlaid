@@ -148,6 +148,18 @@ func (w *moderationWorkflow) executeNuke(ctx context.Context, request botNukeDry
 	if err := ctx.Err(); err != nil {
 		return botNukeExecuteResponse{}, err
 	}
+	// Validate the whole execution before creating an enforced rule or sending
+	// any action. Zero timeout duration retains the documented default.
+	action = strings.ToLower(strings.TrimSpace(action))
+	if action != "delete" && action != "timeout" {
+		return botNukeExecuteResponse{}, errors.New("nuke action must be delete or timeout")
+	}
+	if action == "timeout" && request.DurationSeconds != 0 && (request.DurationSeconds < 1 || request.DurationSeconds > 1209600) {
+		return botNukeExecuteResponse{}, errors.New("timeout duration must be between 1 and 1209600 seconds")
+	}
+	if err := w.validateNukeRadiationRequest(request); err != nil {
+		return botNukeExecuteResponse{}, err
+	}
 	matches, err := w.planNukeDryRun(request)
 	if err != nil {
 		return botNukeExecuteResponse{}, err

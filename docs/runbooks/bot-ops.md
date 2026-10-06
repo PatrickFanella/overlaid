@@ -215,7 +215,7 @@ Nuke planning and guarded execution are available from `/dashboard/chat`:
 - It accepts a bounded lookback window and result limit.
 - It returns matching users/messages/message IDs when available.
 - Execution uses `POST /api/bot/moderation/nuke/execute`, accepts the same plan fields, and requires `confirm: true`.
-- Execution supports `delete` and `timeout` only. Timeout defaults to 60 seconds when no duration is supplied.
+- Execution supports `delete` and `timeout` only. Timeout defaults to 60 seconds when no duration is supplied. Nonzero timeout duration must be 1–1209600 seconds; radiation must be zero or 1–120 minutes. The full request is validated before any radiation rule or immediate action is created.
 - Execution caps each batch at 50 matches and counts actions actually attempted. Cancellation stops before the next action; a partial receipt reports interruption and unattempted matches. Already accepted actions remain accepted, and an already-created radiation window remains active until expiry or rollback. A disconnected client may not receive that receipt; check audit and active windows before retrying.
 - Execution is capped to 50 matching chat events per request and writes bot audit rows for successful and failed Twitch moderation attempts.
 - The dashboard clears confirmation whenever the plan inputs change; run the dry-run, review the listed matches, check `I reviewed this dry-run plan`, then execute.

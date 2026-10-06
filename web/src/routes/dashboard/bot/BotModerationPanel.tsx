@@ -202,7 +202,7 @@ export function BotModerationPanel({
                 </select>
               </Field>
               <Field label="Duration seconds">
-                <input className="desk-input" type="number" min={1} value={nukeDraft.durationSeconds} onChange={(event) => onNukeDraftChange({ ...nukeDraft, durationSeconds: Number(event.target.value), confirm: false })} />
+                <input className="desk-input" type="number" min={1} max={1209600} value={nukeDraft.durationSeconds} onChange={(event) => onNukeDraftChange({ ...nukeDraft, durationSeconds: Number(event.target.value), confirm: false })} />
               </Field>
               <Field label="Radiation minutes">
                 <input className="desk-input" type="number" min={0} max={120} value={nukeDraft.radiationMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, radiationMinutes: Number(event.target.value), confirm: false })} placeholder="radiation min" />

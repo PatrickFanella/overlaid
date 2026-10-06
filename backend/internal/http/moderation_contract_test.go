@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 )
 
 func TestManualModerationScopePayloadAndAuditContracts(t *testing.T) {
@@ -276,5 +278,119 @@ func TestModerationConfigurationHTTPAuditReceipts(t *testing.T) {
 		if strings.Contains(string(encoded), "private pattern content") || strings.Contains(string(encoded), "private reason content") {
 			t.Fatal("free-form rule content copied into configuration audit")
 		}
+	}
+}
+
+func TestNukeInvalidSettingsCannotCreateRadiationOrDispatch(t *testing.T) {
+	for _, request := range []botNukeDryRunRequest{
+		{Action: "timeout", DurationSeconds: -1, RadiationMinutes: 5},
+		{Action: "timeout", DurationSeconds: 1209601, RadiationMinutes: 5},
+		{Action: "delete", RadiationMinutes: -1},
+		{Action: "delete", RadiationMinutes: 121},
+	} {
+		t.Run(fmt.Sprintf("%s/duration_%d/radiation_%d", request.Action, request.DurationSeconds, request.RadiationMinutes), func(t *testing.T) {
+			server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+			server.botStore = newModerationRuleTestStore(t)
+			server.botRuntime = nil
+			server.twitch.token = &twitchTokenInfo{AccessToken: "access-fixture", Scope: []string{"moderator:manage:banned_users", "moderator:manage:chat_messages"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123"}
+			server.history = eventHistoryListStub{events: []events.Event{{ID: "chat-1", Type: events.EventTypeChatMessage, Message: "spam", CreatedAt: time.Now().UTC(), Data: map[string]any{"messageId": "message-1", "twitchEvent": map[string]any{"chatter_user_id": "456"}}}}}
+			oldClient := twitchHTTPClient
+			twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				t.Fatal("invalid nuke request reached Helix")
+				return nil, nil
+			})}
+			t.Cleanup(func() { twitchHTTPClient = oldClient })
+			request.Pattern, request.Confirm = "spam", true
+			body, err := json.Marshal(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rec := httptest.NewRecorder()
+			server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/bot/moderation/nuke/execute", bytes.NewReader(body)))
+			rules, err := server.botStore.ListModerationRules(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rules) != 0 {
+				t.Fatalf("invalid request created active radiation: %#v", rules)
+			}
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("invalid settings returned %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestNukeValidExecutionSettingBoundaries(t *testing.T) {
+	for _, duration := range []int{0, 1, 1209600} {
+		for _, minutes := range []int{0, 1, 120} {
+			t.Run(fmt.Sprintf("duration_%d/radiation_%d", duration, minutes), func(t *testing.T) {
+				server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+				server.botStore = newModerationRuleTestStore(t)
+				server.botRuntime = nil
+				server.history = eventHistoryListStub{}
+				before := time.Now().UTC()
+				response, err := server.executeNukeWorkflow(t.Context(), botNukeDryRunRequest{Pattern: "spam", DurationSeconds: duration, RadiationMinutes: minutes}, " TIMEOUT ")
+				if err != nil || response.Action != "timeout" || response.Attempted != 0 {
+					t.Fatalf("valid boundary response=%#v err=%v", response, err)
+				}
+				if minutes == 0 {
+					if response.RadiationRule != nil {
+						t.Fatal("zero radiation created a rule")
+					}
+					return
+				}
+				rule := response.RadiationRule
+				earliest := before.Add(time.Duration(minutes) * time.Minute)
+				latest := time.Now().UTC().Add(time.Duration(minutes) * time.Minute)
+				if rule == nil || rule.ExpiresAt == nil || rule.ExpiresAt.Before(earliest) || rule.ExpiresAt.After(latest) || !rule.Enabled || !rule.Enforce {
+					t.Fatalf("radiation boundary rule=%#v", rule)
+				}
+			})
+		}
+	}
+}
+
+func TestNukePlanRegexCaseLookbackAndHistoryLimit(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+	eventStore := history.New("", 250)
+	server.history = eventStore
+	now := time.Now().UTC()
+	for _, event := range []events.Event{
+		{ID: "old-chat", Type: events.EventTypeChatMessage, Message: "spam1", CreatedAt: now.Add(-2 * time.Hour)},
+		{ID: "alert", Type: events.EventTypeAlert, Message: "spam2", CreatedAt: now},
+		{ID: "lower", Type: events.EventTypeChatMessage, Message: "spam3", CreatedAt: now, Data: map[string]any{"messageId": "message-lower"}},
+		{ID: "upper", Type: events.EventTypeChatMessage, Message: "SPAM4", CreatedAt: now, Data: map[string]any{"messageId": "message-upper"}},
+	} {
+		if err := eventStore.Append(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		request botNukeDryRunRequest
+		ids     []string
+	}{
+		{botNukeDryRunRequest{Pattern: "^spam[0-9]+$", Regex: true}, []string{"upper", "lower"}},
+		{botNukeDryRunRequest{Pattern: "^spam[0-9]+$", Regex: true, CaseSensitive: true}, []string{"lower"}},
+		{botNukeDryRunRequest{Pattern: "spam", Limit: 1}, []string{"upper"}},
+		{botNukeDryRunRequest{Pattern: "spam", LookbackMinutes: 180}, []string{"upper", "lower", "old-chat"}},
+	} {
+		matches, err := server.planNukeDryRun(tc.request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := []string{}
+		for _, match := range matches {
+			ids = append(ids, match.EventID)
+		}
+		if !reflect.DeepEqual(ids, tc.ids) {
+			t.Fatalf("plan %#v IDs=%v want=%v", tc.request, ids, tc.ids)
+		}
+	}
+	if _, err := server.planNukeDryRun(botNukeDryRunRequest{Pattern: "[", Regex: true}); err == nil {
+		t.Fatal("invalid regex accepted")
+	}
+	if got := len(eventStore.List(250)); got != 4 {
+		t.Fatalf("dry run changed history count: %d", got)
 	}
 }

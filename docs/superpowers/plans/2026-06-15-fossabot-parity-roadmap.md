@@ -390,7 +390,7 @@ Build the spine before adding feature breadth.
 - [x] Add blocked-term rules and dry-run matching (October 6: real Postgres CRUD/edit/pause, case-sensitive username regex, rejected-write preservation, expiry and radiation rollback contracts).
 - [x] Add Twitch moderation API actions: delete message, timeout, ban only with explicit scopes (October 6: operator authorization, scope denial before dispatch, success/failure payload and audit matrix; unban covered too).
 - [x] Add dashboard moderation audit (October 6: configuration and manual action receipts, linked automatic rule outcomes, session report/export, and native rendered success/failure rows verified).
-- “Nuke” workflow has regex/plain matching, lookback window, dry-run preview, guarded delete/timeout execution, audit rows, optional temporary radiation/future-enforcement windows, and rollback that disables those windows.
+- [x] “Nuke” workflow has regex/plain matching, lookback window, dry-run preview, guarded delete/timeout execution, audit rows, optional temporary radiation/future-enforcement windows, and rollback that disables those windows (October 6: setting boundaries before side effects, history planning contracts, scoped actions/audit, batch/cancellation fixtures, real Postgres windows, and browser execution/rollback receipts).
 
 ---
 
@@ -458,3 +458,12 @@ Rule create/update/delete now write synchronous operator configuration receipts,
 Real Postgres coverage verifies identity/creation-time preservation on edit, unchanged state after rejected regex writes, case-sensitive username matching, disabled rules, and missing IDs. Radiation edits preserve server-owned source/expiry; active windows match, rollback disables enabled/enforce while preserving identity/expiry, and expired enabled windows do not match. These tests use a disposable schema isolated from the running scheduler.
 
 Validation: `make verify`, all 17 browser smoke workflows, bot/HTTP race tests with isolated Postgres schemas, and `make smoke API_PORT=8081` passed. Native API create/pause/rejected-edit/delete produced four immediate safe receipts; the collaborative browser displayed their success/failure audit rows and the restored empty moderation list. The fixture rule was deleted.
+
+
+### Overnight progress: nuke validation before side effects
+
+The workflow now validates action, timeout duration, and radiation settings before planning, creating an enforced rule, or dispatching a Helix action. Zero timeout duration retains the 60-second default; nonzero duration accepts 1–1209600 seconds. Radiation accepts zero (off) or 1–120 minutes. Negative radiation previously fell through to immediate actions, and invalid timeout duration could leave an active radiation rule before failing. A pre-fix HTTP fixture reproduced both failures; corrected requests reject without rules or remote writes.
+
+Coverage also verifies the accepted timeout/radiation endpoints, normalized action, and expiry calculation. Nuke planning uses real in-memory history to prove case-sensitive/insensitive regex, plain matching, lookback exclusion/inclusion, alert exclusion, newest-first limits, invalid regex rejection, and no history mutation. Existing tests cover confirmation, restricted actions, 50-action batches, partial failures/cancellation, radiation persistence/expiry, and rollback; browser workflows cover plan invalidation, pending execution, retained receipts, and rollback after refresh failure.
+
+Validation: `make verify`, all 17 browser smoke workflows, bot/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. The rebuilt native API rejected all four invalid execution settings with 400 and left its moderation rules unchanged. Local moderation milestone contracts are verified; live Twitch enforcement still requires external credentials.
