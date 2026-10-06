@@ -495,3 +495,10 @@ Validation: `make verify`, all 17 browser smoke workflows, probe race tests, and
 The bot template module now resolves referenced media/community/API values through read-only adapters, and the custom-command executor supplies only chat context. Unused dependencies are skipped, repeated names are resolved once, API lookups stay bounded, dependency errors remain out of rendered text, and returned values are not interpreted as templates. Timer rendering retains its existing snapshot-only behavior.
 
 Verification passed: full `make verify`, 17 browser smoke workflows, Bot/Twitch/HTTP race tests including isolated Postgres contracts, and runtime smoke at port 8081. Live Twitch/OBS testing still requires the external setup.
+
+
+### Overnight progress: shared moderation pattern policy
+
+Saved rules and nuke previews now use the same literal/regex matcher. A reproduced defect in saved-rule matching is corrected: lowercasing regex input no longer defeats explicit case-sensitive groups. Rule normalization, target and expiry policy moved out of SQL storage; matching uses one expiry snapshot per batch.
+
+Full verification, 17 browser workflows, Bot/Twitch/HTTP race tests with isolated Postgres contracts, and runtime smoke passed. A disposable public-API rule confirmed the corrected matches and was removed. Live Twitch enforcement remains pending external credentials.

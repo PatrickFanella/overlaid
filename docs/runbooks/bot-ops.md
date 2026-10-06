@@ -195,6 +195,7 @@ Moderation rules are dry-run by default. They only call Twitch delete, timeout, 
 - Actions `flag`, `delete`, `timeout`, and `ban` can be tested in dry-run first. `delete`/`timeout`/`ban` become live only when `enforce` is checked.
 - Dry-run requests return the rules that would match a sample username/message.
 - Keep new rules in dry-run until a live sample confirms the pattern is correct; regex mistakes can otherwise delete, timeout, or ban real users.
+- Saved rules and nuke previews share the same matcher. Regex case folding preserves the original message, including explicit inline case flags such as `(?-i:ABC)`. Plain text uses substring matching. Expired rules stop matching at their exact expiry time.
 
 Manual guarded Twitch moderation actions are available from `/dashboard/chat` and `POST /api/bot/moderation/action`:
 

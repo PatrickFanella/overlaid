@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -279,18 +278,9 @@ func (w *moderationWorkflow) planNukeDryRun(request botNukeDryRunRequest) ([]bot
 	if lookback <= 0 || lookback > 360 {
 		lookback = 30
 	}
-	var compiled *regexp.Regexp
-	if request.Regex {
-		compiledPattern := pattern
-		if !request.CaseSensitive {
-			compiledPattern = "(?i)" + compiledPattern
-		}
-		compiled, err = regexp.Compile(compiledPattern)
-		if err != nil {
-			return nil, err
-		}
-	} else if !request.CaseSensitive {
-		pattern = strings.ToLower(pattern)
+	matcher, err := bot.CompileModerationPattern(pattern, request.Regex, request.CaseSensitive)
+	if err != nil {
+		return nil, err
 	}
 	cutoff := time.Now().UTC().Add(-time.Duration(lookback) * time.Minute)
 	matches := []botNukeDryRunMatch{}
@@ -298,17 +288,7 @@ func (w *moderationWorkflow) planNukeDryRun(request botNukeDryRunRequest) ([]bot
 		if event.Type != events.EventTypeChatMessage || event.CreatedAt.Before(cutoff) {
 			continue
 		}
-		candidate := event.Message
-		if !request.CaseSensitive && !request.Regex {
-			candidate = strings.ToLower(candidate)
-		}
-		matched := false
-		if request.Regex {
-			matched = compiled.MatchString(candidate)
-		} else {
-			matched = strings.Contains(candidate, pattern)
-		}
-		if !matched {
+		if !matcher.Matches(event.Message) {
 			continue
 		}
 		matches = append(matches, botNukeDryRunMatch{EventID: event.ID, MessageID: twitchMessageIDFromEvent(event), UserID: twitchEventString(event, "chatter_user_id"), User: event.Title, Message: event.Message, CreatedAt: event.CreatedAt.Format(time.RFC3339)})

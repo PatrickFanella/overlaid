@@ -371,6 +371,7 @@ func TestNukePlanRegexCaseLookbackAndHistoryLimit(t *testing.T) {
 		ids     []string
 	}{
 		{botNukeDryRunRequest{Pattern: "^spam[0-9]+$", Regex: true}, []string{"upper", "lower"}},
+		{botNukeDryRunRequest{Pattern: "^(?-i:SPAM)[0-9]+$", Regex: true}, []string{"upper"}},
 		{botNukeDryRunRequest{Pattern: "^spam[0-9]+$", Regex: true, CaseSensitive: true}, []string{"lower"}},
 		{botNukeDryRunRequest{Pattern: "spam", Limit: 1}, []string{"upper"}},
 		{botNukeDryRunRequest{Pattern: "spam", LookbackMinutes: 180}, []string{"upper", "lower", "old-chat"}},
