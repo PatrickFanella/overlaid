@@ -199,7 +199,7 @@ Moderation rules are dry-run by default. They only call Twitch delete, timeout, 
 Manual guarded Twitch moderation actions are available from `/dashboard/chat` and `POST /api/bot/moderation/action`:
 
 - `delete` requires `messageId` and Twitch scope `moderator:manage:chat_messages`.
-- `timeout` requires `targetUserId`, `durationSeconds` from `1` to `1209600`, and Twitch scope `moderator:manage:banned_users`.
+- `timeout` requires `targetUserId`, `durationSeconds` from `1` to `1209600`, and Twitch scope `moderator:manage:banned_users`. Audit duration applies only to timeouts; ban/delete/unban rows use zero even if the draft retained a timeout value.
 - `ban` requires `targetUserId` and Twitch scope `moderator:manage:banned_users`.
 - `unban` requires `targetUserId` and Twitch scope `moderator:manage:banned_users`.
 - The current implementation is broadcaster-self mode: the OAuth token user is used as both broadcaster and moderator id.

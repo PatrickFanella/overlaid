@@ -363,7 +363,7 @@ func (w *moderationWorkflow) recordModerationActionAudit(ctx context.Context, re
 	if err != nil || s.botRuntime == nil {
 		return
 	}
-	data := map[string]any{"targetUserId": strings.TrimSpace(request.TargetUserID), "targetUserLogin": strings.TrimSpace(request.TargetUserLogin), "messageId": strings.TrimSpace(request.MessageID), "durationSeconds": request.DurationSeconds}
+	data := moderationAuditData(request)
 	action := strings.ToLower(strings.TrimSpace(request.Action))
 	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "moderation_action", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
 }
@@ -376,14 +376,24 @@ func (w *moderationWorkflow) recordModerationEnforcementAudit(ctx context.Contex
 		return
 	}
 	action := strings.ToLower(strings.TrimSpace(request.Action))
+	data := moderationAuditData(request)
+	data["ruleId"], data["ruleName"] = match.RuleID, match.RuleName
 	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
 		Source: bot.SourceChat, ActorRole: bot.RoleSystem, Trigger: "moderation_rule",
 		Command: match.RuleName, Action: action, Result: bot.Result(result), Reason: reason,
 		EventID: event.ID, StreamSessionID: s.activeSessionID(),
-		Data: map[string]any{"ruleId": match.RuleID, "ruleName": match.RuleName,
-			"targetUserId": strings.TrimSpace(request.TargetUserID), "targetUserLogin": strings.TrimSpace(request.TargetUserLogin),
-			"messageId": strings.TrimSpace(request.MessageID), "durationSeconds": request.DurationSeconds},
+		Data: data,
 	})
+}
+
+// Duration applies only to timeout. Other actions ignore a timeout value left
+// in the dashboard draft, so their receipts must not imply a timed ban.
+func moderationAuditData(request botModerationActionRequest) map[string]any {
+	duration := 0
+	if strings.EqualFold(strings.TrimSpace(request.Action), "timeout") {
+		duration = request.DurationSeconds
+	}
+	return map[string]any{"targetUserId": strings.TrimSpace(request.TargetUserID), "targetUserLogin": strings.TrimSpace(request.TargetUserLogin), "messageId": strings.TrimSpace(request.MessageID), "durationSeconds": duration}
 }
 
 func twitchEventString(event events.Event, key string) string {

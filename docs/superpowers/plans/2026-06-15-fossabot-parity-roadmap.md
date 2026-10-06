@@ -388,7 +388,7 @@ Build the spine before adding feature breadth.
 ## Milestone F: Moderation
 
 - Add blocked-term rules and dry-run matching.
-- Add Twitch moderation API actions: delete message, timeout, ban only with explicit scopes.
+- [x] Add Twitch moderation API actions: delete message, timeout, ban only with explicit scopes (October 6: operator authorization, scope denial before dispatch, success/failure payload and audit matrix; unban covered too).
 - Add dashboard moderation audit.
 - “Nuke” workflow has regex/plain matching, lookback window, dry-run preview, guarded delete/timeout execution, audit rows, optional temporary radiation/future-enforcement windows, and rollback that disables those windows.
 
@@ -440,3 +440,12 @@ Nuke batches now check request cancellation before planning and between actions.
 Transport fixtures verify interruption both after an accepted action and during a failing request, no dispatch or rule creation for a pre-canceled context, and retention of the existing window. A separate 51-match fixture proves only 50 actions run, in order, and individual remote failures do not stop an uncanceled batch. Browser coverage shows the partial receipt, its unattempted count, and rollback even when audit refresh fails.
 
 Validation: `make verify`, all 17 browser smoke workflows, HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch execution remains unverified; fixtures sent no external moderation writes.
+
+
+### Overnight progress: manual moderation scope and receipt contracts
+
+The manual moderation endpoint now has a 16-case HTTP-to-Helix matrix for delete, timeout, ban, and unban: authorized success, remote failure, missing scope, and rejected operator authentication for each action. The fixture checks method/path, broadcaster/moderator/target IDs, authentication headers, trimmed reason, timeout duration, permanent-ban omission of duration, response receipts, and dashboard/operator/session audit ownership. Invalid targets, timeout bounds, and unsupported actions are rejected before dispatch.
+
+This exposed stale timeout metadata in non-timeout audit rows. Shared audit metadata now records zero duration for delete/ban/unban and keeps timeout duration for manual and automatic workflows. The [official scope reference](https://dev.twitch.tv/docs/authentication/scopes/) and [moderation API reference](https://dev.twitch.tv/docs/api/reference#ban-user) confirm the explicit scope and payload boundaries. No live Twitch write is required for these contracts.
+
+Validation: `make verify`, all 17 browser smoke workflows, HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. The pre-fix contract matrix reproduced incorrect non-timeout duration audit metadata; all cases passed after the correction.
