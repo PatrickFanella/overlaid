@@ -467,3 +467,10 @@ The workflow now validates action, timeout duration, and radiation settings befo
 Coverage also verifies the accepted timeout/radiation endpoints, normalized action, and expiry calculation. Nuke planning uses real in-memory history to prove case-sensitive/insensitive regex, plain matching, lookback exclusion/inclusion, alert exclusion, newest-first limits, invalid regex rejection, and no history mutation. Existing tests cover confirmation, restricted actions, 50-action batches, partial failures/cancellation, radiation persistence/expiry, and rollback; browser workflows cover plan invalidation, pending execution, retained receipts, and rollback after refresh failure.
 
 Validation: `make verify`, all 17 browser smoke workflows, bot/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. The rebuilt native API rejected all four invalid execution settings with 400 and left its moderation rules unchanged. Local moderation milestone contracts are verified; live Twitch enforcement still requires external credentials.
+
+
+### Overnight progress: custom command execution module
+
+The custom command executor now owns its configuration snapshots, role/template/delivery decisions, and cooldown state independently from alias and built-in dispatch. Public processor callers remain unchanged. Existing command and HTTP audit matrices continue to verify behavior, and a concurrent reload test proves immutable in-flight behavior and retained cooldowns when saved responses/modes change. Removing configured commands returns them to the unsupported-command path. Further community/built-in extraction is tracked in the architecture plan.
+
+Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS integration remains unverified.

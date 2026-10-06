@@ -296,3 +296,12 @@ Verification passed: `make verify` (93 frontend tests and the Go suite), all fou
 Browser workflow tests cover delayed create, failed-edit retry, late-list suppression, lifecycle/delete receipts, and fulfill/cancel receipts with unavailable reloads. These strengthen the live operations Seam without moving rule-editor behavior into the reward queue.
 
 Verification for the reward operation slice passed: `make verify` (95 frontend tests and the Go suite), all seventeen `make smoke-browser` checks, and `make smoke API_PORT=8081`. Browser fixtures perform no live Twitch writes.
+
+
+## October 6 custom command execution ownership
+
+`custom_commands.go` now owns saved-command snapshots, live replacement, role checks, template/API/community/media dependencies, response modes, event decisions, and atomic custom cooldown reservations. `CommandProcessor` retains its public constructor/Handle/SetCustomCommands interface and delegates resolved custom identities to this executor after community dispatch. Custom state uses its own mutex and cooldown map; aliases and built-in reservations remain in the dispatcher. Shared diagnostic constructors are pure package helpers.
+
+Existing response-mode, alias, role, empty-response, unknown-variable, dependency, concurrency, and HTTP audit contracts continue to exercise the public processor. A new concurrent reload workflow verifies one in-flight configuration snapshot, caller-slice isolation, cooldown preservation across replacement, independent built-in cooldowns, exact expiry, new response-mode delivery, and removal. Community/built-in extraction remains the next command architecture work; this slice closes custom rendering ownership only.
+
+Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS integration remains unverified.

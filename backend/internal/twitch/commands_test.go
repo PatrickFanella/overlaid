@@ -579,3 +579,64 @@ func TestCommunityViewerCannotMutateConfiguredStorage(t *testing.T) {
 		t.Fatalf("denial mutated community storage: %#v", community)
 	}
 }
+
+func TestCustomCommandReloadKeepsInFlightSnapshotAndCooldown(t *testing.T) {
+	now := time.Now().UTC()
+	started, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	p := NewCommandProcessor(CommandProcessorConfig{
+		Cooldown: 10 * time.Second,
+		Now:      func() time.Time { return now },
+		Aliases:  map[string]string{"water": "hydrate"},
+		Custom:   []CustomCommand{{Name: "hydrate", Enabled: true, Response: "Before {nowPlaying.title}", Action: "ticker", CooldownSeconds: 10}},
+		NowPlaying: func() bot.NowPlayingMetadata {
+			once.Do(func() { close(started) })
+			<-release
+			return bot.NowPlayingMetadata{Title: "Song"}
+		},
+	})
+	produced := make(chan []events.Event, 1)
+	go func() { produced <- p.Handle(ChatCommand{Name: "water"}, ChatCommandUser{Name: "Viewer"}) }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("render did not start")
+	}
+	replacement := []CustomCommand{{Name: "hydrate", Enabled: true, Response: "After", Action: "alert", ResponseMode: "chat", CooldownSeconds: 10}}
+	p.SetCustomCommands(replacement)
+	// The saved snapshot must also survive a caller mutating its input slice.
+	replacement[0].Response = "Changed outside executor"
+	close(release)
+	var previous []events.Event
+	select {
+	case previous = <-produced:
+	case <-time.After(time.Second):
+		t.Fatal("in-flight render did not finish")
+	}
+	if len(previous) != 2 || previous[1].Message != "Before Song" || previous[1].Data["action"] != "ticker" || previous[0].Data["alias"] != true {
+		t.Fatalf("mixed in-flight configuration: %#v", previous)
+	}
+	cooled := p.Handle(ChatCommand{Name: "hydrate"}, ChatCommandUser{})
+	if len(cooled) != 1 || cooled[0].Message != "Command cooling down" {
+		t.Fatalf("reload reset custom cooldown: %#v", cooled)
+	}
+	// Built-in cooldown ownership is independent of saved-command reservations.
+	builtin := p.Handle(ChatCommand{Name: "alert", Args: "Builtin still available"}, ChatCommandUser{IsModerator: true})
+	if len(builtin) != 2 || builtin[0].Severity != events.SeveritySuccess {
+		t.Fatalf("custom cooldown affected built-in: %#v", builtin)
+	}
+	now = now.Add(10 * time.Second)
+	current := p.Handle(ChatCommand{Name: "water"}, ChatCommandUser{})
+	if len(current) != 1 || current[0].Data["responseMode"] != "chat" {
+		t.Fatalf("replacement mode not used: %#v", current)
+	}
+	response, ok := current[0].Data["chatResponse"].(map[string]any)
+	if !ok || response["message"] != "After" {
+		t.Fatalf("replacement snapshot changed: %#v", current)
+	}
+	p.SetCustomCommands(nil)
+	removed := p.Handle(ChatCommand{Name: "hydrate"}, ChatCommandUser{})
+	if len(removed) != 1 || removed[0].Message != "Unsupported command" {
+		t.Fatalf("removed command still resolved: %#v", removed)
+	}
+}
