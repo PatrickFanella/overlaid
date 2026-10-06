@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/testpostgres"
 )
 
 func isolatedSessionStore(t *testing.T) *Store {
@@ -32,6 +33,10 @@ func isolatedSessionStore(t *testing.T) *Store {
 	schema := "sessions_test_" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if err := testpostgres.EnsurePGCrypto(ctx, admin); err != nil {
+		_ = admin.Close()
+		t.Fatalf("initialize database-wide test extension: %v", err)
+	}
 	if _, err := admin.ExecContext(ctx, "CREATE SCHEMA "+schema); err != nil {
 		_ = admin.Close()
 		t.Fatal(err)

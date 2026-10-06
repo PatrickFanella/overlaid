@@ -26,6 +26,8 @@ make verify
 
 Use narrower commands only when an issue explicitly asks for a smaller check.
 
+Optional Postgres integration checks use `OVERLAID_TEST_DATABASE_URL` pointing to a disposable database. Fixtures must work without preloaded application tables, create/drop owned schemas, and initialize the shared `pgcrypto` extension in `public` through the serialized test helper.
+
 ## Operations conventions
 
 - Keep `/healthz` as cheap process liveness for Compose. Monitoring must parse `/readyz` JSON, using `cmd/probe` or equivalent, because HTTP 200 can contain degraded readiness.

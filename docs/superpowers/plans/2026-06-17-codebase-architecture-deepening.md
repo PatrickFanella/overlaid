@@ -374,3 +374,8 @@ Failing-before-fix tests reproduced overwritten nested secret keys and acceptanc
 `configuration.go` now owns command, timer, counter, and quote types and normalization, including safe names, role/action/mode allowlists, reserved command names, duration/text limits, and timer secret-key policy. `Store` invokes those functions at persistence boundaries and retains only storage behavior for these records. Public types/functions and behavior are unchanged. This closes the remaining configuration policy in finding 3 without adding pass-through repository abstractions.
 
 Existing offline normalization and isolated Postgres CRUD contracts exercise the same public interfaces after the move. Validation: `make verify`, all 21 browser smoke workflows, and Bot race tests with isolated Postgres fixtures passed.
+
+
+## October 6 resumed fresh-database verification
+
+Recreating the disposable stack after the server restart exposed test setup assumptions. Cache and session-audit integration tests now use owned schemas; shared fixture initialization keeps `pgcrypto` in public under a cross-package transaction lock. A complete race run against an unmigrated database passed and left no product tables or temporary schemas. Full verification, 23 browser workflows, and local runtime smoke passed. [Recorded evidence](../../qa/2026-10-06-fresh-postgres-test-isolation.md) distinguishes this new fixture run from the unavailable earlier temporary data and live integration gates.

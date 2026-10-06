@@ -18,6 +18,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/sessions"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/testpostgres"
 )
 
 // Isolate global list queries and enabled timers from the running API worker.
@@ -39,6 +40,10 @@ func isolatedPostgresBotStore(t *testing.T) (*Store, *history.PostgresStore) {
 	schema := "bot_test_" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if err := testpostgres.EnsurePGCrypto(ctx, admin); err != nil {
+		_ = admin.Close()
+		t.Fatalf("initialize database-wide test extension: %v", err)
+	}
 	if _, err := admin.ExecContext(ctx, "CREATE SCHEMA "+schema); err != nil {
 		_ = admin.Close()
 		t.Fatalf("create test schema: %v", err)

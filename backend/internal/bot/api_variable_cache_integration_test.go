@@ -2,37 +2,19 @@ package bot
 
 import (
 	"context"
-	"os"
-	"strconv"
 	"testing"
 	"time"
 )
 
 func TestAPIVariableCacheConfigurationPostgres(t *testing.T) {
-	databaseURL := os.Getenv("OVERLAID_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set OVERLAID_TEST_DATABASE_URL to a disposable Postgres database")
-	}
-	store, err := NewPostgres(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
+	store, _ := isolatedPostgresBotStore(t)
 	resolver := NewAPIVariableResolver(store)
 	ctx := context.Background()
-	name := "cache_test_" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	name := "cache_test"
 	variable, err := store.SaveAPIVariable(ctx, APIVariable{Name: name, Enabled: true, URL: "https://api.example.test/one", Fallback: "offline", CacheTTLSeconds: 60, TimeoutMs: 1500})
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixtureIDs := []string{variable.ID}
-	t.Cleanup(func() {
-		for _, id := range fixtureIDs {
-			if _, err := store.db.ExecContext(ctx, `DELETE FROM bot_api_variables WHERE id=$1`, id); err != nil {
-				t.Error(err)
-			}
-		}
-	})
 	resolver.cacheAPIVariable(variable, "original", time.Hour)
 	if result := resolver.resolveAPIVariable(ctx, name); result.Status != "cache_hit" || result.Value != "original" {
 		t.Fatalf("cache miss: %#v", result)
@@ -93,7 +75,6 @@ func TestAPIVariableCacheConfigurationPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixtureIDs = append(fixtureIDs, variable.ID)
 	if _, hit := resolver.cachedAPIVariable(variable); hit {
 		t.Fatal("recreated name reused deleted record cache")
 	}

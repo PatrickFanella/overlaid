@@ -12,6 +12,8 @@ make verify
 docker compose up --build
 ```
 
+Set `OVERLAID_TEST_DATABASE_URL` to a disposable Postgres database to include persistence integration tests in `make verify` or the backend race suite. They work without preloaded application tables, create/drop their own schemas, and retain the shared `pgcrypto` extension in `public`. Without that variable, persistence integration tests are skipped.
+
 ## Overlay MVP
 
 ### Environment

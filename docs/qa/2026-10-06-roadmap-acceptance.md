@@ -8,7 +8,7 @@ The [parent roadmap](../superpowers/plans/2026-06-15-fossabot-parity-roadmap.md)
 
 | Requirement | Current implementation and inspected evidence |
 | --- | --- |
-| A1: durable audit schema/store, newest-first reads, secret-key rejection | `migrations/001_init.sql`, `bot/store.go`, and `bot/audit.go`; isolated Postgres audit round trips/order/bounds/validation in `bot/store_integration_test.go`, and payload-policy tests in `bot/store_test.go`. |
+| A1: durable audit schema/store, newest-first reads, secret-key rejection | `migrations/0001_init.sql`, `bot/store.go`, and `bot/audit.go`; isolated Postgres audit round trips/order/bounds/validation in `bot/store_integration_test.go`, and payload-policy tests in `bot/store_test.go`. |
 | A2: five roles/sources, permissions, nonblocking audit fallback | `bot/runtime.go` implements role policy, outcome construction, bounded FIFO writes, overflow readiness, and flush. `runtime_test.go` covers the role matrix, absent/failed/blocked storage, snapshots, queue order/capacity, cancellation, and shutdown. |
 | A3: preserve fixed Twitch commands, record outcomes/session metadata without raw secrets | Built-in dispatcher/executor and `http/bot_audit_test.go` cover allowed, denied, invalid, unsupported, cooldown, alias, event/session links, history-before-audit, and delivery while audit is blocked. |
 | A4: operator status/audit API, counts, linked dashboard | `http/routes.go`, bot handlers, Chat/BotWorkspace and route metadata. Auth/unavailable-storage contracts cover the API; browser routes/status/audit and session export workflows cover the operator surface. |
@@ -40,6 +40,8 @@ Postgres-enabled tests create/drop their own schemas. The complete backend race 
 | Browser build isolation | [Controlled artifact comparison](2026-10-06-browser-artifact-build-isolation.md) reproduced generated browser evidence changing CSS, then verified exact artifact-free CSS after both browser result/report directories were Git-ignored. Existing Docker context exclusions already cover them. |
 | Compose wiring/exposure | [Compose drill](2026-10-06-compose-wiring.md): health dependencies, product service DNS/storage, named volumes, restart/report persistence, exposure forwarding and nonlocal secret warnings. |
 | Current routes/styles/user notes | `dashboardRoutes.ts`, Overlays/Settings/Scenes/Health/Sessions, stylesheet imports, and browser route/demo checks are authoritative. Original notes now describe current primary routes and preserve legacy/design history. |
+
+The resumed run also verified [fresh-database fixture isolation](2026-10-06-fresh-postgres-test-isolation.md), correcting cache/session-audit fixture dependencies and concurrent extension setup that a migrated database had hidden.
 
 ## Verification record
 

@@ -3,51 +3,15 @@ package bot
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
-
-	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
-	"git.subcult.tv/PatrickFanella/over-laid/internal/sessions"
 )
 
 func TestAuditForSessionPostgres(t *testing.T) {
-	databaseURL := os.Getenv("OVERLAID_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set OVERLAID_TEST_DATABASE_URL to a disposable Postgres database")
-	}
+	store, _ := isolatedPostgresBotStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	eventStore, err := history.NewPostgres(databaseURL, 250)
-	if err != nil {
-		t.Fatalf("initialize event schema: %v", err)
-	}
-	t.Cleanup(func() { _ = eventStore.Close() })
-	sessionStore, err := sessions.NewPostgres(databaseURL)
-	if err != nil {
-		t.Fatalf("initialize session schema: %v", err)
-	}
-	t.Cleanup(func() { _ = sessionStore.Close() })
-	store, err := NewPostgres(databaseURL)
-	if err != nil {
-		t.Fatalf("initialize bot store: %v", err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-
-	// Insert ended fixtures directly so tests never end another active session.
 	sessionIDs := []string{}
-	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cleanupCancel()
-		for _, id := range sessionIDs {
-			if _, err := store.db.ExecContext(cleanupCtx, `DELETE FROM bot_audit_events WHERE stream_session_id = $1`, id); err != nil {
-				t.Errorf("remove fixture audit: %v", err)
-			}
-			if _, err := store.db.ExecContext(cleanupCtx, `DELETE FROM stream_sessions WHERE id = $1`, id); err != nil {
-				t.Errorf("remove fixture session: %v", err)
-			}
-		}
-	})
 	for i := 0; i < 3; i++ {
 		var id string
 		if err := store.db.QueryRowContext(ctx, `INSERT INTO stream_sessions (title, kind, ended_at) VALUES ('Bot audit test fixture', 'rehearsal', now()) RETURNING id`).Scan(&id); err != nil {
