@@ -107,11 +107,11 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
 
   const selectedReward = useMemo(() => rewards.find((reward) => reward.id === selectedRewardId), [rewards, selectedRewardId]);
   const selectedRewardRule = useMemo(
-    () => (selectedReward ? findMatchingChannelPointRule(channelPointRules, selectedReward.title) : undefined),
+    () => (selectedReward ? findMatchingChannelPointRule(channelPointRules, selectedReward.title, selectedReward.id) : undefined),
     [channelPointRules, selectedReward],
   );
   const redemptionsWithRules = useMemo(
-    () => redemptions.map((redemption) => ({ redemption, matchedRule: findMatchingChannelPointRule(channelPointRules, redemption.reward.title) })),
+    () => redemptions.map((redemption) => ({ redemption, matchedRule: findMatchingChannelPointRule(channelPointRules, redemption.reward.title, redemption.reward.id) })),
     [channelPointRules, redemptions],
   );
 
@@ -358,6 +358,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
               {selectedReward.is_in_stock === false ? <Tag tone="bad">Out of stock</Tag> : null}
             </div>
           </div>
+          <p className="desk-row__meta mono">Reward ID: {selectedReward.id}</p>
           {selectedRewardRule?.fulfillmentNote ? <p className="desk-row__text">Fulfillment note: {selectedRewardRule.fulfillmentNote}</p> : <Empty>No saved channel-point rule match.</Empty>}
           <p className="desk-row__text">Pause or disable first when you need a reversible change. Delete is permanent and may fulfill pending redemptions on Twitch.</p>
           <div className="flex flex-wrap gap-2">

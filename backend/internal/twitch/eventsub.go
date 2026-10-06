@@ -485,7 +485,7 @@ func (p *channelPointProcessor) events(message EventSubMessage, rules interactio
 	user := firstNonEmpty(stringValue(event, "user_name"), stringValue(event, "user_login"), "Someone")
 	input := stringValue(event, "user_input")
 
-	if rule, ok := interactions.MatchChannelPointRule(rules, rewardTitle); ok {
+	if rule, ok := interactions.MatchChannelPointReward(rules, stringValue(nestedMap(event, "reward"), "id"), rewardTitle); ok {
 		if rule.CooldownSeconds > 0 && p.coolingDown(rule, event) {
 			return []events.Event{events.NewCommand("twitch", "Channel point reward cooling down", "Matched reward is cooling down", events.SeverityWarning, map[string]any{
 				"action":          "cooldown",

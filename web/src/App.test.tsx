@@ -1232,3 +1232,21 @@ describe('twitch interaction rule helpers', () => {
     expect(findMatchingChannelPointRule([], 'hydrate')).toBeUndefined();
   });
 });
+
+describe('reward ID mapping', () => {
+  it('prefers stable IDs over titles and never matches an ID rule by its label', () => {
+    const rules = [
+      { rewardTitle: 'Renamed', action: 'ignore' as const, enabled: true, fulfillmentNote: 'Title fallback' },
+      { rewardId: 'stable-id', rewardTitle: 'Original', action: 'alert' as const, enabled: true, fulfillmentNote: 'ID note' },
+    ];
+    expect(findMatchingChannelPointRule(rules, 'Renamed', 'stable-id')?.fulfillmentNote).toBe('ID note');
+    expect(findMatchingChannelPointRule(rules, 'Original', 'other-id')).toBeUndefined();
+    expect(findMatchingChannelPointRule(rules, 'Renamed', 'other-id')?.fulfillmentNote).toBe('Title fallback');
+  });
+  it('preserves reward IDs through JSON import and saved draft editing', () => {
+    const rules = normalizeImportedTwitchInteractionRules({ chatAliases: [], channelPointRules: [{ rewardId: ' stable-id ', action: 'alert', enabled: true, fulfillmentNote: 'ID note' }] });
+    expect(rules.channelPointRules[0]).toMatchObject({ rewardId: 'stable-id', rewardTitle: '' });
+    expect(updateTwitchRewardRule(rules, 0, { rewardTitle: 'Renamed' }).channelPointRules[0].rewardId).toBe('stable-id');
+    expect(rules.channelPointRules[0].rewardTitle).toBe('');
+  });
+});

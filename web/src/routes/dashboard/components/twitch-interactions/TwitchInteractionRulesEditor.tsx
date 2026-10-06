@@ -118,7 +118,7 @@ export function TwitchInteractionRulesEditor({ apiBaseUrl, operatorSecret, rules
 
         <SubPanel title="Channel point rewards">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="desk-row__text">An exact reward title match can alert, show BRB, clear, or be ignored. Cooldowns and fulfillment notes are optional.</p>
+            <p className="desk-row__text">Match a reward by ID to keep its rule through title changes, or leave ID blank for an exact title match. Actions, cooldowns, and fulfillment notes apply to the matched reward.</p>
             <button className="desk-btn desk-btn--small" type="button" onClick={addReward}>
               Add reward
             </button>
@@ -129,7 +129,10 @@ export function TwitchInteractionRulesEditor({ apiBaseUrl, operatorSecret, rules
               {rules.channelPointRules.map((rule, index) => (
                 <li key={`${rule.rewardTitle || 'reward'}-${index}`} className={`desk-row ${rule.enabled ? '' : 'desk-row--warn'}`}>
                   <div className="grid gap-2 md:grid-cols-2">
-                    <Field label="Reward title" className="md:col-span-2">
+                    <Field label="Reward ID (optional)" className="md:col-span-2">
+                      <input className="desk-input mono" type="text" maxLength={128} value={rule.rewardId ?? ''} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { rewardId: event.target.value }))} placeholder="Twitch reward ID" />
+                    </Field>
+                    <Field label={rule.rewardId?.trim() ? 'Reward title (label)' : 'Reward title'} className="md:col-span-2">
                       <input className="desk-input" type="text" value={rule.rewardTitle} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { rewardTitle: event.target.value }))} placeholder="Hydrate break" />
                     </Field>
                     <Field label="Action">

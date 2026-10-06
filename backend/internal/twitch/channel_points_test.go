@@ -96,3 +96,16 @@ func TestRewardCooldownTitleFallbackAndConfigurationChanges(t *testing.T) {
 		t.Fatal("zero cooldown blocked reward")
 	}
 }
+
+func TestRewardIDRuleRoutesRenamedNotification(t *testing.T) {
+	client := &Client{}
+	rules := interactions.Rules{ChannelPointRules: []interactions.ChannelPointRule{{RewardTitle: "Renamed", Action: "ignore", Enabled: true}, {RewardID: "stable-id", RewardTitle: "Original label", Action: "brb", Enabled: true, CooldownSeconds: 30, Message: "{reward} for {user}"}}}
+	got := client.eventsForNotification(redemptionFixture("channel", "stable-id", "Renamed"), rules)
+	if len(got) != 1 || got[0].Type != events.EventTypeBRB || got[0].Message != "Renamed for Viewer" {
+		t.Fatalf("renamed ID notification=%#v", got)
+	}
+	cooling := client.eventsForNotification(redemptionFixture("channel", "stable-id", "Another rename"), rules)
+	if len(cooling) != 1 || cooling[0].Data["action"] != "cooldown" {
+		t.Fatalf("ID mapping lost cooldown on rename: %#v", cooling)
+	}
+}

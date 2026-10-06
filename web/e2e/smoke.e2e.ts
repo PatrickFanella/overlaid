@@ -232,6 +232,48 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
   });
 
+  test('saves reward ID rules and matches renamed reward queue notes', async ({ page }) => {
+    let saved = false;
+    const rules = { chatAliases: [], channelPointRules: [
+      { rewardId: 'stable-id', rewardTitle: 'Original title', action: 'alert', enabled: true, fulfillmentNote: 'Stable reward note' },
+      { rewardTitle: 'Renamed reward', action: 'ignore', enabled: true, fulfillmentNote: 'Title fallback note' },
+    ] };
+    await page.route('**/api/twitch/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/interactions')) {
+        if (route.request().method() === 'PUT') {
+          const payload = route.request().postDataJSON().rules;
+          expect(payload.channelPointRules[0].rewardId).toBe('stable-id');
+          expect(payload.channelPointRules[0].rewardTitle).toBe('Edited label');
+          saved = true;
+          rules.channelPointRules = payload.channelPointRules;
+        }
+        await route.fulfill({ json: { rules } });
+      } else if (path.endsWith('/redemptions')) {
+        await route.fulfill({ json: { redemptions: [{ id: 'redemption-1', user_name: 'Viewer', user_input: 'Hello', status: 'UNFULFILLED', redeemed_at: '2026-10-06T00:00:00Z', reward: { id: 'stable-id', title: 'Renamed reward' } }] } });
+      } else if (path.endsWith('/rewards')) {
+        await route.fulfill({ json: { rewards: [{ id: 'stable-id', title: 'Renamed reward', cost: 100, is_enabled: true }] } });
+      } else {
+        await route.fallback();
+      }
+    });
+    await page.goto('/dashboard/settings');
+    await page.getByLabel('Secret header').fill('browser-fixture');
+    await page.goto('/dashboard/chat');
+    const editor = page.locator('#twitch-rules');
+    await expect(editor.getByLabel('Reward ID (optional)').first()).toHaveValue('stable-id');
+    await editor.getByLabel('Reward title (label)', { exact: true }).fill('Edited label');
+    await editor.getByRole('button', { name: 'Save rules', exact: true }).click();
+    await expect.poll(() => saved).toBe(true);
+    const queue = page.locator('#reward-queue');
+    await queue.getByRole('button', { name: 'Load rewards', exact: true }).click();
+    await expect(queue.getByText('Reward ID: stable-id', { exact: true })).toBeVisible();
+    await expect(queue.getByText('Fulfillment note: Stable reward note')).toBeVisible();
+    await expect(queue.getByText('Fulfillment note: Title fallback note')).toHaveCount(0);
+    await queue.getByRole('button', { name: 'Load unfulfilled', exact: true }).click();
+    await expect(queue.getByText('Fulfillment note: Stable reward note')).toHaveCount(2);
+  });
+
   test('edits commands independently, retries failed drafts, and preserves successful writes after refresh failure', async ({ page }) => {
     let releaseSave!: () => void;
     const delayedSave = new Promise<void>((resolve) => { releaseSave = resolve; });

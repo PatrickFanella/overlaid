@@ -153,6 +153,14 @@ Reward cooldowns now belong to each EventSub client's channel-point processor ra
 
 Offline tests cover sixty-four simultaneous redemptions producing one alert and sixty-three cooldown diagnostics, separate clients/channels/reward IDs, renames, fallback title normalization, exact expiry, expired-entry cleanup, and cooldown configuration changes. The single-notification mapping helpers remain isolated; production notification processing retains client-owned state. Verification passed: `make verify`, all fourteen browser smoke tests, Twitch/HTTP race tests, and `make smoke API_PORT=8081`. Stable reward-ID rule matching remains the next mapping gap.
 
+## October 6 stable reward-ID rule mapping
+
+Channel-point rules now accept an optional `rewardId`. Enabled ID rules match first and retain their behavior through title changes; their title is only a label. Rules without an ID retain exact case-insensitive title matching. ID rules cannot fall back to their labels, disabled rules are skipped, ID-only rules are supported, and normalization deduplicates IDs independently from title rules.
+
+The dashboard edits reward IDs and labels, preserves IDs through import/export and saved drafts, and applies the same precedence to selected reward and redemption fulfillment notes. Go tests cover matching/normalization, file round trips, renamed EventSub output and cooldown continuity. Frontend tests cover matching and ID-only imports. A browser workflow saves the ID rule and verifies both renamed reward and redemption notes.
+
+Verification passed: `make verify` (95 frontend tests and the Go suite), all fifteen browser smoke checks, interactions/Twitch/HTTP race tests, and `make smoke API_PORT=8081`. The native API saved and reloaded an ID rule from Postgres, the collaborative browser displayed its ID and label fields, and an API restart preserved it. Original interaction rules were restored after the fixture.
+
 ---
 
 ## File structure
@@ -364,9 +372,9 @@ Build the spine before adding feature breadth.
 
 ## Milestone E: Channel points parity
 
-- Expand exact-title rules into richer reward mappings.
+- [x] Expand exact-title rules into richer reward mappings (October 6: stable reward IDs, label-only titles, ID precedence, legacy fallback, editor/import/export and queue note matching).
 - [x] Add per-reward cooldowns and templates (October 6: client-owned atomic reservations, identity/channel isolation, expiry/configuration tests, and reward/user/input template fixtures).
-- Reward queue shows fulfillment notes alongside selected rewards and matching redemptions.
+- [x] Reward queue shows fulfillment notes alongside selected rewards and matching redemptions (October 6: renamed ID-based reward and redemption browser workflow).
 - Twitch reward management has minimal create/delete controls after scoped API research; advanced fields and safer disable/pause lifecycle remain follow-up.
 
 ---

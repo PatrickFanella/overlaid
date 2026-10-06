@@ -145,6 +145,7 @@ export type ChatAliasRule = {
 };
 
 export type ChannelPointRule = {
+  rewardId?: string;
   rewardTitle: string;
   action: 'alert' | 'brb' | 'clear' | 'ignore';
   title?: string;

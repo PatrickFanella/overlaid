@@ -188,3 +188,44 @@ func TestReplaceWithEmptyPathUpdatesMemoryOnly(t *testing.T) {
 		t.Fatalf("store rules = %#v, want %#v", store.Rules(), want)
 	}
 }
+
+func TestRewardIDMatchingPrecedenceRenameAndTitleFallback(t *testing.T) {
+	rules := Rules{ChannelPointRules: []ChannelPointRule{{RewardTitle: "Renamed", Action: "ignore", Enabled: true}, {RewardID: " reward-1 ", RewardTitle: "Original", Action: "alert", Enabled: true}, {RewardID: "disabled-id", RewardTitle: "Disabled label", Action: "clear", Enabled: false}}}
+	matched, ok := MatchChannelPointReward(rules, "reward-1", "Renamed")
+	if !ok || matched.Action != "alert" || matched.RewardID != "reward-1" {
+		t.Fatalf("ID did not take precedence after rename: %#v, %t", matched, ok)
+	}
+	if matched, ok := MatchChannelPointReward(rules, "other-id", "Original"); ok {
+		t.Fatalf("ID rule fell back to its title: %#v", matched)
+	}
+	if _, ok := MatchChannelPointReward(rules, "disabled-id", "Disabled label"); ok {
+		t.Fatal("disabled ID rule matched")
+	}
+	if matched, ok := MatchChannelPointReward(rules, "other-id", " renamed "); !ok || matched.Action != "ignore" {
+		t.Fatalf("legacy title fallback=%#v, %t", matched, ok)
+	}
+	if _, ok := MatchChannelPointRule(rules, "Original"); ok {
+		t.Fatal("title-only matcher executed ID rule without ID")
+	}
+}
+
+func TestRewardIDNormalizationAndFileRoundTrip(t *testing.T) {
+	rules := Rules{ChannelPointRules: []ChannelPointRule{{RewardID: "one", RewardTitle: "Same", Action: "alert", Enabled: true}, {RewardID: "two", RewardTitle: "Same", Action: "clear", Enabled: true}, {RewardID: "one", RewardTitle: "Duplicate", Action: "ignore", Enabled: true}, {RewardID: "id-only", Action: "brb", Enabled: true}, {RewardTitle: "Same", Action: "ignore", Enabled: true}, {RewardID: strings.Repeat("x", 129), Action: "alert", Enabled: true}}}
+	normalized := Normalize(rules)
+	if len(normalized.ChannelPointRules) != 4 {
+		t.Fatalf("ID deduplication/validation=%#v", normalized)
+	}
+	path := filepath.Join(t.TempDir(), "rules.json")
+	store := New(path)
+	if _, err := store.Replace(rules); err != nil {
+		t.Fatal(err)
+	}
+	loaded := New(path)
+	if err := loaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	matched, ok := MatchChannelPointReward(loaded.Rules(), "id-only", "New title")
+	if !ok || matched.Action != "brb" || matched.RewardID != "id-only" {
+		t.Fatalf("ID-only round trip=%#v, %t", matched, ok)
+	}
+}
