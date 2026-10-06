@@ -115,7 +115,7 @@ Audit validation now rejects API-key and private-key names in camel case, unders
 
 Verification passed: bot/HTTP/Twitch race tests with Postgres integration tests enabled, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, and `make smoke API_PORT=8081`. Native bot status reports configured storage and command/timer/audit counts.
 
-A2's nonblocking recording requirement remains open: audit errors are nonfatal and missing storage no longer panics, but `Runtime.Record` still waits synchronously for a recorder. A stalled writer can delay subsequent command publication. This needs an execution-path change before the item can be closed.
+A2's command recording now uses a bounded FIFO queue with one worker that exits when idle. `Runtime.Record` snapshots audit data and returns without waiting for storage; each write gets a five-second deadline. Queue overflow records a readiness error and drops the new audit rather than delaying commands. Dashboard mutation receipts retain synchronous recording. Shutdown waits for HTTP requests and drains pending command audits within its ten-second budget. Tests hold an audit writer open while both diagnostic and action events reach the bus, exercise queue capacity/order/cancellation/snapshots/restart and bounded flush, and verify queued persistence and event foreign keys against isolated Postgres. Event history is appended before the command audit is queued. Verification passed: `make verify`, all fourteen browser smoke checks, bot/HTTP/Twitch race tests with Postgres enabled, and `make smoke API_PORT=8081`.
 
 ---
 
@@ -181,7 +181,7 @@ Build the spine before adding feature breadth.
 - [x] Define roles: `viewer`, `moderator`, `broadcaster`, `operator`, `system`.
 - [x] Define sources: `chat`, `channel_point`, `dashboard`, `timer`, `webhook`.
 - [x] Implement role comparison so broadcaster/operator/system can run everything, moderator can run moderator-safe commands, viewer can only run viewer-safe response commands (October 6: full role matrix and custom-command execution tests).
-- [ ] Implement `Runtime.Record(ctx, AuditEvent)` wrapper that never blocks command execution if audit storage is unavailable.
+- [x] Implement `Runtime.Record(ctx, AuditEvent)` wrapper that never blocks command execution if audit storage is unavailable (October 6: bounded queue, blocked-writer delivery proof, overflow readiness, shutdown drain).
 - [x] Test allowed/denied role decisions and audit fallback behavior (role matrix, unavailable store, failed-write delivery tests).
 - [x] Run `cd backend && go test ./internal/bot`.
 - [x] Commit: `feat: add bot runtime permissions` (`d030b9e`; privileged-role correction `ab76809`).

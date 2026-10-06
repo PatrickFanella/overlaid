@@ -260,3 +260,35 @@ func TestTimerSchedulerEventAndAuditPersistencePostgres(t *testing.T) {
 		t.Fatalf("next scheduled run missing: published=%d audit=%d err=%v", len(published), total, err)
 	}
 }
+
+func TestRuntimeQueuedAuditPersistencePostgres(t *testing.T) {
+	store, eventStore := isolatedPostgresBotStore(t)
+	runtime := NewRuntime(store)
+	for _, command := range []string{"first", "second", "third"} {
+		event := events.Event{ID: "queued-" + command, Type: events.EventTypeCommand, Source: "twitch", Message: command}
+		if err := eventStore.Append(event); err != nil {
+			t.Fatal(err)
+		}
+		runtime.RecordOutcome(context.Background(), AuditOutcome{Source: SourceChat, ActorRole: RoleViewer, Command: command, Result: ResultAllowed, EventID: event.ID})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := runtime.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	audits, err := store.RecentAudit(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(audits) != 3 {
+		t.Fatalf("queued audit count=%d", len(audits))
+	}
+	for i, name := range []string{"third", "second", "first"} {
+		if audits[i].Command != name || audits[i].EventID != "queued-"+name {
+			t.Fatalf("queued audit order: %#v", audits)
+		}
+	}
+	if runtime.LastAuditError() != "" {
+		t.Fatal(runtime.LastAuditError())
+	}
+}

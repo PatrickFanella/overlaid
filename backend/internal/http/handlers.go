@@ -526,7 +526,6 @@ func (s *Server) publishEventSubEvent(event events.Event) {
 func (s *Server) publishEvent(event events.Event) {
 	s.nowPlaying.Observe(event)
 	s.sendOutboundChatForEvent(context.Background(), event)
-	s.recordBotAuditForEvent(context.Background(), event)
 	if s.bus != nil {
 		s.bus.Publish(event)
 	}
@@ -535,6 +534,7 @@ func (s *Server) publishEvent(event events.Event) {
 			log.Printf("failed to append event history: %v", err)
 		}
 	}
+	s.recordBotAuditForEvent(context.Background(), event)
 }
 
 func (s *Server) eventHistory(w http.ResponseWriter, r *http.Request) {

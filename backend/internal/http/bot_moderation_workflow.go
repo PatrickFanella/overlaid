@@ -347,7 +347,7 @@ func (w *moderationWorkflow) recordNukeWorkflowAudit(ctx context.Context, action
 	if err != nil || s.botRuntime == nil {
 		return
 	}
-	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "nuke_workflow", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "nuke_workflow", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
 }
 
 func (w *moderationWorkflow) recordModerationActionAudit(ctx context.Context, request botModerationActionRequest, result, reason string) {
@@ -357,7 +357,7 @@ func (w *moderationWorkflow) recordModerationActionAudit(ctx context.Context, re
 	}
 	data := map[string]any{"targetUserId": strings.TrimSpace(request.TargetUserID), "targetUserLogin": strings.TrimSpace(request.TargetUserLogin), "messageId": strings.TrimSpace(request.MessageID), "durationSeconds": request.DurationSeconds}
 	action := strings.ToLower(strings.TrimSpace(request.Action))
-	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "moderation_action", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "moderation_action", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
 }
 
 func twitchEventString(event events.Event, key string) string {

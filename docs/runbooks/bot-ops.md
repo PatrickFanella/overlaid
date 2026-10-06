@@ -251,3 +251,9 @@ Changing any nuke plan setting clears the displayed plan and confirmation. Plan 
 - If `bot_runtime` is degraded, inspect `DATABASE_URL`, Postgres health, and API logs.
 - If audit is empty after commands, confirm EventSub chat is connected and `/overlay/debug` sees chat command diagnostics.
 - Bot audit data intentionally rejects secret-looking keys. Do not store tokens, passwords, cookies, authorization headers, or raw webhook secrets.
+
+## Audit delivery under storage pressure
+
+Twitch command audits enter a FIFO queue with one writer, up to 128 waiting records, and a five-second deadline per write. Command diagnostics and actions continue while the writer waits. Audit rows can appear shortly after the command; dashboard mutation receipts still wait for their audit attempt. Command audit snapshots retain the event and active session IDs captured at publication, after the event history append attempt.
+
+If storage fails or the queue fills, bot readiness and `lastAuditError` report the error. A full queue drops new audit records, so review the storage problem before treating the audit as a complete command history. Graceful shutdown drains accepted audits within the shared ten-second shutdown budget; a crash can lose queued records.

@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Role string
@@ -61,6 +62,8 @@ type Runtime struct {
 	recorder AuditRecorder
 	mu       sync.RWMutex
 	lastErr  string
+	queue    []auditJob
+	idle     chan struct{}
 }
 
 func NewRuntime(recorder AuditRecorder) *Runtime {
@@ -71,7 +74,74 @@ func (r *Runtime) Allowed(actor Role, required Role) bool {
 	return RoleAllows(actor, required)
 }
 
+const auditQueueCapacity = 128
+const auditWriteTimeout = 5 * time.Second
+
+type auditJob struct {
+	context context.Context
+	event   AuditEvent
+}
+
+// Record queues an immutable audit snapshot without waiting for storage. One
+// worker preserves enqueue order and exits when idle; overload is observable.
 func (r *Runtime) Record(ctx context.Context, event AuditEvent) {
+	if r == nil || r.recorder == nil {
+		return
+	}
+	event.Data = append(json.RawMessage(nil), event.Data...)
+	r.mu.Lock()
+	if len(r.queue) >= auditQueueCapacity {
+		r.lastErr = "bot audit queue full; audit event dropped"
+		r.mu.Unlock()
+		return
+	}
+	r.queue = append(r.queue, auditJob{context.WithoutCancel(ctx), event})
+	if r.idle == nil {
+		r.idle = make(chan struct{})
+		go r.drain()
+	}
+	r.mu.Unlock()
+}
+
+func (r *Runtime) drain() {
+	for {
+		r.mu.Lock()
+		if len(r.queue) == 0 {
+			close(r.idle)
+			r.idle = nil
+			r.mu.Unlock()
+			return
+		}
+		job := r.queue[0]
+		r.queue[0] = auditJob{}
+		r.queue = r.queue[1:]
+		r.mu.Unlock()
+		ctx, cancel := context.WithTimeout(job.context, auditWriteTimeout)
+		r.recordAndWait(ctx, job.event)
+		cancel()
+	}
+}
+
+// Flush waits for currently queued work, bounded by the caller's deadline.
+func (r *Runtime) Flush(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	idle := r.idle
+	r.mu.RUnlock()
+	if idle == nil {
+		return nil
+	}
+	select {
+	case <-idle:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *Runtime) recordAndWait(ctx context.Context, event AuditEvent) {
 	if r == nil || r.recorder == nil {
 		return
 	}
@@ -83,6 +153,11 @@ func (r *Runtime) Record(ctx context.Context, event AuditEvent) {
 
 func (r *Runtime) RecordOutcome(ctx context.Context, outcome AuditOutcome) {
 	r.Record(ctx, AuditEventFromOutcome(outcome))
+}
+
+// RecordOutcomeAndWait keeps dashboard mutation receipts readable immediately.
+func (r *Runtime) RecordOutcomeAndWait(ctx context.Context, outcome AuditOutcome) {
+	r.recordAndWait(ctx, AuditEventFromOutcome(outcome))
 }
 
 func AuditEventFromOutcome(outcome AuditOutcome) AuditEvent {

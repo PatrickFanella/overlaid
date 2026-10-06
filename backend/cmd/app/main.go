@@ -29,12 +29,17 @@ func main() {
 		WriteTimeout:      0, // SSE streams stay open; per-request handlers validate body sizes.
 		IdleTimeout:       60 * time.Second,
 	}
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			log.Printf("over-laid API shutdown failed: %v", err)
+		}
+		if err := server.FlushBotAudit(shutdownCtx); err != nil {
+			log.Printf("bot audit shutdown drain failed: %v", err)
 		}
 	}()
 
@@ -42,4 +47,6 @@ func main() {
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+	stop()
+	<-shutdownDone
 }

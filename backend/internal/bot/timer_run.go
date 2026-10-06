@@ -31,11 +31,11 @@ func RunTimerOnce(ctx context.Context, store TimerReader, runtime *Runtime, id, 
 	if strings.TrimSpace(event.Message) == "" {
 		outcome.Result = ResultFailed
 		outcome.Reason = "timer_response_empty"
-		runtime.RecordOutcome(ctx, outcome)
+		runtime.RecordOutcomeAndWait(ctx, outcome)
 		return events.Event{}, ErrEmptyTimerResponse
 	}
 	publish(event)
 	outcome.EventID = event.ID
-	runtime.RecordOutcome(ctx, outcome)
+	runtime.RecordOutcomeAndWait(ctx, outcome)
 	return event, nil
 }

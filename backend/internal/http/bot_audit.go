@@ -134,7 +134,7 @@ func (s *Server) recordBotTimerChange(ctx context.Context, timer bot.Timer, oper
 	if result == bot.ResultFailed {
 		reason = "timer_configuration_failed"
 	}
-	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{
 		Source: bot.SourceDashboard, ActorRole: bot.RoleOperator,
 		Trigger: "timer_configuration", Command: timer.Name,
 		Action: "timer_" + operation, Result: result, Reason: reason,
@@ -150,7 +150,7 @@ func (s *Server) recordBotCommunityChange(ctx context.Context, kind, operation, 
 	if result == bot.ResultFailed {
 		reason = kind + "_configuration_failed"
 	}
-	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{
 		Source: bot.SourceDashboard, ActorRole: bot.RoleOperator,
 		Trigger: kind + "_configuration", Command: name,
 		Action: kind + "_" + operation, Result: result, Reason: reason,

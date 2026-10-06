@@ -340,3 +340,8 @@ func mprisSessionBusAvailable() bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
 }
+
+// FlushBotAudit drains accepted command audits during orderly shutdown.
+func (s *Server) FlushBotAudit(ctx context.Context) error {
+	return s.botRuntime.Flush(ctx)
+}

@@ -13,6 +13,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 )
 
@@ -45,6 +46,7 @@ func TestTwitchCommandsPublishWithoutBotStorage(t *testing.T) {
 			}
 			for _, event := range produced {
 				server.publishEventSubEvent(event)
+				flushBotAudit(t, server)
 			}
 			for _, event := range produced {
 				select {
@@ -69,6 +71,7 @@ func TestTwitchCommandDeliverySurvivesAuditStorageFailure(t *testing.T) {
 	produced := server.twitchCommandProcessor.Handle(twitch.ChatCommand{Name: "alert", Args: "local rehearsal"}, twitch.ChatCommandUser{Name: "Streamer", IsBroadcaster: true})
 	for _, event := range produced {
 		server.publishEventSubEvent(event)
+		flushBotAudit(t, server)
 	}
 	for _, event := range produced {
 		select {
@@ -97,6 +100,7 @@ func TestCustomCommandAuditRetainsUnknownVariablesWithoutRawPayload(t *testing.T
 	produced[0].Data["rawEventSub"] = map[string]any{"payload": "PRIVATE_RAW_PAYLOAD"}
 	for _, event := range produced {
 		server.recordBotAuditForEvent(context.Background(), event)
+		flushBotAudit(t, server)
 	}
 	if len(recorder.events) != 1 {
 		t.Fatalf("expected one diagnostic audit, got %#v", recorder.events)
@@ -149,6 +153,7 @@ func TestTwitchCommandExecutionAuditsEveryOutcome(t *testing.T) {
 			before := len(recorder.events)
 			for _, event := range produced {
 				server.publishEventSubEvent(event)
+				flushBotAudit(t, server)
 			}
 			if len(recorder.events) != before+1 {
 				t.Fatalf("expected exactly one command audit, got %#v", recorder.events[before:])
@@ -204,6 +209,7 @@ func TestRecordBotAuditForAcceptedTwitchCommand(t *testing.T) {
 	})
 
 	server.recordBotAuditForEvent(context.Background(), event)
+	flushBotAudit(t, server)
 
 	if len(recorder.events) != 1 {
 		t.Fatalf("expected one audit event, got %#v", recorder.events)
@@ -228,6 +234,7 @@ func TestRecordBotAuditForDeniedTwitchCommand(t *testing.T) {
 	})
 
 	server.recordBotAuditForEvent(context.Background(), event)
+	flushBotAudit(t, server)
 
 	if len(recorder.events) != 1 {
 		t.Fatalf("expected one audit event, got %#v", recorder.events)
@@ -369,5 +376,107 @@ func TestRecordBotCommunityChangesUsesSafeMetadata(t *testing.T) {
 	}
 	if event := recorder.events[7]; event.Result != "failed" || event.Reason != "quote_configuration_failed" {
 		t.Fatalf("unexpected failed quote audit: %#v", event)
+	}
+}
+
+func flushBotAudit(t *testing.T, server *Server) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := server.FlushBotAudit(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type blockedCommandAuditRecorder struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *blockedCommandAuditRecorder) RecordAudit(ctx context.Context, event bot.AuditEvent) (bot.AuditEvent, error) {
+	close(r.started)
+	select {
+	case <-r.release:
+		return event, nil
+	case <-ctx.Done():
+		return bot.AuditEvent{}, ctx.Err()
+	}
+}
+
+func TestTwitchCommandPublishesActionWhileAuditWriterIsBlocked(t *testing.T) {
+	recorder := &blockedCommandAuditRecorder{started: make(chan struct{}), release: make(chan struct{})}
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+	server.botRuntime = bot.NewRuntime(recorder)
+	t.Cleanup(func() { close(recorder.release); flushBotAudit(t, server) })
+	produced := server.twitchCommandProcessor.Handle(twitch.ChatCommand{Name: "alert", Args: "Still live"}, twitch.ChatCommandUser{Name: "Streamer", IsBroadcaster: true})
+	if len(produced) != 2 {
+		t.Fatalf("expected diagnostic and action: %#v", produced)
+	}
+	done := make(chan struct{})
+	go func() {
+		for _, event := range produced {
+			server.publishEventSubEvent(event)
+		}
+		close(done)
+	}()
+	select {
+	case <-recorder.started:
+	case <-time.After(time.Second):
+		t.Fatal("audit writer did not start")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stalled audit writer blocked command publication")
+	}
+	for _, event := range produced {
+		select {
+		case got := <-client.Events:
+			if got.ID != event.ID {
+				t.Fatalf("wrong event: %#v", got)
+			}
+		default:
+			t.Fatal("action not delivered before audit writer released")
+		}
+	}
+}
+
+type historyCheckingAuditRecorder struct {
+	history eventHistoryStore
+	found   chan bool
+}
+
+func (r *historyCheckingAuditRecorder) RecordAudit(_ context.Context, event bot.AuditEvent) (bot.AuditEvent, error) {
+	found := false
+	for _, persisted := range r.history.List(10) {
+		if persisted.ID == event.EventID {
+			found = true
+		}
+	}
+	r.found <- found
+	return event, nil
+}
+
+func TestCommandAuditEnqueuesAfterEventHistoryAppend(t *testing.T) {
+	eventStore := history.New("", 10)
+	recorder := &historyCheckingAuditRecorder{history: eventStore, found: make(chan bool, 1)}
+	server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+	server.history, server.historyWritable = eventStore, true
+	server.botRuntime = bot.NewRuntime(recorder)
+	produced := server.twitchCommandProcessor.Handle(twitch.ChatCommand{Name: "alert", Args: "Linked event"}, twitch.ChatCommandUser{Name: "Streamer", IsBroadcaster: true})
+	for _, event := range produced {
+		server.publishEventSubEvent(event)
+	}
+	flushBotAudit(t, server)
+	select {
+	case found := <-recorder.found:
+		if !found {
+			t.Fatal("audit writer ran before its event was persisted")
+		}
+	default:
+		t.Fatal("audit was not recorded")
 	}
 }
