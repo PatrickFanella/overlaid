@@ -2,6 +2,63 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 test.describe('operator browser smoke', () => {
+  test('holds session controls until the ended report returns and preserves a failed report receipt', async ({ page }) => {
+    await page.addInitScript(() => sessionStorage.setItem('overlaid.operatorSecret.session.v1', 'operator-fixture'));
+    const current = { id: 'pending-report', title: 'Fixture session', kind: 'rehearsal', startedAt: '2026-10-06T00:00:00Z', eventCount: 0 };
+    const ended = { ...current, endedAt: '2026-10-06T01:00:00Z' };
+    await page.route('**/api/stream/session', (route) => route.fulfill({ json: { current, recent: [current] } }));
+    await page.route('**/api/stream/session/end', (route) => route.fulfill({ json: ended }));
+    let reports = 0;
+    let releaseReport!: () => void;
+    const blocked = new Promise<void>((resolve) => { releaseReport = resolve; });
+    await page.route('**/api/stream/session/pending-report?*', async (route) => {
+      reports++;
+      if (reports === 1) {
+        await blocked;
+        await route.fulfill({ status: 503, body: 'fixture report offline' });
+      } else await route.fulfill({ json: { session: ended, events: [], snapshots: [] } });
+    });
+    await page.goto('/dashboard/sessions');
+    await page.getByRole('button', { name: 'End session', exact: true }).click();
+    await expect.poll(() => reports).toBe(1);
+    await expect(page.getByRole('button', { name: 'Start rehearsal', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Open latest report', exact: true })).toBeDisabled();
+    releaseReport();
+    await expect(page.getByText('Fixture session ended. Report unavailable; retry from Recent sessions.', { exact: true })).toBeVisible();
+    await expect(page.getByText(/fixture report offline/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start rehearsal', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Open latest report', exact: true }).click();
+    await expect(page.getByText('Fixture session report loaded.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Export JSON', exact: true })).toBeVisible();
+  });
+
+  test('reports unavailable preflight evidence accurately and clears a failed rehearsal after cleanup', async ({ page }) => {
+    await page.addInitScript(() => sessionStorage.setItem('overlaid.operatorSecret.session.v1', 'operator-fixture'));
+    const current = { id: 'preflight-fixture', title: 'Preflight rehearsal', kind: 'rehearsal', startedAt: '2026-10-06T00:00:00Z', eventCount: 0 };
+    const ended = { ...current, endedAt: '2026-10-06T01:00:00Z' };
+    let starts = 0, ends = 0;
+    await page.route('**/api/stream/session', (route) => route.fulfill({ json: { recent: [] } }));
+    await page.route('**/api/stream/session/start', (route) => { starts++; return route.fulfill({ json: current }); });
+    await page.route('**/api/stream/session/end', (route) => { ends++; return route.fulfill({ json: ended }); });
+    await page.route('**/api/stream/session/preflight-fixture?*', (route) => starts === 1
+      ? route.fulfill({ status: 503, body: 'fixture evidence offline' })
+      : route.fulfill({ json: { session: ended, events: [], snapshots: [] } }));
+    await page.route('**/api/events/test-alert', (route) => starts === 1
+      ? route.fulfill({ status: 204 }) : route.fulfill({ status: 503, body: 'fixture alert failed' }));
+    await page.route('**/api/events/brb', (route) => route.fulfill({ status: 204 }));
+    await page.goto('/dashboard/sessions');
+    await page.getByRole('button', { name: 'Run preflight rehearsal', exact: true }).click();
+    await expect(page.getByText('Preflight rehearsal complete. Report unavailable; retry from Recent sessions.', { exact: true })).toBeVisible();
+    await expect(page.getByText(/fixture evidence offline/)).toBeVisible();
+    expect(ends).toBe(1);
+    await page.getByRole('button', { name: 'Run preflight rehearsal', exact: true }).click();
+    await expect(page.getByText(/Preflight failed:.*fixture alert failed/)).toBeVisible();
+    expect(ends).toBe(2);
+    await expect(page.getByRole('button', { name: 'End session', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Start rehearsal', exact: true })).toBeEnabled();
+    await expect(page.getByRole('list', { name: 'Preflight steps' })).toContainText('Sample alert: fail');
+  });
+
   test('confirms an operator sequence, blocks pending controls, logs failure, and allows retry', async ({ page }) => {
     await page.addInitScript(() => {
       sessionStorage.setItem('overlaid.operatorSecret.session.v1', 'operator-fixture');

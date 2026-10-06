@@ -53,3 +53,8 @@ If a session is accidentally left open, starting a new one automatically closes 
 ## Review
 
 Recent sessions appear in `/dashboard/sessions` under **Rehearsal audit**. Click a recent/open session card to load its report. Reports show the selected session, start/end readiness snapshots, and recent events tagged with its `sessionId`. Use **Export Markdown** or **Export JSON** to save the report after a rehearsal.
+
+
+### Lifecycle receipts and report retry
+
+Ending a session keeps lifecycle controls pending through the report request. If the session ends successfully but its report cannot load, the receipt says the session ended and the report is unavailable. Retry from Recent sessions or Open latest report. A completed preflight with unavailable report evidence uses the same distinction. If a preflight step fails and cleanup ends its session, the current-session display clears while the original step failure stays visible.

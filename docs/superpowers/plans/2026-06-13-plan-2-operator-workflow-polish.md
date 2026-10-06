@@ -788,3 +788,10 @@ git push origin main
 5. Task 5 integration/deploy and plan completion update.
 
 Do not combine implementation tasks into one commit. Each task should be independently verified and committed.
+
+
+## October 6 session lifecycle and report receipts
+
+The session panel now separates report reads from the lifecycle operation that owns pending controls. Ending a session awaits its report request; nested report loading no longer releases the outer busy state. Report reads return an explicit success flag, so preflight cannot claim evidence loaded after a failed fetch. Ended-session receipts retain lifecycle success with a report retry hint. Successful cleanup after a failed preflight updates the current/recent session display before preserving the original failure.
+
+Browser fixtures cover a delayed ended report, controls remaining disabled, report failure/retry, successful preflight with unavailable evidence, and failed-step cleanup clearing the current session. All writes are intercepted fixtures. `make verify` passed with 113 frontend tests, all 21 browser workflows passed, and runtime smoke at port 8081 passed.

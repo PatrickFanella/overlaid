@@ -46,10 +46,11 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
       const endedSession = isStreamSession(ended) ? ended : undefined;
       const recent = endedSession ? [endedSession, ...(status?.recent ?? []).filter((item) => item.id !== endedSession.id)].slice(0, 8) : status?.recent ?? [];
       onChange({ recent });
+      let reportLoaded = false;
       if (endedSession) {
-        void loadReport(endedSession.id);
+        reportLoaded = await readReport(endedSession.id);
       }
-      setMessage(endedSession ? `${endedSession.title} ended.` : 'No active session to end.');
+      setMessage(endedSession ? `${endedSession.title} ended. ${reportLoaded ? 'Report loaded.' : 'Report unavailable; retry from Recent sessions.'}` : 'No active session to end.');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Unable to end session.');
     } finally {
@@ -59,17 +60,26 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
 
   async function loadReport(sessionId: string) {
     setBusy(true);
+    try {
+      return await readReport(sessionId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Report reads may belong to a lifecycle workflow that already owns busy.
+  async function readReport(sessionId: string) {
     setReportError('');
     setMessage('Loading session report…');
     try {
       const next = await fetchStreamSessionReport(sessionId, 100, apiBaseUrl, operatorSecret);
       setReport(next);
       setMessage(`${next.session.title} report loaded.`);
+      return true;
     } catch (err) {
       setReportError(err instanceof Error ? err.message : 'Unable to load session report.');
       setMessage('');
-    } finally {
-      setBusy(false);
+      return false;
     }
   }
 
@@ -119,8 +129,8 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
       const endedSession = isStreamSession(ended) ? ended : session;
       const recent = [endedSession, ...(status?.recent ?? []).filter((item) => item.id !== endedSession.id)].slice(0, 8);
       onChange({ recent });
-      await loadReport(endedSession.id);
-      setMessage('Preflight rehearsal complete. Report loaded.');
+      const reportLoaded = await readReport(endedSession.id);
+      setMessage(`Preflight rehearsal complete. ${reportLoaded ? 'Report loaded.' : 'Report unavailable; retry from Recent sessions.'}`);
     } catch (err) {
       const runningStep = Object.entries(stepState).find(([, state]) => state === 'running')?.[0];
       if (runningStep) {
@@ -129,8 +139,10 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
       }
       if (session) {
         try {
-          await endStreamSession(apiBaseUrl, operatorSecret);
-          await loadReport(session.id);
+          const ended = await endStreamSession(apiBaseUrl, operatorSecret);
+          const endedSession = isStreamSession(ended) ? ended : session;
+          onChange({ recent: [endedSession, ...(status?.recent ?? []).filter((item) => item.id !== endedSession.id)].slice(0, 8) });
+          await readReport(session.id);
         } catch {
           // Keep the original preflight failure visible.
         }
