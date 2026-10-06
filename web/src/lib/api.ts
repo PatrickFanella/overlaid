@@ -434,6 +434,15 @@ export async function setBotTimerEnabled(id: string, enabled: boolean, explicitB
   });
 }
 
+export async function runBotTimer(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  return requestJSON<{ eventId: string }>(`/api/bot/timers/${encodeURIComponent(id)}/run`, {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'run bot timer',
+  });
+}
+
 export async function deleteBotTimer(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
   await requestJSON(`/api/bot/timers/${encodeURIComponent(id)}`, {
     method: 'DELETE',

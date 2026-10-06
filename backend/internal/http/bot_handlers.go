@@ -619,6 +619,26 @@ func (s *Server) botTimerSetEnabled(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, timer)
 }
 
+func (s *Server) botTimerRun(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot timers unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	event, err := bot.RunTimerOnce(r.Context(), s.botStore, s.botRuntime, r.PathValue("id"), s.config.TwitchChannel, s.activeSessionID(), s.publishEvent)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			http.Error(w, "bot timer not found", http.StatusNotFound)
+		case errors.Is(err, bot.ErrEmptyTimerResponse):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "bot timer execution unavailable", http.StatusServiceUnavailable)
+		}
+		return
+	}
+	writeJSON(w, map[string]string{"eventId": event.ID})
+}
+
 func (s *Server) botTimerDelete(w http.ResponseWriter, r *http.Request) {
 	if s.botStore == nil {
 		http.Error(w, "bot timers unavailable", http.StatusServiceUnavailable)

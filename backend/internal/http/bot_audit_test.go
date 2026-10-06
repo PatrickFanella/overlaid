@@ -123,3 +123,20 @@ func TestBotAuditReturnsEmptyWhenStoreUnavailable(t *testing.T) {
 func configForBotTest(operatorSecret string) config.Config {
 	return config.Config{AllowedOrigin: "*", OperatorSecret: operatorSecret}
 }
+
+func TestBotTimerRunRequiresOperatorAndStorage(t *testing.T) {
+	server := NewServer(config.Config{OperatorSecret: "operator-secret"}, events.NewBus(4))
+	request := httptest.NewRequest(http.MethodPost, "/api/bot/timers/timer-1/run", nil)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthorized, got %d", recorder.Code)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/api/bot/timers/timer-1/run", nil)
+	request.Header.Set("X-Overlay-Operator-Secret", "operator-secret")
+	recorder = httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected unavailable storage, got %d", recorder.Code)
+	}
+}

@@ -459,6 +459,19 @@ func (s *Store) SaveTimer(ctx context.Context, timer Timer) (Timer, error) {
 	return s.updateTimer(ctx, timer)
 }
 
+func (s *Store) GetTimer(ctx context.Context, id string) (Timer, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Timer{}, errors.New("timer id is required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return scanTimer(s.db.QueryRowContext(ctx, `
+		SELECT id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
+		FROM bot_timers WHERE id = $1
+	`, id))
+}
+
 func (s *Store) SetTimerEnabled(ctx context.Context, id string, enabled bool) (Timer, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {

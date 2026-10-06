@@ -28,7 +28,7 @@ The parity roadmap adds FossaBot-style bot breadth without weakening the existin
 Implemented and verified in committed slices:
 
 - Bot audit storage, runtime permissions, existing Twitch command audit, and `/dashboard/bot` audit/status view.
-- Timer CRUD, dashboard management, safe template rendering, and enabled timer runtime dispatch through ticker/alert events.
+- Timer CRUD, dashboard management, safe template rendering, enabled timer dispatch through ticker/alert events, and an audited Run once rehearsal action that preserves the schedule.
 - Safe custom response commands with role/cooldown checks, template variables, dashboard management, and preview rendering.
 - Guarded outbound Twitch chat replies for custom commands through `user:write:chat`, with per-command response mode `overlay`, `chat`, or `both`.
 - Operator-configured custom API variables using `{api:name}` with GET-only HTTPS fetching, caps, caching, and private-host blocking.
@@ -42,6 +42,16 @@ Deliberately carried forward:
 - Arbitrary inline/custom API URLs supplied by chat or templates.
 - Twitch reward fields still intentionally deferred: skip-request-queue, image/background styling, reward image upload, and any automatic fulfillment behavior. Common guarded fields now live in the reward queue runbook.
 - Cloud-hosted uptime parity with FossaBot; see `docs/superpowers/plans/2026-06-16-fossabot-uptime-parity-options.md` before changing deployment architecture.
+
+---
+
+## October 5 overnight progress
+
+The timer workflow now includes Run once for saved timers, including paused timers. Manual execution publishes the same safe ticker or alert event as the scheduler, records a dashboard/operator audit row with event and session IDs, and leaves the scheduled cadence unchanged. The dashboard shows the last scheduled run and refreshes audit after rehearsal.
+
+Verification passed: `make verify`, `make smoke`, and all six `make smoke-browser` checks. Unit tests cover paused timers, missing timers, empty rendered responses, and audit-storage failure. Browser fixtures cover pending, success, audit refresh, and API failure without Twitch credentials.
+
+Local limits: Docker socket access is unavailable. Native API and Vite processes run on loopback, with disposable data under `/tmp`. Readiness reports missing Twitch configuration and unreachable OBS. Real Postgres and live Twitch/OBS execution have not been verified in this environment.
 
 ---
 
@@ -183,8 +193,8 @@ Build the spine before adding feature breadth.
 - Test: `web/src/App.test.tsx`
 
 - [ ] Add timer list, enable/disable, interval, response/action editor.
-- [ ] Add a manual “Run once” operator action if backend supports it.
-- [ ] Show last run time and recent audit result.
+- [x] Add a manual “Run once” operator action backed by `POST /api/bot/timers/{id}/run`.
+- [x] Show last scheduled run time and refresh the audit after manual execution.
 - [ ] Commit: `feat: manage bot timers`.
 
 ---

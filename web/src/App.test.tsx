@@ -4,7 +4,7 @@ import App from './App';
 import { dashboardRoutes, legacyDashboardPaths } from './lib/dashboardRoutes';
 import { splitLastWord } from './overlay/data';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
-import { deleteTwitchReward, fetchBotStatus, fetchTwitchInteractions, saveBotCommand, type StreamSessionReport } from './lib/api';
+import { deleteTwitchReward, runBotTimer, fetchBotStatus, fetchTwitchInteractions, saveBotCommand, type StreamSessionReport } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
 import {
   defaultPanelLayouts,
@@ -462,6 +462,16 @@ describe('overlay event utilities', () => {
         Accept: 'application/json',
         'X-Overlay-Operator-Secret': 'operator-secret',
       },
+    });
+  });
+
+  it('runs a saved timer with an encoded ID and operator credentials', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ eventId: 'event-1' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(runBotTimer('timer/id', 'http://example.test', 'operator-secret')).resolves.toEqual({ eventId: 'event-1' });
+    expect(fetchMock).toHaveBeenCalledWith('http://example.test/api/bot/timers/timer%2Fid/run', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'X-Overlay-Operator-Secret': 'operator-secret' },
     });
   });
 

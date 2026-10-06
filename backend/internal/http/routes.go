@@ -28,6 +28,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("DELETE /api/bot/commands/{id}", s.requireOperator(s.botCommandDelete))
 	s.mux.HandleFunc("GET /api/bot/timers", s.requireOperator(s.botTimers))
 	s.mux.HandleFunc("POST /api/bot/timers", s.requireOperator(s.botTimerSave))
+	s.mux.HandleFunc("POST /api/bot/timers/{id}/run", s.requireOperator(s.botTimerRun))
 	s.mux.HandleFunc("PUT /api/bot/timers/{id}", s.requireOperator(s.botTimerSetEnabled))
 	s.mux.HandleFunc("DELETE /api/bot/timers/{id}", s.requireOperator(s.botTimerDelete))
 	s.mux.HandleFunc("GET /api/bot/counters", s.requireOperator(s.botCounters))

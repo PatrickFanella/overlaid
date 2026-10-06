@@ -25,6 +25,7 @@ import {
   saveBotModerationRule,
   saveBotQuote,
   saveBotTimer,
+  runBotTimer,
   setBotCommandEnabled,
   setBotTimerEnabled,
   type BotAPIVariablesResponse,
@@ -82,6 +83,8 @@ export function BotWorkspace() {
   const [draft, setDraft] = useState<TimerDraft>(defaultTimerDraft);
   const [savingCommand, setSavingCommand] = useState(false);
   const [savingTimer, setSavingTimer] = useState(false);
+  const [runningTimer, setRunningTimer] = useState<string | null>(null);
+  const [timerRunResult, setTimerRunResult] = useState('');
   const [counterDraft, setCounterDraft] = useState(defaultCounterDraft);
   const [quoteDraft, setQuoteDraft] = useState(defaultQuoteDraft);
   const [apiVariableDraft, setAPIVariableDraft] = useState(defaultAPIVariableDraft);
@@ -297,6 +300,22 @@ export function BotWorkspace() {
     }
   }
 
+  async function handleRunTimer(timer: BotTimer) {
+    setRunningTimer(timer.id);
+    setTimerRunResult('');
+    setState((current) => ({ ...current, error: '' }));
+    try {
+      const result = await runBotTimer(timer.id, apiBaseUrl, operatorSecret);
+      setTimerRunResult(`Sent ${timer.name}. Event ${result.eventId}. Schedule unchanged.`);
+      const audit = await fetchBotAudit(25, apiBaseUrl, operatorSecret);
+      setState((current) => ({ ...current, audit }));
+    } catch (error) {
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'timer run failed' }));
+    } finally {
+      setRunningTimer(null);
+    }
+  }
+
   async function handleDeleteTimer(timer: BotTimer) {
     setState((current) => ({ ...current, error: '' }));
     try {
@@ -373,6 +392,9 @@ export function BotWorkspace() {
                 draft={draft}
                 timers={state.timers}
                 saving={savingTimer}
+                runningId={runningTimer}
+                runResult={timerRunResult}
+                onRun={handleRunTimer}
                 onDraftChange={setDraft}
                 onSave={handleSaveTimer}
                 onToggle={handleToggleTimer}
@@ -978,6 +1000,9 @@ function BotTimersPanel({
   draft,
   timers,
   saving,
+  runningId,
+  runResult,
+  onRun,
   onDraftChange,
   onSave,
   onToggle,
@@ -986,6 +1011,9 @@ function BotTimersPanel({
   draft: TimerDraft;
   timers: BotTimersResponse | null;
   saving: boolean;
+  runningId: string | null;
+  runResult: string;
+  onRun: (timer: BotTimer) => void;
   onDraftChange: (draft: TimerDraft) => void;
   onSave: () => void;
   onToggle: (timer: BotTimer) => void;
@@ -998,7 +1026,7 @@ function BotTimersPanel({
       id="bot-timers"
       kicker="Schedule"
       title="Bot timers"
-      description="Create safe scheduled bot messages now. Runtime firing is enabled after response-command and template support lands."
+      description="Enabled timers send ticker or alert events when due. Run once rehearses any saved timer without changing its schedule."
     >
       {timers?.loadError ? <Notice tone="warn">Timers unavailable: {timers.loadError}</Notice> : null}
 
@@ -1026,6 +1054,8 @@ function BotTimersPanel({
         </button>
       </div>
 
+      {runResult ? <Notice tone="ok">{runResult}</Notice> : null}
+
       {items.length === 0 ? (
         <Empty>No bot timers configured yet.</Empty>
       ) : (
@@ -1040,7 +1070,11 @@ function BotTimersPanel({
                 every {timer.intervalSeconds}s · {timer.action}
               </p>
               <p className="desk-row__text">{timer.response}</p>
+              <p className="desk-row__meta">Last scheduled run: {timer.lastRunAt ? new Date(timer.lastRunAt).toLocaleString() : 'Never'}</p>
               <div className="flex flex-wrap gap-2 pt-1">
+                <button className="desk-btn desk-btn--small" type="button" disabled={runningId !== null} onClick={() => onRun(timer)}>
+                  {runningId === timer.id ? 'Running…' : 'Run once'}
+                </button>
                 <button className="desk-btn desk-btn--small" type="button" onClick={() => onToggle(timer)}>
                   {timer.enabled ? 'Pause' : 'Enable'}
                 </button>

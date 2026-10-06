@@ -10,7 +10,7 @@ Implemented now:
 - Operator-protected bot status at `GET /api/bot/status`.
 - Operator-protected recent audit events at `GET /api/bot/audit`.
 - Operator-protected custom command list/create/toggle/delete at `/api/bot/commands`.
-- Operator-protected timer list/create/toggle/delete at `/api/bot/timers`.
+- Operator-protected timer list/create/toggle/delete at `/api/bot/timers`, plus `POST /api/bot/timers/{id}/run` for manual rehearsal.
 - Operator-protected counter list/create/delete at `/api/bot/counters`.
 - Operator-protected quote list/create/delete at `/api/bot/quotes`.
 - Operator-protected custom API variable list/create/delete at `/api/bot/api-variables`.
@@ -72,7 +72,8 @@ Expected status:
 5. Toggle the command paused/enabled and delete it if it was only for verification.
 6. Confirm Bot timers shows existing timers or the empty state.
 7. Create a safe test timer with name `stream_hype`, interval `300`, action `Ticker`, and a short response.
-8. Toggle the timer paused/enabled and delete it if it was only for verification.
+8. Pause the timer and click Run once. Check its ticker or alert output and the `timer_run_once` bot audit row. The timer stays paused and its schedule stays unchanged.
+9. Toggle the timer paused/enabled and delete it if it was only for verification.
 9. Confirm Bot counters and quotes shows existing entries or the empty state.
 10. Create a safe `hype` counter and a short quote, then delete them if verification-only.
 11. Confirm Bot moderation dry-run shows existing rules or the empty state.
@@ -128,6 +129,8 @@ To test a custom command:
 ## Timer behavior
 
 Timers are persisted so operator configuration survives browser/session changes. When bot storage is available, the API starts a timer worker that polls due enabled timers and publishes the configured safe `ticker` or `alert` response into the existing event pipeline. Timer executions write bot audit rows with result `allowed` and reason `timer_due`.
+
+Run once sends one saved timer response, including a paused timer. It requires operator access and bot storage, but no Twitch credentials. It does not enable the timer or update `lastRunAt`. The dashboard labels that timestamp Last scheduled run. Manual executions appear in bot audit with source `dashboard`, actor role `operator`, reason `timer_run_once`, event ID, and active stream session ID. Empty rendered responses return a validation error and write a failed audit row.
 
 Timer validation:
 
