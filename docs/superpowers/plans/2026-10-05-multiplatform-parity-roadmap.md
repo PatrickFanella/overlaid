@@ -10,8 +10,12 @@
 - Platforms: Twitch, Kick, YouTube Live, Discord.
 - The bot chats as its own account, not as the broadcaster.
 - First priorities: chat-bot depth and the automation engine. Loyalty, games, and media come later.
+- Funding: a free tier supported by donations, plus a paid tier.
+- Hosting: self-hosted on our own infrastructure for now (the homelab, behind the public edge).
+- Single-tenant self-hosting stays a supported product, not just a development mode.
+- Media requests are open, not songs only. Viewers are told that the streamer will stop anything that draws a DMCA claim, and the streamer has the tools to do it fast.
 
-**Still to decide:** see "Open questions" at the end. None of them block Phase 0 or Phase 1.
+**Still to decide:** the service name, domain, and bot username, plus two smaller questions under "Open questions". None of them block Phase 0 or Phase 1.
 
 ---
 
@@ -52,7 +56,9 @@ Discord ──▶ │ HTTP interactions endpoint     │                        
 - **Outbound queues** per platform carry a cost model: Twitch token buckets per bot account and per channel, a YouTube quota ledger with per-tenant budgets, Kick backoff on 429.
 - **Jobs and fan-out** stay on Postgres to start (a Postgres-backed job queue such as River, plus `LISTEN/NOTIFY`). Add NATS or Redis only when measurements say so.
 - **Overlay gateway** scopes every stream to a tenant and an unguessable overlay token. The **OBS bridge** is an overlay page that also connects to `ws://localhost:4455` inside OBS and executes OBS effects sent from the cloud, so OBS automation works with nothing installed.
-- **Self-host mode** is a single tenant created at boot from environment variables. It keeps working throughout.
+- **Self-host mode** is a single tenant created at boot from environment variables. It is a supported product: CI runs the test suite in both modes, and every phase documents its self-host setup.
+- **Deployment** stays on our own hardware for now: Docker Compose on the homelab, published through the existing public edge. The process roles (API, ingest, engine, outbound, overlay gateway) run in one binary at first and split into separate containers when one of them needs to scale. Design for a few hundred tenants on this footprint; anything larger is a hosting decision for later.
+- **Plans and entitlements** are data, not code paths. Every limit (commands, timers, HTTP variable calls, stored events, media storage, bot-account options) reads from the tenant's plan, so the paid tier is a row change and self-host mode simply gets an unlimited plan.
 
 ## Phases
 
@@ -80,9 +86,10 @@ Fix what is unsafe before anything goes public, and write the decisions down.
 - Token vault: encrypted refresh tokens per tenant connection, with scopes held, granted-at, and revocation handling in one place.
 - Per-tenant overlay tokens; rotate from the desk.
 - Data lifecycle: retention settings per tenant, chat-log expiry job, tenant export, tenant deletion, viewer deletion requests. Privacy policy and terms pages.
-- Abuse limits: per-tenant quotas on commands, timers, HTTP variables, and stored events.
+- Plans and entitlements: `free` and `paid` plan rows with per-feature limits; self-host gets `unlimited`. Abuse limits are the free plan's limits.
+- Uptime basics for a public service on our own hardware: health probes, alerting into the existing homelab monitoring, nightly Postgres backups with a tested restore, and a status page.
 
-**Exit:** two tenants on one deployment cannot see each other's data in any API or stream; an integration test proves it. Self-host still boots from env.
+**Exit:** two tenants on one deployment cannot see each other's data in any API or stream; an integration test proves it. Self-host still boots from env. Changing a tenant's plan changes its limits without a deploy.
 
 ### Phase 2: Platform layer and the bot account on Twitch (L)
 
@@ -127,7 +134,7 @@ Built as triggers, effects, and variables on the Phase 3 engine.
 - **Spam filters:** links with allowlist and `!permit`, caps, symbols, emotes, repetition, message length, zalgo, blocked terms with wildcard and regex. Per filter: exempt userlevel, timeout length, silent mode, custom message, warn-then-escalate.
 - **Keywords** (phrase groups, negative and regex flags, shared keyword variables) and the **lookalike normalization pipeline** with a configuration tester.
 - **Nuke from chat** (`!nuke … -r=`) with the existing report and rollback.
-- **Public channel page:** commands, quotes, and song queue later, per tenant slug.
+- **Public channel page:** commands, quotes, and the media request queue later, per tenant slug.
 - **Chat and moderation log search** within the tenant's retention window.
 - **Importers:** Nightbot (its API covers commands, timers, regulars, spam settings) and Fossabot command exports.
 
@@ -178,7 +185,13 @@ Built as triggers, effects, and variables on the Phase 3 engine.
 - Alert designer per event type with variations by amount or tier, sounds, images, video, TTS, animation, and a server-side queue with priority.
 - Media library per tenant in object storage.
 - Widgets: goal bars fed by real events, subathon timer, poll and prediction bars, counter, rotating text, chat with emotes.
-- Song and media requests: YouTube and SoundCloud, queue limits, moderation queue, backup playlist, public queue page, player in the desk.
+- **Open media requests** (songs, videos, clips; not music only):
+  - Sources: YouTube (any embeddable video), SoundCloud, Twitch clips and VODs, Kick clips, plus providers added as adapters later. Embeddable media only; age-restricted and live streams are rejected.
+  - Streamer controls: per-source toggles, maximum length, per-user and queue limits, minimum userlevel, an optional approve-first queue, a banned-media list, channel and keyword blocks, and a "safe mode" that requires approval for everything.
+  - Fast stop: skip, remove, and ban from the desk, from chat (`!skip`, `!wrongsong`, `!voteskip`), and from a hotkey on the control deck. The player can mute instantly without losing its place in the queue.
+  - Viewer notice: the request confirmation and the public queue page say that the streamer will stop anything that draws a DMCA or copyright claim. Tenants can edit the wording but not remove it.
+  - Player: a desk player plus a media overlay for OBS, volume control, a backup playlist when the queue is empty, and a public queue page.
+  - Channel point and currency costs for requests, once Phase 10 exists.
 
 ### Phase 10: Viewers and loyalty (L)
 
@@ -188,7 +201,10 @@ Built as triggers, effects, and variables on the Phase 3 engine.
 - Giveaways (active, keyword, number; luck multipliers; overlay), `!winner`.
 - Games: heist, slots, duel, bid, trivia.
 
-### Phase 11: Ecosystem (M)
+### Phase 11: Ecosystem and the paid tier (M)
+
+- Payments: one-off and recurring donations to the service, and a paid-tier subscription that switches the tenant's plan row. Pick a payment provider with webhooks for subscription state; the entitlement model from Phase 1 does the rest.
+- Paid-tier candidates, to confirm once usage data exists: bring-your-own bot account, higher limits on commands, timers, and HTTP calls, longer chat-log retention, more media storage, more overlay instances, priority in outbound queues.
 
 - Public REST API with OAuth apps and scopes; WebSocket event stream for third-party tools.
 - Plugin model, if demand appears: sandboxed JavaScript effects and variables first, no native code.
@@ -229,16 +245,15 @@ These have long lead times and gate later phases.
 - **Kick API maturity.** Undocumented rate limits and missing features; budget for breakage.
 - **`$(eval)` and `$(urlfetch)` are attack surface.** Sandboxing, SSRF guards, and per-tenant limits are requirements, not polish.
 - **Scope.** Each phase is a product in itself. Phases 9–11 can slip without hurting the stated priorities.
+- **Self-hosted capacity.** A public service on homelab hardware shares fate with the homelab: power, uplink, and maintenance windows. Publish what uptime we offer, and keep the split-role design so moving hosts later is a deployment change, not a rewrite.
+- **Media requests and copyright.** The streamer, not the service, decides what plays; the service's job is to make stopping media instant and to tell viewers the rules. State this in the terms of service.
 - **Data obligations.** Chat logs and viewer data carry deletion duties on every platform. Phase 1 builds the deletion paths before any new data is collected.
 
 ## Open questions
 
-1. **Business model.** Free, donations, or paid tiers? This decides how hard the abuse limits and per-tenant quotas need to be.
-2. **Name and domain** for the hosted service, and the bot account's username.
-3. **Hosting.** The homelab edge (Almaz) can serve the first tenants. Where does it run once it is public, and what uptime do we promise?
-4. **Self-host mode.** Keep single-tenant self-hosting as a supported product, or only as a development mode?
-5. **Song requests.** Playing YouTube and SoundCloud through a hosted player has licensing exposure for streamers. Ship it, ship it with warnings, or leave it out?
-6. **Trovo and SOOP.** Nightbot supports them; they are out of scope unless you want them.
+1. **Name and domain** for the hosted service, and the bot account's username. Needed before the external sign-ups below.
+2. **Payment provider** for donations and the paid tier. Not needed until Phase 11.
+3. **Trovo and SOOP.** Nightbot supports them; they are out of scope unless you want them.
 
 ## Next step
 
