@@ -63,3 +63,8 @@ Ending a session keeps lifecycle controls pending through the report request. If
 ### Concurrent lifecycle requests
 
 Start and end are serialized by a Postgres transaction lock shared by API processes using the same session table. Concurrent starts still retain each requested session in history, close the prior active session, and leave one session active. Concurrent end calls end that session once; later calls report no active session. A canceled request waiting for the lock does not change session state. Lifecycle timestamps are captured after lock acquisition.
+
+
+### Report consistency during live writes
+
+Each session report reads its session summary, bounded events, and readiness snapshots from one Postgres snapshot. Events and end snapshots committed while that report is loading appear together in the next report. The total event count describes all events in that snapshot; the returned event list still respects the requested limit. Report reads share a five-second deadline and release their transaction on cancellation.

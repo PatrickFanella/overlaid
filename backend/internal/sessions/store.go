@@ -173,12 +173,25 @@ func (s *Store) End(ctx context.Context) (Session, bool, error) {
 func (s *Store) ByID(ctx context.Context, id string) (Session, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, sessionSelectSQL+` WHERE stream_sessions.id = $1 GROUP BY stream_sessions.id`, id)
+	return sessionByID(ctx, s.db, id)
+}
+
+// Both the pool and report transactions use these readers. Reports supply a
+// repeatable-read transaction so summary, events, and snapshots agree.
+type reportQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func sessionByID(ctx context.Context, db reportQueryer, id string) (Session, error) {
+	rows, err := db.QueryContext(ctx, sessionSelectSQL+` WHERE stream_sessions.id = $1 GROUP BY stream_sessions.id`, id)
 	if err != nil {
 		return Session{}, err
 	}
 	defer rows.Close()
 	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return Session{}, err
+		}
 		return Session{}, sql.ErrNoRows
 	}
 	return scanSession(rows)
@@ -192,13 +205,18 @@ func (s *Store) Report(ctx context.Context, id string, limit int) (Report, error
 	if limit <= 0 || limit > 250 {
 		limit = 100
 	}
-	session, err := s.ByID(ctx, id)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return Report{}, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `
+	defer tx.Rollback()
+	session, err := sessionByID(ctx, tx, id)
+	if err != nil {
+		return Report{}, err
+	}
+	rows, err := tx.QueryContext(ctx, `
 		SELECT id, type, source, title, message, severity, data, created_at
 		FROM stream_events
 		WHERE session_id = $1
@@ -220,8 +238,14 @@ func (s *Store) Report(ctx context.Context, id string, limit int) (Report, error
 	if err := rows.Err(); err != nil {
 		return Report{}, err
 	}
-	snapshots, err := s.ReadinessSnapshots(ctx, id)
+	if err := rows.Close(); err != nil {
+		return Report{}, err
+	}
+	snapshots, err := readinessSnapshots(ctx, tx, id)
 	if err != nil {
+		return Report{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return Report{}, err
 	}
 	return Report{Session: session, Events: items, Snapshots: snapshots}, nil
@@ -260,7 +284,11 @@ func (s *Store) ReadinessSnapshots(ctx context.Context, sessionID string) ([]Rea
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `
+	return readinessSnapshots(ctx, s.db, sessionID)
+}
+
+func readinessSnapshots(ctx context.Context, db reportQueryer, sessionID string) ([]ReadinessSnapshot, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT id, session_id, phase, status, checks, captured_at
 		FROM stream_session_readiness_snapshots
 		WHERE session_id = $1
