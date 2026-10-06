@@ -9,23 +9,21 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 )
 
-// customCommandExecutor owns saved-command snapshots, template dependencies,
-// delivery decisions, and cooldown reservations. The dispatcher supplies only
+// customCommandExecutor owns saved-command snapshots, delivery decisions, and
+// cooldown reservations, using the bot template renderer. The dispatcher supplies only
 // the original/resolved command identity and actor.
 type customCommandExecutor struct {
-	mu           sync.RWMutex
-	commands     map[string]CustomCommand
-	lastRun      map[string]time.Time
-	now          func() time.Time
-	channel      string
-	community    CommunityStore
-	apiVariables APIVariableStore
-	nowPlaying   func() bot.NowPlayingMetadata
+	mu       sync.RWMutex
+	commands map[string]CustomCommand
+	lastRun  map[string]time.Time
+	now      func() time.Time
+	channel  string
+	renderer bot.TemplateRenderer
 }
 
 func newCustomCommandExecutor(config CommandProcessorConfig, now func() time.Time) *customCommandExecutor {
 	return &customCommandExecutor{commands: customCommandMap(config.Custom), lastRun: make(map[string]time.Time), now: now,
-		channel: strings.TrimSpace(config.Channel), community: config.Community, apiVariables: config.APIVariables, nowPlaying: config.NowPlaying}
+		channel: strings.TrimSpace(config.Channel), renderer: bot.TemplateRenderer{Community: config.Community, APIVariables: config.APIVariables, NowPlaying: config.NowPlaying}}
 }
 
 // Replace configuration without resetting successful command cooldowns.
@@ -62,7 +60,7 @@ func (e *customCommandExecutor) execute(original ChatCommand, resolved ChatComma
 	if e.namedCooldownActive(custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
 		return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
 	}
-	template := bot.RenderTemplate(custom.Response, e.templateContext(custom.Response, original, resolved, user))
+	template := e.renderer.Render(custom.Response, bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: e.channel, Args: original.Args, Command: resolved.Name})
 	mode := normalizeResponseMode(custom.ResponseMode)
 	if strings.TrimSpace(template.Text) == "" {
 		return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command response is empty", map[string]any{"custom": true, "action": custom.Action, "responseMode": mode, "unknownVariables": template.UnknownVariables})}
@@ -84,42 +82,6 @@ func (e *customCommandExecutor) execute(original ChatCommand, resolved ChatComma
 		return []events.Event{accepted}
 	}
 	return []events.Event{accepted, action}
-}
-
-func (e *customCommandExecutor) templateContext(response string, original ChatCommand, resolved ChatCommand, user ChatCommandUser) bot.TemplateContext {
-	ctx := bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: e.channel, Args: original.Args, Command: resolved.Name, Counts: map[string]int{}}
-	if e.nowPlaying != nil {
-		metadata := e.nowPlaying()
-		ctx.NowPlayingTitle = metadata.Title
-		ctx.NowPlayingArtist = metadata.Artist
-	}
-	if e.apiVariables != nil {
-		names := bot.APIVariableNames(response)
-		results := e.apiVariables.ResolveAPIVariables(names)
-		if len(results) > 0 {
-			ctx.APIVariables = map[string]string{}
-			for name, result := range results {
-				ctx.APIVariables[name] = result.Value
-			}
-		}
-	}
-	if e.community == nil {
-		return ctx
-	}
-	for _, name := range bot.CountVariableNames(response) {
-		if counter, ok, err := e.community.CounterValue(name); err == nil && ok {
-			ctx.Counts[name] = counter.Value
-		}
-	}
-	if bot.UsesRandomQuote(response) {
-		if quote, ok, err := e.community.RandomQuote(); err == nil && ok {
-			ctx.QuoteRandom = quote.Text
-			if quote.Author != "" {
-				ctx.QuoteRandom += " — " + quote.Author
-			}
-		}
-	}
-	return ctx
 }
 
 func (e *customCommandExecutor) namedCooldownActive(name string, cooldown time.Duration) bool {

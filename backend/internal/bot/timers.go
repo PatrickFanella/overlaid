@@ -91,7 +91,7 @@ func (s TimerScheduler) recordAudit(ctx context.Context, timer Timer, event even
 }
 
 func TimerEvent(timer Timer, channel string) (events.Event, TemplateResult) {
-	render := RenderTemplate(timer.Response, TemplateContext{Channel: channel, Command: timer.Name})
+	render := (TemplateRenderer{}).Render(timer.Response, TemplateContext{Channel: channel, Command: timer.Name})
 	message := render.Text
 	switch timer.Action {
 	case "alert":

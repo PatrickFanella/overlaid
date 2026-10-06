@@ -488,3 +488,10 @@ Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race test
 Option A now has a bounded, read-only monitoring probe that interprets readiness JSON rather than relying on HTTP status. It supports full-report and explicitly selected checks, fails on missing/invalid checks, handles timeouts/interrupts, and includes completion/help/version modes. Build/Makefile, README, agent conventions, and uptime/recovery guidance identify its contract. The dedicated uptime plan retains off-host scheduler/alert delivery and live external-service checks as deployment work.
 
 Validation: `make verify`, all 17 browser smoke workflows, probe race tests, and `make smoke API_PORT=8081` passed. Native probes correctly rejected overall Twitch/OBS degradation while accepting required local Postgres/bot checks; missing named checks failed. Signal exits and Linux startup were verified, and macOS/Windows cross-builds passed.
+
+
+### Overnight progress: template dependency resolution
+
+The bot template module now resolves referenced media/community/API values through read-only adapters, and the custom-command executor supplies only chat context. Unused dependencies are skipped, repeated names are resolved once, API lookups stay bounded, dependency errors remain out of rendered text, and returned values are not interpreted as templates. Timer rendering retains its existing snapshot-only behavior.
+
+Verification passed: full `make verify`, 17 browser smoke workflows, Bot/Twitch/HTTP race tests including isolated Postgres contracts, and runtime smoke at port 8081. Live Twitch/OBS testing still requires the external setup.

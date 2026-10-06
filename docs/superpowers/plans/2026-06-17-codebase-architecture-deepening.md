@@ -314,3 +314,12 @@ Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race test
 Dispatch preserves community precedence, then custom lookup, then built-in/unsupported handling. Existing public processor and HTTP audit contracts remain applicable; added compatibility tests prove zero-value processor behavior, alias/custom configuration on that value, community precedence over a same-name custom record, alias-shared built-in cooldowns, and independent community/custom availability during a built-in cooldown. This closes the command-family extraction from implementation-order item 5; runtime/audit policy deepening remains documented in the earlier bounded asynchronous audit and shared role-policy work.
 
 Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS behavior remains unavailable for the known external setup.
+
+
+## October 6 template dependency ownership
+
+`bot.TemplateRenderer` now owns referenced media, counter, random-quote, and API-variable assembly behind read-only interfaces. Custom execution supplies actor, channel, arguments, and resolved command identity; it no longer assembles dependency maps. Timer rendering uses the same entry point with its existing channel/command snapshot and no external adapters. `RenderTemplate` remains available for already assembled snapshots.
+
+Dependencies are loaded only when referenced, repeated normalized names share one lookup, and API-variable discovery is bounded to three names before invoking its resolver. Counter failures remain zero, missing quotes/API values remain empty, and API fallback values continue to render without diagnostic details. Rendering copies supplied maps before merging live values, does not recursively interpret dependency values, caps responses at 400 Unicode characters, and sorts unknown-variable diagnostics for stable audit output. No timer network fetches or new template syntax were introduced.
+
+Direct offline workflow tests cover combined resolution, unused dependencies, missing/error/fallback behavior, context isolation, API limits, literal returned values, and the shared cap. Existing command reload/cooldown/audit contracts cover the integration. Validation: `make verify`, all 17 browser smoke workflows, Bot/Twitch/HTTP race tests with isolated Postgres fixtures, and `make smoke API_PORT=8081` passed. Frontend preview uses its existing local snapshot; unifying that separate TypeScript implementation remains future work.
