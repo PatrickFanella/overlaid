@@ -47,6 +47,12 @@ func TestTimerSchedulerPublishesBeforeWritesAndLinksAudit(t *testing.T) {
 		},
 		audit: func(_ context.Context, event AuditEvent) (AuditEvent, error) {
 			operations = append(operations, "audit:"+event.Command)
+			if event.Command == "empty" {
+				if event.Source != "timer" || event.ActorRole != "system" || event.Result != "failed" || event.Reason != "timer_response_empty" || event.EventID != "" || event.StreamSessionID != "active-session" || !strings.Contains(string(event.Data), "missing") {
+					t.Fatalf("incorrect failed-render audit: %#v", event)
+				}
+				return event, nil
+			}
 			if event.Source != "timer" || event.ActorRole != "system" || event.Reason != "timer_due" || event.Result != "allowed" || event.StreamSessionID != "active-session" || event.EventID != published[len(published)-1].ID {
 				t.Fatalf("unlinked audit=%#v", event)
 			}
@@ -66,7 +72,7 @@ func TestTimerSchedulerPublishesBeforeWritesAndLinksAudit(t *testing.T) {
 		operations = append(operations, "publish:"+event.Data["timer"].(string))
 	}}
 	scheduler.runOnce(context.Background(), now)
-	if strings.Join(operations, ",") != "publish:welcome,mark:ticker,audit:welcome,publish:hydrate,mark:alert,audit:hydrate" {
+	if strings.Join(operations, ",") != "mark:empty,audit:empty,publish:welcome,mark:ticker,audit:welcome,publish:hydrate,mark:alert,audit:hydrate" {
 		t.Fatalf("publication/write order=%v", operations)
 	}
 	if len(published) != 2 || published[0].Message != "Welcome fixture-channel" || published[0].Type != events.EventTypeCommand || published[1].Type != events.EventTypeAlert {

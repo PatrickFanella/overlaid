@@ -58,10 +58,13 @@ func (s TimerScheduler) runOnce(ctx context.Context, now time.Time) {
 			return
 		}
 		event, render := TimerEvent(timer, s.Channel)
-		if strings.TrimSpace(event.Message) == "" {
-			continue
+		if strings.TrimSpace(event.Message) != "" {
+			s.Publish(event)
+		} else {
+			// A failed render still consumes this scheduled attempt. Leaving it due
+			// forever can crowd valid timers out of the bounded due batch.
+			event = events.Event{}
 		}
-		s.Publish(event)
 		if err := s.Store.MarkTimerRun(ctx, timer.ID, now); err != nil {
 			log.Printf("failed to mark bot timer %s run: %v", timer.Name, err)
 		}
@@ -77,7 +80,11 @@ func (s TimerScheduler) recordAudit(ctx context.Context, timer Timer, event even
 	if s.StreamSessionID != nil {
 		sessionID = s.StreamSessionID()
 	}
-	auditEvent := AuditEventFromOutcome(AuditOutcome{Source: SourceTimer, ActorRole: RoleSystem, Trigger: timer.Name, Command: timer.Name, Action: timer.Action, Result: ResultAllowed, Reason: "timer_due", EventID: event.ID, StreamSessionID: sessionID, Data: map[string]any{"unknownVariables": render.UnknownVariables}})
+	result, reason := ResultAllowed, "timer_due"
+	if strings.TrimSpace(render.Text) == "" {
+		result, reason = ResultFailed, "timer_response_empty"
+	}
+	auditEvent := AuditEventFromOutcome(AuditOutcome{Source: SourceTimer, ActorRole: RoleSystem, Trigger: timer.Name, Command: timer.Name, Action: timer.Action, Result: result, Reason: reason, EventID: event.ID, StreamSessionID: sessionID, Data: map[string]any{"unknownVariables": render.UnknownVariables}})
 	if _, err := s.Store.RecordAudit(ctx, auditEvent); err != nil {
 		log.Printf("failed to record bot timer audit: %v", err)
 	}

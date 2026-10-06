@@ -129,6 +129,12 @@ Empty custom-command renders now emit a warning diagnostic with template unknown
 
 Cooldown checks skip template dependencies when already active. A valid response reserves cooldown atomically after rendering, so two concurrent renders cannot both publish during one cooldown window. Tests reproduce the prior empty chat success and lost overlay diagnostics, cover immediate retry after correcting a response, concurrent renders, dependency suppression during cooldown, and actual custom command publication/audit outcomes with alias and active-session links. Verification passed: `make verify`, all fourteen browser smoke tests, Twitch/HTTP race tests, and `make smoke API_PORT=8081`.
 
+## October 6 failed timer attempts and scheduler fairness
+
+A scheduled timer whose response renders empty now writes a failed audit with reason `timer_response_empty`, unknown-variable details, and the active session ID. It publishes no overlay event and has no event foreign key. Its scheduled attempt advances cadence so it waits until the next interval, rather than remaining due every five-second poll.
+
+An isolated Postgres fixture puts ten empty timers ahead of a valid timer in the bounded due batch. The first poll records all ten failed attempts; the next poll delivers the valid timer, and failed timers become due again at their exact thirty-second boundary. Unit coverage verifies failed audit metadata and attempt ordering alongside successful ticker/alert publication. Native API verification created an enabled empty timer, observed its failed audit and advanced cadence without an event link, then deleted the fixture. `make verify`, all fourteen browser smoke tests, bot race tests with Postgres enabled, and `make smoke API_PORT=8081` passed.
+
 ---
 
 ## File structure

@@ -85,7 +85,7 @@ Expected status:
 
 ## Scheduled timer verification
 
-Scheduled timers use the persisted last run and interval to decide when they are due. Paused timers are excluded. Scheduler shutdown stops further publication from an already-loaded batch. The optional timer/audit storage tests run without Twitch or OBS: from `backend`, run `OVERLAID_TEST_DATABASE_URL='<disposable-postgres-url>' go test ./internal/bot -run 'TestRecentAuditPersistencePostgres|TestTimerCadencePostgres|TestTimerSchedulerEventAndAuditPersistencePostgres' -count=1`. These tests create and remove private schemas, so enabled fixtures cannot be dispatched by a running API worker; the database user needs permission to create schemas.
+Scheduled timers use the persisted last run and interval to decide when they are due. The last scheduled run records an attempt, including a response that renders empty. Empty attempts publish no overlay output, write a failed audit with reason `timer_response_empty` and unknown-variable details, and wait for the next interval before retrying. This prevents empty templates from crowding valid timers out of a due batch. Paused timers are excluded. Scheduler shutdown stops further publication from an already-loaded batch. The optional timer/audit storage tests run without Twitch or OBS: from `backend`, run `OVERLAID_TEST_DATABASE_URL='<disposable-postgres-url>' go test ./internal/bot -run 'TestRecentAuditPersistencePostgres|TestTimerCadencePostgres|TestTimerSchedulerEventAndAuditPersistencePostgres' -count=1`. These tests create and remove private schemas, so enabled fixtures cannot be dispatched by a running API worker; the database user needs permission to create schemas.
 
 ## Custom command behavior
 

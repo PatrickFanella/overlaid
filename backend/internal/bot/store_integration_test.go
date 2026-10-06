@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"sort"
@@ -346,5 +347,57 @@ func TestCommandCRUDPostgres(t *testing.T) {
 	}
 	if _, err := store.SetCommandEnabled(ctx, paused.ID, true); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("missing enable=%v", err)
+	}
+}
+
+func TestEmptyTimerAttemptsDoNotStarveValidTimersPostgres(t *testing.T) {
+	store, eventStore := isolatedPostgresBotStore(t)
+	ctx := context.Background()
+	for i := range 10 {
+		_, err := store.SaveTimer(ctx, Timer{Name: fmt.Sprintf("empty_%02d", i), Enabled: true, IntervalSeconds: 30, Response: "{missing}", Action: "ticker"})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	valid, err := store.SaveTimer(ctx, Timer{Name: "valid", Enabled: true, IntervalSeconds: 30, Response: "Welcome", Action: "ticker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Give the empty fixtures priority in the first bounded batch.
+	if _, err := store.db.ExecContext(ctx, `UPDATE bot_timers SET created_at = now() - interval '1 minute' WHERE id <> $1`, valid.ID); err != nil {
+		t.Fatal(err)
+	}
+	published := []events.Event{}
+	scheduler := TimerScheduler{Store: store, Publish: func(event events.Event) {
+		published = append(published, event)
+		if err := eventStore.Append(event); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	scheduler.runOnce(ctx, now)
+	if len(published) != 0 {
+		t.Fatalf("empty timers published: %#v", published)
+	}
+	audits, err := store.RecentAudit(ctx, 20)
+	if err != nil || len(audits) != 10 {
+		t.Fatalf("failed attempts=%#v, %v", audits, err)
+	}
+	for _, audit := range audits {
+		if audit.Result != "failed" || audit.Reason != "timer_response_empty" || audit.EventID != "" || !strings.Contains(string(audit.Data), "missing") {
+			t.Fatalf("incorrect failed attempt: %#v", audit)
+		}
+	}
+	scheduler.runOnce(ctx, now.Add(5*time.Second))
+	if len(published) != 1 || published[0].Data["timer"] != "valid" {
+		t.Fatalf("valid timer starved: %#v", published)
+	}
+	due, err := store.DueTimers(ctx, now.Add(29*time.Second), 20)
+	if err != nil || len(due) != 0 {
+		t.Fatalf("failed attempts remain due: %#v, %v", due, err)
+	}
+	due, err = store.DueTimers(ctx, now.Add(30*time.Second), 20)
+	if err != nil || len(due) != 10 {
+		t.Fatalf("failed attempt cadence=%d, %v", len(due), err)
 	}
 }
