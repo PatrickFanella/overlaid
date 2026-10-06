@@ -83,7 +83,7 @@ make postgres-backup
 make api-data-backup
 ```
 
-The backup lands in `$(BACKUP_DIR)`, which defaults to `backups/`.
+The backup lands in `$(BACKUP_DIR)`, which defaults to `backups/`. Both targets accept relative or absolute directories, including paths containing spaces. The api-data target resolves that existing directory before mounting it into its backup container.
 
 ### Sensitivity warning
 
@@ -113,9 +113,11 @@ volume=$(docker volume ls -q \
   --filter label=com.docker.compose.project=${COMPOSE_PROJECT_NAME:-$(basename "$PWD")} \
   --filter label=com.docker.compose.volume=api-data)
 : "${volume:?api-data Compose volume not found; check the project before restoring}"
+backup_path=$(cd -- "${BACKUP_DIR:-backups}" && pwd -P)
+: "${backup_path:?Backup directory not found; select the archive directory before restoring}"
 docker run --rm \
   -v "$volume:/data" \
-  -v "$PWD/${BACKUP_DIR:-backups}:/backup" \
+  -v "$backup_path:/backup" \
   alpine:3.22 \
   sh -c 'tar -xzf /backup/<backup-file>.tar.gz -C /data'
 docker compose up -d api

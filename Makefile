@@ -112,15 +112,16 @@ api-data-backup: api-data-volume-check ## Back up the Compose api-data volume in
 	volume=$$(docker volume ls -q \
 		--filter label=com.docker.compose.project=$${COMPOSE_PROJECT_NAME:-$$(basename "$$PWD")} \
 		--filter label=com.docker.compose.volume=api-data); \
+	api_data_backup_path=$$(cd -- "$(BACKUP_DIR)" && pwd -P) || exit 1; \
 	docker run --rm \
 		-v "$$volume:/data:ro" \
-		-v "$$PWD/$(BACKUP_DIR):/backup" \
+		-v "$$api_data_backup_path:/backup" \
 		alpine:3.22 \
 		sh -c 'tar -czf /backup/api-data-$$(date -u +%Y%m%dT%H%M%SZ).tar.gz -C /data .'
 
 postgres-backup: ## Back up the Compose Postgres database into ./backups
 	mkdir -p "$(BACKUP_DIR)"
-	docker compose exec -T postgres sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" --format=custom --file=-' > "$(BACKUP_DIR)/postgres-$$(date -u +%Y%m%dT%H%M%SZ).dump"
+	docker compose exec -T postgres sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" --format=custom' > "$(BACKUP_DIR)/postgres-$$(date -u +%Y%m%dT%H%M%SZ).dump"
 
 smoke-alert: ## Send a test alert to the running API
 	@ : "$${OPERATOR_SECRET:?OPERATOR_SECRET must be set}"

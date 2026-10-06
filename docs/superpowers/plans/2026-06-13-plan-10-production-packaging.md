@@ -530,3 +530,8 @@ Rootless Podman built both Dockerfiles and exercised isolated API/Nginx containe
 ## October 6 Compose dependency and exposure correction
 
 A disposable Compose project ran through the rootless Podman API with fresh volumes and loopback ports. Postgres health gated API startup; all three services became healthy, and BRB/session/readiness evidence survived an API restart. Inspection found that the documented `EXPOSURE_MODE` setting was not forwarded to the API. Compose now passes it through with the existing local default; all three modes resolve correctly, and public-mode runtime readiness reports missing operator/webhook fixture secrets. `make verify`, all 21 browser workflows, and Compose-stack smoke passed. [Recorded evidence](../../qa/2026-10-06-compose-wiring.md) distinguishes completed local wiring from remaining Docker-engine, production, and live integration checks.
+
+
+## October 6 backup Make recipe corrections
+
+Actual recipe verification found two silent backup failures: absolute api-data destinations were prefixed with the repository path, and `pg_dump --file=-` wrote a literal dash file inside Postgres while leaving the host dump empty. The api-data recipe now resolves its existing destination; Postgres uses custom-format stdout without the file option. Real archives passed absolute/spaced/relative destination checks, and a Make-produced Postgres dump restored the exact fixture row in a separate database. Restore guidance now resolves and validates the archive directory. [Recorded evidence](../../qa/2026-10-06-backup-make-targets.md) covers the baseline failures, Podman compatibility adjustment, verification, and cleanup. Full verification, all 21 browser workflows, and native smoke passed.
