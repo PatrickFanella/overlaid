@@ -19,7 +19,7 @@ func (s *Server) requireOperator(next http.HandlerFunc) http.HandlerFunc {
 func (s *Server) authorizeOperator(r *http.Request) bool {
 	secret := strings.TrimSpace(s.config.OperatorSecret)
 	if secret == "" {
-		return true
+		return s.localExposure()
 	}
 
 	provided := strings.TrimSpace(r.Header.Get("X-Overlay-Operator-Secret"))
@@ -54,4 +54,29 @@ func bearerToken(header string) string {
 		return ""
 	}
 	return strings.TrimSpace(header[len("Bearer "):])
+}
+
+func (s *Server) localExposure() bool {
+	mode := strings.ToLower(strings.TrimSpace(s.config.ExposureMode))
+	return mode == "" || mode == "local"
+}
+
+func (s *Server) requireOverlay(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		secret := strings.TrimSpace(s.config.OverlayToken)
+		provided := r.URL.Query().Get("key")
+		authorized := secret == "" && s.localExposure()
+		if secret != "" && len(secret) == len(provided) {
+			authorized = subtle.ConstantTimeCompare([]byte(secret), []byte(provided)) == 1
+		}
+		// Operator clients authenticate with headers, never an operator secret in a URL.
+		if !authorized && strings.TrimSpace(s.config.OperatorSecret) != "" {
+			authorized = s.authorizeOperator(r)
+		}
+		if !authorized {
+			http.Error(w, "overlay authorization required", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
 }

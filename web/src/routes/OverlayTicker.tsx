@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from 'react';
-import { loadDashboardConfig } from '../lib/dashboardConfig';
+import { useOverlayDisplay } from '../lib/useOverlayDisplay';
 import type { OverlayEvent, OverlaySeverity } from '../lib/events';
 import { useOverlayStream } from '../lib/useOverlayStream';
 import { Mark, OverlayStage } from '../overlay/Brand';
@@ -16,7 +16,6 @@ type TickerItem = {
 const SECONDS_PER_ITEM = 9;
 
 export function OverlayTickerPage() {
-  const [display] = useState(() => loadDashboardConfig().display);
   const [items, setItems] = useState<TickerItem[]>([]);
 
   const status = useOverlayStream((event) => {
@@ -32,6 +31,7 @@ export function OverlayTickerPage() {
 
     setItems((current) => [item, ...current.filter((existing) => existing.id !== item.id)].slice(0, display.tickerMaxItems));
   });
+  const display = useOverlayDisplay(status);
 
   const scrolling = items.length > 1;
   // The track holds two copies so the -50% marquee loops without a seam.

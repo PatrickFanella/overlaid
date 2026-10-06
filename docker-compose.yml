@@ -29,6 +29,7 @@ services:
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-*}
       EXPOSURE_MODE: ${EXPOSURE_MODE:-local}
       OPERATOR_SECRET: ${OPERATOR_SECRET:-}
+      OVERLAY_TOKEN: ${OVERLAY_TOKEN:-}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
       OVERLAY_STATE_FILE: ${OVERLAY_STATE_FILE:-/data/overlay-state.json}
       EVENT_HISTORY_FILE: ${EVENT_HISTORY_FILE:-/data/event-history.jsonl}
@@ -44,7 +45,7 @@ services:
       TWITCH_TOKEN_FILE: ${TWITCH_TOKEN_FILE:-/data/twitch-token.json}
       TWITCH_INTERACTIONS_FILE: ${TWITCH_INTERACTIONS_FILE:-/data/twitch-interactions.json}
       TWITCH_EVENTSUB_ENABLED: ${TWITCH_EVENTSUB_ENABLED:-true}
-      TWITCH_SCOPES: ${TWITCH_SCOPES:-user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers}
+      TWITCH_SCOPES: ${TWITCH_SCOPES:-user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers moderator:manage:chat_messages moderator:manage:banned_users}
       MPRIS_ENABLED: ${MPRIS_ENABLED:-false}
       MPRIS_PLAYER: ${MPRIS_PLAYER:-}
       MPRIS_PLAYER_PRIORITY: ${MPRIS_PLAYER_PRIORITY:-Feishin,mpv,cliamp,ferrosonic,playerctld,vivaldi}

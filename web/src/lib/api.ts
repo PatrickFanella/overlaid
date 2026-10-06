@@ -106,10 +106,10 @@ export type BotAPIVariablesResponse = { variables: BotAPIVariable[]; loadError?:
 export type BotCounterPayload = { id?: string; name: string; value: number };
 export type BotQuotePayload = { id?: string; text: string; author?: string };
 export type BotAPIVariablePayload = { id?: string; name: string; enabled: boolean; url: string; responseSelector?: string; fallback?: string; cacheTtlSeconds: number; timeoutMs: number };
-export type BotModerationRule = { id: string; name: string; enabled: boolean; enforce?: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both' | string; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban' | string; reason?: string; source?: string; expiresAt?: string; createdAt: string; updatedAt: string };
+export type BotModerationRule = { id: string; name: string; enabled: boolean; enforce?: boolean; exemptRole?: string; timeoutSeconds?: number; pattern: string; matchTarget: 'message' | 'username' | 'both' | string; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban' | string; reason?: string; source?: string; expiresAt?: string; createdAt: string; updatedAt: string };
 export type BotModerationRulesResponse = { rules: BotModerationRule[]; loadError?: string };
-export type BotModerationRulePayload = { id?: string; name: string; enabled: boolean; enforce?: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both'; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban'; reason?: string };
-export type BotModerationMatch = { ruleId: string; ruleName: string; pattern: string; matchTarget: string; action: string; reason?: string };
+export type BotModerationRulePayload = { id?: string; name: string; enabled: boolean; enforce?: boolean; exemptRole?: string; timeoutSeconds?: number; pattern: string; matchTarget: 'message' | 'username' | 'both'; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban'; reason?: string };
+export type BotModerationMatch = { ruleId: string; ruleName: string; pattern: string; matchTarget: string; action: string; reason?: string; skipped?: boolean; note?: string };
 export type BotModerationDryRunResponse = { matches: BotModerationMatch[]; loadError?: string };
 export type BotModerationActionPayload = { action: 'delete' | 'timeout' | 'ban' | 'unban'; targetUserId?: string; targetUserLogin?: string; messageId?: string; durationSeconds?: number; reason?: string };
 export type BotModerationActionResponse = { action: string; result: string; reason?: string };
@@ -574,7 +574,7 @@ export async function deleteBotModerationRule(id: string, explicitBaseUrl?: stri
   });
 }
 
-export async function dryRunBotModeration(payload: { message: string; username: string }, explicitBaseUrl?: string, operatorSecret?: string) {
+export async function dryRunBotModeration(payload: { message: string; username: string; role?: string }, explicitBaseUrl?: string, operatorSecret?: string) {
   return requestJSON<BotModerationDryRunResponse>('/api/bot/moderation/dry-run', {
     method: 'POST',
     explicitBaseUrl,
@@ -720,9 +720,9 @@ export async function fetchBuildInfo(explicitBaseUrl?: string) {
   return requestJSON<BuildInfo>('/version', { method: 'GET', explicitBaseUrl, errorLabel: 'Build info' });
 }
 
-export async function fetchEventHistory(limit = 24, explicitBaseUrl?: string) {
+export async function fetchEventHistory(limit = 24, explicitBaseUrl?: string, operatorSecret?: string) {
   const boundedLimit = Math.max(1, Math.min(limit, 250));
-  return requestJSON<EventHistoryResponse>(`/api/events/history?limit=${boundedLimit}`, { method: 'GET', explicitBaseUrl, errorLabel: 'Event history' });
+  return requestJSON<EventHistoryResponse>(`/api/events/history?limit=${boundedLimit}`, { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'Event history' });
 }
 
 export async function fetchStreamSession(explicitBaseUrl?: string, operatorSecret?: string) {
@@ -803,4 +803,8 @@ export async function saveTwitchInteractions(payload: TwitchInteractionRules, ex
 
 export async function sendWebhook(source: string, payload: AlertPayload, explicitBaseUrl?: string, webhookSecret?: string) {
   await requestJSON(`/api/integrations/webhook/${encodeURIComponent(source)}`, { method: 'POST', explicitBaseUrl, webhookSecret, body: payload, errorLabel: `/api/integrations/webhook/${encodeURIComponent(source)}`, expectJson: false });
+}
+
+export async function fetchOverlayToken(explicitBaseUrl?: string, operatorSecret?: string) {
+  return requestJSON<{ key: string }>('/api/dashboard/overlay-token', { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'Overlay token' });
 }

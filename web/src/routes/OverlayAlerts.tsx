@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { loadDashboardConfig } from '../lib/dashboardConfig';
+import { useOverlayDisplay } from '../lib/useOverlayDisplay';
 import type { OverlayEvent } from '../lib/events';
 import { useOverlayStream } from '../lib/useOverlayStream';
 import { Kicker, OverlayStage, RegMark } from '../overlay/Brand';
@@ -7,7 +7,6 @@ import { asString, formatClock } from '../overlay/data';
 import { SlabHeadline } from '../overlay/SlabHeadline';
 
 export function OverlayAlertsPage() {
-  const [display] = useState(() => loadDashboardConfig().display);
   const [alerts, setAlerts] = useState<OverlayEvent[]>([]);
 
   const status = useOverlayStream((event) => {
@@ -27,6 +26,7 @@ export function OverlayAlertsPage() {
       return [event, ...current].slice(0, display.alertMaxVisible);
     });
   });
+  const display = useOverlayDisplay(status);
 
   return (
     <OverlayStage name="alerts" status={status} label="Alert feed">

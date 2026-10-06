@@ -192,6 +192,7 @@ func (s *Server) recordBotModerationChange(ctx context.Context, rule bot.Moderat
 			data["moderationAction"], data["matchTarget"] = rule.Action, rule.MatchTarget
 			data["regex"], data["caseSensitive"] = rule.Regex, rule.CaseSensitive
 			data["source"] = rule.Source
+			data["exemptRole"], data["timeoutSeconds"] = rule.ExemptRole, rule.TimeoutSeconds
 			if rule.ExpiresAt != nil {
 				data["expiresAt"] = rule.ExpiresAt
 			}

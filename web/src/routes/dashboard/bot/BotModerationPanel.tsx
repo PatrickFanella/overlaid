@@ -24,7 +24,7 @@ export function BotModerationPanel({
   onTestChange,
   onActionChange,
   onNukeDraftChange,
-  onSave,
+  onSave, onEdit,
   onDelete,
   onDryRun,
   onAction,
@@ -53,7 +53,7 @@ export function BotModerationPanel({
           {rules?.loadError ? <Notice tone="warn">Moderation unavailable: {rules.loadError}</Notice> : null}
 
           <fieldset disabled={loading} className="contents">
-            <SubPanel title="New rule">
+            <SubPanel title={draft.id ? "Edit rule" : "New rule"}>
               <div className="grid gap-3 md:grid-cols-[1fr_1fr_9rem_8rem]">
                 <Field label="Rule name">
                   <input className="desk-input desk-input--mono" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="spam_link" />
@@ -77,6 +77,12 @@ export function BotModerationPanel({
                   </select>
                 </Field>
               </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Exempt role and above"><select className="desk-input" value={draft.exemptRole} onChange={event => onDraftChange({ ...draft, exemptRole: event.target.value })}>
+                  <option value="moderator">Moderator</option><option value="broadcaster">Broadcaster</option><option value="viewer">Everyone</option><option value="none">None</option>
+                </select></Field>
+                <Field label="Rule timeout seconds"><input className="desk-input" type="number" min={1} max={1209600} value={draft.timeoutSeconds} onChange={event => onDraftChange({ ...draft, timeoutSeconds: Number(event.target.value) })} /></Field>
+              </div>
               <Field label="Reason" hint="Shown in audit and planning.">
                 <input className="desk-input" value={draft.reason} onChange={(event) => onDraftChange({ ...draft, reason: event.target.value })} placeholder="reason shown in audit/planning" />
               </Field>
@@ -97,6 +103,7 @@ export function BotModerationPanel({
               <Field label="Username">
                 <input className="desk-input" value={test.username} onChange={(event) => onTestChange({ ...test, username: event.target.value })} placeholder="username" />
               </Field>
+              <Field label="Test role"><select className="desk-input" value={test.role} onChange={event => onTestChange({ ...test, role: event.target.value })}><option value="viewer">Viewer</option><option value="moderator">Moderator</option><option value="broadcaster">Broadcaster</option></select></Field>
               <Field label="Message to test">
                 <input className="desk-input" value={test.message} onChange={(event) => onTestChange({ ...test, message: event.target.value })} placeholder="message to test" />
               </Field>
@@ -106,7 +113,7 @@ export function BotModerationPanel({
             </div>
             {dryRun ? (
               <p className="desk-row__text">
-                Matches: <span className="mono">{dryRun.matches.length ? dryRun.matches.map((match) => `${match.ruleName}:${match.action}`).join(', ') : 'none'}</span>
+                Matches: <span className="mono">{dryRun.matches.length ? dryRun.matches.map((match) => `${match.ruleName}:${match.action}${match.skipped ? ` (skipped: ${match.note})` : ''}`).join(', ') : 'none'}</span>
               </p>
             ) : null}
           </SubPanel>
@@ -156,11 +163,12 @@ export function BotModerationPanel({
                       <Tag tone={stateTag.tone}>{stateTag.label}</Tag>
                     </div>
                     <p className="desk-row__meta">
-                      {rule.matchTarget} · {rule.regex ? 'regex' : 'contains'} · {rule.action}
+                      Exempt {rule.exemptRole || 'moderator'} and above · timeout {rule.timeoutSeconds || 60}s · {rule.matchTarget} · {rule.regex ? 'regex' : 'contains'} · {rule.action}
                     </p>
                     <p className="desk-row__text mono">{rule.pattern}</p>
                     <div className="desk-row__line">
                       <span className="desk-row__meta">{rule.reason || 'no reason'}</span>
+                      <button className="desk-btn desk-btn--small" type="button" disabled={loading} onClick={() => onEdit(rule)}>Edit</button>
                       <button className="desk-btn desk-btn--small desk-btn--danger" type="button" disabled={loading} onClick={() => onDelete(rule)}>
                         Delete
                       </button>

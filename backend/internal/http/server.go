@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -28,7 +29,7 @@ type Server struct {
 	history                   eventHistoryStore
 	historyLoadError          string
 	historyWritable           bool
-	dashboardConfig           *dashboardconfig.Store
+	dashboardConfig           dashboardConfigStore
 	dashboardConfigLoadError  string
 	sessions                  *sessions.Store
 	sessionsLoadError         string
@@ -44,9 +45,15 @@ type Server struct {
 	interactionsLoadError     string
 	twitch                    *twitchAuthStore
 	twitchTokenLoadError      string
+	twitchSentMessages        twitch.SentMessages
 	twitchCommandProcessor    *twitch.CommandProcessor
 	twitchEventSubDiagnostics *twitch.DiagnosticsStore
 	mux                       *http.ServeMux
+}
+
+type dashboardConfigStore interface {
+	Get(context.Context) (dashboardconfig.Document, bool, error)
+	Replace(context.Context, json.RawMessage) (dashboardconfig.Document, error)
 }
 
 type eventHistoryStore interface {
@@ -164,7 +171,7 @@ func (s *Server) refreshActiveSession(ctx context.Context) {
 	s.setActiveSessionID(session.ID)
 }
 
-func newDashboardConfigStore(cfg config.Config) (*dashboardconfig.Store, string) {
+func newDashboardConfigStore(cfg config.Config) (dashboardConfigStore, string) {
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		return nil, ""
 	}
@@ -304,7 +311,8 @@ func (s *Server) StartBackground(ctx context.Context) {
 				Scopes:      append([]string(nil), token.Scope...),
 			}, true
 		},
-		CommandProcessor: s.twitchCommandProcessor,
+		CommandProcessor:  s.twitchCommandProcessor,
+		IgnoreChatMessage: s.twitchSentMessages.Contains,
 		InteractionRules: func() interactions.Rules {
 			if s.interactions == nil || s.interactionsLoadErrorValue() != "" {
 				return interactions.Rules{}

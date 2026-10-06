@@ -121,5 +121,6 @@ func (s *Server) sendTwitchChatMessage(ctx context.Context, message string) (str
 	if !item.IsSent {
 		return item.MessageID, fmt.Errorf("twitch chat dropped message: %s %s", item.DropReason.Code, item.DropReason.Message)
 	}
+	s.twitchSentMessages.Remember(item.MessageID)
 	return item.MessageID, nil
 }

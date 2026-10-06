@@ -18,7 +18,7 @@ describe('API operation transport', () => {
     ['OBS status', '/api/obs/status', () => fetchOBSStatus(base), false],
     ['readiness', '/readyz', () => fetchReadiness(base), false],
     ['version', '/version', () => fetchBuildInfo(base), false],
-    ['history', '/api/events/history?limit=250', () => fetchEventHistory(999, base), false],
+    ['history', '/api/events/history?limit=250', () => fetchEventHistory(999, base, operator), true],
     ['session', '/api/stream/session', () => fetchStreamSession(base, operator), true],
     ['session report', '/api/stream/session/session%2Fid?limit=1', () => fetchStreamSessionReport('session/id', 0, base, operator), true],
     ['dashboard config', '/api/dashboard/config', () => fetchDashboardConfig(base, operator), true],

@@ -229,7 +229,7 @@ func (s *Store) ListQuotes(ctx context.Context) ([]Quote, error) {
 func (s *Store) ListModerationRules(ctx context.Context) ([]ModerationRule, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at FROM bot_moderation_rules ORDER BY name ASC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds FROM bot_moderation_rules ORDER BY name ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -253,9 +253,9 @@ func (s *Store) SaveModerationRule(ctx context.Context, rule ModerationRule) (Mo
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if strings.TrimSpace(rule.ID) == "" {
-		return scanModerationRule(s.db.QueryRowContext(ctx, `INSERT INTO bot_moderation_rules (name, enabled, enforce, pattern, match_target, case_sensitive, regex, action, reason, source, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at`, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt))
+		return scanModerationRule(s.db.QueryRowContext(ctx, `INSERT INTO bot_moderation_rules (name, enabled, enforce, pattern, match_target, case_sensitive, regex, action, reason, source, expires_at, exempt_role, timeout_seconds) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds`, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt, rule.ExemptRole, rule.TimeoutSeconds))
 	}
-	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET name=$2, enabled=$3, enforce=$4, pattern=$5, match_target=$6, case_sensitive=$7, regex=$8, action=$9, reason=$10, source=CASE WHEN $11 = 'manual' THEN source ELSE $11 END, expires_at=COALESCE($12, expires_at), updated_at=now() WHERE id=$1 RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at`, rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt))
+	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET name=$2, enabled=$3, enforce=$4, pattern=$5, match_target=$6, case_sensitive=$7, regex=$8, action=$9, reason=$10, source=CASE WHEN $11 = 'manual' THEN source ELSE $11 END, expires_at=COALESCE($12, expires_at), exempt_role=$13, timeout_seconds=$14, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds`, rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt, rule.ExemptRole, rule.TimeoutSeconds))
 }
 
 func (s *Store) DisableNukeRadiationRule(ctx context.Context, id string) (ModerationRule, error) {
@@ -265,7 +265,7 @@ func (s *Store) DisableNukeRadiationRule(ctx context.Context, id string) (Modera
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET enabled=false, enforce=false, updated_at=now() WHERE id=$1 AND source='nuke_radiation' RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at`, id))
+	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET enabled=false, enforce=false, updated_at=now() WHERE id=$1 AND source='nuke_radiation' RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds`, id))
 }
 
 func (s *Store) DeleteModerationRule(ctx context.Context, id string) error {
@@ -591,7 +591,7 @@ func scanQuote(row quoteScanner) (Quote, error) {
 func scanModerationRule(row moderationRuleScanner) (ModerationRule, error) {
 	var rule ModerationRule
 	var expiresAt sql.NullTime
-	if err := row.Scan(&rule.ID, &rule.Name, &rule.Enabled, &rule.Enforce, &rule.Pattern, &rule.MatchTarget, &rule.CaseSensitive, &rule.Regex, &rule.Action, &rule.Reason, &rule.Source, &expiresAt, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+	if err := row.Scan(&rule.ID, &rule.Name, &rule.Enabled, &rule.Enforce, &rule.Pattern, &rule.MatchTarget, &rule.CaseSensitive, &rule.Regex, &rule.Action, &rule.Reason, &rule.Source, &expiresAt, &rule.CreatedAt, &rule.UpdatedAt, &rule.ExemptRole, &rule.TimeoutSeconds); err != nil {
 		return ModerationRule{}, err
 	}
 	if expiresAt.Valid {
@@ -721,6 +721,8 @@ CREATE TABLE IF NOT EXISTS bot_moderation_rules (
 );
 
 CREATE INDEX IF NOT EXISTS bot_moderation_rules_enabled_idx ON bot_moderation_rules (enabled);
+ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS exempt_role text NOT NULL DEFAULT 'moderator' CHECK (exempt_role IN ('none', 'viewer', 'moderator', 'broadcaster'));
+ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS timeout_seconds integer NOT NULL DEFAULT 60 CHECK (timeout_seconds BETWEEN 1 AND 1209600);
 ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS enforce boolean NOT NULL DEFAULT false;
 ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual';
 ALTER TABLE bot_moderation_rules ADD COLUMN IF NOT EXISTS expires_at timestamptz;

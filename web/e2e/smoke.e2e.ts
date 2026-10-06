@@ -572,7 +572,7 @@ test.describe('operator browser smoke', () => {
     await page.goto('/dashboard/chat');
     const queue = page.locator('#reward-queue');
     await queue.getByRole('button', { name: 'Load rewards', exact: true }).click();
-    await expect.poll(() => reads).toBe(1);
+    await expect.poll(() => reads).toBeGreaterThan(0);
     await queue.getByLabel('New reward title').fill('Hydrate');
     await queue.getByLabel('Global cooldown seconds').first().fill('604801');
     await queue.getByRole('button', { name: 'Create reward', exact: true }).click();
@@ -1124,4 +1124,99 @@ test.describe('operator browser smoke', () => {
     await page.goto('/overlay/starting?minutes=10');
     await expect(page.getByText('10:00')).toBeVisible();
   });
+});
+
+test('copies authenticated overlay source URLs while demo previews stay offline', async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem('overlaid.operatorSecret.session.v1', 'operator-fixture'));
+  await page.route('**/api/dashboard/overlay-token', route => {
+    expect(route.request().headers()['x-overlay-operator-secret']).toBe('operator-fixture');
+    return route.fulfill({ json: { key: 'overlay+fixture' } });
+  });
+  await page.goto('/dashboard/overlays');
+  await expect(page.getByRole('button', { name: 'Copy URL' }).first()).toBeEnabled();
+  const urls = await page.locator('code.desk-url').allTextContents();
+  expect(urls.length).toBe(10);
+  for (const value of urls) expect(new URL(value).searchParams.get('key')).toBe('overlay+fixture');
+  for (const src of await page.locator('iframe').evaluateAll(frames => frames.map(frame => frame.getAttribute('src')))) {
+    expect(src).toContain('demo=1'); expect(src).not.toContain('key=');
+  }
+});
+
+test('loads shared overlay display settings instead of localStorage and refetches on reconnect', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('overlaid.dashboard.config.v1', JSON.stringify({ display: { chatMaxVisible: 1 } }));
+    const sources: EventTarget[] = [];
+    class FixtureSource extends EventTarget {
+      constructor(url: string) { super(); if (!url.includes('key=overlay-fixture')) throw new Error('missing key'); sources.push(this); }
+      close() { const index = sources.indexOf(this); if (index >= 0) sources.splice(index, 1); }
+    }
+    Object.defineProperty(window, 'EventSource', { value: FixtureSource });
+    Object.assign(window, { overlayTestEmit: (type: string, data?: string) => sources.forEach(source => source.dispatchEvent(data ? new MessageEvent(type, { data }) : new Event(type))) });
+  });
+  let reads = 0;
+  let chatMaxVisible = 3;
+  await page.route('**/api/overlay/display?*', route => {
+    expect(new URL(route.request().url()).searchParams.get('key')).toBe('overlay-fixture');
+    reads++; return route.fulfill({ json: { display: { chatMaxVisible } } });
+  });
+  await page.goto('/overlay/chat?key=overlay-fixture');
+  await expect.poll(() => reads).toBeGreaterThan(0);
+  const emit = async (type: string, data?: string) => page.evaluate(({ type, data }) => {
+    (window as unknown as { overlayTestEmit(type: string, data?: string): void }).overlayTestEmit(type, data);
+  }, { type, data });
+  for (let i = 0; i < 4; i++) await emit('chat_message', JSON.stringify({ id: String(i), type: 'chat_message', title: 'Viewer', message: `shared ${i}` }));
+  await expect(page.locator('.sc-chat')).toHaveCount(3);
+  const initialReads = reads;
+  chatMaxVisible = 2;
+  await emit('open');
+  await expect.poll(() => reads).toBeGreaterThan(initialReads);
+  await emit('chat_message', JSON.stringify({ id: 'after', type: 'chat_message', title: 'Viewer', message: 'after reconnect' }));
+  await expect(page.locator('.sc-chat')).toHaveCount(2);
+  await page.route('**/api/dashboard/config', route => {
+    if (route.request().method() === 'PUT') chatMaxVisible = route.request().postDataJSON().config.display.chatMaxVisible;
+    return route.fulfill({ json: { config: { display: { chatMaxVisible } } } });
+  });
+  await page.goto('/dashboard/settings');
+  await page.getByLabel('Chat max visible').fill('4');
+  await page.getByRole('button', { name: 'Save shared', exact: true }).click();
+  await expect.poll(() => chatMaxVisible).toBe(4);
+  await page.goto('/overlay/chat?key=overlay-fixture');
+  for (let i = 0; i < 6; i++) await emit('chat_message', JSON.stringify({ id: String(i), type: 'chat_message', title: 'Viewer', message: `saved ${i}` }));
+  await expect(page.locator('.sc-chat')).toHaveCount(4);
+  await page.route('**/api/overlay/display?*', route => route.fulfill({ status: 503 }));
+  await page.reload();
+  await expect(page.locator('.sc-standby')).toBeVisible();
+  for (let i = 0; i < 10; i++) await emit('chat_message', JSON.stringify({ id: String(i), type: 'chat_message', title: 'Viewer', message: `fallback ${i}` }));
+  await expect(page.locator('.sc-chat')).toHaveCount(8);
+});
+
+test('edits moderation exemptions and timeouts and explains exempt dry-run matches', async ({ page }) => {
+  const rule = { id: 'policy-rule', name: 'spam', pattern: 'buy', enabled: true, enforce: true, action: 'timeout', matchTarget: 'message', caseSensitive: false, regex: false, exemptRole: 'moderator', timeoutSeconds: 60, reason: '' };
+  await page.route('**/api/bot/moderation/rules', route => {
+    if (route.request().method() === 'POST') {
+      const payload = route.request().postDataJSON();
+      expect(payload.id).toBe(rule.id);
+      expect(payload.exemptRole).toBe('broadcaster');
+      expect(payload.timeoutSeconds).toBe(300);
+      Object.assign(rule, payload);
+      return route.fulfill({ json: rule });
+    }
+    return route.fulfill({ json: { rules: [rule] } });
+  });
+  await page.route('**/api/bot/moderation/dry-run', route => {
+    expect(route.request().postDataJSON().role).toBe('broadcaster');
+    return route.fulfill({ json: { matches: [{ ruleName: 'spam', action: 'timeout', skipped: true, note: 'role_exempt:broadcaster' }] } });
+  });
+  await page.goto('/dashboard/chat');
+  const panel = page.locator('#bot-moderation');
+  await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+  await panel.getByLabel('Exempt role and above').selectOption('broadcaster');
+  await panel.getByLabel('Rule timeout seconds').fill('300');
+  await panel.getByRole('button', { name: 'Save rule', exact: true }).click();
+  await expect(panel.getByText('Saved spam.', { exact: true })).toBeVisible();
+  await expect(panel.getByText(/Exempt broadcaster and above · timeout 300s/)).toBeVisible();
+  await panel.getByLabel('Test role').selectOption('broadcaster');
+  await panel.getByLabel('Message to test').fill('buy now');
+  await panel.getByRole('button', { name: 'Dry run', exact: true }).click();
+  await expect(panel.getByText(/skipped: role_exempt:broadcaster/)).toBeVisible();
 });

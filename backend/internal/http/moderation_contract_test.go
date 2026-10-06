@@ -265,7 +265,7 @@ func TestModerationConfigurationHTTPAuditReceipts(t *testing.T) {
 			t.Fatalf("audit %d ID=%#v", i, data)
 		}
 		if i == 0 || i == 1 {
-			if data["enabled"] != (i == 0) || data["enforce"] != true || data["moderationAction"] != "delete" || data["matchTarget"] != "message" || audit.Command != "spam" {
+			if data["exemptRole"] != "moderator" || data["timeoutSeconds"] != float64(60) || data["enabled"] != (i == 0) || data["enforce"] != true || data["moderationAction"] != "delete" || data["matchTarget"] != "message" || audit.Command != "spam" {
 				t.Fatalf("saved metadata %d = %#v", i, audit)
 			}
 		} else if len(data) != 1 || audit.Command != "" {

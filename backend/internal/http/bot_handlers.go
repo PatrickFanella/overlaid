@@ -77,20 +77,23 @@ type botModerationRulesResponse struct {
 	LoadError string               `json:"loadError,omitempty"`
 }
 type botModerationRuleRequest struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Enabled       bool   `json:"enabled"`
-	Enforce       bool   `json:"enforce"`
-	Pattern       string `json:"pattern"`
-	MatchTarget   string `json:"matchTarget"`
-	CaseSensitive bool   `json:"caseSensitive"`
-	Regex         bool   `json:"regex"`
-	Action        string `json:"action"`
-	Reason        string `json:"reason"`
+	ExemptRole     string `json:"exemptRole"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Enabled        bool   `json:"enabled"`
+	Enforce        bool   `json:"enforce"`
+	Pattern        string `json:"pattern"`
+	MatchTarget    string `json:"matchTarget"`
+	CaseSensitive  bool   `json:"caseSensitive"`
+	Regex          bool   `json:"regex"`
+	Action         string `json:"action"`
+	Reason         string `json:"reason"`
 }
 type botModerationDryRunRequest struct {
-	Message  string `json:"message"`
-	Username string `json:"username"`
+	Role     bot.Role `json:"role"`
+	Message  string   `json:"message"`
+	Username string   `json:"username"`
 }
 type botModerationDryRunResponse struct {
 	Matches   []bot.ModerationMatch `json:"matches"`
@@ -289,7 +292,7 @@ func (s *Server) botModerationRuleSave(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(request.ID) != "" {
 		operation = "update"
 	}
-	rule, err := s.botStore.SaveModerationRule(r.Context(), bot.ModerationRule{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Enforce: request.Enforce, Pattern: request.Pattern, MatchTarget: request.MatchTarget, CaseSensitive: request.CaseSensitive, Regex: request.Regex, Action: request.Action, Reason: request.Reason})
+	rule, err := s.botStore.SaveModerationRule(r.Context(), bot.ModerationRule{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Enforce: request.Enforce, ExemptRole: request.ExemptRole, TimeoutSeconds: request.TimeoutSeconds, Pattern: request.Pattern, MatchTarget: request.MatchTarget, CaseSensitive: request.CaseSensitive, Regex: request.Regex, Action: request.Action, Reason: request.Reason})
 	if err != nil {
 		s.recordBotModerationChange(r.Context(), bot.ModerationRule{ID: request.ID}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
@@ -335,7 +338,7 @@ func (s *Server) botModerationDryRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bot moderation dry-run unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	writeJSON(w, botModerationDryRunResponse{Matches: matches})
+	writeJSON(w, botModerationDryRunResponse{Matches: bot.ApplyModerationExemptions(matches, request.Role)})
 }
 
 func (s *Server) botModerationNukeDryRun(w http.ResponseWriter, r *http.Request) {

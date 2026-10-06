@@ -1,12 +1,11 @@
 import { useState, type CSSProperties } from 'react';
-import { loadDashboardConfig } from '../lib/dashboardConfig';
+import { useOverlayDisplay } from '../lib/useOverlayDisplay';
 import type { OverlayEvent } from '../lib/events';
 import { useOverlayStream } from '../lib/useOverlayStream';
 import { OverlayStage } from '../overlay/Brand';
 import { asString, isRecord } from '../overlay/data';
 
 export function OverlayChatPage() {
-  const [display] = useState(() => loadDashboardConfig().display);
   const [messages, setMessages] = useState<OverlayEvent[]>([]);
 
   const status = useOverlayStream((event) => {
@@ -21,6 +20,7 @@ export function OverlayChatPage() {
 
     setMessages((current) => [...current, event].slice(-display.chatMaxVisible));
   });
+  const display = useOverlayDisplay(status);
 
   return (
     <OverlayStage name="chat" status={status} label="Twitch chat">

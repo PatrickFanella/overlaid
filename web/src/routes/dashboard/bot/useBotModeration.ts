@@ -87,6 +87,15 @@ export function useBotModeration(apiBaseUrl: string, operatorSecret: string, onC
     rules, draft, test, dryRun, actionDraft, actionResult, nukeDraft, nukeResult, nukeExecuteResult, nukeRollbackResult,
     loading, pending, error, result, nukeError,
     onDraftChange: setDraft,
+    onEdit: (rule: BotModerationRule) => {
+      if (busy.current) return;
+      setDraft({
+        id: rule.id, name: rule.name, enabled: rule.enabled, enforce: Boolean(rule.enforce),
+        pattern: rule.pattern, matchTarget: rule.matchTarget as typeof draft.matchTarget,
+        caseSensitive: rule.caseSensitive, regex: rule.regex, action: rule.action as typeof draft.action,
+        reason: rule.reason || '', exemptRole: rule.exemptRole || 'moderator', timeoutSeconds: rule.timeoutSeconds || 60,
+      });
+    },
     onTestChange: (next: typeof test) => { if (!busy.current) { setTest(next); setDryRun(null); } },
     onActionChange: (next: typeof actionDraft) => { if (!busy.current) { setActionDraft(next); setActionResult(null); } },
     onNukeDraftChange,

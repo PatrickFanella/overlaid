@@ -542,8 +542,9 @@ func TestModerationRulePersistenceMatchingAndRollbackPostgres(t *testing.T) {
 	edited := created
 	edited.Pattern, edited.MatchTarget, edited.Action = "^spam_[0-9]+$", "username", "delete"
 	edited.Regex, edited.CaseSensitive, edited.Enforce = true, true, true
+	edited.ExemptRole, edited.TimeoutSeconds = "broadcaster", 300
 	updated, err := store.SaveModerationRule(ctx, edited)
-	if err != nil || updated.ID != created.ID || !updated.CreatedAt.Equal(created.CreatedAt) || updated.Pattern != edited.Pattern || updated.MatchTarget != "username" || updated.Action != "delete" || !updated.Enforce || !updated.Regex || !updated.CaseSensitive {
+	if err != nil || updated.ID != created.ID || !updated.CreatedAt.Equal(created.CreatedAt) || updated.Pattern != edited.Pattern || updated.MatchTarget != "username" || updated.Action != "delete" || updated.ExemptRole != "broadcaster" || updated.TimeoutSeconds != 300 || !updated.Enforce || !updated.Regex || !updated.CaseSensitive {
 		t.Fatalf("updated = %#v err=%v", updated, err)
 	}
 	matches, err := store.DryRunModeration(ctx, "unrelated", "spam_42")
@@ -627,5 +628,44 @@ func TestModerationRulePersistenceMatchingAndRollbackPostgres(t *testing.T) {
 	updated.ID = "missing"
 	if _, err := store.SaveModerationRule(ctx, updated); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("missing edit = %v", err)
+	}
+}
+
+func TestModerationPolicyMigrationPostgres(t *testing.T) {
+	store, _ := isolatedPostgresBotStore(t)
+	ctx := t.Context()
+	if _, err := store.db.ExecContext(ctx, `ALTER TABLE bot_moderation_rules DROP COLUMN exempt_role, DROP COLUMN timeout_seconds`); err != nil {
+		t.Fatal(err)
+	}
+	var id string
+	if err := store.db.QueryRowContext(ctx, `INSERT INTO bot_moderation_rules(name,enabled,pattern,match_target,action) VALUES ('legacy',true,'buy','message','timeout') RETURNING id`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	migration, err := os.ReadFile("../../../migrations/0002_moderation_policy.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := store.db.ExecContext(ctx, string(migration)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rules, err := store.ListModerationRules(ctx)
+	if err != nil || len(rules) != 1 || rules[0].ID != id || rules[0].ExemptRole != "moderator" || rules[0].TimeoutSeconds != 60 {
+		t.Fatalf("migrated=%#v %v", rules, err)
+	}
+	rule := rules[0]
+	rule.TimeoutSeconds = 420
+	rule.ExemptRole = "broadcaster"
+	saved, err := store.SaveModerationRule(ctx, rule)
+	if err != nil || saved.TimeoutSeconds != 420 || saved.ExemptRole != "broadcaster" {
+		t.Fatalf("saved=%#v %v", saved, err)
+	}
+	if err := store.Load(); err != nil {
+		t.Fatal(err)
+	}
+	rules, err = store.ListModerationRules(ctx)
+	if err != nil || rules[0].TimeoutSeconds != 420 {
+		t.Fatalf("reload reset policy %#v %v", rules, err)
 	}
 }

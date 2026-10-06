@@ -30,7 +30,7 @@ export function getBrowserOrigin() {
   return 'http://localhost:5173';
 }
 
-export function buildOverlaySourceUrl(path: string, apiBaseUrl: string) {
+export function buildOverlaySourceUrl(path: string, apiBaseUrl: string, key = '') {
   const origin = getBrowserOrigin();
   const url = new URL(path, origin);
   const defaultApiBaseUrl = getDefaultApiBaseUrl(origin);
@@ -39,5 +39,6 @@ export function buildOverlaySourceUrl(path: string, apiBaseUrl: string) {
     url.searchParams.set('apiBaseUrl', apiBaseUrl);
   }
 
+  if (key) url.searchParams.set('key', key);
   return url.toString();
 }

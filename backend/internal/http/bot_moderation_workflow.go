@@ -238,8 +238,19 @@ func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, even
 	if len(matches) == 0 {
 		return
 	}
-	match := matches[0]
-	request := botModerationActionRequest{Action: match.Action, TargetUserID: twitchEventString(event, "chatter_user_id"), TargetUserLogin: event.Title, MessageID: twitchMessageIDFromEvent(event), Reason: firstNonEmptyString(match.Reason, "moderation rule: "+match.RuleName)}
+	matches = bot.ApplyModerationExemptions(matches, moderationRoleForEvent(event))
+	var match bot.ModerationMatch
+	found := false
+	for _, candidate := range matches {
+		if !candidate.Skipped {
+			match, found = candidate, true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+	request := botModerationActionRequest{Action: match.Action, DurationSeconds: match.TimeoutSeconds, TargetUserID: twitchEventString(event, "chatter_user_id"), TargetUserLogin: event.Title, MessageID: twitchMessageIDFromEvent(event), Reason: firstNonEmptyString(match.Reason, "moderation rule: "+match.RuleName)}
 	if request.Action == "flag" {
 		w.recordModerationEnforcementAudit(ctx, event, match, request, "allowed", "moderation_flag")
 		return
@@ -415,4 +426,28 @@ func twitchMessageIDFromEvent(event events.Event) string {
 		}
 	}
 	return ""
+}
+
+func moderationRoleForEvent(event events.Event) bot.Role {
+	chatter := twitchEventString(event, "chatter_user_id")
+	if chatter != "" && chatter == twitchEventString(event, "broadcaster_user_id") {
+		return bot.RoleBroadcaster
+	}
+	if raw, ok := event.Data["twitchEvent"].(map[string]any); ok {
+		if badges, ok := raw["badges"].([]any); ok {
+			role := bot.RoleViewer
+			for _, value := range badges {
+				if badge, ok := value.(map[string]any); ok {
+					if badge["set_id"] == "broadcaster" {
+						return bot.RoleBroadcaster
+					}
+					if badge["set_id"] == "moderator" {
+						role = bot.RoleModerator
+					}
+				}
+			}
+			return role
+		}
+	}
+	return bot.RoleViewer
 }

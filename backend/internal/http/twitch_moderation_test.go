@@ -301,24 +301,26 @@ func (d *moderationRuleTestDriver) query(query string, args []driver.NamedValue)
 		}
 		return rows, nil
 	case strings.Contains(query, "INSERT INTO bot_moderation_rules"):
-		if len(args) != 11 {
-			return nil, fmt.Errorf("expected 11 args, got %d", len(args))
+		if len(args) != 13 {
+			return nil, fmt.Errorf("expected 13 args, got %d", len(args))
 		}
 		d.next++
 		rule := bot.ModerationRule{
-			ID:            fmt.Sprintf("rule-%d", d.next),
-			Name:          args[0].Value.(string),
-			Enabled:       args[1].Value.(bool),
-			Enforce:       args[2].Value.(bool),
-			Pattern:       args[3].Value.(string),
-			MatchTarget:   args[4].Value.(string),
-			CaseSensitive: args[5].Value.(bool),
-			Regex:         args[6].Value.(bool),
-			Action:        args[7].Value.(string),
-			Reason:        args[8].Value.(string),
-			Source:        args[9].Value.(string),
-			CreatedAt:     time.Now().UTC(),
-			UpdatedAt:     time.Now().UTC(),
+			ID:             fmt.Sprintf("rule-%d", d.next),
+			Name:           args[0].Value.(string),
+			Enabled:        args[1].Value.(bool),
+			Enforce:        args[2].Value.(bool),
+			Pattern:        args[3].Value.(string),
+			MatchTarget:    args[4].Value.(string),
+			CaseSensitive:  args[5].Value.(bool),
+			Regex:          args[6].Value.(bool),
+			Action:         args[7].Value.(string),
+			Reason:         args[8].Value.(string),
+			Source:         args[9].Value.(string),
+			ExemptRole:     args[11].Value.(string),
+			TimeoutSeconds: int(args[12].Value.(int64)),
+			CreatedAt:      time.Now().UTC(),
+			UpdatedAt:      time.Now().UTC(),
 		}
 		if args[10].Value != nil {
 			expiresAt := args[10].Value.(time.Time).UTC()
@@ -336,6 +338,7 @@ func (d *moderationRuleTestDriver) query(query string, args []driver.NamedValue)
 		rule.Pattern, rule.MatchTarget = args[4].Value.(string), args[5].Value.(string)
 		rule.CaseSensitive, rule.Regex = args[6].Value.(bool), args[7].Value.(bool)
 		rule.Action, rule.Reason = args[8].Value.(string), args[9].Value.(string)
+		rule.ExemptRole, rule.TimeoutSeconds = args[12].Value.(string), int(args[13].Value.(int64))
 		if source := args[10].Value.(string); source != "manual" {
 			rule.Source = source
 		}
@@ -395,8 +398,8 @@ func singleRowFromRule(rule bot.ModerationRule) driver.Rows {
 		expiresAt = *rule.ExpiresAt
 	}
 	return &singleRow{
-		columns: []string{"id", "name", "enabled", "enforce", "pattern", "match_target", "case_sensitive", "regex", "action", "reason", "source", "expires_at", "created_at", "updated_at"},
-		values:  []driver.Value{rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, expiresAt, rule.CreatedAt, rule.UpdatedAt},
+		columns: []string{"id", "name", "enabled", "enforce", "pattern", "match_target", "case_sensitive", "regex", "action", "reason", "source", "expires_at", "created_at", "updated_at", "exempt_role", "timeout_seconds"},
+		values:  []driver.Value{rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, expiresAt, rule.CreatedAt, rule.UpdatedAt, rule.ExemptRole, int64(rule.TimeoutSeconds)},
 	}
 }
 
@@ -618,5 +621,52 @@ func TestNukeExecutionCapsBatchAndContinuesIndividualFailures(t *testing.T) {
 	}
 	if calls != 50 || len(response.Matches) != 50 || response.Attempted != 50 || response.Succeeded != 25 || response.Failed != 25 || response.Interrupted {
 		t.Fatalf("bounded execution: calls=%d response=%#v", calls, response)
+	}
+}
+
+func TestAutomaticModerationExemptionAndCustomTimeout(t *testing.T) {
+	s := NewServer(config.Config{TwitchClientID: "client"}, events.NewBus(4))
+	s.botStore = newModerationRuleTestStore(t)
+	_, err := s.botStore.SaveModerationRule(t.Context(), bot.ModerationRule{Name: "spam", Enabled: true, Enforce: true, Pattern: "buy", Action: "timeout", TimeoutSeconds: 300})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"moderator:manage:banned_users"}, UserID: "host", ExpiresAt: time.Now().Add(time.Hour)}
+	old := twitchHTTPClient
+	t.Cleanup(func() { twitchHTTPClient = old })
+	calls := 0
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		var payload struct {
+			Data struct {
+				Duration int `json:"duration"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Data.Duration != 300 {
+			t.Fatalf("duration=%d", payload.Data.Duration)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"data":[]}`))}, nil
+	})}
+	for _, role := range []string{"moderator", "broadcaster", "viewer"} {
+		event := events.Event{Type: events.EventTypeChatMessage, Title: "User", Message: "buy", Data: map[string]any{"messageId": "message", "twitchEvent": map[string]any{"chatter_user_id": "user", "broadcaster_user_id": "host", "badges": []any{map[string]any{"set_id": role}}}}}
+		s.enforceModerationForEvent(t.Context(), event)
+	}
+	if calls != 1 {
+		t.Fatalf("enforcement calls=%d", calls)
+	}
+	s.twitchSentMessages.Remember("echo")
+	event := events.Event{Type: events.EventTypeChatMessage, Message: "buy", Data: map[string]any{"messageId": "echo"}}
+	s.publishEventSubEvent(event)
+	if calls != 1 {
+		t.Fatal("bot echo reached moderation")
+	}
+	req := httptest.NewRequest("POST", "/api/bot/moderation/dry-run", strings.NewReader(`{"message":"buy","username":"Host","role":"broadcaster"}`))
+	r := httptest.NewRecorder()
+	s.Handler().ServeHTTP(r, req)
+	if r.Code != 200 || !strings.Contains(r.Body.String(), `"skipped":true`) || !strings.Contains(r.Body.String(), "role_exempt:broadcaster") {
+		t.Fatalf("dry run=%d %s", r.Code, r.Body)
 	}
 }

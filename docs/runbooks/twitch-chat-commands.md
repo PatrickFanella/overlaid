@@ -30,7 +30,7 @@ The parser only accepts `!`-prefixed commands, lowercases the command name, and 
 - Cooldowns are global per command, apply to all trusted users, last 10 seconds, live in memory, and reset when the API process restarts.
 - `!clear`, `!brb`, and `!back` update retained overlay state so OBS browser-source reconnects do not replay stale BRB/overlay state.
 - Commands do not execute arbitrary OBS actions or dashboard quick actions.
-- Commands do not send outbound Twitch chat replies.
+- Custom commands can use overlay, chat, or both response modes. Chat replies require `user:write:chat`; the bot ignores successful send IDs for two minutes so replies cannot run commands or moderation. Broadcaster messages with other IDs still run normally.
 
 If you add chat aliases, they can only point to `alert`, `clear`, `brb`, or `back`. The alias layer is intentionally small and cannot trigger custom commands.
 

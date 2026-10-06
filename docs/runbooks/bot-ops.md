@@ -23,7 +23,7 @@ Implemented now:
 - Custom Twitch commands can publish safe ticker/alert overlays, guarded outbound Twitch chat replies, or both, with bounded template variables.
 - Templates can use operator-configured `{api:name}` variables for read-only HTTPS GET data.
 
-Implemented in later FossaBot parity slices:
+Also implemented:
 
 - Nuke-style dry-run, guarded delete/timeout execution, temporary radiation windows, and rollback.
 - Twitch reward inventory, guarded creation/deletion, pause/resume, enable/disable, prompt and user-input edits, cooldown and per-stream/user limits, redemption fulfillment/canceling, and fulfillment-note visibility through the Twitch interaction rules page.
@@ -270,3 +270,7 @@ If storage fails or the queue fills, bot readiness and `lastAuditError` report t
 Counter increments (`!count`) and quote mutations (`!addquote`, `!quote add`, `!delquote`) require moderator or broadcaster permissions. Role checks run before storage access, so an unauthorized attempt is audited as `denied` with reason `permission_denied` even when community storage is unavailable. Viewers may request a random quote with `!quote`; that read reports unavailable storage as a failure.
 
 The optional Postgres community test verifies counter/quote CRUD, preserved record identity, empty/deleted reads, and twenty concurrent counter increments without lost updates: from `backend`, run `OVERLAID_TEST_DATABASE_URL='<disposable-postgres-url>' go test ./internal/bot -run TestCommunityPersistenceAndConcurrentCounterPostgres -count=1`. It creates and removes its own private schema.
+
+## Automatic moderation policy
+
+Each saved rule defaults to exempting moderators and the broadcaster. Edit **Exempt role and above** to choose moderator, broadcaster, everyone, or none; lower roles remain eligible. Timeout rules accept 1–1,209,600 seconds and default to 60. Existing rows receive these defaults during migration. The Chat editor can update existing rules. Test a message with its role: matching exempt rules remain visible with a skipped note, and automatic enforcement selects the first eligible match. Manual moderation and explicitly reviewed nuke execution retain their separate guarded workflow.

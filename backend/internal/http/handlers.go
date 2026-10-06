@@ -175,6 +175,11 @@ func (s *Server) buildExposureReadinessChecks() []readinessCheck {
 		return []readinessCheck{{Name: "exposure", Status: "ok"}}
 	}
 	checks := []readinessCheck{{Name: "exposure", Status: "ok"}}
+	if strings.TrimSpace(s.config.OverlayToken) == "" {
+		checks = append(checks, readinessCheck{Name: "overlay_token", Status: "degraded", Hint: "set OVERLAY_TOKEN before exposing overlay streams"})
+	} else {
+		checks = append(checks, readinessCheck{Name: "overlay_token", Status: "ok"})
+	}
 	if strings.TrimSpace(s.config.OperatorSecret) == "" {
 		checks = append(checks, readinessCheck{Name: "operator_secret", Status: "degraded", Hint: "EXPOSURE_MODE is not local; set OPERATOR_SECRET before exposing protected dashboard APIs"})
 	} else {
@@ -507,6 +512,9 @@ func (s *Server) brbStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) publishEventSubEvent(event events.Event) {
+	if event.Type == events.EventTypeChatMessage && s.twitchSentMessages.Contains(twitchMessageIDFromEvent(event)) {
+		return
+	}
 	switch event.Type {
 	case events.EventTypeClear:
 		if err := s.state.Clear(); err != nil {
@@ -547,7 +555,19 @@ func (s *Server) eventHistory(w http.ResponseWriter, r *http.Request) {
 	if s.history != nil {
 		items = s.history.List(limit)
 	}
-	writeJSON(w, history.Response{Events: items})
+	sanitized := make([]events.Event, len(items))
+	for i, event := range items {
+		sanitized[i] = event
+		if event.Data != nil {
+			sanitized[i].Data = make(map[string]any, len(event.Data))
+			for key, value := range event.Data {
+				if key != "twitchEvent" {
+					sanitized[i].Data[key] = value
+				}
+			}
+		}
+	}
+	writeJSON(w, history.Response{Events: sanitized})
 }
 
 func parsePositiveLimit(w http.ResponseWriter, r *http.Request, fallback, max int) (int, bool) {
@@ -704,4 +724,35 @@ func normalizeSeverity(severity events.Severity) events.Severity {
 	default:
 		return events.SeverityInfo
 	}
+}
+
+func (s *Server) overlayToken(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, map[string]string{"key": strings.TrimSpace(s.config.OverlayToken)})
+}
+
+func (s *Server) overlayDisplay(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	display := json.RawMessage(`{}`)
+	if s.dashboardConfig != nil {
+		doc, ok, err := s.dashboardConfig.Get(r.Context())
+		if err != nil {
+			http.Error(w, "overlay settings unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if ok {
+			var config map[string]json.RawMessage
+			if json.Unmarshal(doc.Config, &config) != nil {
+				http.Error(w, "overlay settings unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if value, exists := config["display"]; exists {
+				display = value
+			}
+		}
+	} else if s.dashboardConfigLoadError != "" {
+		http.Error(w, "overlay settings unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, map[string]json.RawMessage{"display": display})
 }

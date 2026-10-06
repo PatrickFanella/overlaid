@@ -8,32 +8,50 @@ import (
 )
 
 type ModerationRule struct {
-	ID            string     `json:"id"`
-	Name          string     `json:"name"`
-	Enabled       bool       `json:"enabled"`
-	Enforce       bool       `json:"enforce"`
-	Pattern       string     `json:"pattern"`
-	MatchTarget   string     `json:"matchTarget"`
-	CaseSensitive bool       `json:"caseSensitive"`
-	Regex         bool       `json:"regex"`
-	Action        string     `json:"action"`
-	Reason        string     `json:"reason,omitempty"`
-	Source        string     `json:"source,omitempty"`
-	ExpiresAt     *time.Time `json:"expiresAt,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Enabled        bool       `json:"enabled"`
+	ExemptRole     string     `json:"exemptRole"`
+	TimeoutSeconds int        `json:"timeoutSeconds"`
+	Enforce        bool       `json:"enforce"`
+	Pattern        string     `json:"pattern"`
+	MatchTarget    string     `json:"matchTarget"`
+	CaseSensitive  bool       `json:"caseSensitive"`
+	Regex          bool       `json:"regex"`
+	Action         string     `json:"action"`
+	Reason         string     `json:"reason,omitempty"`
+	Source         string     `json:"source,omitempty"`
+	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 type ModerationMatch struct {
-	RuleID      string `json:"ruleId"`
-	RuleName    string `json:"ruleName"`
-	Pattern     string `json:"pattern"`
-	MatchTarget string `json:"matchTarget"`
-	Action      string `json:"action"`
-	Reason      string `json:"reason,omitempty"`
+	RuleID         string `json:"ruleId"`
+	RuleName       string `json:"ruleName"`
+	Pattern        string `json:"pattern"`
+	MatchTarget    string `json:"matchTarget"`
+	Action         string `json:"action"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
+	ExemptRole     string `json:"exemptRole"`
+	Skipped        bool   `json:"skipped,omitempty"`
+	Note           string `json:"note,omitempty"`
+	Reason         string `json:"reason,omitempty"`
 }
 
 func NormalizeModerationRule(rule ModerationRule) (ModerationRule, error) {
+	rule.ExemptRole = normalizeToken(rule.ExemptRole, "moderator")
+	switch rule.ExemptRole {
+	case "none", "viewer", "moderator", "broadcaster":
+	default:
+		return ModerationRule{}, errors.New("unsupported moderation exempt role")
+	}
+	if rule.TimeoutSeconds == 0 {
+		rule.TimeoutSeconds = 60
+	}
+	if rule.TimeoutSeconds < 1 || rule.TimeoutSeconds > 1209600 {
+		return ModerationRule{}, errors.New("timeout seconds must be between 1 and 1209600")
+	}
 	rule.ID = strings.TrimSpace(rule.ID)
 	rule.Name = strings.ToLower(strings.TrimSpace(rule.Name))
 	rule.Pattern = strings.TrimSpace(rule.Pattern)
@@ -106,8 +124,20 @@ func matchModerationRulesAt(rules []ModerationRule, message, username string, no
 			matched = pattern.Matches(message)
 		}
 		if matched {
-			matches = append(matches, ModerationMatch{RuleID: rule.ID, RuleName: rule.Name, Pattern: rule.Pattern, MatchTarget: rule.MatchTarget, Action: rule.Action, Reason: rule.Reason})
+			matches = append(matches, ModerationMatch{RuleID: rule.ID, RuleName: rule.Name, Pattern: rule.Pattern, MatchTarget: rule.MatchTarget, Action: rule.Action, Reason: rule.Reason, TimeoutSeconds: rule.TimeoutSeconds, ExemptRole: rule.ExemptRole})
 		}
 	}
 	return matches, nil
+}
+
+// Exemptions are applied after matching so dry-run can explain skipped rules.
+func ApplyModerationExemptions(matches []ModerationMatch, role Role) []ModerationMatch {
+	for i := range matches {
+		exempt := normalizeToken(matches[i].ExemptRole, "moderator")
+		if exempt != "none" && RoleAllows(role, Role(exempt)) {
+			matches[i].Skipped = true
+			matches[i].Note = "role_exempt:" + string(NormalizeRole(role))
+		}
+	}
+	return matches
 }

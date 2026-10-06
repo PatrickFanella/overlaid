@@ -143,19 +143,20 @@ func sanitizeDiagnosticMessage(message string) string {
 }
 
 type Client struct {
-	channelPoints    channelPointProcessor
-	ClientID         string
-	WebSocketURL     string
-	SubscriptionURL  string
-	TokenProvider    TokenProvider
-	CommandProcessor *CommandProcessor
-	InteractionRules func() interactions.Rules
-	Publish          Publisher
-	Diagnostics      *DiagnosticsStore
-	HTTPClient       *http.Client
-	Dialer           *websocket.Dialer
-	Now              func() time.Time
-	SubscriptionPlan []SubscriptionSpec
+	channelPoints     channelPointProcessor
+	ClientID          string
+	WebSocketURL      string
+	SubscriptionURL   string
+	TokenProvider     TokenProvider
+	CommandProcessor  *CommandProcessor
+	IgnoreChatMessage func(string) bool
+	InteractionRules  func() interactions.Rules
+	Publish           Publisher
+	Diagnostics       *DiagnosticsStore
+	HTTPClient        *http.Client
+	Dialer            *websocket.Dialer
+	Now               func() time.Time
+	SubscriptionPlan  []SubscriptionSpec
 }
 
 type SubscriptionSpec struct {
@@ -473,6 +474,9 @@ func EventsForChannelPointRedemption(message EventSubMessage, rules interactions
 }
 
 func (c *Client) eventsForNotification(message EventSubMessage, rules interactions.Rules) []events.Event {
+	if message.Payload.Subscription.Type == "channel.chat.message" && c.IgnoreChatMessage != nil && c.IgnoreChatMessage(stringValue(message.Payload.Event, "message_id")) {
+		return nil
+	}
 	if message.Payload.Subscription.Type == "channel.channel_points_custom_reward_redemption.add" {
 		return c.channelPoints.events(message, rules)
 	}
