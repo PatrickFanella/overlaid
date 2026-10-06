@@ -515,3 +515,8 @@ git commit -m "docs: mark plan 10 complete"
 ```
 
 Do not push unless explicitly instructed by the user.
+
+
+## October 6 isolated backup/restore evidence
+
+A stopped native API backup was restored into a separate disposable Postgres database and private retained-state directory. A fresh API returned identical BRB/goals/ticker replay, eight history rows, a session report with three events and both readiness snapshots, shared config, interaction rules, and 25 recent audit rows (51 total). Restored dependency readiness and `make smoke API_PORT=8082` passed. The temporary restore process/database and retained fixtures were cleaned up. [Recorded evidence](../../qa/2026-10-06-local-backup-restore-drill.md) names the accepted integration/deployment limits. Restore guidance now rejects a missing api-data volume and uses `pg_restore --exit-on-error`.
