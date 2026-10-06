@@ -183,3 +183,98 @@ func TestManualModerationRejectsInvalidTargetsAndDurationsWithoutDispatch(t *tes
 		}
 	}
 }
+
+func TestModerationConfigurationHTTPAuditReceipts(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+	server.botStore = newModerationRuleTestStore(t)
+	recorder := &recordingBotAuditStore{}
+	server.botRuntime = bot.NewRuntime(recorder)
+	server.history = activeHistoryStub{sessionID: "session-1"}
+	post := func(request botModerationRuleRequest, status int) bot.ModerationRule {
+		t.Helper()
+		body, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := httptest.NewRecorder()
+		server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/bot/moderation/rules", bytes.NewReader(body)))
+		if rec.Code != status {
+			t.Fatalf("save status=%d want=%d: %s", rec.Code, status, rec.Body.String())
+		}
+		var rule bot.ModerationRule
+		if status == http.StatusOK {
+			if err := json.Unmarshal(rec.Body.Bytes(), &rule); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return rule
+	}
+	request := botModerationRuleRequest{Name: "spam", Enabled: true, Enforce: true, Pattern: "private pattern content", MatchTarget: "message", Action: "delete", Reason: "private reason content"}
+	created := post(request, http.StatusOK)
+	request.ID, request.Enabled = created.ID, false
+	updated := post(request, http.StatusOK)
+	if updated.ID != created.ID || updated.Enabled || updated.Pattern != created.Pattern {
+		t.Fatalf("pause = %#v", updated)
+	}
+	request.Regex, request.Pattern = true, "["
+	post(request, http.StatusBadRequest)
+	request.ID = ""
+	post(request, http.StatusBadRequest)
+	request.ID, request.Regex, request.Pattern = "missing", false, "valid"
+	post(request, http.StatusNotFound)
+	for _, status := range []int{http.StatusNoContent, http.StatusNotFound} {
+		rec := httptest.NewRecorder()
+		server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/bot/moderation/rules/"+created.ID, nil))
+		if rec.Code != status {
+			t.Fatalf("delete status=%d want=%d: %s", rec.Code, status, rec.Body.String())
+		}
+	}
+	if len(recorder.events) != 7 {
+		t.Fatalf("configuration audits = %#v", recorder.events)
+	}
+	for i, audit := range recorder.events {
+		action := "moderation_update"
+		if i == 0 || i == 3 {
+			action = "moderation_create"
+		}
+		if i >= 5 {
+			action = "moderation_delete"
+		}
+		allowed := i == 0 || i == 1 || i == 5
+		result, reason := "failed", "moderation_configuration_failed"
+		if allowed {
+			result, reason = "allowed", "moderation_configuration_changed"
+		}
+		if audit.Action != action || audit.Trigger != "moderation_configuration" || audit.Source != "dashboard" || audit.ActorRole != "operator" || audit.StreamSessionID != "session-1" || audit.Result != result || audit.Reason != reason {
+			t.Fatalf("audit %d = %#v", i, audit)
+		}
+		var data map[string]any
+		if err := json.Unmarshal(audit.Data, &data); err != nil {
+			t.Fatal(err)
+		}
+		id := created.ID
+		if i == 3 {
+			id = ""
+		}
+		if i == 4 {
+			id = "missing"
+		}
+		if data["ruleId"] != id {
+			t.Fatalf("audit %d ID=%#v", i, data)
+		}
+		if i == 0 || i == 1 {
+			if data["enabled"] != (i == 0) || data["enforce"] != true || data["moderationAction"] != "delete" || data["matchTarget"] != "message" || audit.Command != "spam" {
+				t.Fatalf("saved metadata %d = %#v", i, audit)
+			}
+		} else if len(data) != 1 || audit.Command != "" {
+			t.Fatalf("failed/delete metadata %d = %#v", i, audit)
+		}
+		encoded, err := json.Marshal(audit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encoded), "private pattern content") || strings.Contains(string(encoded), "private reason content") {
+			t.Fatal("free-form rule content copied into configuration audit")
+		}
+	}
+}

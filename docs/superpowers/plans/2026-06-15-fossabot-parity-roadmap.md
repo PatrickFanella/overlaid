@@ -387,9 +387,9 @@ Build the spine before adding feature breadth.
 
 ## Milestone F: Moderation
 
-- Add blocked-term rules and dry-run matching.
+- [x] Add blocked-term rules and dry-run matching (October 6: real Postgres CRUD/edit/pause, case-sensitive username regex, rejected-write preservation, expiry and radiation rollback contracts).
 - [x] Add Twitch moderation API actions: delete message, timeout, ban only with explicit scopes (October 6: operator authorization, scope denial before dispatch, success/failure payload and audit matrix; unban covered too).
-- Add dashboard moderation audit.
+- [x] Add dashboard moderation audit (October 6: configuration and manual action receipts, linked automatic rule outcomes, session report/export, and native rendered success/failure rows verified).
 - “Nuke” workflow has regex/plain matching, lookback window, dry-run preview, guarded delete/timeout execution, audit rows, optional temporary radiation/future-enforcement windows, and rollback that disables those windows.
 
 ---
@@ -449,3 +449,12 @@ The manual moderation endpoint now has a 16-case HTTP-to-Helix matrix for delete
 This exposed stale timeout metadata in non-timeout audit rows. Shared audit metadata now records zero duration for delete/ban/unban and keeps timeout duration for manual and automatic workflows. The [official scope reference](https://dev.twitch.tv/docs/authentication/scopes/) and [moderation API reference](https://dev.twitch.tv/docs/api/reference#ban-user) confirm the explicit scope and payload boundaries. No live Twitch write is required for these contracts.
 
 Validation: `make verify`, all 17 browser smoke workflows, HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. The pre-fix contract matrix reproduced incorrect non-timeout duration audit metadata; all cases passed after the correction.
+
+
+### Overnight progress: moderation configuration audit and persistence
+
+Rule create/update/delete now write synchronous operator configuration receipts, including paused/enabled edits and failed writes. Successful settings include rule ID/name, enabled/enforce, action, target, regex/case options, and server-owned source/expiry. Failed writes and deletion retain only the attempted rule ID; patterns, reasons, and rejected drafts are omitted. An HTTP workflow covers create, pause, rejected regex edits/creates, missing records, delete, and repeat delete, including session linkage and safe metadata.
+
+Real Postgres coverage verifies identity/creation-time preservation on edit, unchanged state after rejected regex writes, case-sensitive username matching, disabled rules, and missing IDs. Radiation edits preserve server-owned source/expiry; active windows match, rollback disables enabled/enforce while preserving identity/expiry, and expired enabled windows do not match. These tests use a disposable schema isolated from the running scheduler.
+
+Validation: `make verify`, all 17 browser smoke workflows, bot/HTTP race tests with isolated Postgres schemas, and `make smoke API_PORT=8081` passed. Native API create/pause/rejected-edit/delete produced four immediate safe receipts; the collaborative browser displayed their success/failure audit rows and the restored empty moderation list. The fixture rule was deleted.

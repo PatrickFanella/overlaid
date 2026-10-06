@@ -326,6 +326,33 @@ func (d *moderationRuleTestDriver) query(query string, args []driver.NamedValue)
 		}
 		d.rules[rule.ID] = rule
 		return singleRowFromRule(rule), nil
+	case strings.Contains(query, "UPDATE bot_moderation_rules SET name="):
+		id := args[0].Value.(string)
+		rule, ok := d.rules[id]
+		if !ok {
+			return &singleRow{done: true}, nil
+		}
+		rule.Name, rule.Enabled, rule.Enforce = args[1].Value.(string), args[2].Value.(bool), args[3].Value.(bool)
+		rule.Pattern, rule.MatchTarget = args[4].Value.(string), args[5].Value.(string)
+		rule.CaseSensitive, rule.Regex = args[6].Value.(bool), args[7].Value.(bool)
+		rule.Action, rule.Reason = args[8].Value.(string), args[9].Value.(string)
+		if source := args[10].Value.(string); source != "manual" {
+			rule.Source = source
+		}
+		if args[11].Value != nil {
+			expiry := args[11].Value.(time.Time)
+			rule.ExpiresAt = &expiry
+		}
+		rule.UpdatedAt = time.Now().UTC()
+		d.rules[id] = rule
+		return singleRowFromRule(rule), nil
+	case strings.Contains(query, "DELETE FROM bot_moderation_rules"):
+		id := args[0].Value.(string)
+		if _, ok := d.rules[id]; !ok {
+			return nil, sql.ErrNoRows
+		}
+		delete(d.rules, id)
+		return &singleRow{done: true}, nil
 	case strings.Contains(query, "UPDATE bot_moderation_rules SET enabled=false, enforce=false"):
 		if len(args) != 1 {
 			return nil, fmt.Errorf("expected 1 arg, got %d", len(args))

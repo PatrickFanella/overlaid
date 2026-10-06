@@ -174,3 +174,30 @@ func (s *Server) recordBotQuoteChange(ctx context.Context, quote bot.Quote, oper
 	// Quote text and authors are free-form content. Keep only the record ID.
 	s.recordBotCommunityChange(ctx, "quote", operation, "", result, map[string]any{"quoteId": quote.ID})
 }
+
+// Configuration receipts retain rule metadata, not free-form patterns/reasons
+// or rejected request content. Failed writes contain only the attempted ID.
+func (s *Server) recordBotModerationChange(ctx context.Context, rule bot.ModerationRule, operation string, result bot.Result) {
+	if s == nil || s.botRuntime == nil {
+		return
+	}
+	data := map[string]any{"ruleId": strings.TrimSpace(rule.ID)}
+	name := ""
+	reason := "moderation_configuration_failed"
+	if result == bot.ResultAllowed {
+		name = rule.Name
+		reason = "moderation_configuration_changed"
+		if operation != "delete" {
+			data["enabled"], data["enforce"] = rule.Enabled, rule.Enforce
+			data["moderationAction"], data["matchTarget"] = rule.Action, rule.MatchTarget
+			data["regex"], data["caseSensitive"] = rule.Regex, rule.CaseSensitive
+			data["source"] = rule.Source
+			if rule.ExpiresAt != nil {
+				data["expiresAt"] = rule.ExpiresAt
+			}
+		}
+	}
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator,
+		Trigger: "moderation_configuration", Command: name, Action: "moderation_" + operation, Result: result, Reason: reason,
+		StreamSessionID: s.activeSessionID(), Data: data})
+}

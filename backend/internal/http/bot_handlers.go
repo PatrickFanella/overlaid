@@ -285,8 +285,13 @@ func (s *Server) botModerationRuleSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
+	operation := "create"
+	if strings.TrimSpace(request.ID) != "" {
+		operation = "update"
+	}
 	rule, err := s.botStore.SaveModerationRule(r.Context(), bot.ModerationRule{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Enforce: request.Enforce, Pattern: request.Pattern, MatchTarget: request.MatchTarget, CaseSensitive: request.CaseSensitive, Regex: request.Regex, Action: request.Action, Reason: request.Reason})
 	if err != nil {
+		s.recordBotModerationChange(r.Context(), bot.ModerationRule{ID: request.ID}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -294,6 +299,7 @@ func (s *Server) botModerationRuleSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotModerationChange(r.Context(), rule, operation, bot.ResultAllowed)
 	writeJSON(w, rule)
 }
 
@@ -303,6 +309,7 @@ func (s *Server) botModerationRuleDelete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := s.botStore.DeleteModerationRule(r.Context(), r.PathValue("id")); err != nil {
+		s.recordBotModerationChange(r.Context(), bot.ModerationRule{ID: r.PathValue("id")}, "delete", bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -310,6 +317,7 @@ func (s *Server) botModerationRuleDelete(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotModerationChange(r.Context(), bot.ModerationRule{ID: r.PathValue("id")}, "delete", bot.ResultAllowed)
 	w.WriteHeader(http.StatusNoContent)
 }
 

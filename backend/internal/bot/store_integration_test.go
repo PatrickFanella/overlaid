@@ -523,3 +523,104 @@ func TestCommunityPersistenceAndConcurrentCounterPostgres(t *testing.T) {
 		t.Fatalf("missing quote delete=%v", err)
 	}
 }
+
+func TestModerationRulePersistenceMatchingAndRollbackPostgres(t *testing.T) {
+	store, _ := isolatedPostgresBotStore(t)
+	ctx := t.Context()
+	created, err := store.SaveModerationRule(ctx, ModerationRule{Name: " SPAM ", Enabled: true, Pattern: " buy now ", MatchTarget: "MESSAGE", Action: "FLAG"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID == "" || created.Name != "spam" || created.Pattern != "buy now" || created.Source != "manual" || created.CreatedAt.IsZero() {
+		t.Fatalf("created = %#v", created)
+	}
+	edited := created
+	edited.Pattern, edited.MatchTarget, edited.Action = "^spam_[0-9]+$", "username", "delete"
+	edited.Regex, edited.CaseSensitive, edited.Enforce = true, true, true
+	updated, err := store.SaveModerationRule(ctx, edited)
+	if err != nil || updated.ID != created.ID || !updated.CreatedAt.Equal(created.CreatedAt) || updated.Pattern != edited.Pattern || updated.MatchTarget != "username" || updated.Action != "delete" || !updated.Enforce || !updated.Regex || !updated.CaseSensitive {
+		t.Fatalf("updated = %#v err=%v", updated, err)
+	}
+	matches, err := store.DryRunModeration(ctx, "unrelated", "spam_42")
+	if err != nil || len(matches) != 1 || matches[0].RuleID != created.ID {
+		t.Fatalf("username dry run = %#v err=%v", matches, err)
+	}
+	matches, err = store.DryRunModeration(ctx, "spam_42", "SPAM_42")
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("case/target dry run = %#v err=%v", matches, err)
+	}
+	invalid := updated
+	invalid.Pattern = "["
+	if _, err := store.SaveModerationRule(ctx, invalid); err == nil {
+		t.Fatal("invalid regex edit persisted")
+	}
+	invalid.ID = ""
+	if _, err := store.SaveModerationRule(ctx, invalid); err == nil {
+		t.Fatal("invalid regex create persisted")
+	}
+	rows, err := store.ListModerationRules(ctx)
+	if err != nil || len(rows) != 1 || rows[0].Pattern != updated.Pattern || !rows[0].UpdatedAt.Equal(updated.UpdatedAt) {
+		t.Fatalf("rejected writes changed saved rule = %#v err=%v", rows, err)
+	}
+	paused := updated
+	paused.Enabled = false
+	paused, err = store.SaveModerationRule(ctx, paused)
+	if err != nil || paused.ID != created.ID || paused.Enabled || paused.Pattern != updated.Pattern {
+		t.Fatalf("paused = %#v err=%v", paused, err)
+	}
+	matches, err = store.DryRunModeration(ctx, "", "spam_42")
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("paused matched = %#v err=%v", matches, err)
+	}
+	if _, err := store.DisableNukeRadiationRule(ctx, created.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("manual rollback = %v", err)
+	}
+	future := time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond)
+	radiation, err := store.SaveModerationRule(ctx, ModerationRule{Name: "radiation", Enabled: true, Enforce: true, Pattern: "spam", Action: "timeout", Source: "nuke_radiation", ExpiresAt: &future})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Dashboard edits omit source and expiry; those server-owned fields persist.
+	radiation.Pattern, radiation.Source, radiation.ExpiresAt = "buy now", "", nil
+	radiation, err = store.SaveModerationRule(ctx, radiation)
+	if err != nil || radiation.Source != "nuke_radiation" || radiation.ExpiresAt == nil || !radiation.ExpiresAt.Equal(future) {
+		t.Fatalf("radiation edit metadata = %#v err=%v", radiation, err)
+	}
+	matches, err = store.DryRunModeration(ctx, "BUY NOW", "viewer")
+	if err != nil || len(matches) != 1 || matches[0].RuleID != radiation.ID {
+		t.Fatalf("active radiation = %#v err=%v", matches, err)
+	}
+	rolledBack, err := store.DisableNukeRadiationRule(ctx, radiation.ID)
+	if err != nil || rolledBack.ID != radiation.ID || rolledBack.Enabled || rolledBack.Enforce || rolledBack.ExpiresAt == nil || !rolledBack.ExpiresAt.Equal(future) {
+		t.Fatalf("rollback = %#v err=%v", rolledBack, err)
+	}
+	matches, err = store.DryRunModeration(ctx, "buy now", "viewer")
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("rollback still matches = %#v err=%v", matches, err)
+	}
+	past := time.Now().UTC().Add(-time.Minute)
+	radiation.Enabled, radiation.Enforce, radiation.ExpiresAt = true, true, &past
+	if _, err := store.SaveModerationRule(ctx, radiation); err != nil {
+		t.Fatal(err)
+	}
+	matches, err = store.DryRunModeration(ctx, "buy now", "viewer")
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("expired still matches = %#v err=%v", matches, err)
+	}
+	for _, id := range []string{created.ID, radiation.ID} {
+		if err := store.DeleteModerationRule(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err = store.ListModerationRules(ctx)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("deleted rows = %#v err=%v", rows, err)
+	}
+	if err := store.DeleteModerationRule(ctx, created.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing delete = %v", err)
+	}
+	updated.ID = "missing"
+	if _, err := store.SaveModerationRule(ctx, updated); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing edit = %v", err)
+	}
+}

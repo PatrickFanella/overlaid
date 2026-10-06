@@ -14,7 +14,7 @@ Implemented now:
 - Operator-protected counter list/create/delete at `/api/bot/counters`.
 - Operator-protected quote list/create/delete at `/api/bot/quotes`.
 - Operator-protected custom API variable list/create/delete at `/api/bot/api-variables`.
-- Operator-protected moderation rule list/create/delete and dry-run matching at `/api/bot/moderation/*`.
+- Operator-protected moderation rule list/create/update/delete and dry-run matching at `/api/bot/moderation/*`. Create, edits (including pause/enable), deletion, and failed configuration writes produce dashboard/operator audit receipts. Those receipts include rule IDs and safe settings; patterns, reasons, and rejected draft content are omitted.
 - Enabled timers publish safe ticker or alert overlay events when due.
 - `/dashboard/chat` overview, command manager, counters/quotes manager, moderation dry-run panel, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
