@@ -507,7 +507,6 @@ func (s *Server) brbStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) publishEventSubEvent(event events.Event) {
-	s.enforceModerationForEvent(context.Background(), event)
 	switch event.Type {
 	case events.EventTypeClear:
 		if err := s.state.Clear(); err != nil {
@@ -521,6 +520,8 @@ func (s *Server) publishEventSubEvent(event events.Event) {
 		}
 	}
 	s.publishEvent(event)
+	// Persist the chat event before queuing moderation audit foreign keys.
+	s.enforceModerationForEvent(context.Background(), event)
 }
 
 func (s *Server) publishEvent(event events.Event) {

@@ -422,3 +422,12 @@ The advanced reward sprint was already implemented; its historical step-by-step 
 The [Twitch API reference](https://dev.twitch.tv/docs/api/reference#update-custom-reward) documents the seven-day maximum. Fixture transport coverage verifies that the exact maximum is sent with its enabled flag and decoded on both create and update, while the next second never reaches Helix. Browser workflow coverage verifies invalid create and edit drafts preserve the current write count and can be corrected. Live Twitch writes still require credentials.
 
 Validation: `make verify` (95 frontend tests and all Go checks), all 17 browser smoke workflows, and `make smoke API_PORT=8081` passed. Local readiness confirms Postgres and the bot runtime are healthy; Twitch authentication and OBS connectivity remain unavailable.
+
+
+### Overnight progress: automatic moderation audit ownership
+
+Automatic enforcement previously reused dashboard operator receipts, omitted the triggering chat event and matched rule ID, and waited for audit storage. It now records a chat/system outcome with `moderation_rule` trigger, event/session links, rule ID/name, and target/message/duration metadata. Flag, successful delete, and missing-scope timeout outcomes have workflow coverage. Manual moderation and nuke audit receipts retain their operator ownership.
+
+EventSub now publishes and appends the event before enforcement, so queued moderation audit references can resolve their event foreign key. A blocked-recorder test verifies chat is delivered and the EventSub callback returns before audit storage resumes; a history-checking recorder verifies persistence precedes the audit dispatch. No live moderation action is sent by these fixture tests.
+
+Validation: `make verify`, all 17 browser smoke workflows, HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Twitch and OBS readiness remain degraded for the known missing external setup.

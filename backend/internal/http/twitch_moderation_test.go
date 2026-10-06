@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 )
 
 type eventHistoryListStub struct{ events []events.Event }
@@ -287,6 +289,17 @@ func (d *moderationRuleTestDriver) query(query string, args []driver.NamedValue)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	switch {
+	case strings.Contains(query, "FROM bot_moderation_rules ORDER BY name ASC"):
+		rules := make([]bot.ModerationRule, 0, len(d.rules))
+		for _, rule := range d.rules {
+			rules = append(rules, rule)
+		}
+		sort.Slice(rules, func(i, j int) bool { return rules[i].Name < rules[j].Name })
+		rows := &moderationRuleRows{columns: singleRowFromRule(bot.ModerationRule{}).Columns()}
+		for _, rule := range rules {
+			rows.values = append(rows.values, singleRowFromRule(rule).(*singleRow).values)
+		}
+		return rows, nil
 	case strings.Contains(query, "INSERT INTO bot_moderation_rules"):
 		if len(args) != 11 {
 			return nil, fmt.Errorf("expected 11 args, got %d", len(args))
@@ -357,5 +370,141 @@ func singleRowFromRule(rule bot.ModerationRule) driver.Rows {
 	return &singleRow{
 		columns: []string{"id", "name", "enabled", "enforce", "pattern", "match_target", "case_sensitive", "regex", "action", "reason", "source", "expires_at", "created_at", "updated_at"},
 		values:  []driver.Value{rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, expiresAt, rule.CreatedAt, rule.UpdatedAt},
+	}
+}
+
+type moderationRuleRows struct {
+	columns []string
+	values  [][]driver.Value
+}
+
+func (r *moderationRuleRows) Columns() []string { return r.columns }
+func (r *moderationRuleRows) Close() error      { return nil }
+func (r *moderationRuleRows) Next(dest []driver.Value) error {
+	if len(r.values) == 0 {
+		return io.EOF
+	}
+	copy(dest, r.values[0])
+	r.values = r.values[1:]
+	return nil
+}
+
+func TestAutomaticModerationAuditsChatSystemAndRule(t *testing.T) {
+	for _, action := range []string{"flag", "delete", "timeout"} {
+		t.Run(action, func(t *testing.T) {
+			server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+			server.botStore = newModerationRuleTestStore(t)
+			recorder := &recordingBotAuditStore{}
+			server.botRuntime = bot.NewRuntime(recorder)
+			server.history = activeHistoryStub{sessionID: "session-1"}
+			rule, err := server.botStore.SaveModerationRule(t.Context(), bot.ModerationRule{Name: "spam", Enabled: true, Enforce: true, Pattern: "buy now", MatchTarget: "message", Action: action})
+			if err != nil {
+				t.Fatal(err)
+			}
+			server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"moderator:manage:chat_messages"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123"}
+			calls := 0
+			oldClient := twitchHTTPClient
+			twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				calls++
+				if req.Method != http.MethodDelete || req.URL.Query().Get("message_id") != "msg-1" {
+					t.Fatalf("unexpected delete request: %s %s", req.Method, req.URL)
+				}
+				return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+			})}
+			t.Cleanup(func() { twitchHTTPClient = oldClient })
+			event := events.Event{ID: "chat-1", Type: events.EventTypeChatMessage, Source: "twitch", Title: "Viewer", Message: "BUY NOW", Data: map[string]any{"messageId": "msg-1", "twitchEvent": map[string]any{"chatter_user_id": "user-42"}}}
+			server.publishEventSubEvent(event)
+			flushBotAudit(t, server)
+			if len(recorder.events) != 1 {
+				t.Fatalf("audits = %#v", recorder.events)
+			}
+			audit := recorder.events[0]
+			if audit.Source != "chat" || audit.ActorRole != "system" || audit.Trigger != "moderation_rule" || audit.Command != rule.Name || audit.Action != action || audit.EventID != event.ID || audit.StreamSessionID != "session-1" {
+				t.Fatalf("audit identity = %#v", audit)
+			}
+			var data map[string]any
+			if err := json.Unmarshal(audit.Data, &data); err != nil {
+				t.Fatal(err)
+			}
+			if data["ruleId"] != rule.ID || data["targetUserId"] != "user-42" || data["targetUserLogin"] != "Viewer" || data["messageId"] != "msg-1" {
+				t.Fatalf("audit data = %#v", data)
+			}
+			wantResult := "allowed"
+			if action == "timeout" {
+				wantResult = "failed"
+				if data["durationSeconds"] != float64(60) {
+					t.Fatalf("default timeout audit = %#v", data)
+				}
+			}
+			if audit.Result != wantResult {
+				t.Fatalf("result = %q, want %q", audit.Result, wantResult)
+			}
+			wantCalls := 0
+			if action == "delete" {
+				wantCalls = 1
+			}
+			if calls != wantCalls {
+				t.Fatalf("Helix calls = %d, want %d", calls, wantCalls)
+			}
+		})
+	}
+}
+
+func TestAutomaticModerationPublicationDoesNotWaitForAudit(t *testing.T) {
+	recorder := &blockedCommandAuditRecorder{started: make(chan struct{}), release: make(chan struct{})}
+	bus := events.NewBus(4)
+	subscriber := bus.Subscribe()
+	defer bus.Unsubscribe(subscriber.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+	server.botStore = newModerationRuleTestStore(t)
+	server.botRuntime = bot.NewRuntime(recorder)
+	t.Cleanup(func() { close(recorder.release); flushBotAudit(t, server) })
+	_, err := server.botStore.SaveModerationRule(t.Context(), bot.ModerationRule{Name: "spam", Enabled: true, Enforce: true, Pattern: "buy now", MatchTarget: "message", Action: "flag"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := events.Event{ID: "chat-1", Type: events.EventTypeChatMessage, Source: "twitch", Message: "buy now"}
+	done := make(chan struct{})
+	go func() { server.publishEventSubEvent(event); close(done) }()
+	select {
+	case <-recorder.started:
+	case <-time.After(time.Second):
+		t.Fatal("audit did not start")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stalled audit blocked EventSub publication")
+	}
+	select {
+	case got := <-subscriber.Events:
+		if got.ID != event.ID {
+			t.Fatalf("published %#v", got)
+		}
+	default:
+		t.Fatal("chat not published")
+	}
+}
+
+func TestAutomaticModerationAuditFollowsHistoryAppend(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+	server.botStore = newModerationRuleTestStore(t)
+	eventStore := history.New("", 10)
+	recorder := &historyCheckingAuditRecorder{history: eventStore, found: make(chan bool, 1)}
+	server.history, server.historyWritable = eventStore, true
+	server.botRuntime = bot.NewRuntime(recorder)
+	_, err := server.botStore.SaveModerationRule(t.Context(), bot.ModerationRule{Name: "spam", Enabled: true, Enforce: true, Pattern: "buy now", MatchTarget: "message", Action: "flag"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.publishEventSubEvent(events.Event{ID: "chat-1", Type: events.EventTypeChatMessage, Source: "twitch", Message: "buy now"})
+	flushBotAudit(t, server)
+	select {
+	case found := <-recorder.found:
+		if !found {
+			t.Fatal("audit dispatched before triggering event was persisted")
+		}
+	default:
+		t.Fatal("no moderation audit")
 	}
 }

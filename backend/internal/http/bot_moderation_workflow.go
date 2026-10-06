@@ -222,7 +222,7 @@ func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, even
 	match := matches[0]
 	request := botModerationActionRequest{Action: match.Action, TargetUserID: twitchEventString(event, "chatter_user_id"), TargetUserLogin: event.Title, MessageID: twitchMessageIDFromEvent(event), Reason: firstNonEmptyString(match.Reason, "moderation rule: "+match.RuleName)}
 	if request.Action == "flag" {
-		w.recordModerationActionAudit(ctx, request, "allowed", "moderation_flag")
+		w.recordModerationEnforcementAudit(ctx, event, match, request, "allowed", "moderation_flag")
 		return
 	}
 	if request.Action == "timeout" && request.DurationSeconds == 0 {
@@ -230,10 +230,10 @@ func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, even
 	}
 	if _, err := s.executeTwitchModerationAction(ctx, request); err != nil {
 		log.Printf("moderation enforcement failed rule=%s action=%s: %v", match.RuleName, match.Action, err)
-		w.recordModerationActionAudit(ctx, request, "failed", err.Error())
+		w.recordModerationEnforcementAudit(ctx, event, match, request, "failed", err.Error())
 		return
 	}
-	w.recordModerationActionAudit(ctx, request, "allowed", "moderation_rule:"+match.RuleName)
+	w.recordModerationEnforcementAudit(ctx, event, match, request, "allowed", "moderation_rule:"+match.RuleName)
 }
 
 func (w *moderationWorkflow) planNukeDryRun(request botNukeDryRunRequest) ([]botNukeDryRunMatch, error) {
@@ -358,6 +358,24 @@ func (w *moderationWorkflow) recordModerationActionAudit(ctx context.Context, re
 	data := map[string]any{"targetUserId": strings.TrimSpace(request.TargetUserID), "targetUserLogin": strings.TrimSpace(request.TargetUserLogin), "messageId": strings.TrimSpace(request.MessageID), "durationSeconds": request.DurationSeconds}
 	action := strings.ToLower(strings.TrimSpace(request.Action))
 	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "moderation_action", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
+}
+
+// Automatic enforcement belongs to the chat event and system actor. Queue its
+// receipt so audit storage cannot delay processing the next EventSub message.
+func (w *moderationWorkflow) recordModerationEnforcementAudit(ctx context.Context, event events.Event, match bot.ModerationMatch, request botModerationActionRequest, result, reason string) {
+	s, err := w.serverOrErr()
+	if err != nil || s.botRuntime == nil {
+		return
+	}
+	action := strings.ToLower(strings.TrimSpace(request.Action))
+	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
+		Source: bot.SourceChat, ActorRole: bot.RoleSystem, Trigger: "moderation_rule",
+		Command: match.RuleName, Action: action, Result: bot.Result(result), Reason: reason,
+		EventID: event.ID, StreamSessionID: s.activeSessionID(),
+		Data: map[string]any{"ruleId": match.RuleID, "ruleName": match.RuleName,
+			"targetUserId": strings.TrimSpace(request.TargetUserID), "targetUserLogin": strings.TrimSpace(request.TargetUserLogin),
+			"messageId": strings.TrimSpace(request.MessageID), "durationSeconds": request.DurationSeconds},
+	})
 }
 
 func twitchEventString(event events.Event, key string) string {
