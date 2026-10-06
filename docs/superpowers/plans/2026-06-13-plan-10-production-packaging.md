@@ -525,3 +525,8 @@ A stopped native API backup was restored into a separate disposable Postgres dat
 ## October 6 packaged image and volume verification
 
 Rootless Podman built both Dockerfiles and exercised isolated API/Nginx containers. The web build exposed a short-name resolution failure; qualified Docker Hub base-image names fix it without changing versions. Context-local ignore files now keep environment files, installed frontend dependencies, generated assets, and test artifacts out of builds. The packaged Go 1.26 runtime repaired a root-owned named volume, ran as UID 100, persisted BRB/history across restart, served healthy product storage, and passed packaged smoke and native browser rendering. All 21 browser workflows and `make verify` passed. [Recorded evidence](../../qa/2026-10-06-container-packaging.md) names image IDs, cleanup, and remaining Compose/deployment/live-integration gates.
+
+
+## October 6 Compose dependency and exposure correction
+
+A disposable Compose project ran through the rootless Podman API with fresh volumes and loopback ports. Postgres health gated API startup; all three services became healthy, and BRB/session/readiness evidence survived an API restart. Inspection found that the documented `EXPOSURE_MODE` setting was not forwarded to the API. Compose now passes it through with the existing local default; all three modes resolve correctly, and public-mode runtime readiness reports missing operator/webhook fixture secrets. `make verify`, all 21 browser workflows, and Compose-stack smoke passed. [Recorded evidence](../../qa/2026-10-06-compose-wiring.md) distinguishes completed local wiring from remaining Docker-engine, production, and live integration checks.
