@@ -111,3 +111,9 @@ Then repopulate valid rules from `/dashboard/chat`.
 Set **Reward ID (optional)** to the Twitch reward ID to keep a rule attached when its title changes. Its reward title becomes a display label and may be empty. Leave the ID blank for the existing case-insensitive exact-title match. Enabled ID rules take precedence over title rules; an ID rule never matches a different reward by its label. Duplicate IDs keep the first configured rule.
 
 IDs persist in backend rules JSON and export/import. The reward queue uses the same precedence for selected reward and redemption fulfillment notes. Rule IDs and redemption/reward IDs are identifiers, not credentials. Load rewards and copy the displayed Reward ID from Selected reward, or use an existing rules export.
+
+## Reward operation receipts
+
+The reward queue allows one write at a time. While creating, editing, pausing/enabling, deleting, fulfilling, or canceling, queue controls and reload actions are disabled. Delete consumes its confirmation when the request starts. A failed write retains its draft for retry.
+
+Successful writes update the visible returned reward or remove the completed redemption immediately, and show a success receipt. If the following reload fails, the receipt stays visible beside the reload error. Reload failures do not mean the write failed. Older list responses cannot overwrite newer write results. Changing API or operator credentials invalidates pending UI responses and clears the old queue; it cannot undo an already-sent request.

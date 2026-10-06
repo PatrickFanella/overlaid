@@ -274,6 +274,120 @@ test.describe('operator browser smoke', () => {
     await expect(queue.getByText('Fulfillment note: Stable reward note')).toHaveCount(2);
   });
 
+  test('guards reward writes and preserves successful receipts when reload fails', async ({ page }) => {
+    let releaseOldLoad!: () => void;
+    const oldLoading = new Promise<void>((resolve) => { releaseOldLoad = resolve; });
+    let reads = 0;
+    let oldLoadFinished = false;
+    let releaseCreate!: () => void;
+    const creating = new Promise<void>((resolve) => { releaseCreate = resolve; });
+    let writes = 0;
+    let reloadFails = false;
+    let editFails = true;
+    let reward = { id: 'created-reward', title: 'Hydrate', cost: 100, prompt: '', is_enabled: true, is_paused: false, is_user_input_required: false };
+    await page.route('**/api/twitch/rewards**', async (route) => {
+      const method = route.request().method();
+      if (method === 'GET') {
+        reads++;
+        if (reads === 1) {
+          await oldLoading;
+          await route.fulfill({ json: { rewards: [{ ...reward, id: 'older-reward', title: 'Older reward' }] } });
+          oldLoadFinished = true;
+          return;
+        }
+        await route.fulfill(reloadFails ? { status: 503, body: 'reward reload unavailable' } : { json: { rewards: [reward] } });
+      } else if (method === 'POST') {
+        writes++;
+        await creating;
+        reloadFails = true;
+        await route.fulfill({ json: { reward, result: 'created' } });
+      } else if (method === 'PATCH') {
+        writes++;
+        const patch = route.request().postDataJSON();
+        if ('prompt' in patch) {
+          expect(patch).toEqual({ prompt: 'Remember water' });
+          if (editFails) { await route.fulfill({ status: 503, body: 'reward edit unavailable' }); return; }
+          reward = { ...reward, prompt: patch.prompt };
+        } else { reward = { ...reward, is_paused: patch.paused }; }
+        await route.fulfill({ json: { reward, result: 'updated' } });
+      } else if (method === 'DELETE') {
+        writes++;
+        await route.fulfill({ json: { result: 'deleted' } });
+      } else { await route.fallback(); }
+    });
+    await page.goto('/dashboard/chat');
+    const queue = page.locator('#reward-queue');
+    await queue.getByRole('button', { name: 'Load rewards', exact: true }).click();
+    await expect.poll(() => reads).toBe(1);
+    await queue.getByLabel('New reward title').fill('Hydrate');
+    await queue.getByRole('button', { name: 'Create reward', exact: true }).click();
+    await expect.poll(() => writes).toBe(1);
+    await expect(queue.getByRole('button', { name: 'Create reward', exact: true })).toBeDisabled();
+    await expect(queue.getByRole('button', { name: 'Load rewards', exact: true })).toBeDisabled();
+    await expect(queue.getByLabel('New reward title')).toBeDisabled();
+    releaseCreate();
+    await expect(queue.getByText('Reward created.', { exact: true })).toBeVisible();
+    await expect(queue.getByText(/reward reload unavailable/)).toBeVisible();
+    await expect(queue.getByText('Reward ID: created-reward', { exact: true })).toBeVisible();
+    releaseOldLoad();
+    await expect.poll(() => oldLoadFinished).toBe(true);
+    await expect(queue.getByText('Reward ID: created-reward', { exact: true })).toBeVisible();
+    await expect(queue.getByText('Reward ID: older-reward', { exact: true })).toHaveCount(0);
+    await queue.getByLabel('Prompt', { exact: true }).last().fill('Remember water');
+    await queue.getByRole('button', { name: 'Save reward fields', exact: true }).click();
+    await expect(queue.getByText(/reward edit unavailable/)).toBeVisible();
+    await expect(queue.getByLabel('Prompt', { exact: true }).last()).toHaveValue('Remember water');
+    editFails = false;
+    await queue.getByRole('button', { name: 'Save reward fields', exact: true }).click();
+    await expect(queue.getByText('Reward fields saved.', { exact: true })).toBeVisible();
+    await expect(queue.getByLabel('Prompt', { exact: true }).last()).toHaveValue('Remember water');
+    await queue.getByRole('button', { name: 'Pause reward', exact: true }).click();
+    await expect(queue.getByText('Reward lifecycle updated.', { exact: true })).toBeVisible();
+    await expect(queue.getByRole('button', { name: 'Resume reward', exact: true })).toBeVisible();
+    await queue.getByLabel('Confirm delete', { exact: true }).check();
+    await queue.getByRole('button', { name: 'Delete selected', exact: true }).click();
+    await expect(queue.getByText('Reward deleted.', { exact: true })).toBeVisible();
+    await expect(queue.getByText('Reward ID: created-reward', { exact: true })).toHaveCount(0);
+    expect(writes).toBe(5);
+  });
+
+  test('guards redemption writes and retains fulfillment receipts after reload failure', async ({ page }) => {
+    let releaseFulfill!: () => void;
+    const fulfilling = new Promise<void>((resolve) => { releaseFulfill = resolve; });
+    let writes = 0;
+    let reloadFails = false;
+    const reward = { id: 'reward-1', title: 'Hydrate', cost: 100, is_enabled: true };
+    await page.route('**/api/twitch/rewards**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (route.request().method() === 'POST') {
+        writes++;
+        if (path.endsWith('/redemption-1')) { expect(route.request().postDataJSON().status).toBe('FULFILLED'); await fulfilling; }
+        else { expect(route.request().postDataJSON().status).toBe('CANCELED'); }
+        reloadFails = true;
+        await route.fulfill({ json: { result: 'accepted' } });
+      } else if (path.endsWith('/redemptions')) {
+        await route.fulfill(reloadFails ? { status: 503, body: 'redemption reload unavailable' } : { json: { redemptions: [1, 2].map((id) => ({ id: `redemption-${id}`, user_name: `Viewer ${id}`, status: 'UNFULFILLED', redeemed_at: '2026-10-06T00:00:00Z', reward })) } });
+      } else { await route.fulfill({ json: { rewards: [reward] } }); }
+    });
+    await page.goto('/dashboard/chat');
+    const queue = page.locator('#reward-queue');
+    await queue.getByRole('button', { name: 'Load rewards', exact: true }).click();
+    await queue.getByRole('button', { name: 'Load unfulfilled', exact: true }).click();
+    await queue.getByRole('button', { name: 'Fulfill', exact: true }).first().click();
+    await expect.poll(() => writes).toBe(1);
+    await expect(queue.getByRole('button', { name: 'Fulfill', exact: true }).last()).toBeDisabled();
+    await expect(queue.getByRole('button', { name: 'Cancel', exact: true }).last()).toBeDisabled();
+    releaseFulfill();
+    await expect(queue.getByText('Redemption fulfilled.', { exact: true })).toBeVisible();
+    await expect(queue.getByText(/redemption reload unavailable/)).toBeVisible();
+    await expect(queue.getByText('Viewer 1 · Hydrate', { exact: true })).toHaveCount(0);
+    await expect(queue.getByText('Viewer 2 · Hydrate', { exact: true })).toBeVisible();
+    await queue.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(queue.getByText('Redemption canceled.', { exact: true })).toBeVisible();
+    await expect(queue.getByText('No unfulfilled redemptions loaded.', { exact: true })).toBeVisible();
+    expect(writes).toBe(2);
+  });
+
   test('edits commands independently, retries failed drafts, and preserves successful writes after refresh failure', async ({ page }) => {
     let releaseSave!: () => void;
     const delayedSave = new Promise<void>((resolve) => { releaseSave = resolve; });

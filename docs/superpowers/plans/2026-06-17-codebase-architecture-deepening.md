@@ -288,3 +288,11 @@ Verification passed: the complete backend `go test -race ./... -count=1` suite, 
 Changing nuke settings clears the old plan and confirmation. Execution consumes confirmation at the start. Execution and rollback receipts survive summary-refresh failure, and returned radiation rules update immediately without a rule-list reload. Manual action receipts display the actual result/reason; failed results are not shown as successful. Failed rule writes keep their drafts, and test edits clear stale dry-run results.
 
 Verification passed: `make verify` (93 frontend tests and the Go suite), all fourteen `make smoke-browser` checks, and `make smoke API_PORT=8081`. Browser fixtures cover stale-plan invalidation, pending execution, confirmation consumption, rollback after refresh failure, manual action failure/audit refresh, draft retry, and stale dry-run clearing. The collaborative browser created a dry-run rule in Postgres, matched a message, deleted the fixture, and confirmed that its old test result cleared. Live Twitch moderation remains unverified.
+
+## October 6 reward queue operation ownership
+
+`useRewardOperation.ts` is a small Module behind the live reward queue Adapter. Its Interface owns write serialization, pending state, receipts, error handling, and response invalidation when API/credentials change. Returned rewards and completed redemptions update immediately, while the receipt survives reload failure. Per-list request generations prevent late reads from replacing newer writes or reward selections. Queue controls disable throughout a write, and delete consumes confirmation at its start.
+
+Browser workflow tests cover delayed create, failed-edit retry, late-list suppression, lifecycle/delete receipts, and fulfill/cancel receipts with unavailable reloads. These strengthen the live operations Seam without moving rule-editor behavior into the reward queue.
+
+Verification for the reward operation slice passed: `make verify` (95 frontend tests and the Go suite), all seventeen `make smoke-browser` checks, and `make smoke API_PORT=8081`. Browser fixtures perform no live Twitch writes.

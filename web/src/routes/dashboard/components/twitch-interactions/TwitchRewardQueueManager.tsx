@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createTwitchReward,
   deleteTwitchReward,
@@ -10,6 +10,7 @@ import {
   type TwitchRedemption,
   type TwitchReward,
 } from '../../../../lib/api';
+import { useRewardOperation } from './useRewardOperation';
 import { findMatchingChannelPointRule } from '../../../../lib/twitchInteractionRules';
 import { Check, Empty, Field, Notice, Panel, SubPanel, Tag } from '../../ui';
 
@@ -100,10 +101,24 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
   const [rewards, setRewards] = useState<TwitchReward[]>([]);
   const [redemptions, setRedemptions] = useState<TwitchRedemption[]>([]);
   const [selectedRewardId, setSelectedRewardId] = useState('');
-  const [rewardError, setRewardError] = useState('');
+  const operation = useRewardOperation(apiBaseUrl, operatorSecret);
+  const { error: rewardError, setError: setRewardError } = operation;
+  const rewardRequest = useRef(0);
+  const redemptionRequest = useRef(0);
+  function invalidateLoads() { rewardRequest.current++; redemptionRequest.current++; }
   const [rewardDraft, setRewardDraft] = useState<RewardDraft>(emptyRewardDraft);
   const [rewardEditDraft, setRewardEditDraft] = useState<RewardEditDraft>(rewardEditDraftFromReward());
   const [deleteRewardConfirmed, setDeleteRewardConfirmed] = useState(false);
+
+  useEffect(() => {
+    invalidateLoads();
+    setRewards([]);
+    setRedemptions([]);
+    setSelectedRewardId('');
+    setRewardDraft(emptyRewardDraft);
+    setRewardEditDraft(rewardEditDraftFromReward());
+    setDeleteRewardConfirmed(false);
+  }, [apiBaseUrl, operatorSecret]);
 
   const selectedReward = useMemo(() => rewards.find((reward) => reward.id === selectedRewardId), [rewards, selectedRewardId]);
   const selectedRewardRule = useMemo(
@@ -116,39 +131,51 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
   );
 
   async function loadRewards(preferredRewardId = selectedRewardId) {
+    const request = ++rewardRequest.current;
+    const current = operation.snapshot();
     try {
       const response = await fetchTwitchRewards(apiBaseUrl, operatorSecret);
+      if (!current() || request !== rewardRequest.current) return;
       const loadedRewards = response.rewards ?? [];
       const nextSelectedRewardId = loadedRewards.find((reward) => reward.id === preferredRewardId)?.id ?? loadedRewards[0]?.id ?? '';
       const nextSelectedReward = loadedRewards.find((reward) => reward.id === nextSelectedRewardId);
+      if (nextSelectedRewardId !== selectedRewardId) { redemptionRequest.current++; setRedemptions([]); }
       setRewards(loadedRewards);
       setSelectedRewardId(nextSelectedRewardId);
       setRewardEditDraft(rewardEditDraftFromReward(nextSelectedReward));
       setDeleteRewardConfirmed(false);
       setRewardError('');
     } catch (error) {
-      setRewardError(error instanceof Error ? error.message : 'Failed to load rewards.');
+      if (current() && request === rewardRequest.current) setRewardError(error instanceof Error ? error.message : 'Failed to load rewards.');
     }
   }
 
   async function loadRedemptions(rewardId = selectedRewardId) {
     if (!rewardId) return;
+    const request = ++redemptionRequest.current;
+    const current = operation.snapshot();
     try {
       const response = await fetchTwitchRewardRedemptions(rewardId, apiBaseUrl, operatorSecret);
+      if (!current() || request !== redemptionRequest.current) return;
       setRedemptions(response.redemptions ?? []);
       setRewardError('');
     } catch (error) {
-      setRewardError(error instanceof Error ? error.message : 'Failed to load redemptions.');
+      if (current() && request === redemptionRequest.current) setRewardError(error instanceof Error ? error.message : 'Failed to load redemptions.');
     }
   }
 
   async function updateRedemption(redemption: TwitchRedemption, status: 'FULFILLED' | 'CANCELED') {
-    try {
-      await updateTwitchRedemptionStatus(redemption.reward.id || selectedRewardId, redemption.id, status, apiBaseUrl, operatorSecret);
-      await loadRedemptions(redemption.reward.id || selectedRewardId);
-    } catch (error) {
-      setRewardError(error instanceof Error ? error.message : 'Failed to update redemption.');
-    }
+    const rewardId = redemption.reward.id || selectedRewardId;
+    await operation.run('Updating redemption', () => updateTwitchRedemptionStatus(rewardId, redemption.id, status, apiBaseUrl, operatorSecret), () => {
+      setRedemptions((current) => current.filter((row) => row.id !== redemption.id));
+    }, status === 'FULFILLED' ? 'Redemption fulfilled.' : 'Redemption canceled.', () => loadRedemptions(rewardId), invalidateLoads);
+  }
+
+  function applyReward(reward: TwitchReward) {
+    setRewards((current) => [...current.filter((row) => row.id !== reward.id), reward]);
+    setSelectedRewardId(reward.id);
+    setRewardEditDraft(rewardEditDraftFromReward(reward));
+    setDeleteRewardConfirmed(false);
   }
 
   async function createReward() {
@@ -173,34 +200,27 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
       setRewardError(limitError);
       return;
     }
-    try {
-      await createTwitchReward(buildCreateRewardPayload(rewardDraft), apiBaseUrl, operatorSecret);
+    await operation.run('Creating reward', () => createTwitchReward(buildCreateRewardPayload(rewardDraft), apiBaseUrl, operatorSecret), (response) => {
+      if (response.reward) applyReward(response.reward);
       setRewardDraft(emptyRewardDraft);
-      await loadRewards();
-    } catch (error) {
-      setRewardError(error instanceof Error ? error.message : 'Failed to create reward.');
-    }
+      setRedemptions([]);
+    }, 'Reward created.', (response) => loadRewards(response.reward?.id), invalidateLoads);
   }
 
   async function deleteReward() {
     if (!selectedRewardId || !deleteRewardConfirmed) return;
-    try {
-      await deleteTwitchReward(selectedRewardId, apiBaseUrl, operatorSecret);
+    const id = selectedRewardId;
+    await operation.run('Deleting reward', () => deleteTwitchReward(id, apiBaseUrl, operatorSecret), () => {
+      setRewards((current) => current.filter((row) => row.id !== id));
+      setSelectedRewardId('');
       setRedemptions([]);
-      await loadRewards();
-    } catch (error) {
-      setRewardError(error instanceof Error ? error.message : 'Failed to delete reward.');
-    }
+      setRewardEditDraft(rewardEditDraftFromReward());
+    }, 'Reward deleted.', () => loadRewards(''), () => { invalidateLoads(); setDeleteRewardConfirmed(false); });
   }
 
   async function updateSelectedRewardLifecycle(patch: { enabled?: boolean; paused?: boolean }) {
     if (!selectedReward) return;
-    try {
-      await updateTwitchReward(selectedReward.id, patch, apiBaseUrl, operatorSecret);
-      await loadRewards(selectedReward.id);
-    } catch (error) {
-      setRewardError(error instanceof Error ? error.message : 'Failed to update reward lifecycle.');
-    }
+    await operation.run('Updating reward', () => updateTwitchReward(selectedReward.id, patch, apiBaseUrl, operatorSecret), (response) => { if (response.reward) applyReward(response.reward); }, 'Reward lifecycle updated.', () => loadRewards(selectedReward.id), invalidateLoads);
   }
 
   async function updateSelectedRewardAdvancedFields() {
@@ -222,12 +242,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
       setRewardError('No reward field changes to save.');
       return;
     }
-    try {
-      await updateTwitchReward(selectedReward.id, patch, apiBaseUrl, operatorSecret);
-      await loadRewards(selectedReward.id);
-    } catch (error) {
-      setRewardError(error instanceof Error ? error.message : 'Failed to update reward fields.');
-    }
+    await operation.run('Saving reward fields', () => updateTwitchReward(selectedReward.id, patch, apiBaseUrl, operatorSecret), (response) => { if (response.reward) applyReward(response.reward); }, 'Reward fields saved.', () => loadRewards(selectedReward.id), invalidateLoads);
   }
 
   return (
@@ -237,7 +252,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
       title="Reward queue"
       description="Load manageable rewards, create simple rewards, and fulfill or cancel unfulfilled redemptions. Delete requires confirmation and can fulfill pending redemptions on Twitch."
       actions={
-        <button className="desk-btn" type="button" onClick={() => void loadRewards()}>
+        <button className="desk-btn" type="button" onClick={() => void loadRewards()} disabled={Boolean(operation.pending)}>
           Load rewards
         </button>
       }
@@ -248,6 +263,9 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
         </Notice>
       ) : null}
 
+      {operation.result ? <Notice tone="ok" role="status">{operation.result}</Notice> : null}
+      {operation.pending ? <Notice role="status">{operation.pending}…</Notice> : null}
+      <fieldset disabled={Boolean(operation.pending)} className="min-w-0 border-0 p-0 m-0">
       <SubPanel title="New reward">
         <div className="grid gap-3 md:grid-cols-4 md:items-end">
           <Field label="New reward title" className="md:col-span-2">
@@ -328,6 +346,8 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
               onChange={(event) => {
                 const nextRewardId = event.target.value;
                 const nextReward = rewards.find((reward) => reward.id === nextRewardId);
+                redemptionRequest.current++;
+                setRedemptions([]);
                 setSelectedRewardId(nextRewardId);
                 setRewardEditDraft(rewardEditDraftFromReward(nextReward));
                 setDeleteRewardConfirmed(false);
@@ -466,6 +486,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
           ))}
         </ul>
       )}
+      </fieldset>
     </Panel>
   );
 }

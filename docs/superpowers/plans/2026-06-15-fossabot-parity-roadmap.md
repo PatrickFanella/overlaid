@@ -161,6 +161,12 @@ The dashboard edits reward IDs and labels, preserves IDs through import/export a
 
 Verification passed: `make verify` (95 frontend tests and the Go suite), all fifteen browser smoke checks, interactions/Twitch/HTTP race tests, and `make smoke API_PORT=8081`. The native API saved and reloaded an ID rule from Postgres, the collaborative browser displayed its ID and label fields, and an API restart preserved it. Original interaction rules were restored after the fixture.
 
+## October 6 reward queue write ownership and receipts
+
+A small reward-operation hook now owns the write guard, pending state, receipts, errors, and API/credential response generation. All reward/redemption writes share one guard. Queue controls and reload buttons disable while writing; delete consumes confirmation at request start. Failed edits retain drafts. Successful create/edit/lifecycle/delete/fulfill/cancel operations update local records and keep their receipt if reloading fails.
+
+Reward and redemption reads use request generations. Writes invalidate older loads; reward selection changes discard old redemption results, and API/credential changes clear the old queue and ignore pending responses. Browser fixtures cover delayed create, disabled overlapping controls, late older loads, rejected-edit retry, lifecycle/delete receipts, and fulfill/cancel receipts with reload failures. Live Twitch changes remain unverified because credentials are unavailable.
+
 ---
 
 ## File structure
@@ -405,3 +411,5 @@ curl -fsS http://localhost:8080/readyz | jq .
 ```
 
 Do not push or deploy unless explicitly requested. Do not log or commit secrets.
+
+Verification for the reward operation slice passed: `make verify` (95 frontend tests and the Go suite), all seventeen `make smoke-browser` checks, and `make smoke API_PORT=8081`. Browser fixtures perform no live Twitch writes.
