@@ -112,7 +112,7 @@ Supported template variables:
 - `{quote:random}` — random stored quote, including author when present.
 - `{api:name}` — operator-configured read-only HTTPS API variable output or fallback.
 
-Unknown variables render empty and are included in command audit data. Rendered responses are capped at 400 characters.
+Unknown variables render empty and are included in command audit data. Rendered responses are capped at 400 characters. If the entire response renders empty, the command emits only a failed diagnostic with audit reason `empty_response`, preserves unknown-variable details, and does not consume cooldown. Correcting the template permits an immediate retry. Disabled commands use audit result `denied` and reason `command_disabled`.
 
 ## API variable behavior
 

@@ -123,6 +123,12 @@ The backend now enforces the command-name pattern already used by the dashboard:
 
 Isolated Postgres coverage verifies create/edit/pause/delete, preserved IDs and creation timestamps, response mode/action/role/cooldown round trips, rejected names and OBS actions, unchanged records after rejected edits, and missing-ID results. Native API checks confirm HTTP 400 for malformed names and rejected edits, plus successful create/pause/delete; the fixture was removed. `make verify`, all fourteen browser smoke tests, bot race tests with Postgres enabled, and `make smoke API_PORT=8081` passed. C1 and the existing command-dashboard commit checklist now reflect the inspected implementation and this evidence.
 
+## October 6 custom command failure handling
+
+Empty custom-command renders now emit a warning diagnostic with template unknown-variable details, audit result `failed`, and reason `empty_response` in overlay, chat, and both modes. They emit no overlay action or outbound-chat metadata and leave cooldown available for a corrected response. Disabled commands audit as `denied` with reason `command_disabled`.
+
+Cooldown checks skip template dependencies when already active. A valid response reserves cooldown atomically after rendering, so two concurrent renders cannot both publish during one cooldown window. Tests reproduce the prior empty chat success and lost overlay diagnostics, cover immediate retry after correcting a response, concurrent renders, dependency suppression during cooldown, and actual custom command publication/audit outcomes with alias and active-session links. Verification passed: `make verify`, all fourteen browser smoke tests, Twitch/HTTP race tests, and `make smoke API_PORT=8081`.
+
 ---
 
 ## File structure
@@ -302,11 +308,11 @@ Build the spine before adding feature breadth.
 - Modify: `backend/internal/twitch/commands.go`
 - Test: Twitch command tests.
 
-- [ ] Resolve custom command before reporting unknown command.
-- [ ] Enforce enabled flag, role, and cooldown.
-- [ ] Publish response as a safe overlay/ticker/chat diagnostic event first; outbound chat replies can be a later milestone.
-- [ ] Record audit event for success/denial/failure.
-- [ ] Commit: `feat: run safe custom chat commands`.
+- [x] Resolve custom command before reporting unknown command (alias/custom execution coverage).
+- [x] Enforce enabled flag, role, and cooldown (October 6: disabled/denied outcome matrix, response-mode cooldown checks, and concurrent render reservation).
+- [x] Publish response as a safe overlay/ticker/chat diagnostic event first; outbound chat replies can be a later milestone (overlay/chat/both delivery matrix; empty responses emit only a failed diagnostic).
+- [x] Record audit event for success/denial/failure (October 6: alias, session/event links, all response modes, disabled/role denial, cooldown, and empty-render diagnostics).
+- [x] Commit: `feat: run safe custom chat commands` (`96f2158`; October 6 empty-render/cooldown correction).
 
 ### Task C4: Command dashboard
 

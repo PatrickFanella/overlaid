@@ -68,7 +68,7 @@ func botResultForCommandEvent(event events.Event) string {
 		return string(bot.ResultAllowed)
 	case strings.Contains(message, "cooling down"):
 		return string(bot.ResultCooldown)
-	case strings.Contains(message, "permission denied") || strings.Contains(message, "unsupported"):
+	case strings.Contains(message, "permission denied") || strings.Contains(message, "unsupported") || message == "command disabled":
 		return string(bot.ResultDenied)
 	default:
 		return string(bot.ResultFailed)
@@ -84,6 +84,10 @@ func botReasonForCommandEvent(event events.Event) string {
 		return "permission_denied"
 	case strings.Contains(message, "unsupported"):
 		return "unsupported_command"
+	case message == "command disabled":
+		return "command_disabled"
+	case message == "command response is empty":
+		return "empty_response"
 	case strings.Contains(message, "ignored"):
 		return "invalid_command"
 	case event.Severity == events.SeveritySuccess:

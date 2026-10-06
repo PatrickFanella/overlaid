@@ -247,21 +247,29 @@ func (p *CommandProcessor) handleCustomCommand(original ChatCommand, resolved Ch
 	if !roleAllows(chatCommandRole(user), custom.RoleRequired) {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"custom": true, "action": custom.Action, "roleRequired": custom.RoleRequired})}
 	}
-	if p.onNamedCooldown("custom:"+custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
+	if p.namedCooldownActive("custom:"+custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
 	}
 	template := bot.RenderTemplate(custom.Response, p.templateContext(custom.Response, original, resolved, user))
-	action, ok := customActionEvent(custom, user, template.Text, template.UnknownVariables)
 	mode := normalizeResponseMode(custom.ResponseMode)
+	if strings.TrimSpace(template.Text) == "" {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command response is empty", map[string]any{"custom": true, "action": custom.Action, "responseMode": mode, "unknownVariables": template.UnknownVariables})}
+	}
+	action, ok := customActionEvent(custom, user, template.Text, template.UnknownVariables)
+	if mode != "chat" && !ok {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command ignored", map[string]any{"custom": true, "action": custom.Action, "unknownVariables": template.UnknownVariables})}
+	}
+	// Reserve only after a valid response exists. The second check prevents
+	// concurrent renders from both publishing during the same cooldown window.
+	if p.onNamedCooldown("custom:"+custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
+	}
 	accepted := p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"custom": true, "action": custom.Action, "responseMode": mode, "unknownVariables": template.UnknownVariables})
 	if mode == "chat" || mode == "both" {
 		accepted.Data["chatResponse"] = map[string]any{"message": template.Text, "command": custom.Name}
 	}
 	if mode == "chat" {
 		return []events.Event{accepted}
-	}
-	if !ok {
-		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command ignored", map[string]any{"custom": true, "action": custom.Action})}
 	}
 	return []events.Event{accepted, action}
 }
@@ -320,6 +328,16 @@ func (p *CommandProcessor) resolveCommand(command ChatCommand) (ChatCommand, boo
 
 func (p *CommandProcessor) onCooldown(name string) bool {
 	return p.onNamedCooldown(name, p.cooldown)
+}
+
+func (p *CommandProcessor) namedCooldownActive(name string, cooldown time.Duration) bool {
+	if cooldown == 0 {
+		return false
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	last, ok := p.lastRun[name]
+	return ok && p.now().UTC().Sub(last) < cooldown
 }
 
 func (p *CommandProcessor) onNamedCooldown(name string, cooldown time.Duration) bool {

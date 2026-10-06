@@ -480,3 +480,80 @@ func TestCommandAuditEnqueuesAfterEventHistoryAppend(t *testing.T) {
 		t.Fatal("audit was not recorded")
 	}
 }
+
+func TestCustomCommandExecutionAuditOutcomes(t *testing.T) {
+	for _, test := range []struct {
+		name, mode, response, role string
+		enabled                    bool
+		result, reason             string
+		count                      int
+	}{
+		{"overlay", "overlay", "Hello {user}", "viewer", true, "allowed", "accepted", 2},
+		{"chat", "chat", "Hello {user}", "viewer", true, "allowed", "accepted", 1},
+		{"both", "both", "Hello {user}", "viewer", true, "allowed", "accepted", 2},
+		{"empty overlay", "overlay", "{missing}", "viewer", true, "failed", "empty_response", 1},
+		{"empty chat", "chat", "{missing}", "viewer", true, "failed", "empty_response", 1},
+		{"empty both", "both", "{missing}", "viewer", true, "failed", "empty_response", 1},
+		{"disabled", "overlay", "Hello", "viewer", false, "denied", "command_disabled", 1},
+		{"denied", "overlay", "Hello", "moderator", true, "denied", "permission_denied", 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := &recordingBotAuditStore{}
+			bus := events.NewBus(4)
+			client := bus.Subscribe()
+			defer bus.Unsubscribe(client.ID)
+			server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+			server.botRuntime = bot.NewRuntime(recorder)
+			server.history, server.historyWritable = activeHistoryStub{sessionID: "session-custom"}, false
+			processor := twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Aliases: map[string]string{"hi": "hello"}, Custom: []twitch.CustomCommand{{Name: "hello", Enabled: test.enabled, Response: test.response, Action: "ticker", ResponseMode: test.mode, RoleRequired: test.role, CooldownSeconds: 30}}})
+			produced := processor.Handle(twitch.ChatCommand{Name: "hi"}, twitch.ChatCommandUser{Name: "Viewer", Login: "viewer"})
+			if len(produced) != test.count {
+				t.Fatalf("event count=%d want %d", len(produced), test.count)
+			}
+			for _, event := range produced {
+				server.publishEventSubEvent(event)
+			}
+			flushBotAudit(t, server)
+			if len(recorder.events) != 1 {
+				t.Fatalf("expected one audit: %#v", recorder.events)
+			}
+			audit := recorder.events[0]
+			if audit.Result != test.result || audit.Reason != test.reason || audit.Command != "hello" || audit.Trigger != "!hi" || audit.EventID != produced[0].ID || audit.StreamSessionID != "session-custom" {
+				t.Fatalf("wrong custom audit: %#v", audit)
+			}
+			if test.reason == "empty_response" {
+				var data struct {
+					UnknownVariables []string `json:"unknownVariables"`
+				}
+				if err := json.Unmarshal(audit.Data, &data); err != nil || len(data.UnknownVariables) != 1 || data.UnknownVariables[0] != "missing" {
+					t.Fatalf("empty-response diagnostics lost: %s, %v", audit.Data, err)
+				}
+				if produced[0].Data["chatResponse"] != nil {
+					t.Fatal("empty response attempted outbound chat")
+				}
+			}
+			for _, event := range produced {
+				select {
+				case delivered := <-client.Events:
+					if delivered.ID != event.ID {
+						t.Fatal("wrong delivered event")
+					}
+				default:
+					t.Fatal("custom event not delivered")
+				}
+			}
+
+			if test.result == "allowed" {
+				cooling := processor.Handle(twitch.ChatCommand{Name: "hi"}, twitch.ChatCommandUser{Name: "Viewer", Login: "viewer"})
+				if len(cooling) != 1 {
+					t.Fatalf("cooldown emitted action: %#v", cooling)
+				}
+				server.publishEventSubEvent(cooling[0])
+				flushBotAudit(t, server)
+				if len(recorder.events) != 2 || recorder.events[1].Result != "cooldown" || recorder.events[1].Reason != "cooldown" {
+					t.Fatalf("custom cooldown audit missing: %#v", recorder.events)
+				}
+			}
+		})
+	}
+}

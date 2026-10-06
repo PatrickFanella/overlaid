@@ -2,6 +2,7 @@ package twitch
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -458,3 +459,89 @@ func TestCommandProcessorRejectsEmptyAlertWithoutCooldown(t *testing.T) {
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+func TestCustomCommandEmptyResponseDoesNotConsumeCooldown(t *testing.T) {
+	for _, mode := range []string{"overlay", "chat", "both"} {
+		t.Run(mode, func(t *testing.T) {
+			current := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+			command := CustomCommand{Name: "hello", Enabled: true, Response: "{missing}", Action: "ticker", ResponseMode: mode, RoleRequired: "viewer", CooldownSeconds: 30}
+			processor := NewCommandProcessor(CommandProcessorConfig{Now: func() time.Time { return current }, Custom: []CustomCommand{command}})
+			failed := processor.Handle(ChatCommand{Name: "hello"}, ChatCommandUser{Name: "Viewer"})
+			if len(failed) != 1 || failed[0].Severity != events.SeverityWarning || failed[0].Message != "Command response is empty" || failed[0].Data["chatResponse"] != nil {
+				t.Fatalf("empty response accepted: %#v", failed)
+			}
+			unknown, ok := failed[0].Data["unknownVariables"].([]string)
+			if !ok || len(unknown) != 1 || unknown[0] != "missing" {
+				t.Fatalf("empty response lost template diagnostics: %#v", failed[0].Data)
+			}
+			command.Response = "Hello {user}"
+			processor.SetCustomCommands([]CustomCommand{command})
+			accepted := processor.Handle(ChatCommand{Name: "hello"}, ChatCommandUser{Name: "Viewer"})
+			if accepted[0].Severity != events.SeveritySuccess {
+				t.Fatalf("failed render consumed cooldown: %#v", accepted)
+			}
+			cooldown := processor.Handle(ChatCommand{Name: "hello"}, ChatCommandUser{Name: "Viewer"})
+			if len(cooldown) != 1 || cooldown[0].Message != "Command cooling down" {
+				t.Fatalf("success did not reserve cooldown: %#v", cooldown)
+			}
+		})
+	}
+}
+
+func TestCustomCommandConcurrentRendersReserveOneCooldown(t *testing.T) {
+	arrived, release := make(chan struct{}, 2), make(chan struct{})
+	current := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	processor := NewCommandProcessor(CommandProcessorConfig{Now: func() time.Time { return current }, NowPlaying: func() bot.NowPlayingMetadata {
+		arrived <- struct{}{}
+		<-release
+		return bot.NowPlayingMetadata{Title: "Song"}
+	}, Custom: []CustomCommand{{Name: "song", Enabled: true, Response: "{nowPlaying.title}", Action: "ticker", CooldownSeconds: 30}}})
+	results := make(chan []events.Event, 2)
+	var workers sync.WaitGroup
+	for range 2 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			results <- processor.Handle(ChatCommand{Name: "song"}, ChatCommandUser{Name: "Viewer"})
+		}()
+	}
+	defer func() { close(release); workers.Wait() }()
+	for range 2 {
+		select {
+		case <-arrived:
+		case <-time.After(time.Second):
+			t.Fatal("concurrent render did not reach fixture")
+		}
+	}
+	// Both renders started before either reserved a cooldown.
+	release <- struct{}{}
+	release <- struct{}{}
+	allowed, cooldown := 0, 0
+	for range 2 {
+		select {
+		case result := <-results:
+			if len(result) == 2 && result[0].Severity == events.SeveritySuccess {
+				allowed++
+			} else if len(result) == 1 && result[0].Message == "Command cooling down" {
+				cooldown++
+			} else {
+				t.Fatalf("unexpected concurrent result: %#v", result)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("concurrent command did not finish")
+		}
+	}
+	if allowed != 1 || cooldown != 1 {
+		t.Fatalf("allowed=%d cooldown=%d", allowed, cooldown)
+	}
+}
+
+func TestCustomCommandCooldownSkipsTemplateDependencies(t *testing.T) {
+	calls := 0
+	processor := NewCommandProcessor(CommandProcessorConfig{NowPlaying: func() bot.NowPlayingMetadata { calls++; return bot.NowPlayingMetadata{Title: "Song"} }, Custom: []CustomCommand{{Name: "song", Enabled: true, Response: "{nowPlaying.title}", Action: "ticker", CooldownSeconds: 30}}})
+	processor.Handle(ChatCommand{Name: "song"}, ChatCommandUser{Name: "Viewer"})
+	processor.Handle(ChatCommand{Name: "song"}, ChatCommandUser{Name: "Viewer"})
+	if calls != 1 {
+		t.Fatalf("cooldown triggered %d template dependency calls", calls)
+	}
+}
