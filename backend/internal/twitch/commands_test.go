@@ -545,3 +545,37 @@ func TestCustomCommandCooldownSkipsTemplateDependencies(t *testing.T) {
 		t.Fatalf("cooldown triggered %d template dependency calls", calls)
 	}
 }
+
+func TestCommunityMutationPermissionsPrecedeUnavailableStorage(t *testing.T) {
+	processor := NewCommandProcessor(CommandProcessorConfig{})
+	for _, command := range []ChatCommand{{Name: "count", Args: "hype"}, {Name: "addquote", Args: "Hello"}, {Name: "quote", Args: "add Hello"}, {Name: "delquote", Args: "quote-id"}} {
+		denied := processor.Handle(command, ChatCommandUser{Name: "Viewer"})
+		if len(denied) != 1 || denied[0].Message != "Permission denied" || denied[0].Data["roleRequired"] != "moderator" {
+			t.Errorf("mutation %s not role-gated without storage: %#v", command.Name, denied)
+		}
+		for _, user := range []ChatCommandUser{{Name: "Mod", IsModerator: true}, {Name: "Streamer", IsBroadcaster: true}} {
+			unavailable := processor.Handle(command, user)
+			if len(unavailable) != 1 || !strings.Contains(unavailable[0].Message, "storage unavailable") {
+				t.Errorf("authorized mutation %s: %#v", command.Name, unavailable)
+			}
+		}
+	}
+	read := processor.Handle(ChatCommand{Name: "quote"}, ChatCommandUser{Name: "Viewer"})
+	if len(read) != 1 || read[0].Message != "Quote storage unavailable" {
+		t.Fatalf("read-only quote was role-gated: %#v", read)
+	}
+}
+
+func TestCommunityViewerCannotMutateConfiguredStorage(t *testing.T) {
+	community := &fakeCommunityStore{counter: bot.Counter{Name: "hype", Value: 7}, quote: bot.Quote{ID: "quote-id", Text: "Original", Author: "Author"}}
+	processor := NewCommandProcessor(CommandProcessorConfig{Community: community})
+	for _, command := range []ChatCommand{{Name: "count", Args: "hype"}, {Name: "addquote", Args: "Replacement"}, {Name: "quote", Args: "add Replacement"}, {Name: "delquote", Args: "quote-id"}} {
+		denied := processor.Handle(command, ChatCommandUser{Name: "Viewer"})
+		if len(denied) != 1 || denied[0].Message != "Permission denied" {
+			t.Fatalf("viewer mutation %s=%#v", command.Name, denied)
+		}
+	}
+	if community.counter.Value != 7 || community.quote.ID != "quote-id" || community.quote.Text != "Original" {
+		t.Fatalf("denial mutated community storage: %#v", community)
+	}
+}

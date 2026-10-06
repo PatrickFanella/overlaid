@@ -147,15 +147,15 @@ func (p *CommandProcessor) handleCommunityCommand(original ChatCommand, resolved
 }
 
 func (p *CommandProcessor) handleCountCommand(original ChatCommand, resolved ChatCommand, aliased bool, user ChatCommandUser) []events.Event {
+	if !CanRunChatCommand(user) {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"action": "counter", "roleRequired": "moderator"})}
+	}
 	name := strings.ToLower(strings.TrimSpace(resolved.Args))
 	if name == "" {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Counter name required", map[string]any{"action": "counter"})}
 	}
 	if p.community == nil {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Counter storage unavailable", map[string]any{"action": "counter"})}
-	}
-	if !CanRunChatCommand(user) {
-		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"action": "counter", "roleRequired": "moderator"})}
 	}
 	counter, err := p.community.IncrementCounter(name, 1)
 	if err != nil {
@@ -166,14 +166,15 @@ func (p *CommandProcessor) handleCountCommand(original ChatCommand, resolved Cha
 }
 
 func (p *CommandProcessor) handleQuoteCommand(original ChatCommand, resolved ChatCommand, aliased bool, user ChatCommandUser) []events.Event {
+	args := strings.TrimSpace(resolved.Args)
+	mutates := resolved.Name == "addquote" || resolved.Name == "delquote" || strings.HasPrefix(strings.ToLower(args), "add ")
+	if mutates && !CanRunChatCommand(user) {
+		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"action": "quote", "roleRequired": "moderator"})}
+	}
 	if p.community == nil {
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Quote storage unavailable", map[string]any{"action": "quote"})}
 	}
-	args := strings.TrimSpace(resolved.Args)
 	if resolved.Name == "delquote" {
-		if !CanRunChatCommand(user) {
-			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"action": "quote", "roleRequired": "moderator"})}
-		}
 		if args == "" {
 			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Quote id required", map[string]any{"action": "quote"})}
 		}
@@ -183,9 +184,6 @@ func (p *CommandProcessor) handleQuoteCommand(original ChatCommand, resolved Cha
 		return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"action": "quote", "quoteId": args})}
 	}
 	if resolved.Name == "addquote" || strings.HasPrefix(strings.ToLower(args), "add ") {
-		if !CanRunChatCommand(user) {
-			return []events.Event{p.commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"action": "quote", "roleRequired": "moderator"})}
-		}
 		text := strings.TrimSpace(args)
 		if strings.HasPrefix(strings.ToLower(text), "add ") {
 			text = strings.TrimSpace(text[4:])

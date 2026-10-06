@@ -261,3 +261,9 @@ Changing any nuke plan setting clears the displayed plan and confirmation. Plan 
 Twitch command audits enter a FIFO queue with one writer, up to 128 waiting records, and a five-second deadline per write. Command diagnostics and actions continue while the writer waits. Audit rows can appear shortly after the command; dashboard mutation receipts still wait for their audit attempt. Command audit snapshots retain the event and active session IDs captured at publication, after the event history append attempt.
 
 If storage fails or the queue fills, bot readiness and `lastAuditError` report the error. A full queue drops new audit records, so review the storage problem before treating the audit as a complete command history. Graceful shutdown drains accepted audits within the shared ten-second shutdown budget; a crash can lose queued records.
+
+## Community command permissions
+
+Counter increments (`!count`) and quote mutations (`!addquote`, `!quote add`, `!delquote`) require moderator or broadcaster permissions. Role checks run before storage access, so an unauthorized attempt is audited as `denied` with reason `permission_denied` even when community storage is unavailable. Viewers may request a random quote with `!quote`; that read reports unavailable storage as a failure.
+
+The optional Postgres community test verifies counter/quote CRUD, preserved record identity, empty/deleted reads, and twenty concurrent counter increments without lost updates: from `backend`, run `OVERLAID_TEST_DATABASE_URL='<disposable-postgres-url>' go test ./internal/bot -run TestCommunityPersistenceAndConcurrentCounterPostgres -count=1`. It creates and removes its own private schema.

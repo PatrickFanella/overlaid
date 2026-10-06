@@ -557,3 +557,27 @@ func TestCustomCommandExecutionAuditOutcomes(t *testing.T) {
 		})
 	}
 }
+
+func TestCommunityMutationDenialsAuditWithoutStorage(t *testing.T) {
+	for _, command := range []twitch.ChatCommand{{Name: "count", Args: "hype"}, {Name: "addquote", Args: "Hello"}, {Name: "quote", Args: "add Hello"}, {Name: "delquote", Args: "quote-id"}} {
+		t.Run(command.Name+command.Args, func(t *testing.T) {
+			recorder := &recordingBotAuditStore{}
+			server := NewServer(config.Config{AllowedOrigin: "*"}, events.NewBus(4))
+			server.botRuntime = bot.NewRuntime(recorder)
+			server.history, server.historyWritable = activeHistoryStub{sessionID: "community-session"}, false
+			produced := server.twitchCommandProcessor.Handle(command, twitch.ChatCommandUser{Name: "Viewer", Login: "viewer"})
+			if len(produced) != 1 {
+				t.Fatalf("denial emitted actions: %#v", produced)
+			}
+			server.publishEventSubEvent(produced[0])
+			flushBotAudit(t, server)
+			if len(recorder.events) != 1 {
+				t.Fatalf("expected one audit: %#v", recorder.events)
+			}
+			audit := recorder.events[0]
+			if audit.Result != "denied" || audit.Reason != "permission_denied" || audit.Command != command.Name || audit.ActorRole != "viewer" || audit.EventID != produced[0].ID || audit.StreamSessionID != "community-session" {
+				t.Fatalf("community denial audit=%#v", audit)
+			}
+		})
+	}
+}

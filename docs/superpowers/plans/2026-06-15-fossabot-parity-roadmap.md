@@ -141,6 +141,12 @@ Timer response templates that are valid JSON now reject secret-looking keys recu
 
 Unit tests cover secret/public keys, ordinary prose and template variables, and interval boundaries 29/30/86400/86401. Isolated Postgres tests cover create, same-ID editing, enable, field and creation-timestamp preservation, rejected creates/edits without saved-row changes, delete, and missing lookup results. The scheduler fairness fixture now documents and uses the actual name ordering rather than an unrelated creation-time adjustment. Native API checks confirm three unsafe JSON edits return HTTP 400, preserve the saved timer, and record failed configuration audits with safe metadata; the fixture was deleted. `make verify`, all fourteen browser smoke tests, bot race tests with Postgres enabled, and `make smoke API_PORT=8081` passed.
 
+## October 6 community role and persistence contracts
+
+Community mutation permissions now run before storage availability checks. A viewer attempting a counter increment or quote mutation gets a permission denial even without Postgres, and the diagnostic audits as `denied` / `permission_denied` with its event/session links. Moderator/broadcaster attempts can reach storage, while viewers retain random-quote reads. Tests also verify rejected mutations leave configured counter/quote values intact.
+
+Isolated Postgres coverage verifies counter and quote CRUD, normalized fields, unchanged IDs/creation timestamps during edits, empty/deleted reads, and twenty concurrent increments preserving an exact total. Existing renderer/command-context tests and browser community editor checks cover the other milestone D requirements; the checklist now reflects those sources. Verification passed: `make verify`, all fourteen browser smoke tests, bot/Twitch/HTTP race tests with Postgres enabled, and `make smoke API_PORT=8081`.
+
 ---
 
 ## File structure
@@ -342,10 +348,10 @@ Build the spine before adding feature breadth.
 
 ## Milestone D: Counters and quotes
 
-- Add Postgres tables `bot_counters` and `bot_quotes`.
-- Add dashboard panels for counters and quotes.
-- Add commands: `!count`, `!addquote`, `!quote`, `!delquote` gated by role.
-- Add template variables `{count:name}` and `{quote:random}`.
+- [x] Add Postgres tables `bot_counters` and `bot_quotes` (migration inspected; isolated Postgres CRUD and concurrent increment proof).
+- [x] Add dashboard panels for counters and quotes (saved editor, independent state, retry, and receipt preservation verified by browser smoke).
+- [x] Add commands: `!count`, `!addquote`, `!quote`, `!delquote` gated by role (October 6: mutation gates precede unavailable storage, viewer quote reads remain allowed, denial audit/session coverage).
+- [x] Add template variables `{count:name}` and `{quote:random}` (renderer and command-context tests, repeated/case-normalized discovery, saved counter/quote values).
 - [x] Include counter/quote actions in audit/session reports (October 6: operator CRUD audit, session filtering before row limits, loaded/total counts, and JSON/Markdown exports).
 
 ---

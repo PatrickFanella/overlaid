@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -443,5 +444,82 @@ func TestTimerCRUDAndRejectedJSONPostgres(t *testing.T) {
 	}
 	if _, err := store.GetTimer(ctx, created.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("missing timer lookup=%v", err)
+	}
+}
+
+func TestCommunityPersistenceAndConcurrentCounterPostgres(t *testing.T) {
+	store, _ := isolatedPostgresBotStore(t)
+	ctx := context.Background()
+	counter, err := store.SaveCounter(ctx, Counter{Name: " HYPE ", Value: 7})
+	if err != nil || counter.Name != "hype" || counter.ID == "" {
+		t.Fatalf("create counter=%#v, %v", counter, err)
+	}
+	var workers sync.WaitGroup
+	failures := make(chan error, 20)
+	for range 20 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := store.IncrementCounter(ctx, " HYPE ", 1)
+			if err != nil {
+				failures <- err
+			}
+		}()
+	}
+	workers.Wait()
+	close(failures)
+	for err := range failures {
+		t.Error(err)
+	}
+	counted, found, err := store.CounterValue(ctx, "HYPE")
+	if err != nil || !found || counted.Value != 27 || counted.ID != counter.ID || !counted.CreatedAt.Equal(counter.CreatedAt) {
+		t.Fatalf("lost concurrent increments: %#v, %t, %v", counted, found, err)
+	}
+	counted.Name, counted.Value = "hype_renamed", -3
+	edited, err := store.SaveCounter(ctx, counted)
+	if err != nil || edited.ID != counter.ID || edited.Name != "hype_renamed" || edited.Value != -3 {
+		t.Fatalf("edit counter=%#v, %v", edited, err)
+	}
+	if _, found, err := store.CounterValue(ctx, "hype"); err != nil || found {
+		t.Fatalf("old counter name remains: %t, %v", found, err)
+	}
+	if err := store.DeleteCounter(ctx, counter.ID); err != nil {
+		t.Fatal(err)
+	}
+	counters, err := store.ListCounters(ctx)
+	if err != nil || len(counters) != 0 {
+		t.Fatalf("deleted counter remains: %#v, %v", counters, err)
+	}
+	if _, found, err := store.CounterValue(ctx, "hype_renamed"); err != nil || found {
+		t.Fatalf("deleted counter lookup: %t, %v", found, err)
+	}
+	if _, found, err := store.RandomQuote(ctx); err != nil || found {
+		t.Fatalf("empty quote lookup: %t, %v", found, err)
+	}
+	quote, err := store.SaveQuote(ctx, Quote{Text: " Original quote ", Author: " Author "})
+	if err != nil || quote.ID == "" || quote.Text != "Original quote" || quote.Author != "Author" {
+		t.Fatalf("create quote=%#v, %v", quote, err)
+	}
+	quote.Text, quote.Author = "Edited quote", "Edited author"
+	editedQuote, err := store.SaveQuote(ctx, quote)
+	if err != nil || editedQuote.ID != quote.ID || !editedQuote.CreatedAt.Equal(quote.CreatedAt) {
+		t.Fatalf("edit quote identity=%#v, %v", editedQuote, err)
+	}
+	random, found, err := store.RandomQuote(ctx)
+	if err != nil || !found || random.ID != quote.ID || random.Text != "Edited quote" || random.Author != "Edited author" {
+		t.Fatalf("quote read=%#v, %t, %v", random, found, err)
+	}
+	quotes, err := store.ListQuotes(ctx)
+	if err != nil || len(quotes) != 1 || quotes[0].Text != random.Text {
+		t.Fatalf("quote list=%#v, %v", quotes, err)
+	}
+	if err := store.DeleteQuote(ctx, quote.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := store.RandomQuote(ctx); err != nil || found {
+		t.Fatalf("deleted quote lookup: %t, %v", found, err)
+	}
+	if err := store.DeleteQuote(ctx, quote.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing quote delete=%v", err)
 	}
 }
