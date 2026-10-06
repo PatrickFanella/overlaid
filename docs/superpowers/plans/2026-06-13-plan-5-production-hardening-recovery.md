@@ -745,3 +745,10 @@ Expected: `main` is synced to `origin/main` and working tree is clean.
 OBS operations now close their WebSocket when the request context is canceled during Hello, Identify, or response reads. Handshake and request cancellation callbacks have separate lifetimes, so the handshake cleanup does not close a successfully returned connection. Existing deadlines remain in place. Errors support `errors.Is(..., context.Canceled)`; an Identify failure still preserves the established reachable-but-not-authenticated readiness distinction and Hello metadata.
 
 A local WebSocket regression failed before the change at all three blocked read stages. It now verifies prompt return after explicit cancellation without waiting for the default ten-second deadline. Existing request/auth/status fixtures and HTTP readiness tests cover successful handoff and error classification. OBS/HTTP race tests, `make verify` (113 frontend tests), all 19 browser workflows, and runtime smoke at port 8081 passed. Live OBS testing remains pending its external connection.
+
+
+## October 6 concurrent session persistence
+
+A failing isolated Postgres fixture reproduced eight simultaneous starts leaving eight active sessions. Start and end now acquire the same transaction advisory lock derived from the session table identity, so separate stores/processes serialize lifecycle writes. Starting a new session retains the existing documented rollover behavior. Timestamps are captured after the lock, avoiding transaction-start times from earlier waits and preserving recent-session ordering. End commits before reading its receipt.
+
+Integration contracts verify eight successful starts with one active session, retained history, recent ordering, nonnegative durations, eight end calls with exactly one accepted end, and deadline cancellation while another transaction holds the lock. Fixtures create and remove their own schema, including an insert-delay trigger used only to reproduce overlap. `make verify` passed with 113 frontend tests, all 21 browser workflows passed, Session/Bot/HTTP race tests with disposable Postgres passed, and rebuilt API runtime smoke passed at port 8081.

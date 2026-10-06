@@ -117,11 +117,20 @@ func (s *Store) Start(ctx context.Context, title, kind, notes string) (Session, 
 		return Session{}, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `UPDATE stream_sessions SET ended_at = now() WHERE ended_at IS NULL`); err != nil {
+	if _, err := tx.ExecContext(ctx, lifecycleLockSQL); err != nil {
+		return Session{}, err
+	}
+	// Capture time after acquiring the lock; transaction start may precede a
+	// session created by another writer while this transaction was waiting.
+	var startedAt time.Time
+	if err := tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&startedAt); err != nil {
+		return Session{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE stream_sessions SET ended_at = $1 WHERE ended_at IS NULL`, startedAt); err != nil {
 		return Session{}, err
 	}
 	var id string
-	err = tx.QueryRowContext(ctx, `INSERT INTO stream_sessions (title, kind, notes) VALUES ($1, $2, $3) RETURNING id`, title, kind, notes).Scan(&id)
+	err = tx.QueryRowContext(ctx, `INSERT INTO stream_sessions (title, kind, notes, started_at) VALUES ($1, $2, $3, $4) RETURNING id`, title, kind, notes, startedAt).Scan(&id)
 	if err != nil {
 		return Session{}, err
 	}
@@ -134,9 +143,17 @@ func (s *Store) Start(ctx context.Context, title, kind, notes string) (Session, 
 func (s *Store) End(ctx context.Context) (Session, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Session{}, false, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, lifecycleLockSQL); err != nil {
+		return Session{}, false, err
+	}
 	var id string
-	err := s.db.QueryRowContext(ctx, `
-		UPDATE stream_sessions SET ended_at = now() WHERE id = (
+	err = tx.QueryRowContext(ctx, `
+		UPDATE stream_sessions SET ended_at = clock_timestamp() WHERE id = (
 			SELECT id FROM stream_sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1
 		) RETURNING id
 	`).Scan(&id)
@@ -144,6 +161,9 @@ func (s *Store) End(ctx context.Context) (Session, bool, error) {
 		if err == sql.ErrNoRows {
 			return Session{}, false, nil
 		}
+		return Session{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
 		return Session{}, false, err
 	}
 	session, err := s.ByID(context.Background(), id)
@@ -297,6 +317,10 @@ func scanEvent(row rowScanner) (events.Event, error) {
 	}
 	return event, nil
 }
+
+// Table identity scopes the transaction lock to this database/schema. All
+// lifecycle writers share it, including separate API processes.
+const lifecycleLockSQL = `SELECT pg_advisory_xact_lock('stream_sessions'::regclass::oid::bigint)`
 
 const sessionSelectSQL = `
 SELECT stream_sessions.id, stream_sessions.title, stream_sessions.kind, stream_sessions.notes, stream_sessions.started_at, stream_sessions.ended_at, COUNT(stream_events.id)::int AS event_count

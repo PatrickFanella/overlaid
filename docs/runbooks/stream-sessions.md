@@ -58,3 +58,8 @@ Recent sessions appear in `/dashboard/sessions` under **Rehearsal audit**. Click
 ### Lifecycle receipts and report retry
 
 Ending a session keeps lifecycle controls pending through the report request. If the session ends successfully but its report cannot load, the receipt says the session ended and the report is unavailable. Retry from Recent sessions or Open latest report. A completed preflight with unavailable report evidence uses the same distinction. If a preflight step fails and cleanup ends its session, the current-session display clears while the original step failure stays visible.
+
+
+### Concurrent lifecycle requests
+
+Start and end are serialized by a Postgres transaction lock shared by API processes using the same session table. Concurrent starts still retain each requested session in history, close the prior active session, and leave one session active. Concurrent end calls end that session once; later calls report no active session. A canceled request waiting for the lock does not change session state. Lifecycle timestamps are captured after lock acquisition.
