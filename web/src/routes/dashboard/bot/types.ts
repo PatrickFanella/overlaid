@@ -1,15 +1,11 @@
 import type {
   BotAuditResponse,
-  BotModerationDryRunResponse,
-  BotModerationRulesResponse,
   BotStatus,
 } from '../../../lib/api';
 
 export type BotPageState = {
   status: BotStatus | null;
   audit: BotAuditResponse | null;
-  moderation: BotModerationRulesResponse | null;
-  moderationDryRun: BotModerationDryRunResponse | null;
   loading: boolean;
   error: string;
 };

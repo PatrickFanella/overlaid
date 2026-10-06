@@ -119,8 +119,8 @@ test.describe('operator browser smoke', () => {
   });
 
   test('edits saved timers, preserves failed drafts, and keeps newer audit after a late load', async ({ page }) => {
-    let releaseModeration!: () => void;
-    const moderationReady = new Promise<void>((resolve) => { releaseModeration = resolve; });
+    let releaseInitialAudit!: () => void;
+    const initialAuditReady = new Promise<void>((resolve) => { releaseInitialAudit = resolve; });
     let writes = 0;
     let saved = false;
     let deleted = false;
@@ -146,9 +146,9 @@ test.describe('operator browser smoke', () => {
         await route.fulfill({ status: 204 });
         return;
       }
-      if (path.endsWith('/rules')) {
-        await moderationReady;
-        await route.fulfill({ json: { rules: [] } });
+      if (path.endsWith('/audit') && !saved) {
+        await initialAuditReady;
+        await route.fulfill({ json: { events: [] } });
         return;
       }
       const responses: Record<string, unknown> = {
@@ -187,7 +187,7 @@ test.describe('operator browser smoke', () => {
     await expect(panel.getByText('paused', { exact: true })).toBeVisible();
     await expect(panel.getByLabel('Timer name')).toHaveValue('');
     await expect(page.getByText('dashboard · timer_configuration_changed')).toBeVisible();
-    releaseModeration();
+    releaseInitialAudit();
     await expect(page.locator('#bot-api-variables').getByText('No API variables configured yet.')).toBeVisible();
     await expect(page.getByText('dashboard · timer_configuration_changed')).toBeVisible();
     expect(writes).toBe(2);
@@ -401,6 +401,163 @@ test.describe('operator browser smoke', () => {
     await expect(panel.getByText('No API variables configured yet.')).toBeVisible();
     expect(writes).toBe(2);
     expect(deletes).toBe(2);
+  });
+
+  test('keeps moderation drafts, clears stale dry runs, and displays failed action receipts accurately', async ({ page }) => {
+    let releaseAction!: () => void;
+    const actionReady = new Promise<void>((resolve) => { releaseAction = resolve; });
+    let saves = 0;
+    let actions = 0;
+    let auditUnavailable = false;
+    const rule = { id: 'rule-1', name: 'fixture_rule', enabled: true, enforce: false, pattern: 'spam', matchTarget: 'message', regex: false, caseSensitive: false, action: 'flag', reason: '' };
+    await page.route('**/api/bot/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const method = route.request().method();
+      if (path.endsWith('/rules') && method === 'POST') {
+        saves += 1;
+        if (saves === 1) await route.fulfill({ status: 503, body: 'rule save unavailable' });
+        else await route.fulfill({ json: rule });
+        return;
+      }
+      if (path.endsWith('/rules/rule-1') && method === 'DELETE') { await route.fulfill({ status: 204 }); return; }
+      if (path.endsWith('/moderation/dry-run')) {
+        await route.fulfill({ json: { matches: [{ ruleName: 'fixture_rule', action: 'flag' }] } });
+        return;
+      }
+      if (path.endsWith('/moderation/action')) {
+        actions += 1;
+        if (actions === 1) await route.fulfill({ status: 503, body: 'Twitch unavailable' });
+        else {
+          await actionReady;
+          auditUnavailable = true;
+          await route.fulfill({ json: { action: 'timeout', result: 'failed', reason: 'missing_scope' } });
+        }
+        return;
+      }
+      if (path.endsWith('/audit') && auditUnavailable) { await route.fulfill({ status: 503, body: 'audit unavailable' }); return; }
+      const responses: Record<string, unknown> = {
+        status: { available: true, commandCount: 0, timerCount: 0, counterCount: 0, quoteCount: 0, auditCount: actions },
+        rules: { rules: [] }, commands: { commands: [] }, timers: { timers: [] }, counters: { counters: [] }, quotes: { quotes: [] }, 'api-variables': { variables: [] },
+        audit: { events: actions ? [{ id: 'audit-failed', createdAt: '2026-10-06T05:00:00Z', source: 'dashboard', result: 'failed', reason: 'manual_action_failed', trigger: 'timeout' }] : [] },
+      };
+      await route.fulfill({ json: responses[path.split('/').at(-1)!] ?? {} });
+    });
+    await page.goto('/dashboard/chat');
+    const panel = page.locator('#bot-moderation');
+    await panel.getByLabel('Rule name').fill('fixture_rule');
+    await panel.getByLabel('Pattern', { exact: true }).fill('spam');
+    await panel.getByRole('button', { name: 'Save rule', exact: true }).click();
+    await expect(panel.getByRole('alert')).toContainText('rule save unavailable');
+    await expect(panel.getByLabel('Rule name')).toHaveValue('fixture_rule');
+    await panel.getByRole('button', { name: 'Save rule', exact: true }).click();
+    await expect(panel.getByText('Saved fixture_rule.', { exact: true })).toBeVisible();
+    await expect(panel.getByText('fixture_rule', { exact: true })).toBeVisible();
+    await panel.getByLabel('Message to test').fill('spam');
+    await panel.getByRole('button', { name: 'Dry run', exact: true }).click();
+    await expect(panel.getByText('fixture_rule:flag', { exact: true })).toBeVisible();
+    await panel.getByLabel('Message to test').fill('different message');
+    await expect(panel.getByText('fixture_rule:flag', { exact: true })).toHaveCount(0);
+    await panel.getByLabel('Target user ID').fill('fixture-user');
+    await panel.getByRole('button', { name: 'Run guarded action' }).click();
+    await expect(panel.getByRole('alert')).toContainText('Twitch unavailable');
+    await expect(panel.getByLabel('Target user ID')).toHaveValue('fixture-user');
+    await expect(page.getByText('dashboard · manual_action_failed')).toBeVisible();
+    await expect(page.locator('#bot-nuke').getByRole('alert')).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Run guarded action' }).click();
+    await expect(panel.getByRole('button', { name: 'Running…' })).toBeDisabled();
+    await expect(panel.getByLabel('Target user ID')).toBeDisabled();
+    releaseAction();
+    const receipt = panel.getByText('timeout failed · missing_scope', { exact: true });
+    await expect(receipt).toBeVisible();
+    await expect(receipt).toHaveClass(/bad/);
+    await expect(panel.getByRole('alert')).toContainText('Operation completed. Status/audit refresh failed:');
+    await panel.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(panel.getByText('Deleted fixture_rule.', { exact: true })).toBeVisible();
+    await expect(panel.getByText('No moderation rules configured yet.')).toBeVisible();
+    expect(saves).toBe(2);
+    expect(actions).toBe(2);
+  });
+
+  test('invalidates changed nuke plans, blocks duplicate execution, and retains execution and rollback receipts', async ({ page }) => {
+    let releaseExecution!: () => void;
+    const executionReady = new Promise<void>((resolve) => { releaseExecution = resolve; });
+    let plans = 0;
+    let executions = 0;
+    let rulesReads = 0;
+    let auditUnavailable = false;
+    const radiation = { id: 'radiation-1', name: 'nuke_window', enabled: true, enforce: true, pattern: 'spam two', matchTarget: 'message', regex: false, caseSensitive: false, action: 'delete', source: 'nuke_radiation', expiresAt: '2099-10-06T06:00:00Z' };
+    await page.route('**/api/bot/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/nuke/dry-run')) {
+        plans += 1;
+        const payload = route.request().postDataJSON();
+        expect(payload.confirm).toBe(false);
+        await route.fulfill({ json: { matches: [{ eventId: 'chat-1', messageId: 'message-1', user: 'fixture', userId: 'fixture-1', message: payload.pattern }], pattern: payload.pattern, action: payload.action } });
+        return;
+      }
+      if (path.endsWith('/nuke/execute')) {
+        const payload = route.request().postDataJSON();
+        expect(payload.pattern).toBe('spam two');
+        expect(payload.confirm).toBe(true);
+        executions += 1;
+        await executionReady;
+        auditUnavailable = true;
+        await route.fulfill({ json: { matches: [], attempted: 1, succeeded: 1, failed: 0, action: 'delete', radiationRule: radiation } });
+        return;
+      }
+      if (path.endsWith('/nuke/radiation/rollback')) {
+        expect(route.request().postDataJSON()).toEqual({ ruleId: 'radiation-1', confirm: true });
+        await route.fulfill({ json: { rule: { ...radiation, enabled: false, enforce: false } } });
+        return;
+      }
+      if (path.endsWith('/audit') && auditUnavailable) {
+        await route.fulfill({ status: 503, body: 'audit unavailable after operation' });
+        return;
+      }
+      if (path.endsWith('/rules')) rulesReads += 1;
+      const responses: Record<string, unknown> = {
+        status: { available: true, commandCount: 0, timerCount: 0, counterCount: 0, quoteCount: 0, auditCount: 0 },
+        rules: { rules: [] }, commands: { commands: [] }, timers: { timers: [] }, counters: { counters: [] }, quotes: { quotes: [] }, 'api-variables': { variables: [] }, audit: { events: [] },
+      };
+      await route.fulfill({ json: responses[path.split('/').at(-1)!] ?? {} });
+    });
+    await page.goto('/dashboard/chat');
+    const panel = page.locator('#bot-nuke');
+    const confirm = panel.getByLabel('I reviewed this dry-run plan');
+    const execute = panel.getByRole('button', { name: 'Execute planned nuke', exact: true });
+    await expect(confirm).toBeDisabled();
+    await panel.getByLabel('Pattern', { exact: true }).fill('spam one');
+    await panel.getByRole('button', { name: 'Plan nuke', exact: true }).click();
+    await expect(panel.getByText('Planned matches: 1')).toBeVisible();
+    await confirm.check();
+    await expect(execute).toBeEnabled();
+    await panel.getByLabel('Pattern', { exact: true }).fill('spam two');
+    await expect(confirm).not.toBeChecked();
+    await expect(confirm).toBeDisabled();
+    await expect(panel.getByText('Planned matches: 1')).toHaveCount(0);
+    await expect(execute).toBeDisabled();
+    await panel.getByRole('button', { name: 'Plan nuke', exact: true }).click();
+    await expect(panel.getByText('Planned matches: 1')).toBeVisible();
+    await confirm.check();
+    const initialRulesReads = rulesReads;
+    await execute.click();
+    await expect(panel.getByRole('button', { name: 'Executing…' })).toBeDisabled();
+    await expect(confirm).not.toBeChecked();
+    await expect(confirm).toBeDisabled();
+    await expect(panel.getByLabel('Pattern', { exact: true })).toBeDisabled();
+    await expect(page.locator('#bot-moderation').getByRole('button', { name: 'Run guarded action' })).toBeDisabled();
+    releaseExecution();
+    await expect(panel.getByText(/Executed delete: 1\/1 succeeded/)).toBeVisible();
+    await expect(panel.getByRole('alert')).toContainText('Operation completed. Status/audit refresh failed:');
+    await expect(panel.getByRole('button', { name: 'Rollback window' })).toBeEnabled();
+    await expect(execute).toBeDisabled();
+    await panel.getByRole('button', { name: 'Rollback window' }).click();
+    await expect(panel.getByText('Rollback: disabled nuke_window')).toBeVisible();
+    await expect(panel.getByText(/Executed delete: 1\/1 succeeded/)).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Rollback window' })).toHaveCount(0);
+    expect(plans).toBe(2);
+    expect(executions).toBe(1);
+    expect(rulesReads).toBe(initialRulesReads);
   });
 
   test('isolates counter and quote writes, preserves failed drafts, and retains successful receipts', async ({ page }) => {

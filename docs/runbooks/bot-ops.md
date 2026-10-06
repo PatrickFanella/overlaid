@@ -223,6 +223,12 @@ Dashboard counter and quote create, update, and delete actions record success or
 
 The optional Postgres audit integration test needs a disposable database. It creates and removes its own ended-session fixtures. From `backend`, run `OVERLAID_TEST_DATABASE_URL='<disposable-postgres-url>' go test ./internal/bot -run TestAuditForSessionPostgres -count=1`. The normal suite skips this test when the variable is unset.
 
+## Moderation workflow results
+
+Moderation rules, manual actions, and nuke workflows keep their own request state. Pending operations disable moderation and nuke controls, preventing overlapping writes. Failed rule saves retain the draft for retry. Editing a test message clears its previous dry-run result. Manual action receipts show the returned result and reason; a failed result is marked as failed even when the API returns a response body.
+
+Changing any nuke plan setting clears the displayed plan and confirmation. Plan again before reviewing and executing the changed settings. Execution consumes confirmation immediately. Its counts and any returned radiation rule stay visible if a later status/audit refresh fails. Rollback updates the returned rule immediately and keeps its receipt; it does not depend on reloading the full rule list. Twitch authentication, scope checks, execution caps, and server confirmation remain required.
+
 ## Command audit check
 
 1. Start a rehearsal session from `/dashboard` or `/dashboard/sessions` if you want session tagging.
