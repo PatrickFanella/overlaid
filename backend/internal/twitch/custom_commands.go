@@ -56,7 +56,7 @@ func (e *customCommandExecutor) execute(original ChatCommand, resolved ChatComma
 	if !custom.Enabled {
 		return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command disabled", map[string]any{"custom": true, "action": custom.Action})}
 	}
-	if !roleAllows(chatCommandRole(user), custom.RoleRequired) {
+	if !bot.RoleAllows(bot.Role(chatCommandRole(user)), bot.Role(custom.RoleRequired)) {
 		return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Permission denied", map[string]any{"custom": true, "action": custom.Action, "roleRequired": custom.RoleRequired})}
 	}
 	if e.namedCooldownActive(custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
@@ -173,20 +173,6 @@ func customActionEvent(command CustomCommand, user ChatCommandUser, rendered str
 	default:
 		return events.Event{}, false
 	}
-}
-
-func chatCommandRole(user ChatCommandUser) string {
-	if user.IsBroadcaster {
-		return "broadcaster"
-	}
-	if user.IsModerator {
-		return "moderator"
-	}
-	return "viewer"
-}
-
-func roleAllows(actual, required string) bool {
-	return bot.RoleAllows(bot.Role(actual), bot.Role(required))
 }
 
 func customCommandMap(commands []CustomCommand) map[string]CustomCommand {

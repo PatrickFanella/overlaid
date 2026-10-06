@@ -474,3 +474,10 @@ Validation: `make verify`, all 17 browser smoke workflows, bot/HTTP race tests w
 The custom command executor now owns its configuration snapshots, role/template/delivery decisions, and cooldown state independently from alias and built-in dispatch. Public processor callers remain unchanged. Existing command and HTTP audit matrices continue to verify behavior, and a concurrent reload test proves immutable in-flight behavior and retained cooldowns when saved responses/modes change. Removing configured commands returns them to the unsupported-command path. Further community/built-in extraction is tracked in the architecture plan.
 
 Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS integration remains unverified.
+
+
+### Overnight progress: command dispatcher ownership closeout
+
+The processor now parses/resolves aliases and delegates to community, custom, and built-in executors. Community storage behavior and built-in action/cooldown decisions no longer belong to the dispatcher. Shared event constructors preserve diagnostic metadata, and all role decisions use the bot role policy. Public processor behavior, zero-value compatibility, community precedence, alias cooldowns, and isolation across command families are covered by workflow tests. The architecture plan records the final owners.
+
+Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS behavior remains unavailable for the known external setup.

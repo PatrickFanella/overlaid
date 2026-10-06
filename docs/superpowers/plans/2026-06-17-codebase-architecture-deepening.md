@@ -305,3 +305,12 @@ Verification for the reward operation slice passed: `make verify` (95 frontend t
 Existing response-mode, alias, role, empty-response, unknown-variable, dependency, concurrency, and HTTP audit contracts continue to exercise the public processor. A new concurrent reload workflow verifies one in-flight configuration snapshot, caller-slice isolation, cooldown preservation across replacement, independent built-in cooldowns, exact expiry, new response-mode delivery, and removal. Community/built-in extraction remains the next command architecture work; this slice closes custom rendering ownership only.
 
 Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS integration remains unverified.
+
+
+## October 6 command dispatcher closeout
+
+`commands.go` is now the public parsing/alias/dispatch Adapter. `community_commands.go` owns role-gated counter/quote storage operations and their outcomes. `builtin_commands.go` owns the fixed action allowlist, validation, permission decisions, and per-command global cooldown state. `custom_commands.go` retains independent saved-command/template/delivery/cooldown ownership. `command_events.go` contains pure diagnostic and Unicode truncation helpers shared by all executors. Permission decisions use `bot.RoleAllows` through the shared chat actor role conversion.
+
+Dispatch preserves community precedence, then custom lookup, then built-in/unsupported handling. Existing public processor and HTTP audit contracts remain applicable; added compatibility tests prove zero-value processor behavior, alias/custom configuration on that value, community precedence over a same-name custom record, alias-shared built-in cooldowns, and independent community/custom availability during a built-in cooldown. This closes the command-family extraction from implementation-order item 5; runtime/audit policy deepening remains documented in the earlier bounded asynchronous audit and shared role-policy work.
+
+Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS behavior remains unavailable for the known external setup.

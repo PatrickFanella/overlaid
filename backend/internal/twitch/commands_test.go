@@ -640,3 +640,52 @@ func TestCustomCommandReloadKeepsInFlightSnapshotAndCooldown(t *testing.T) {
 		t.Fatalf("removed command still resolved: %#v", removed)
 	}
 }
+
+func TestCommandProcessorZeroValueKeepsPublicDispatchBehavior(t *testing.T) {
+	var p CommandProcessor
+	unsupported := p.Handle(ChatCommand{Name: "unknown"}, ChatCommandUser{})
+	if len(unsupported) != 1 || unsupported[0].Message != "Unsupported command" {
+		t.Fatalf("zero-value unsupported: %#v", unsupported)
+	}
+	community := p.Handle(ChatCommand{Name: "count", Args: "hype"}, ChatCommandUser{IsModerator: true})
+	if len(community) != 1 || community[0].Message != "Counter storage unavailable" {
+		t.Fatalf("zero-value community: %#v", community)
+	}
+	builtin := p.Handle(ChatCommand{Name: "alert", Args: "Hello"}, ChatCommandUser{IsModerator: true})
+	if len(builtin) != 2 || builtin[1].Message != "Hello" {
+		t.Fatalf("zero-value built-in: %#v", builtin)
+	}
+	p.SetAliases(map[string]string{"hi": "hello"})
+	p.SetCustomCommands([]CustomCommand{{Name: "hello", Enabled: true, Response: "Welcome", Action: "ticker"}})
+	custom := p.Handle(ChatCommand{Name: "hi"}, ChatCommandUser{})
+	if len(custom) != 2 || custom[1].Message != "Welcome" || custom[0].Data["alias"] != true {
+		t.Fatalf("zero-value configured custom: %#v", custom)
+	}
+}
+
+func TestCommandDispatcherCommunityPrecedenceAndExecutorIsolation(t *testing.T) {
+	store := &fakeCommunityStore{quote: bot.Quote{ID: "quote-1", Text: "A real community quote"}}
+	p := NewCommandProcessor(CommandProcessorConfig{
+		Cooldown:  time.Hour,
+		Community: store,
+		Aliases:   map[string]string{"q": "quote", "notice": "alert"},
+		Custom:    []CustomCommand{{Name: "quote", Enabled: true, Response: "Shadowed custom", Action: "alert"}, {Name: "hello", Enabled: true, Response: "Custom available", Action: "ticker"}},
+	})
+	quote := p.Handle(ChatCommand{Name: "q"}, ChatCommandUser{})
+	if len(quote) != 2 || quote[1].Message != store.quote.Text || quote[0].Data["action"] != "quote" {
+		t.Fatalf("community precedence: %#v", quote)
+	}
+	builtin := p.Handle(ChatCommand{Name: "notice", Args: "One"}, ChatCommandUser{IsModerator: true})
+	if len(builtin) != 2 || builtin[0].Severity != events.SeveritySuccess {
+		t.Fatalf("built-in dispatch: %#v", builtin)
+	}
+	cooled := p.Handle(ChatCommand{Name: "alert", Args: "Two"}, ChatCommandUser{IsModerator: true})
+	if len(cooled) != 1 || cooled[0].Message != "Command cooling down" {
+		t.Fatalf("alias cooldown: %#v", cooled)
+	}
+	custom := p.Handle(ChatCommand{Name: "hello"}, ChatCommandUser{})
+	quote = p.Handle(ChatCommand{Name: "quote"}, ChatCommandUser{})
+	if len(custom) != 2 || custom[1].Message != "Custom available" || len(quote) != 2 {
+		t.Fatalf("built-in cooldown leaked into other executors: custom=%#v community=%#v", custom, quote)
+	}
+}
