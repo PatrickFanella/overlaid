@@ -1,7 +1,6 @@
 import {
   fetchBotStatus,
   fetchBotAudit,
-  fetchBotAPIVariables,
   fetchBotModerationRules,
 } from '../../../lib/api';
 import type { BotPageState } from './types';
@@ -14,16 +13,14 @@ function panelResult<T extends { loadError?: string }>(result: PromiseSettledRes
 
 // Loading one operation must not hide data from the other bot panels.
 export async function loadBotWorkspace(apiBaseUrl: string, operatorSecret: string): Promise<BotPageState> {
-  const [status, audit, apiVariables, moderation] = await Promise.allSettled([
+  const [status, audit, moderation] = await Promise.allSettled([
     fetchBotStatus(apiBaseUrl, operatorSecret),
     fetchBotAudit(25, apiBaseUrl, operatorSecret),
-    fetchBotAPIVariables(apiBaseUrl, operatorSecret),
     fetchBotModerationRules(apiBaseUrl, operatorSecret),
   ]);
   return {
     status: panelResult(status, { available: false, commandCount: 0, timerCount: 0, counterCount: 0, quoteCount: 0, auditCount: 0 }),
     audit: panelResult(audit, { events: [] }),
-    apiVariables: panelResult(apiVariables, { variables: [] }),
     moderation: panelResult(moderation, { rules: [] }),
     moderationDryRun: null,
     loading: false,

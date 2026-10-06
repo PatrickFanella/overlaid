@@ -1,21 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  deleteBotAPIVariable,
   deleteBotModerationRule,
   dryRunBotModeration,
   dryRunBotNuke,
   executeBotNuke,
   executeBotModerationAction,
   fetchBotAudit,
-  fetchBotAPIVariables,
   fetchBotModerationRules,
   fetchBotStatus,
   rollbackBotNukeRadiation,
-  saveBotAPIVariable,
   saveBotModerationRule,
   type BotNukeDryRunResponse,
   type BotNukeExecuteResponse,
-  type BotAPIVariable,
   type BotModerationRule,
 } from '../../lib/api';
 import { loadOperatorSecret } from '../../lib/dashboardConfig';
@@ -23,7 +19,6 @@ import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { BotStatusSummary } from './bot/BotStatusSummary';
 import { loadBotWorkspace } from './bot/loadBotWorkspace';
 import {
-  defaultAPIVariableDraft,
   defaultModerationAction,
   defaultModerationDraft,
   defaultModerationTest,
@@ -43,6 +38,7 @@ import { BotTimersPanel } from './bot/BotTimersPanel';
 import { useBotTimers } from './bot/useBotTimers';
 import { useBotCommunity } from './bot/useBotCommunity';
 import { useBotCommands } from './bot/useBotCommands';
+import { useBotAPIVariables } from './bot/useBotAPIVariables';
 
 export function BotWorkspace() {
   const apiBaseUrl = getOverlayApiBaseUrl();
@@ -50,8 +46,7 @@ export function BotWorkspace() {
   const [config, setConfig] = useState(() => loadDashboardConfig());
   const workspaceGeneration = useRef(0);
   const summaryRequest = useRef(0);
-  const [state, setState] = useState<BotPageState>({ status: null, audit: null, apiVariables: null, moderation: null, moderationDryRun: null, loading: false, error: '' });
-  const [apiVariableDraft, setAPIVariableDraft] = useState(defaultAPIVariableDraft);
+  const [state, setState] = useState<BotPageState>({ status: null, audit: null, moderation: null, moderationDryRun: null, loading: false, error: '' });
   const [moderationDraft, setModerationDraft] = useState<ModerationDraft>(defaultModerationDraft);
   const [moderationTest, setModerationTest] = useState(defaultModerationTest);
   const [moderationAction, setModerationAction] = useState(defaultModerationAction);
@@ -64,6 +59,7 @@ export function BotWorkspace() {
   const timers = useBotTimers(apiBaseUrl, operatorSecret, refreshBotSummary);
   const community = useBotCommunity(apiBaseUrl, operatorSecret, refreshBotSummary);
   const commands = useBotCommands(apiBaseUrl, operatorSecret, refreshBotSummary);
+  const apiVariables = useBotAPIVariables(apiBaseUrl, operatorSecret, refreshBotSummary);
 
   function updateBotPanelLayout(items: PanelLayoutItem[]) {
     setConfig((current) => {
@@ -97,11 +93,6 @@ export function BotWorkspace() {
     if (generation === workspaceGeneration.current && request === summaryRequest.current) {
       setState((current) => ({ ...current, status, audit }));
     }
-  }
-
-  async function refreshAPIVariables() {
-    const [status, apiVariables] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAPIVariables(apiBaseUrl, operatorSecret)]);
-    setState((current) => ({ ...current, status, apiVariables }));
   }
 
   async function refreshModeration() {
@@ -175,16 +166,6 @@ export function BotWorkspace() {
     }
   }
 
-  async function handleSaveAPIVariable() {
-    try { await saveBotAPIVariable(apiVariableDraft, apiBaseUrl, operatorSecret); setAPIVariableDraft(defaultAPIVariableDraft); await refreshAPIVariables(); }
-    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'api variable save failed' })); }
-  }
-
-  async function handleDeleteAPIVariable(variable: BotAPIVariable) {
-    try { await deleteBotAPIVariable(variable.id, apiBaseUrl, operatorSecret); await refreshAPIVariables(); }
-    catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'api variable delete failed' })); }
-  }
-
   return (
     <>
       {state.error ? (
@@ -216,13 +197,7 @@ export function BotWorkspace() {
           {
             id: 'api-variables',
             node: (
-              <BotAPIVariablesPanel
-                variables={state.apiVariables}
-                draft={apiVariableDraft}
-                onDraftChange={setAPIVariableDraft}
-                onSave={handleSaveAPIVariable}
-                onDelete={handleDeleteAPIVariable}
-              />
+              <BotAPIVariablesPanel {...apiVariables} />
             ),
           },
           {

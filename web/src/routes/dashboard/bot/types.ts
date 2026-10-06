@@ -1,5 +1,4 @@
 import type {
-  BotAPIVariablesResponse,
   BotAuditResponse,
   BotModerationDryRunResponse,
   BotModerationRulesResponse,
@@ -9,7 +8,6 @@ import type {
 export type BotPageState = {
   status: BotStatus | null;
   audit: BotAuditResponse | null;
-  apiVariables: BotAPIVariablesResponse | null;
   moderation: BotModerationRulesResponse | null;
   moderationDryRun: BotModerationDryRunResponse | null;
   loading: boolean;
@@ -39,6 +37,7 @@ export type TimerDraft = {
 export type CounterDraft = { name: string; value: number };
 export type QuoteDraft = { text: string; author: string };
 export type APIVariableDraft = {
+  id?: string;
   name: string;
   enabled: boolean;
   url: string;

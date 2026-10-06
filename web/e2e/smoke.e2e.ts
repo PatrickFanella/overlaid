@@ -119,8 +119,8 @@ test.describe('operator browser smoke', () => {
   });
 
   test('edits saved timers, preserves failed drafts, and keeps newer audit after a late load', async ({ page }) => {
-    let releaseVariables!: () => void;
-    const variablesReady = new Promise<void>((resolve) => { releaseVariables = resolve; });
+    let releaseModeration!: () => void;
+    const moderationReady = new Promise<void>((resolve) => { releaseModeration = resolve; });
     let writes = 0;
     let saved = false;
     let deleted = false;
@@ -146,9 +146,9 @@ test.describe('operator browser smoke', () => {
         await route.fulfill({ status: 204 });
         return;
       }
-      if (path.endsWith('/api-variables')) {
-        await variablesReady;
-        await route.fulfill({ json: { variables: [] } });
+      if (path.endsWith('/rules')) {
+        await moderationReady;
+        await route.fulfill({ json: { rules: [] } });
         return;
       }
       const responses: Record<string, unknown> = {
@@ -187,7 +187,7 @@ test.describe('operator browser smoke', () => {
     await expect(panel.getByText('paused', { exact: true })).toBeVisible();
     await expect(panel.getByLabel('Timer name')).toHaveValue('');
     await expect(page.getByText('dashboard · timer_configuration_changed')).toBeVisible();
-    releaseVariables();
+    releaseModeration();
     await expect(page.locator('#bot-api-variables').getByText('No API variables configured yet.')).toBeVisible();
     await expect(page.getByText('dashboard · timer_configuration_changed')).toBeVisible();
     expect(writes).toBe(2);
@@ -316,6 +316,91 @@ test.describe('operator browser smoke', () => {
     await expect(panel.getByRole('button', { name: 'Cancel edit' })).toHaveCount(0);
     await expect(panel.getByText('No bot commands configured yet.')).toBeVisible();
     expect(writes).toBe(2);
+  });
+
+  test('edits API variables with retry, pending controls, and successful receipts after refresh failure', async ({ page }) => {
+    let releaseSave!: () => void;
+    const delayedSave = new Promise<void>((resolve) => { releaseSave = resolve; });
+    let writes = 0;
+    let deletes = 0;
+    let removed = false;
+    let auditUnavailable = false;
+    let variable = { id: 'variable-edit', name: 'weather', enabled: false, url: 'https://api.example.test/old', responseSelector: 'data.temp', fallback: 'offline', cacheTtlSeconds: 60, timeoutMs: 1500 };
+    await page.route('**/api/bot/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const method = route.request().method();
+      if (path.endsWith('/rules') || (path.endsWith('/audit') && auditUnavailable)) {
+        await route.fulfill({ status: 503, body: 'summary unavailable' });
+        return;
+      }
+      if (path.endsWith('/api-variables') && method === 'POST') {
+        const payload = route.request().postDataJSON();
+        expect(payload.id).toBe('variable-edit');
+        expect(payload.enabled).toBe(false);
+        expect(payload.responseSelector).toBe('data.temp');
+        expect(payload.fallback).toBe('offline');
+        writes += 1;
+        if (writes === 1) await route.fulfill({ status: 503, body: 'variable save unavailable' });
+        else {
+          await delayedSave;
+          variable = { ...variable, ...payload };
+          auditUnavailable = true;
+          await route.fulfill({ json: variable });
+        }
+        return;
+      }
+      if (path.endsWith('/api-variables/variable-edit') && method === 'DELETE') {
+        deletes += 1;
+        if (deletes === 1) await route.fulfill({ status: 503, body: 'variable delete unavailable' });
+        else { removed = true; await route.fulfill({ status: 204 }); }
+        return;
+      }
+      const responses: Record<string, unknown> = {
+        status: { available: true, commandCount: 0, timerCount: 0, counterCount: 0, quoteCount: 0, auditCount: 0 },
+        'api-variables': { variables: removed ? [] : [variable] }, commands: { commands: [] }, timers: { timers: [] }, counters: { counters: [] }, quotes: { quotes: [] }, audit: { events: [] },
+      };
+      await route.fulfill({ json: responses[path.split('/').at(-1)!] ?? {} });
+    });
+    await page.goto('/dashboard/chat');
+    const panel = page.locator('#bot-api-variables');
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(panel.getByLabel('JSON selector')).toHaveValue('data.temp');
+    await expect(panel.getByLabel('Fallback')).toHaveValue('offline');
+    await expect(panel.getByLabel('Enabled', { exact: true })).not.toBeChecked();
+    await panel.getByLabel('HTTPS URL').fill('https://api.example.test/abandoned');
+    await panel.getByRole('button', { name: 'Cancel edit' }).click();
+    await expect(panel.getByLabel('HTTPS URL')).toHaveValue('');
+    expect(writes).toBe(0);
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    await panel.getByLabel('TTL seconds').fill('14');
+    await expect(panel.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    await panel.getByLabel('TTL seconds').fill('120');
+    await panel.getByLabel('Timeout ms').fill('3001');
+    await expect(panel.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    await panel.getByLabel('Timeout ms').fill('2000');
+    await panel.getByLabel('HTTPS URL').fill('https://api.example.test/new');
+    await panel.getByRole('button', { name: 'Save changes' }).click();
+    await expect(panel.getByRole('alert')).toContainText('variable save unavailable');
+    await expect(panel.getByLabel('HTTPS URL')).toHaveValue('https://api.example.test/new');
+    await panel.getByRole('button', { name: 'Save changes' }).click();
+    await expect(panel.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    await expect(panel.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+    await expect(panel.getByLabel('Enabled', { exact: true })).toBeDisabled();
+    releaseSave();
+    await expect(panel.getByText('Updated weather.', { exact: true })).toBeVisible();
+    await expect(panel.getByRole('alert')).toContainText('API variable operation succeeded. Status/audit refresh failed:');
+    await expect(panel.getByText('https://api.example.test/new', { exact: true })).toBeVisible();
+    await expect(panel.getByText('status untested · ttl 120s · timeout 2000ms')).toBeVisible();
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    await panel.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(panel.getByRole('alert')).toContainText('variable delete unavailable');
+    await expect(panel.getByRole('button', { name: 'Cancel edit' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(panel.getByText('Deleted weather.', { exact: true })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Cancel edit' })).toHaveCount(0);
+    await expect(panel.getByText('No API variables configured yet.')).toBeVisible();
+    expect(writes).toBe(2);
+    expect(deletes).toBe(2);
   });
 
   test('isolates counter and quote writes, preserves failed drafts, and retains successful receipts', async ({ page }) => {

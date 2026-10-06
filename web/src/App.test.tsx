@@ -468,21 +468,21 @@ describe('overlay event utilities', () => {
   });
 
   it('keeps successful bot panel data when one operation fails', async () => {
-    const command = { id: 'command-1', name: 'hello' };
+    const audit = { id: 'audit-1', action: 'timer_run_once' };
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (url.endsWith('/api-variables')) return { ok: false, status: 503, text: async () => 'variables offline' };
+      if (url.endsWith('/rules')) return { ok: false, status: 503, text: async () => 'moderation offline' };
       const responses: Record<string, unknown> = {
         status: { available: true, commandCount: 1, timerCount: 1, counterCount: 0, quoteCount: 0, auditCount: 0 },
-        commands: { commands: [command] },
-        counters: { counters: [] }, quotes: { quotes: [] }, rules: { rules: [] }, audit: { events: [] },
+        counters: { counters: [] }, quotes: { quotes: [] }, rules: { rules: [] }, audit: { events: [audit] },
       };
       const key = new URL(url).pathname.split('/').at(-1)!;
       return { ok: true, json: async () => responses[key] };
     }));
     const state = await loadBotWorkspace('http://example.test', 'operator-secret');
     expect(state.status?.available).toBe(true);
-    expect(state.apiVariables?.loadError).toContain('variables offline');
-    expect(state.apiVariables?.variables).toEqual([]);
+    expect(state.moderation?.loadError).toContain('moderation offline');
+    expect(state.audit?.events).toEqual([audit]);
+    expect(state.moderation?.rules).toEqual([]);
     expect(state.loading).toBe(false);
   });
 
@@ -490,7 +490,7 @@ describe('overlay event utilities', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'operator access required' }));
     const state = await loadBotWorkspace('http://example.test', '');
     expect(state.status?.available).toBe(false);
-    for (const panel of [state.status, state.audit, state.apiVariables, state.moderation]) {
+    for (const panel of [state.status, state.audit, state.moderation]) {
       expect(panel?.loadError).toContain('operator access required');
     }
     expect(state.loading).toBe(false);

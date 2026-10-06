@@ -151,6 +151,14 @@ Timer validation:
 - Responses are required and capped at 500 UTF-8 bytes.
 - Template variables use the same renderer as custom commands. `{channel}` and `{command}` are useful for timers; user/args variables render empty for timer-triggered messages.
 
+## Editing API variables
+
+Use Edit on a saved API variable to change its name, URL, selector, fallback, TTL, timeout, or enabled state. Save changes keeps its ID; Cancel edit abandons the draft. Pending writes disable the editor and row controls. Failed writes keep the draft for retry, and successful writes remain visible if the later status/audit refresh fails. Name, TTL, and timeout limits are checked in the form; backend URL validation still rejects private hosts and embedded credentials.
+
+Each resolution loads the current saved configuration before using a cached HTTP value. Disabling returns the configured fallback; deleting makes the variable missing. Edits invalidate values cached for the old configuration and reset diagnostics to untested. A fetch that finishes after an edit cannot replace the new configuration's diagnostics or supply a future cache hit for that configuration. Diagnostic updates do not invalidate an otherwise valid cache entry.
+
+The optional Postgres cache workflow test performs no outbound HTTP requests. From `backend`, run `OVERLAID_TEST_DATABASE_URL='<disposable-postgres-url>' go test ./internal/bot -run TestAPIVariableCacheConfigurationPostgres -count=1`. It checks disable/edit/delete/recreate behavior and late fetch results using seeded cache values.
+
 ## Counters and quotes behavior
 
 Counters and quotes are intentionally safe community tools:

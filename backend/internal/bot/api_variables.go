@@ -39,6 +39,8 @@ type APIVariableResult struct {
 }
 
 type apiVariableCacheEntry struct {
+	id        string
+	updatedAt time.Time
 	value     string
 	expiresAt time.Time
 }
@@ -82,7 +84,7 @@ func (s *Store) SaveAPIVariable(ctx context.Context, variable APIVariable) (APIV
 	if strings.TrimSpace(variable.ID) == "" {
 		return scanAPIVariable(s.db.QueryRowContext(ctx, `INSERT INTO bot_api_variables (name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms, last_status, last_error, last_checked_at, created_at, updated_at`, variable.Name, variable.Enabled, variable.URL, variable.ResponseSelector, variable.Fallback, variable.CacheTTLSeconds, variable.TimeoutMs))
 	}
-	return scanAPIVariable(s.db.QueryRowContext(ctx, `UPDATE bot_api_variables SET name=$2, enabled=$3, url=$4, response_selector=$5, fallback=$6, cache_ttl_seconds=$7, timeout_ms=$8, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms, last_status, last_error, last_checked_at, created_at, updated_at`, variable.ID, variable.Name, variable.Enabled, variable.URL, variable.ResponseSelector, variable.Fallback, variable.CacheTTLSeconds, variable.TimeoutMs))
+	return scanAPIVariable(s.db.QueryRowContext(ctx, `UPDATE bot_api_variables SET name=$2, enabled=$3, url=$4, response_selector=$5, fallback=$6, cache_ttl_seconds=$7, timeout_ms=$8, last_status='', last_error='', last_checked_at=NULL, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms, last_status, last_error, last_checked_at, created_at, updated_at`, variable.ID, variable.Name, variable.Enabled, variable.URL, variable.ResponseSelector, variable.Fallback, variable.CacheTTLSeconds, variable.TimeoutMs))
 }
 
 func (s *Store) DeleteAPIVariable(ctx context.Context, id string) error {
@@ -208,9 +210,6 @@ func (s *Store) resolveAPIVariable(ctx context.Context, name string) APIVariable
 	if s == nil {
 		return APIVariableResult{Name: name, Status: "unavailable"}
 	}
-	if cached, ok := s.cachedAPIVariable(name); ok {
-		return APIVariableResult{Name: name, Value: cached, Status: "cache_hit"}
-	}
 	var variable APIVariable
 	row := s.db.QueryRowContext(ctx, `SELECT id, name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms, last_status, last_error, last_checked_at, created_at, updated_at FROM bot_api_variables WHERE name=$1`, name)
 	loaded, err := scanAPIVariable(row)
@@ -221,13 +220,16 @@ func (s *Store) resolveAPIVariable(ctx context.Context, name string) APIVariable
 	if !variable.Enabled {
 		return APIVariableResult{Name: name, Value: variable.Fallback, Status: "disabled"}
 	}
+	if cached, ok := s.cachedAPIVariable(variable); ok {
+		return APIVariableResult{Name: name, Value: cached, Status: "cache_hit"}
+	}
 	value, status, code, err := fetchAPIVariable(ctx, variable)
 	if err != nil {
-		_ = s.updateAPIVariableStatus(context.Background(), variable.ID, status, sanitizeAPIError(err))
+		_ = s.updateAPIVariableStatus(context.Background(), variable, status, sanitizeAPIError(err))
 		return APIVariableResult{Name: name, Value: variable.Fallback, Status: status, HTTPStatus: code, Error: sanitizeAPIError(err)}
 	}
-	s.cacheAPIVariable(name, value, time.Duration(variable.CacheTTLSeconds)*time.Second)
-	_ = s.updateAPIVariableStatus(context.Background(), variable.ID, status, "")
+	s.cacheAPIVariable(variable, value, time.Duration(variable.CacheTTLSeconds)*time.Second)
+	_ = s.updateAPIVariableStatus(context.Background(), variable, status, "")
 	return APIVariableResult{Name: name, Value: value, Status: status, HTTPStatus: code}
 }
 
@@ -292,27 +294,30 @@ func extractAPIResponseValue(contentType string, data []byte, selector string) (
 	return "", errors.New("unsupported content type")
 }
 
-func (s *Store) cachedAPIVariable(name string) (string, bool) {
+func (s *Store) cachedAPIVariable(variable APIVariable) (string, bool) {
 	s.apiCacheMu.Lock()
 	defer s.apiCacheMu.Unlock()
-	entry, ok := s.apiCache[name]
-	if !ok || time.Now().After(entry.expiresAt) {
+	entry, ok := s.apiCache[variable.Name]
+	if !ok || entry.id != variable.ID || !entry.updatedAt.Equal(variable.UpdatedAt) || time.Now().After(entry.expiresAt) {
 		return "", false
 	}
 	return entry.value, true
 }
-func (s *Store) cacheAPIVariable(name, value string, ttl time.Duration) {
+func (s *Store) cacheAPIVariable(variable APIVariable, value string, ttl time.Duration) {
 	s.apiCacheMu.Lock()
 	defer s.apiCacheMu.Unlock()
 	if s.apiCache == nil {
 		s.apiCache = make(map[string]apiVariableCacheEntry)
 	}
-	s.apiCache[name] = apiVariableCacheEntry{value: value, expiresAt: time.Now().Add(ttl)}
+	s.apiCache[variable.Name] = apiVariableCacheEntry{id: variable.ID, updatedAt: variable.UpdatedAt, value: value, expiresAt: time.Now().Add(ttl)}
 }
-func (s *Store) updateAPIVariableStatus(ctx context.Context, id, status, detail string) error {
+
+// Diagnostics keep the configuration revision unchanged. A fetch from an older
+// revision cannot overwrite diagnostics after an operator edits the variable.
+func (s *Store) updateAPIVariableStatus(ctx context.Context, variable APIVariable, status, detail string) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	_, err := s.db.ExecContext(ctx, `UPDATE bot_api_variables SET last_status=$2, last_error=$3, last_checked_at=now(), updated_at=now() WHERE id=$1`, id, status, capRunes(detail, 180))
+	_, err := s.db.ExecContext(ctx, `UPDATE bot_api_variables SET last_status=$2, last_error=$3, last_checked_at=now() WHERE id=$1 AND updated_at=$4`, variable.ID, status, capRunes(detail, 180), variable.UpdatedAt)
 	return err
 }
 func sanitizeAPIError(err error) string {

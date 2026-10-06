@@ -1,6 +1,9 @@
 package bot
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestNormalizeAPIVariable(t *testing.T) {
 	variable, err := NormalizeAPIVariable(APIVariable{Name: " Weather ", Enabled: true, URL: "https://api.example.test/current", ResponseSelector: " data.temp ", Fallback: " unavailable ", CacheTTLSeconds: 60, TimeoutMs: 1500})
@@ -49,5 +52,33 @@ func TestAPIVariableResolverNormalizesAndLimitsNames(t *testing.T) {
 		if result.Name != name || result.Status != "unavailable" {
 			t.Fatalf("unexpected result for %q: %#v", name, result)
 		}
+	}
+}
+
+func TestAPIVariableCacheRejectsChangedConfigurationAndExpiredValues(t *testing.T) {
+	store := &Store{}
+	original := APIVariable{ID: "first-record", Name: "weather", UpdatedAt: time.Now()}
+	store.cacheAPIVariable(original, "72F", time.Hour)
+	if value, hit := store.cachedAPIVariable(original); !hit || value != "72F" {
+		t.Fatalf("healthy cache: %q, %v", value, hit)
+	}
+	changed := original
+	changed.UpdatedAt = original.UpdatedAt.Add(time.Second)
+	if _, hit := store.cachedAPIVariable(changed); hit {
+		t.Fatal("edited configuration reused cache")
+	}
+	recreated := original
+	recreated.ID = "replacement-record"
+	if _, hit := store.cachedAPIVariable(recreated); hit {
+		t.Fatal("recreated record reused cache")
+	}
+	store.cacheAPIVariable(changed, "73F", time.Hour)
+	store.cacheAPIVariable(original, "late old response", time.Hour)
+	if _, hit := store.cachedAPIVariable(changed); hit {
+		t.Fatal("late old response became a current cache hit")
+	}
+	store.cacheAPIVariable(original, "expired", -time.Second)
+	if _, hit := store.cachedAPIVariable(original); hit {
+		t.Fatal("expired cache served a value")
 	}
 }
