@@ -1,6 +1,6 @@
 import type { BotCounter, BotCountersResponse, BotQuote, BotQuotesResponse } from '../../../lib/api';
 import type { CounterDraft, QuoteDraft } from './types';
-import { Empty, Field, Panel, SubPanel } from '../ui';
+import { Empty, Field, Notice, Panel, SubPanel } from '../ui';
 
 export function BotCommunityPanel({
   counters,
@@ -40,6 +40,7 @@ export function BotCommunityPanel({
     >
       <div className="grid gap-4 lg:grid-cols-2">
         <SubPanel title="Counters">
+          {counters?.loadError ? <Notice tone="warn">Counters unavailable: {counters.loadError}</Notice> : null}
           <div className="grid gap-3 md:grid-cols-[1fr_7rem]">
             <Field label="Counter name">
               <input className="desk-input desk-input--mono" value={counterDraft.name} onChange={(event) => onCounterDraftChange({ ...counterDraft, name: event.target.value })} placeholder="hype" />
@@ -74,6 +75,7 @@ export function BotCommunityPanel({
         </SubPanel>
 
         <SubPanel title="Quotes">
+          {quotes?.loadError ? <Notice tone="warn">Quotes unavailable: {quotes.loadError}</Notice> : null}
           <Field label="Author" hint="Optional.">
             <input className="desk-input" value={quoteDraft.author} onChange={(event) => onQuoteDraftChange({ ...quoteDraft, author: event.target.value })} placeholder="author optional" />
           </Field>

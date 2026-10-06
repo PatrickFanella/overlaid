@@ -40,6 +40,7 @@ import {
 import { loadOperatorSecret } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { BotStatusSummary } from './bot/BotStatusSummary';
+import { loadBotWorkspace } from './bot/loadBotWorkspace';
 import {
   defaultAPIVariableDraft,
   defaultCommandDraft,
@@ -100,16 +101,8 @@ export function BotWorkspace() {
     let cancelled = false;
     async function load() {
       setState((current) => ({ ...current, loading: true, error: '' }));
-      try {
-        const [status, audit, commands, counters, quotes, apiVariables, moderation, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotAPIVariables(apiBaseUrl, operatorSecret), fetchBotModerationRules(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
-        if (!cancelled) {
-          setState({ status, audit, commands, counters, quotes, apiVariables, moderation, moderationDryRun: null, timers, loading: false, error: '' });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : 'bot status unavailable' }));
-        }
-      }
+      const loaded = await loadBotWorkspace(apiBaseUrl, operatorSecret);
+      if (!cancelled) setState(loaded);
     }
     void load();
     return () => {

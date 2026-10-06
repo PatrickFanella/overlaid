@@ -126,6 +126,8 @@ To test a custom command:
 3. Confirm `/overlay/ticker` or `/overlay/alerts` shows the configured response for `overlay`/`both` modes, or Twitch chat receives the rendered response for `chat`/`both` modes.
 4. Confirm `/dashboard/chat` audit records the command with result `allowed`.
 
+If one bot operation fails to load, its panel reports the failure and the other panels keep their successful results. Check the affected panel before assuming all bot storage is unavailable. Counters and quotes report load errors separately.
+
 ## Timer behavior
 
 Timers are persisted so operator configuration survives browser/session changes. When bot storage is available, the API starts a timer worker that polls due enabled timers and publishes the configured safe `ticker` or `alert` response into the existing event pipeline. Timer executions write bot audit rows with result `allowed` and reason `timer_due`.

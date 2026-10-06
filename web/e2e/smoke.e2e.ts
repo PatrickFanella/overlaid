@@ -104,6 +104,27 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByText('dashboard · timer_configuration_changed')).toBeVisible();
   });
 
+  test('keeps available bot panels when API variables cannot load', async ({ page }) => {
+    await page.route('**/api/bot/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/api-variables')) {
+        await route.fulfill({ status: 503, body: 'variables offline' });
+        return;
+      }
+      const responses: Record<string, unknown> = {
+        status: { available: true, commandCount: 0, timerCount: 1, counterCount: 0, quoteCount: 0, auditCount: 0 },
+        timers: { timers: [{ id: 'timer-1', name: 'hydrate_available', enabled: false, intervalSeconds: 300, response: 'Hydrate', action: 'ticker' }] },
+        commands: { commands: [] }, counters: { counters: [] }, quotes: { quotes: [] }, rules: { rules: [] }, audit: { events: [] },
+      };
+      await route.fulfill({ json: responses[path.split('/').at(-1)!] ?? {} });
+    });
+    await page.goto('/dashboard/chat');
+    await expect(page.locator('#bot-api-variables').getByText(/variables offline/)).toBeVisible();
+    await expect(page.locator('#bot-timers').getByText('hydrate_available', { exact: true })).toBeVisible();
+    await expect(page.locator('#bot-timers').getByRole('button', { name: 'Run once' })).toBeEnabled();
+    await expect(page.getByText('storage available', { exact: true })).toBeVisible();
+  });
+
   test('shows twitch reward queue lifecycle controls', async ({ page }) => {
     await page.goto('/dashboard/chat');
     await expect(page.getByRole('heading', { name: 'Reward queue' })).toBeVisible();

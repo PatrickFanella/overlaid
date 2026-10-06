@@ -226,3 +226,9 @@ Moved commands, community tools, API variables, moderation/nuke, and timer rende
 Verification passed: `make verify` and all six `make smoke-browser` checks, including timer pending/success/failure behavior. Runtime smoke also passed against the disposable Postgres API at port 8081.
 
 This is the first part of the bot dashboard split. Request state, drafts, and refresh handlers still belong to the workspace; separating those by operation remains follow-up work.
+
+## October 6 bot loading failures
+
+Moved initial workspace loading into `bot/loadBotWorkspace.ts`. Each request result is handled separately. A failed operation now supplies a panel-specific load error while successful panels keep their data. Counters and quotes also display their load errors. The workspace keeps the cancellation guard for navigation.
+
+Verification passed: `make verify`, including 92 frontend tests, and all seven `make smoke-browser` checks. Coverage includes an API-variable failure alongside a working saved timer and bot runtime, and denied operator access across all bot operations. Per-operation drafts and mutation state still belong to the workspace.
