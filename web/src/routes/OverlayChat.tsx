@@ -1,95 +1,58 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { loadDashboardConfig } from '../lib/dashboardConfig';
-import { connectOverlayStream, getOverlayApiBaseUrl, type OverlayStreamStatus } from '../lib/eventStream';
-import { formatOverlayStreamLabel, type OverlayEvent } from '../lib/events';
+import type { OverlayEvent } from '../lib/events';
+import { useOverlayStream } from '../lib/useOverlayStream';
+import { OverlayStage } from '../overlay/Brand';
+import { asString, isRecord } from '../overlay/data';
 
 export function OverlayChatPage() {
-  const display = loadDashboardConfig().display;
+  const [display] = useState(() => loadDashboardConfig().display);
   const [messages, setMessages] = useState<OverlayEvent[]>([]);
-  const [status, setStatus] = useState<OverlayStreamStatus>('connecting');
 
-  useEffect(() => {
-    const stream = connectOverlayStream(getOverlayApiBaseUrl(), {
-      onEvent(event) {
-        if (event.type === 'clear') {
-          setMessages([]);
-          return;
-        }
+  const status = useOverlayStream((event) => {
+    if (event.type === 'clear') {
+      setMessages([]);
+      return;
+    }
 
-        if (event.type !== 'chat_message') {
-          return;
-        }
+    if (event.type !== 'chat_message') {
+      return;
+    }
 
-        setMessages((current) => [...current, event].slice(-display.chatMaxVisible));
-      },
-      onStatusChange(nextStatus) {
-        setStatus(nextStatus);
-      },
-    });
-
-    return () => {
-      stream.close();
-    };
-  }, [display.chatMaxVisible]);
-
-  const streamLabel = useMemo(() => formatOverlayStreamLabel(status), [status]);
+    setMessages((current) => [...current, event].slice(-display.chatMaxVisible));
+  });
 
   return (
-    <main className="hud-shell hud-shell--chat hud-scanlines">
-      <section className="ml-0 flex w-full max-w-[34rem] flex-col gap-3">
-        <header className="hud-panel hud-corners hud-accent-cyan flex items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <p className="hud-label">Twitch chat</p>
-            <p className="mt-1 text-xs text-zinc-300">/chat :: eventsub</p>
+    <OverlayStage name="chat" status={status} label="Twitch chat">
+      <div role="log" aria-live="polite" aria-relevant="additions text" className="sc-chat-log">
+        {messages.length === 0 ? (
+          <div className="sc-standby">
+            <p className="sc-standby__title">Waiting for Twitch chat</p>
+            <p className="sc-standby__hint">EventSub chat messages appear here</p>
           </div>
-          <span className="hud-chip">
-            <span className="hud-led" />
-            {streamLabel}
-          </span>
-        </header>
+        ) : null}
 
-        <div role="log" aria-live="polite" aria-relevant="additions text" className="grid gap-3">
-          {messages.length === 0 ? (
-            <div className="hud-panel hud-corners hud-accent-cyan px-4 py-3 shadow-none">
-              <p className="text-base font-semibold text-white">Waiting for Twitch chat</p>
-              <p className="mt-1 text-sm text-zinc-300">EventSub chat messages will appear here.</p>
-            </div>
-          ) : null}
+        {messages.map((message) => {
+          const twitchEvent = getTwitchEvent(message);
+          const color = asString(twitchEvent?.chatter_color);
 
-          {messages.map((message) => {
-            const twitchEvent = getTwitchEvent(message);
-            const name = getChatName(message);
-            const color = getChatColor(twitchEvent);
-            const badges = getChatBadges(twitchEvent);
-
-            return (
-              <article key={message.id} className="hud-panel hud-corners hud-chat-row border-white/10 bg-black/35 px-4 py-3 shadow-none" style={color ? ({ '--hud-accent': color } as CSSProperties) : undefined}>
-                <div className="flex items-start gap-3">
-                  <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-white/10 bg-black/60">
-                    <span className="hud-led" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="max-w-full truncate text-sm font-semibold uppercase tracking-[0.22em]" style={color ? { color } : undefined}>
-                        {name}
-                      </h2>
-                      <span className="hud-badge">{formatClock(message.createdAt)}</span>
-                      {badges.map((badge) => (
-                        <span key={badge} className="hud-badge">
-                          {badge}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="mt-2 text-[0.98rem] leading-relaxed text-zinc-50">{message.message}</p>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-    </main>
+          return (
+            <article key={message.id} className="sc-chat" style={color ? ({ '--chatter': color } as CSSProperties) : undefined}>
+              <header className="sc-chat__head">
+                <span className="sc-chat__swatch" aria-hidden="true" />
+                <h2 className="sc-chat__name">{getChatName(message, twitchEvent)}</h2>
+                {getChatBadges(twitchEvent).map((badge) => (
+                  <span key={badge} className="sc-label sc-chat__badge">
+                    {badge}
+                  </span>
+                ))}
+              </header>
+              <p className="sc-chat__text">{message.message}</p>
+            </article>
+          );
+        })}
+      </div>
+    </OverlayStage>
   );
 }
 
@@ -98,9 +61,7 @@ function getTwitchEvent(message: OverlayEvent) {
   return data && isRecord(data.twitchEvent) ? data.twitchEvent : undefined;
 }
 
-function getChatName(message: OverlayEvent) {
-  const twitchEvent = getTwitchEvent(message);
-
+function getChatName(message: OverlayEvent, twitchEvent: Record<string, unknown> | undefined) {
   return (
     asString(twitchEvent?.chatter_user_name) ||
     asString(twitchEvent?.chatter_user_login) ||
@@ -110,10 +71,13 @@ function getChatName(message: OverlayEvent) {
   );
 }
 
-function getChatColor(twitchEvent: Record<string, unknown> | undefined) {
-  const color = asString(twitchEvent?.chatter_color);
-  return color || '';
-}
+const badgeLabels: Record<string, string> = {
+  broadcaster: 'host',
+  moderator: 'mod',
+  vip: 'vip',
+  subscriber: 'sub',
+  founder: 'founder',
+};
 
 function getChatBadges(twitchEvent: Record<string, unknown> | undefined) {
   const badges = twitchEvent?.badges;
@@ -122,25 +86,8 @@ function getChatBadges(twitchEvent: Record<string, unknown> | undefined) {
   }
 
   return badges
-    .slice(0, 3)
-    .map((badge) => {
-      if (!isRecord(badge)) {
-        return '';
-      }
-
-      return asString(badge.set_id) || asString(badge.id) || asString(badge.version);
-    })
-    .filter(Boolean);
-}
-
-function formatClock(value: string) {
-  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function asString(value: unknown) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+    .map((badge) => (isRecord(badge) ? asString(badge.set_id) || asString(badge.id) : ''))
+    .map((id) => badgeLabels[id] ?? '')
+    .filter(Boolean)
+    .slice(0, 2);
 }

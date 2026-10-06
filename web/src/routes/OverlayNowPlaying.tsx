@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { connectOverlayStream, getOverlayApiBaseUrl, type OverlayStreamStatus } from '../lib/eventStream';
-import { formatOverlayStreamLabel, type OverlayEvent } from '../lib/events';
+import { useState, type CSSProperties } from 'react';
+import type { OverlayEvent } from '../lib/events';
+import { useOverlayStream } from '../lib/useOverlayStream';
+import { FisheyeMark, Kicker, OverlayStage } from '../overlay/Brand';
+import { asNumber, asString, isRecord } from '../overlay/data';
 
-type Track = {
+export type Track = {
   player: string;
   title: string;
   artist: string;
@@ -13,87 +15,61 @@ type Track = {
   lengthMs: number;
 };
 
-const fallbackTrack: Track = {
-  player: 'mpris',
-  title: 'Waiting for MPRIS',
-  artist: 'Start a local media player',
-  album: 'Now-playing overlay',
-  artUrl: '',
-  playbackStatus: 'Stopped',
-  positionMs: 0,
-  lengthMs: 0,
-};
-
 export function OverlayNowPlayingPage() {
-  const [track, setTrack] = useState<Track>(fallbackTrack);
-  const [status, setStatus] = useState<OverlayStreamStatus>('connecting');
+  const [track, setTrack] = useState<Track | null>(null);
 
-  useEffect(() => {
-    const stream = connectOverlayStream(getOverlayApiBaseUrl(), {
-      onEvent(event) {
-        if (event.type === 'clear') {
-          setTrack(fallbackTrack);
-          return;
-        }
+  const status = useOverlayStream((event) => {
+    if (event.type === 'clear') {
+      setTrack(null);
+      return;
+    }
 
-        const next = trackFromEvent(event);
-        if (next) {
-          setTrack(next);
-        }
-      },
-      onStatusChange(nextStatus) {
-        setStatus(nextStatus);
-      },
-    });
+    const next = trackFromEvent(event);
+    if (next) {
+      setTrack(next);
+    }
+  });
 
-    return () => stream.close();
-  }, []);
+  if (!track) {
+    return (
+      <OverlayStage name="now-playing" status={status} label="Now playing">
+        <div className="sc-standby">
+          <p className="sc-standby__title">Waiting for MPRIS</p>
+          <p className="sc-standby__hint">Now playing · start a local media player</p>
+        </div>
+      </OverlayStage>
+    );
+  }
 
-  const streamLabel = useMemo(() => formatOverlayStreamLabel(status), [status]);
+  const paused = track.playbackStatus.toLowerCase() === 'paused';
   const percent = track.lengthMs > 0 ? Math.max(0, Math.min(100, Math.round((track.positionMs / track.lengthMs) * 100))) : 0;
 
   return (
-    <main className="hud-shell hud-shell--compact hud-scanlines text-white">
-      <section className="hud-panel hud-corners hud-accent-cyan mx-auto grid w-full max-w-5xl gap-5 p-5 lg:grid-cols-[180px_1fr] lg:items-center">
-        <div className="flex items-center justify-center border-2 border-white/10 bg-black p-4 shadow-none">
-          {track.artUrl ? (
-            <img src={track.artUrl} alt="" className="h-36 w-36 border-2 border-white/15 object-cover shadow-none" />
-          ) : (
-            <div className="flex h-36 w-36 items-center justify-center border-2 border-white/15 bg-black text-4xl font-black tracking-[0.18em] text-cyan-100">NP</div>
-          )}
-        </div>
-
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="hud-chip">
-              <span className="hud-led" />
-              {streamLabel}
-            </span>
-            <span className="hud-badge">{track.player}</span>
-            <span className="hud-badge">{track.playbackStatus || 'unknown'}</span>
-          </div>
-
-          <p className="hud-label mt-5">Now playing</p>
-          <h1 className="mt-3 truncate text-[clamp(2rem,5vw,4.6rem)] font-black leading-none tracking-[-0.07em] text-white">{track.title}</h1>
-          <p className="mt-3 truncate text-[clamp(1.1rem,2.3vw,2rem)] font-semibold text-cyan-100">{track.artist || 'Unknown artist'}</p>
-          <p className="mt-2 truncate text-sm uppercase tracking-[0.24em] text-zinc-400">{track.album || 'Unknown album'}</p>
-
-          <div className="mt-6">
-            <div className="hud-progress hud-progress--large" style={{ '--hud-progress': `${percent}%` } as CSSProperties}>
-              <div className="hud-progress__fill" />
+    <OverlayStage name="now-playing" status={status} label="Now playing">
+      <section key={`${track.title}-${track.artist}`} className={`sc-np ${paused ? 'sc-np--paused' : ''}`}>
+        {track.artUrl ? <img className="sc-np__art" src={track.artUrl} alt="" /> : <FisheyeMark className="sc-np__art" size={136} />}
+        <div className="sc-np__body">
+          <Kicker>
+            {paused ? 'paused' : 'now playing'} <span className="sc-label--sep">{track.player}</span>
+          </Kicker>
+          <h1 className="sc-display sc-np__title">{track.title}</h1>
+          <p className="sc-np__artist">{[track.artist, track.album].filter(Boolean).join(' · ') || 'Unknown artist'}</p>
+          {track.lengthMs > 0 ? (
+            <div className="sc-np__progress">
+              <span className="sc-label">{formatDuration(track.positionMs)}</span>
+              <div className="sc-meter" style={{ '--meter': `${percent}%` } as CSSProperties}>
+                <div className="sc-meter__fill" />
+              </div>
+              <span className="sc-label">{formatDuration(track.lengthMs)}</span>
             </div>
-            <div className="mt-3 flex items-center justify-between text-xs uppercase tracking-[0.24em] text-zinc-400">
-              <span>{formatDuration(track.positionMs)}</span>
-              <span>{track.lengthMs > 0 ? formatDuration(track.lengthMs) : 'live'}</span>
-            </div>
-          </div>
+          ) : null}
         </div>
       </section>
-    </main>
+    </OverlayStage>
   );
 }
 
-function trackFromEvent(event: OverlayEvent): Track | null {
+export function trackFromEvent(event: OverlayEvent): Track | null {
   if (event.type !== 'now_playing') {
     return null;
   }
@@ -105,9 +81,13 @@ function trackFromEvent(event: OverlayEvent): Track | null {
     album: asString(data.album),
     artUrl: asString(data.artUrl),
     playbackStatus: asString(data.playbackStatus) || 'Unknown',
-    positionMs: asNumber(data.positionMs),
-    lengthMs: asNumber(data.lengthMs),
+    positionMs: finiteOrZero(asNumber(data.positionMs)),
+    lengthMs: finiteOrZero(asNumber(data.lengthMs)),
   };
+}
+
+function finiteOrZero(value: number) {
+  return Number.isFinite(value) ? value : 0;
 }
 
 function formatDuration(ms: number) {
@@ -118,23 +98,4 @@ function formatDuration(ms: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
-
-function asString(value: unknown) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function asNumber(value: unknown) {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

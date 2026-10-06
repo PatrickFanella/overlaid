@@ -31,7 +31,6 @@ export const sampleGoals: AlertPayload = {
       target: 620,
       unit: 'followers',
       note: 'Sample goal update',
-      accent: 'var(--hud-emerald)',
     },
   },
 };

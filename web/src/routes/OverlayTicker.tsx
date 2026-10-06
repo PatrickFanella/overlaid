@@ -1,71 +1,74 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { loadDashboardConfig } from '../lib/dashboardConfig';
-import { connectOverlayStream, getOverlayApiBaseUrl, type OverlayStreamStatus } from '../lib/eventStream';
-import { formatOverlayStreamLabel, type OverlayEvent, type OverlaySeverity } from '../lib/events';
+import type { OverlayEvent, OverlaySeverity } from '../lib/events';
+import { useOverlayStream } from '../lib/useOverlayStream';
+import { Mark, OverlayStage } from '../overlay/Brand';
+import { asString, isRecord } from '../overlay/data';
 
 type TickerItem = {
   id: string;
   label: string;
   message: string;
   severity: OverlaySeverity;
-  source: string;
 };
 
+// Seconds of scroll per item, so a long rail does not race.
+const SECONDS_PER_ITEM = 9;
+
 export function OverlayTickerPage() {
-  const display = loadDashboardConfig().display;
+  const [display] = useState(() => loadDashboardConfig().display);
   const [items, setItems] = useState<TickerItem[]>([]);
-  const [status, setStatus] = useState<OverlayStreamStatus>('connecting');
 
-  useEffect(() => {
-    const stream = connectOverlayStream(getOverlayApiBaseUrl(), {
-      onEvent(event) {
-        if (event.type === 'clear') {
-          setItems([]);
-          return;
-        }
+  const status = useOverlayStream((event) => {
+    if (event.type === 'clear') {
+      setItems([]);
+      return;
+    }
 
-        const item = tickerItemFromEvent(event);
-        if (!item) {
-          return;
-        }
+    const item = tickerItemFromEvent(event);
+    if (!item) {
+      return;
+    }
 
-        setItems((current) => [item, ...current.filter((existing) => existing.id !== item.id)].slice(0, display.tickerMaxItems));
-      },
-      onStatusChange(nextStatus) {
-        setStatus(nextStatus);
-      },
-    });
+    setItems((current) => [item, ...current.filter((existing) => existing.id !== item.id)].slice(0, display.tickerMaxItems));
+  });
 
-    return () => stream.close();
-  }, [display.tickerMaxItems]);
-
-  const streamLabel = useMemo(() => formatOverlayStreamLabel(status), [status]);
+  const scrolling = items.length > 1;
+  // The track holds two copies so the -50% marquee loops without a seam.
+  const track = scrolling ? [...items, ...items] : items;
 
   return (
-    <main className="hud-shell hud-shell--ticker hud-scanlines text-white">
-      <section className="hud-panel hud-corners hud-accent-fuchsia pointer-events-none w-full p-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="hud-chip hud-accent-rose">
-            <span className="hud-led" />
-            {streamLabel}
-          </span>
-          <span className="hud-badge">Ticker rail</span>
-          <span className="hud-badge">{items.length} items</span>
+    <OverlayStage name="ticker" status={status} label="Ticker rail">
+      <section className="sc-ticker">
+        <div className="sc-ticker__brand">
+          <Mark size={48} />
+          <span className="sc-display">On the wire</span>
         </div>
 
-        <div role="log" aria-live="polite" aria-relevant="additions text" className="mt-3 overflow-hidden border-2 border-white/10 bg-black px-3 py-2">
-          <div className="hud-ticker-track">
-            {(items.length ? [...items, ...items] : [{ id: 'standby', label: 'Ticker rail', message: 'Waiting for ticker events', severity: 'info' as const, source: 'over-laid' }]).map((item, index) => (
-              <article key={`${item.id}-${index}`} className={`hud-ticker-item hud-alert-card--${item.severity}`}>
-                <span className="hud-kicker text-white">{item.label}</span>
-                <span className="text-sm font-semibold text-zinc-100">{item.message}</span>
-                <span className="hud-badge">{item.source}</span>
+        <div role="log" aria-live="polite" aria-relevant="additions text" className="sc-ticker__window">
+          {items.length === 0 ? (
+            <div className="sc-ticker__track sc-ticker__track--still sc-standby-row">
+              <article className="sc-ticker__item">
+                <span className="sc-label sc-ticker__tag">standby</span>
+                <span className="sc-ticker__message">Waiting for ticker events</span>
               </article>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div
+              className={`sc-ticker__track ${scrolling ? '' : 'sc-ticker__track--still'}`}
+              style={{ '--ticker-duration': `${items.length * SECONDS_PER_ITEM}s` } as CSSProperties}
+            >
+              {track.map((item, index) => (
+                <article key={`${item.id}-${index}`} className={`sc-ticker__item sc-ticker__item--${item.severity}`} aria-hidden={index >= items.length || undefined}>
+                  <span className="sc-label sc-ticker__tag">{item.label}</span>
+                  <span className="sc-ticker__message">{item.message}</span>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
-    </main>
+    </OverlayStage>
   );
 }
 
@@ -87,14 +90,5 @@ function tickerItemFromEvent(event: OverlayEvent): TickerItem | null {
     label,
     message,
     severity: event.severity,
-    source: event.source,
   };
-}
-
-function asString(value: unknown) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
