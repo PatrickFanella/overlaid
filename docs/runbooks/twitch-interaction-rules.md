@@ -35,7 +35,7 @@ Recommended smoke check:
 
 - Reward-title matching is exact after case-insensitive normalization.
 - Supported actions are `alert`, `brb`, `clear`, and `ignore`.
-- Optional cooldown seconds suppress repeated matching reward actions and emit a diagnostic event while cooling down.
+- Optional cooldown seconds suppress repeated matching reward actions and emit a diagnostic event while cooling down. Reservation is atomic and belongs to the EventSub client, scoped by broadcaster and Twitch reward ID (normalized title when an ID is absent). Reconnects preserve the client state; separate clients and channels do not share cooldowns. Reward renames retain cooldown when the reward ID stays the same. Expired entries are reclaimed as notifications arrive.
 - Optional fulfillment notes are stored with the rule and included in emitted overlay event metadata for operator review.
 - Title/message overrides support `{user}`, `{reward}`, and `{input}` variables.
 - `ignore` suppresses the normal redemption alert and emits a `custom_command` diagnostic event. Diagnostic events can still appear in broad diagnostic surfaces such as `/overlay/debug`, event history, or ticker-style feeds that intentionally show generic event summaries.

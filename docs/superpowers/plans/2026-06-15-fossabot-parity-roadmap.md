@@ -147,6 +147,12 @@ Community mutation permissions now run before storage availability checks. A vie
 
 Isolated Postgres coverage verifies counter and quote CRUD, normalized fields, unchanged IDs/creation timestamps during edits, empty/deleted reads, and twenty concurrent increments preserving an exact total. Existing renderer/command-context tests and browser community editor checks cover the other milestone D requirements; the checklist now reflects those sources. Verification passed: `make verify`, all fourteen browser smoke tests, bot/Twitch/HTTP race tests with Postgres enabled, and `make smoke API_PORT=8081`.
 
+## October 6 reward cooldown ownership and reservation
+
+Reward cooldowns now belong to each EventSub client's channel-point processor rather than a process-wide title map. A mutex makes check/reservation atomic. Keys include broadcaster identity and Twitch reward ID, with normalized title fallback for notifications without an ID. The client keeps the same processor across reconnects; another client or broadcaster cannot consume its cooldown. Reward renames preserve cooldown for the same ID, and expired other entries are reclaimed on subsequent notifications.
+
+Offline tests cover sixty-four simultaneous redemptions producing one alert and sixty-three cooldown diagnostics, separate clients/channels/reward IDs, renames, fallback title normalization, exact expiry, expired-entry cleanup, and cooldown configuration changes. The single-notification mapping helpers remain isolated; production notification processing retains client-owned state. Verification passed: `make verify`, all fourteen browser smoke tests, Twitch/HTTP race tests, and `make smoke API_PORT=8081`. Stable reward-ID rule matching remains the next mapping gap.
+
 ---
 
 ## File structure
@@ -359,7 +365,7 @@ Build the spine before adding feature breadth.
 ## Milestone E: Channel points parity
 
 - Expand exact-title rules into richer reward mappings.
-- Add per-reward cooldowns and templates.
+- [x] Add per-reward cooldowns and templates (October 6: client-owned atomic reservations, identity/channel isolation, expiry/configuration tests, and reward/user/input template fixtures).
 - Reward queue shows fulfillment notes alongside selected rewards and matching redemptions.
 - Twitch reward management has minimal create/delete controls after scoped API research; advanced fields and safer disable/pause lifecycle remain follow-up.
 

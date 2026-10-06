@@ -258,10 +258,10 @@ func TestEventsForChannelPointRedemptionRules(t *testing.T) {
 	})
 
 	t.Run("cooldown emits diagnostic", func(t *testing.T) {
-		channelPointCooldowns = sync.Map{}
+		client := &Client{}
 		rules := interactions.Rules{ChannelPointRules: []interactions.ChannelPointRule{{RewardTitle: "Change Color", Action: "alert", CooldownSeconds: 60, FulfillmentNote: "check after stream", Enabled: true}}}
-		first := EventsForNotification(message, nil, rules)
-		second := EventsForNotification(message, nil, rules)
+		first := client.eventsForNotification(message, rules)
+		second := client.eventsForNotification(message, rules)
 		if len(first) != 1 || first[0].Type != events.EventTypeAlert {
 			t.Fatalf("expected first redemption alert, got %#v", first)
 		}
