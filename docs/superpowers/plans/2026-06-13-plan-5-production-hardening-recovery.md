@@ -738,3 +738,10 @@ Expected: `main` is synced to `origin/main` and working tree is clean.
 - Spec coverage: tasks cover readiness diagnostics, state/token recovery tests, expanded smoke, recovery docs, final deploy verification, and plan completion.
 - Placeholder scan: no `TBD`, `TODO`, or unspecified implementation placeholders remain.
 - Type consistency: readiness JSON consistently uses `status`, `checks`, `name`, `status`, and `hint`; retained-state and token recovery semantics match existing startup behavior.
+
+
+## October 6 OBS cancellation contract
+
+OBS operations now close their WebSocket when the request context is canceled during Hello, Identify, or response reads. Handshake and request cancellation callbacks have separate lifetimes, so the handshake cleanup does not close a successfully returned connection. Existing deadlines remain in place. Errors support `errors.Is(..., context.Canceled)`; an Identify failure still preserves the established reachable-but-not-authenticated readiness distinction and Hello metadata.
+
+A local WebSocket regression failed before the change at all three blocked read stages. It now verifies prompt return after explicit cancellation without waiting for the default ten-second deadline. Existing request/auth/status fixtures and HTTP readiness tests cover successful handoff and error classification. OBS/HTTP race tests, `make verify` (113 frontend tests), all 19 browser workflows, and runtime smoke at port 8081 passed. Live OBS testing remains pending its external connection.
