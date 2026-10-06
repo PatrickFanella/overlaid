@@ -2,6 +2,53 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 test.describe('operator browser smoke', () => {
+  test('confirms an operator sequence, blocks pending controls, logs failure, and allows retry', async ({ page }) => {
+    await page.addInitScript(() => {
+      sessionStorage.setItem('overlaid.operatorSecret.session.v1', 'operator-fixture');
+      localStorage.setItem('overlaid.dashboard.config.v1', JSON.stringify({ quickActions: [
+        { id: 'scene-fixture', label: 'Scene fixture', kind: 'setScene', sceneName: 'Fixture' },
+        { id: 'refresh-fixture', label: 'Refresh fixture', kind: 'refreshSource', inputName: 'Fixture' },
+        { id: 'clear-fixture', label: 'Clear fixture', kind: 'clearOverlays', confirm: true },
+        { id: 'sequence-fixture', label: 'Sequence fixture', kind: 'sequence', actionIds: ['scene-fixture', 'refresh-fixture', 'clear-fixture'], stopOnError: true, confirm: true },
+      ] }));
+    });
+    const calls: string[] = [];
+    let releaseScene!: () => void;
+    const blocked = new Promise<void>((resolve) => { releaseScene = resolve; });
+    await page.route('**/api/obs/scene', async (route) => {
+      calls.push('scene');
+      expect(route.request().headers()['x-overlay-operator-secret']).toBe('operator-fixture');
+      await blocked;
+      await route.fulfill({ status: 204 });
+    });
+    await page.route('**/api/obs/source/refresh', async (route) => {
+      calls.push('refresh');
+      await route.fulfill({ status: 503, body: 'fixture source unavailable' });
+    });
+    await page.route('**/api/events/clear', async (route) => {
+      calls.push('clear');
+      await route.fulfill({ status: 204 });
+    });
+    await page.goto('/dashboard/scenes');
+    await page.getByRole('button', { name: 'Sequence fixture', exact: true }).click();
+    expect(calls).toEqual([]);
+    await page.getByRole('button', { name: 'Confirm Sequence fixture', exact: true }).click();
+    await expect.poll(() => calls).toEqual(['scene']);
+    await expect(page.getByRole('button', { name: 'Sequence fixture', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Clear fixture', exact: true })).toBeDisabled();
+    await expect(page.getByRole('log')).toContainText('Action started.');
+    releaseScene();
+    await expect(page.getByRole('log')).toContainText('fixture source unavailable');
+    expect(calls).toEqual(['scene', 'refresh']);
+    await expect(page.getByRole('button', { name: 'Sequence fixture', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Clear fixture', exact: true }).click();
+    expect(calls).toEqual(['scene', 'refresh']);
+    await page.getByRole('button', { name: 'Confirm Clear fixture', exact: true }).click();
+    await expect.poll(() => calls).toEqual(['scene', 'refresh', 'clear']);
+    await expect(page.getByRole('log')).toContainText('Action completed.');
+    await expect(page.getByRole('button', { name: 'Clear fixture', exact: true })).toBeEnabled();
+  });
+
   test('preserves omitted layout preferences when reordering and resetting Health panels', async ({ page }) => {
     await page.addInitScript(() => {
       const key = 'overlaid.dashboard.config.v1';

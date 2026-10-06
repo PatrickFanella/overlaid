@@ -700,3 +700,10 @@ Expected: `main` is synced to `origin/main` and working tree is clean.
 - Spec coverage: the tasks cover sequence typing, default config migration, editor controls, runner execution, docs, and deployment verification.
 - Placeholder scan: no `TBD`, `TODO`, or unspecified implementation placeholders remain.
 - Type consistency: the new quick action kind is always `sequence`, uses `actionIds: string[]`, and `stopOnError: boolean` across config, resolver, editor, runner, and tests.
+
+
+## October 6 operator action serialization and workflow contract
+
+`useOperatorActions` now reserves its pending guard synchronously before invoking a callback, rather than relying exclusively on rendered button state. Additional calls while pending are ignored. Invocation goes through the promise chain so synchronous callback failures reach the same error receipt and release path as rejected API requests.
+
+A local browser workflow covers the parent confirmation gate, ordered scene/refresh calls, a delayed first step, disabled controls during execution, stop-on-error suppression of a later clear action, failure details in the operator log, and a subsequent confirmed action succeeding. All external writes are intercepted fixtures. `make verify` passed with 113 frontend tests, all 19 browser smoke workflows passed, and runtime smoke passed at port 8081. Live OBS sequence rehearsal remains pending the external OBS connection.
