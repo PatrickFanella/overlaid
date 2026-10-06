@@ -9,6 +9,7 @@ import {
   updateTwitchRewardRule,
 } from '../../../../lib/twitchInteractionRules';
 import type { ChatAliasRule, ChannelPointRule } from '../../../../lib/api';
+import { Check, Empty, Field, Notice, SubPanel } from '../../ui';
 
 type TwitchInteractionRulesEditorProps = {
   apiBaseUrl?: string;
@@ -74,141 +75,123 @@ export function TwitchInteractionRulesEditor({ apiBaseUrl, operatorSecret, rules
 
   return (
     <>
-      <div className="mt-3 grid gap-3 xl:grid-cols-2">
-        <div className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="hud-kicker">Chat aliases</p>
-              <p className="mt-1 text-xs text-zinc-400">Alias bangs to safe built-in commands only.</p>
-            </div>
-            <button className="hud-chip" type="button" onClick={addAlias}>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <SubPanel title="Chat aliases">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="desk-row__text">Map a chat bang to one of the built-in commands.</p>
+            <button className="desk-btn desk-btn--small" type="button" onClick={addAlias}>
               Add alias
             </button>
           </div>
 
-          <div className="mt-3 grid gap-2">
-            {rules.chatAliases.length > 0 ? (
-              rules.chatAliases.map((rule, index) => (
-                <article key={`${rule.alias || 'alias'}-${index}`} className="grid gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-3 md:grid-cols-[1fr_10rem_auto] md:items-end">
-                  <label className="grid gap-1 text-xs text-zinc-300">
-                    <span className="hud-kicker">Alias</span>
-                    <input className="hud-input" type="text" value={rule.alias} onChange={(event) => onRulesChange((current) => updateTwitchAliasRule(current, index, { alias: event.target.value }))} placeholder="panic" />
-                  </label>
-                  <label className="grid gap-1 text-xs text-zinc-300">
-                    <span className="hud-kicker">Command</span>
-                    <select className="hud-input" value={rule.command} onChange={(event) => onRulesChange((current) => updateTwitchAliasRule(current, index, { command: event.target.value as ChatAliasRule['command'] }))}>
-                      {aliasCommands.map((command) => (
-                        <option key={command} value={command}>
-                          {command}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <label className="grid gap-1 text-xs text-zinc-300">
-                      <span className="hud-kicker">Enabled</span>
-                      <input type="checkbox" checked={rule.enabled} onChange={(event) => onRulesChange((current) => updateTwitchAliasRule(current, index, { enabled: event.target.checked }))} />
-                    </label>
-                    <button className="hud-chip" type="button" onClick={() => onRulesChange((current) => ({ ...current, chatAliases: current.chatAliases.filter((_, itemIndex) => itemIndex !== index) }))}>
-                      Remove
-                    </button>
+          {rules.chatAliases.length > 0 ? (
+            <ul className="desk-rows">
+              {rules.chatAliases.map((rule, index) => (
+                <li key={`${rule.alias || 'alias'}-${index}`} className={`desk-row ${rule.enabled ? '' : 'desk-row--warn'}`}>
+                  <div className="grid gap-2 md:grid-cols-[1fr_10rem_auto] md:items-end">
+                    <Field label="Alias">
+                      <input className="desk-input" type="text" value={rule.alias} onChange={(event) => onRulesChange((current) => updateTwitchAliasRule(current, index, { alias: event.target.value }))} placeholder="panic" />
+                    </Field>
+                    <Field label="Command">
+                      <select className="desk-input" value={rule.command} onChange={(event) => onRulesChange((current) => updateTwitchAliasRule(current, index, { command: event.target.value as ChatAliasRule['command'] }))}>
+                        {aliasCommands.map((command) => (
+                          <option key={command} value={command}>
+                            {command}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <div className="flex min-h-8 items-center gap-3">
+                      <Check label="Enabled" checked={rule.enabled} onChange={(checked) => onRulesChange((current) => updateTwitchAliasRule(current, index, { enabled: checked }))} />
+                      <button className="desk-btn desk-btn--small" type="button" onClick={() => onRulesChange((current) => ({ ...current, chatAliases: current.chatAliases.filter((_, itemIndex) => itemIndex !== index) }))}>
+                        Remove
+                      </button>
+                    </div>
                   </div>
-                </article>
-              ))
-            ) : (
-              <p className="text-xs text-zinc-400">No chat aliases yet.</p>
-            )}
-          </div>
-        </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Empty>No chat aliases yet.</Empty>
+          )}
+        </SubPanel>
 
-        <div className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="hud-kicker">Channel point rewards</p>
-              <p className="mt-1 text-xs text-zinc-400">Exact title matches can alert, BRB, clear, or ignore, with optional cooldowns and fulfillment notes.</p>
-            </div>
-            <button className="hud-chip" type="button" onClick={addReward}>
+        <SubPanel title="Channel point rewards">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="desk-row__text">An exact reward title match can alert, show BRB, clear, or be ignored. Cooldowns and fulfillment notes are optional.</p>
+            <button className="desk-btn desk-btn--small" type="button" onClick={addReward}>
               Add reward
             </button>
           </div>
 
-          <div className="mt-3 grid gap-2">
-            {rules.channelPointRules.length > 0 ? (
-              rules.channelPointRules.map((rule, index) => (
-                <article key={`${rule.rewardTitle || 'reward'}-${index}`} className="grid gap-2 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/5 p-3 xl:grid-cols-[1fr_10rem]">
-                  <div className="grid gap-2 md:grid-cols-2 xl:col-span-2">
-                    <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
-                      <span className="hud-kicker">Reward title</span>
-                      <input className="hud-input" type="text" value={rule.rewardTitle} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { rewardTitle: event.target.value }))} placeholder="Hydrate break" />
-                    </label>
-                    <label className="grid gap-1 text-xs text-zinc-300">
-                      <span className="hud-kicker">Action</span>
-                      <select className="hud-input" value={rule.action} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { action: event.target.value as ChannelPointRule['action'] }))}>
+          {rules.channelPointRules.length > 0 ? (
+            <ul className="desk-rows">
+              {rules.channelPointRules.map((rule, index) => (
+                <li key={`${rule.rewardTitle || 'reward'}-${index}`} className={`desk-row ${rule.enabled ? '' : 'desk-row--warn'}`}>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <Field label="Reward title" className="md:col-span-2">
+                      <input className="desk-input" type="text" value={rule.rewardTitle} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { rewardTitle: event.target.value }))} placeholder="Hydrate break" />
+                    </Field>
+                    <Field label="Action">
+                      <select className="desk-input" value={rule.action} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { action: event.target.value as ChannelPointRule['action'] }))}>
                         {rewardActions.map((action) => (
                           <option key={action} value={action}>
                             {action}
                           </option>
                         ))}
                       </select>
-                    </label>
-                    <label className="grid gap-1 text-xs text-zinc-300">
-                      <span className="hud-kicker">Enabled</span>
-                      <input type="checkbox" checked={rule.enabled} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { enabled: event.target.checked }))} />
-                    </label>
-                    <label className="grid gap-1 text-xs text-zinc-300">
-                      <span className="hud-kicker">Cooldown seconds</span>
-                      <input className="hud-input" type="number" min={0} max={86400} value={rule.cooldownSeconds ?? 0} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { cooldownSeconds: Number(event.target.value) }))} />
-                    </label>
-                    <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
-                      <span className="hud-kicker">Title override</span>
-                      <input className="hud-input" type="text" value={rule.title ?? ''} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { title: event.target.value }))} placeholder="Optional alert title" />
-                    </label>
-                    <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
-                      <span className="hud-kicker">Message override</span>
-                      <textarea className="hud-input min-h-20 font-mono text-xs" value={rule.message ?? ''} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { message: event.target.value }))} placeholder="Optional alert message" />
-                    </label>
-                    <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
-                      <span className="hud-kicker">Fulfillment note</span>
-                      <input className="hud-input" type="text" value={rule.fulfillmentNote ?? ''} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { fulfillmentNote: event.target.value }))} placeholder="Optional operator note" />
-                    </label>
+                    </Field>
+                    <Field label="Cooldown seconds">
+                      <input className="desk-input" type="number" min={0} max={86400} value={rule.cooldownSeconds ?? 0} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { cooldownSeconds: Number(event.target.value) }))} />
+                    </Field>
+                    <Field label="Title override" className="md:col-span-2">
+                      <input className="desk-input" type="text" value={rule.title ?? ''} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { title: event.target.value }))} placeholder="Optional alert title" />
+                    </Field>
+                    <Field label="Message override" className="md:col-span-2">
+                      <textarea className="desk-input desk-input--mono" value={rule.message ?? ''} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { message: event.target.value }))} placeholder="Optional alert message" />
+                    </Field>
+                    <Field label="Fulfillment note" className="md:col-span-2">
+                      <input className="desk-input" type="text" value={rule.fulfillmentNote ?? ''} onChange={(event) => onRulesChange((current) => updateTwitchRewardRule(current, index, { fulfillmentNote: event.target.value }))} placeholder="Optional operator note" />
+                    </Field>
+                    <div className="flex items-center justify-between gap-3 md:col-span-2">
+                      <Check label="Enabled" checked={rule.enabled} onChange={(checked) => onRulesChange((current) => updateTwitchRewardRule(current, index, { enabled: checked }))} />
+                      <button className="desk-btn desk-btn--small" type="button" onClick={() => onRulesChange((current) => ({ ...current, channelPointRules: current.channelPointRules.filter((_, itemIndex) => itemIndex !== index) }))}>
+                        Remove
+                      </button>
+                    </div>
                   </div>
-                  <button className="hud-chip self-start" type="button" onClick={() => onRulesChange((current) => ({ ...current, channelPointRules: current.channelPointRules.filter((_, itemIndex) => itemIndex !== index) }))}>
-                    Remove
-                  </button>
-                </article>
-              ))
-            ) : (
-              <p className="text-xs text-zinc-400">No channel point reward rules yet.</p>
-            )}
-          </div>
-        </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Empty>No channel point reward rules yet.</Empty>
+          )}
+        </SubPanel>
       </div>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <div className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-          <p className="hud-kicker">Import backend rules JSON</p>
-          <textarea className="hud-input mt-3 min-h-32 font-mono text-xs" value={importRaw} onChange={(event) => setImportRaw(event.target.value)} placeholder="Paste chatAliases/channelPointRules JSON here" />
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button className="hud-chip" type="button" onClick={handleImport}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SubPanel title="Import backend rules JSON">
+          <textarea className="desk-input desk-input--mono min-h-32" value={importRaw} onChange={(event) => setImportRaw(event.target.value)} placeholder="Paste chatAliases/channelPointRules JSON here" />
+          <div className="flex flex-wrap items-center gap-3">
+            <button className="desk-btn" type="button" onClick={handleImport}>
               Import rules JSON
             </button>
-            {importError ? <p className="text-xs text-amber-200">{importError}</p> : null}
           </div>
-        </div>
+          {importError ? <Notice tone="warn" role="alert">{importError}</Notice> : null}
+        </SubPanel>
 
-        <div className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-          <p className="hud-kicker">Export backend rules JSON</p>
-          <textarea className="hud-input mt-3 min-h-32 font-mono text-xs" value={exportJson} readOnly />
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button className="hud-chip" type="button" onClick={handleSave} disabled={saving}>
+        <SubPanel title="Export backend rules JSON">
+          <textarea className="desk-input desk-input--mono min-h-32" value={exportJson} readOnly />
+          <div className="flex flex-wrap items-center gap-3">
+            <button className="desk-btn desk-btn--primary" type="button" onClick={handleSave} disabled={saving}>
               {saving ? 'Saving…' : 'Save rules'}
             </button>
-            <span className="text-xs text-zinc-400">Operator secret required to save.</span>
+            <span className="desk-field__hint">Operator secret required to save.</span>
           </div>
-          {saveError ? <p className="mt-2 text-xs text-amber-200">{saveError}</p> : null}
-          {statusMessage ? <p className="mt-2 text-xs text-emerald-200">{statusMessage}</p> : null}
-          {loadError ? <p className="mt-2 text-xs text-amber-200">{loadError}</p> : null}
-        </div>
+          {saveError ? <Notice tone="bad" role="alert">{saveError}</Notice> : null}
+          {statusMessage ? <Notice tone="ok" role="status">{statusMessage}</Notice> : null}
+          {loadError ? <Notice tone="warn">{loadError}</Notice> : null}
+        </SubPanel>
       </div>
     </>
   );

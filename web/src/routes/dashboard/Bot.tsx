@@ -45,8 +45,6 @@ import {
 } from '../../lib/api';
 import { loadOperatorSecret } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
-import { DashboardShell } from './DashboardShell';
-import { ConsolePageHeader } from './components/ConsolePageHeader';
 import { BotStatusSummary } from './bot/BotStatusSummary';
 import {
   defaultAPIVariableDraft,
@@ -73,8 +71,9 @@ import { renderCommandPreview } from './bot/renderCommandPreview';
 import { CustomizablePanelLayout } from './components/CustomizablePanelLayout';
 import type { PanelLayoutItem } from '../../lib/dashboardLayout';
 import { loadDashboardConfig, saveDashboardConfig } from '../../lib/dashboardConfig';
+import { Check, Empty, Field, Notice, Panel, SubPanel, Tag, type Tone } from './ui';
 
-export function DashboardBotPage() {
+export function BotWorkspace() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const operatorSecret = loadOperatorSecret();
   const [config, setConfig] = useState(() => loadDashboardConfig());
@@ -309,22 +308,12 @@ export function DashboardBotPage() {
   }
 
   return (
-    <DashboardShell activePath="/dashboard/bot">
-      <ConsolePageHeader
-        eyebrow="Operate with guardrails"
-        title="Bot operations"
-        description="Manage bot commands, community data, API variables, timers, moderation dry-runs, and guarded destructive actions."
-        accent="amber"
-        chips={[state.loading ? 'loading bot state' : 'bot state loaded', operatorSecret ? 'operator secret loaded' : 'operator secret missing']}
-      />
-
-      <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-        <p className="hud-label">Bot operations</p>
-        <h2 className="hud-title hud-title--compact mt-1">FossaBot parity spine</h2>
-        <p className="mt-2 max-w-3xl text-sm text-zinc-300">Bot audit is the first safety layer for future timers, custom commands, counters, quotes, channel-point workflows, and moderation tools.</p>
-        {state.loading ? <p className="mt-2 text-xs text-zinc-400">Loading bot status…</p> : null}
-        {state.error ? <p className="mt-2 border border-red-400/40 bg-black px-2 py-1 text-xs text-rose-200">{state.error}</p> : null}
-      </section>
+    <>
+      {state.error ? (
+        <Notice tone="bad" role="alert">
+          {state.error}
+        </Notice>
+      ) : null}
 
       <BotStatusSummary status={state.status} audit={state.audit} />
 
@@ -417,8 +406,12 @@ export function DashboardBotPage() {
         onNukeExecute={handleNukeExecute}
         onNukeRollback={handleNukeRollback}
       />
-    </DashboardShell>
+    </>
   );
+}
+
+function enabledTone(enabled: boolean): Tone {
+  return enabled ? 'ok' : 'neutral';
 }
 
 function BotCommandsPanel({
@@ -441,78 +434,82 @@ function BotCommandsPanel({
   const items = commands?.commands ?? [];
   const canSave = draft.name.trim() !== '' && draft.response.trim() !== '' && draft.cooldownSeconds >= 0;
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <p className="hud-label">Bot commands</p>
-      <p className="mt-1 text-sm text-zinc-300">Create safe Twitch chat responses. Custom commands can publish ticker/alert overlays, send guarded Twitch chat replies, or both. They do not run scripts, call arbitrary APIs, or trigger OBS actions.</p>
-      {commands?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">commands unavailable :: {commands.loadError}</p> : null}
+    <Panel
+      id="bot-commands"
+      kicker="Chat commands"
+      title="Bot commands"
+      description="Create safe Twitch chat responses. Custom commands can publish ticker/alert overlays, send guarded Twitch chat replies, or both. They do not run scripts, call arbitrary APIs, or trigger OBS actions."
+    >
+      {commands?.loadError ? <Notice tone="warn">Commands unavailable: {commands.loadError}</Notice> : null}
 
-      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_8rem_8rem_10rem_8rem]">
-        <label className="grid gap-1 text-xs text-zinc-300">
-          Command name
-          <input className="hud-input" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="discord" />
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          Response mode
-          <select className="hud-input" value={draft.responseMode} onChange={(event) => onDraftChange({ ...draft, responseMode: event.target.value as CommandDraft['responseMode'] })}>
+      <div className="grid gap-3 md:grid-cols-[1fr_8rem_8rem_10rem_8rem]">
+        <Field label="Command name">
+          <input className="desk-input desk-input--mono" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="discord" />
+        </Field>
+        <Field label="Response mode">
+          <select className="desk-input" value={draft.responseMode} onChange={(event) => onDraftChange({ ...draft, responseMode: event.target.value as CommandDraft['responseMode'] })}>
             <option value="overlay">Overlay</option>
             <option value="chat">Chat</option>
             <option value="both">Both</option>
           </select>
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          Action
-          <select className="hud-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as CommandDraft['action'] })}>
+        </Field>
+        <Field label="Action">
+          <select className="desk-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as CommandDraft['action'] })}>
             <option value="ticker">Ticker</option>
             <option value="alert">Alert</option>
           </select>
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          Required role
-          <select className="hud-input" value={draft.roleRequired} onChange={(event) => onDraftChange({ ...draft, roleRequired: event.target.value as CommandDraft['roleRequired'] })}>
+        </Field>
+        <Field label="Required role">
+          <select className="desk-input" value={draft.roleRequired} onChange={(event) => onDraftChange({ ...draft, roleRequired: event.target.value as CommandDraft['roleRequired'] })}>
             <option value="viewer">Viewer</option>
             <option value="moderator">Moderator</option>
             <option value="broadcaster">Broadcaster</option>
           </select>
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          Cooldown
-          <input className="hud-input" type="number" min={0} value={draft.cooldownSeconds} onChange={(event) => onDraftChange({ ...draft, cooldownSeconds: Number(event.target.value) })} />
-        </label>
+        </Field>
+        <Field label="Cooldown seconds">
+          <input className="desk-input" type="number" min={0} value={draft.cooldownSeconds} onChange={(event) => onDraftChange({ ...draft, cooldownSeconds: Number(event.target.value) })} />
+        </Field>
       </div>
-      <label className="mt-2 grid gap-1 text-xs text-zinc-300">
-        Response
-        <textarea className="hud-input min-h-20" value={draft.response} onChange={(event) => onDraftChange({ ...draft, response: event.target.value })} placeholder="Join the Discord: https://example.test" />
-      </label>
-      <div className="mt-2 border border-cyan-400/20 bg-black/40 p-2 text-xs">
-        <p className="text-zinc-500">Preview with sample context</p>
-        <p className="mt-1 text-cyan-100">{renderCommandPreview(draft) || 'Enter a response to preview rendered output.'}</p>
-      </div>
-      <div className="mt-2 flex items-center gap-3">
-        <label className="flex items-center gap-2 text-xs text-zinc-300">
-          <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
-          enabled
-        </label>
-        <button className="hud-button" type="button" disabled={!canSave || saving} onClick={onSave}>{saving ? 'Saving…' : 'Save command'}</button>
+      <Field label="Response">
+        <textarea className="desk-input" value={draft.response} onChange={(event) => onDraftChange({ ...draft, response: event.target.value })} placeholder="Join the Discord: https://example.test" />
+      </Field>
+      <SubPanel title="Preview with sample context">
+        <p className="mono">{renderCommandPreview(draft) || 'Enter a response to preview rendered output.'}</p>
+      </SubPanel>
+      <div className="flex flex-wrap items-center gap-3">
+        <Check label="Enabled" checked={draft.enabled} onChange={(enabled) => onDraftChange({ ...draft, enabled })} />
+        <button className="desk-btn desk-btn--primary" type="button" disabled={!canSave || saving} onClick={onSave}>
+          {saving ? 'Saving…' : 'Save command'}
+        </button>
       </div>
 
-      {items.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No bot commands configured yet.</p> : null}
-      <div className="mt-3 grid gap-2">
-        {items.map((command) => (
-          <article key={command.id} className="border border-zinc-700 bg-black/40 p-2 text-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <strong className="text-cyan-100">!{command.name}</strong>
-              <span className="hud-chip hud-chip--square">{command.enabled ? 'enabled' : 'paused'}</span>
-            </div>
-            <p className="mt-1 text-zinc-300">{command.action} · {command.responseMode || 'overlay'} · {command.roleRequired}+ · {command.cooldownSeconds}s cooldown</p>
-            <p className="mt-1 text-zinc-400">{command.response}</p>
-            <div className="mt-2 flex gap-2">
-              <button className="hud-button hud-button--small" type="button" onClick={() => onToggle(command)}>{command.enabled ? 'Pause' : 'Enable'}</button>
-              <button className="hud-button hud-button--small" type="button" onClick={() => onDelete(command)}>Delete</button>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
+      {items.length === 0 ? (
+        <Empty>No bot commands configured yet.</Empty>
+      ) : (
+        <ul className="desk-rows">
+          {items.map((command) => (
+            <li key={command.id} className="desk-row">
+              <div className="desk-row__line">
+                <p className="desk-row__title mono">!{command.name}</p>
+                <Tag tone={enabledTone(command.enabled)}>{command.enabled ? 'enabled' : 'paused'}</Tag>
+              </div>
+              <p className="desk-row__meta">
+                {command.action} · {command.responseMode || 'overlay'} · {command.roleRequired}+ · {command.cooldownSeconds}s cooldown
+              </p>
+              <p className="desk-row__text">{command.response}</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button className="desk-btn desk-btn--small" type="button" onClick={() => onToggle(command)}>
+                  {command.enabled ? 'Pause' : 'Enable'}
+                </button>
+                <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => onDelete(command)}>
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
 
@@ -539,35 +536,86 @@ function BotCommunityPanel({
   onSaveQuote: () => void;
   onDeleteQuote: (quote: BotQuote) => void;
 }) {
+  const counterItems = counters?.counters ?? [];
+  const quoteItems = quotes?.quotes ?? [];
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <p className="hud-label">Bot counters and quotes</p>
-      <p className="mt-1 text-sm text-zinc-300">Community tools for `!count name`, `!quote`, and moderator `!quote add text`.</p>
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-zinc-500">Counters</p>
-          <div className="mt-2 grid gap-2 md:grid-cols-[1fr_7rem_auto]">
-            <input className="hud-input" value={counterDraft.name} onChange={(event) => onCounterDraftChange({ ...counterDraft, name: event.target.value })} placeholder="hype" />
-            <input className="hud-input" type="number" value={counterDraft.value} onChange={(event) => onCounterDraftChange({ ...counterDraft, value: Number(event.target.value) })} />
-            <button className="hud-button" type="button" disabled={counterDraft.name.trim() === ''} onClick={onSaveCounter}>Save counter</button>
+    <Panel
+      id="bot-community"
+      kicker="Community"
+      title="Bot counters and quotes"
+      description={
+        <>
+          Community tools for <code>!count name</code>, <code>!quote</code>, and moderator <code>!quote add text</code>.
+        </>
+      }
+    >
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SubPanel title="Counters">
+          <div className="grid gap-3 md:grid-cols-[1fr_7rem]">
+            <Field label="Counter name">
+              <input className="desk-input desk-input--mono" value={counterDraft.name} onChange={(event) => onCounterDraftChange({ ...counterDraft, name: event.target.value })} placeholder="hype" />
+            </Field>
+            <Field label="Value">
+              <input className="desk-input" type="number" value={counterDraft.value} onChange={(event) => onCounterDraftChange({ ...counterDraft, value: Number(event.target.value) })} />
+            </Field>
           </div>
-          {(counters?.counters ?? []).length === 0 ? <p className="mt-2 text-sm text-zinc-400">No counters yet.</p> : null}
-          <div className="mt-2 grid gap-2">
-            {(counters?.counters ?? []).map((counter) => <article key={counter.id} className="flex items-center justify-between border border-zinc-700 bg-black/40 p-2 text-xs"><span><strong className="text-cyan-100">{counter.name}</strong> · {counter.value}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDeleteCounter(counter)}>Delete</button></article>)}
+          <div>
+            <button className="desk-btn desk-btn--primary" type="button" disabled={counterDraft.name.trim() === ''} onClick={onSaveCounter}>
+              Save counter
+            </button>
           </div>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-wide text-zinc-500">Quotes</p>
-          <input className="hud-input mt-2" value={quoteDraft.author} onChange={(event) => onQuoteDraftChange({ ...quoteDraft, author: event.target.value })} placeholder="author optional" />
-          <textarea className="hud-input mt-2 min-h-20" value={quoteDraft.text} onChange={(event) => onQuoteDraftChange({ ...quoteDraft, text: event.target.value })} placeholder="quote text" />
-          <button className="hud-button mt-2" type="button" disabled={quoteDraft.text.trim() === ''} onClick={onSaveQuote}>Save quote</button>
-          {(quotes?.quotes ?? []).length === 0 ? <p className="mt-2 text-sm text-zinc-400">No quotes yet.</p> : null}
-          <div className="mt-2 grid gap-2">
-            {(quotes?.quotes ?? []).map((quote) => <article key={quote.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><p className="text-zinc-300">{quote.text}</p><div className="mt-1 flex items-center justify-between"><span className="text-zinc-500">{quote.author || 'unknown'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDeleteQuote(quote)}>Delete</button></div></article>)}
+          {counterItems.length === 0 ? (
+            <Empty>No counters yet.</Empty>
+          ) : (
+            <ul className="desk-rows">
+              {counterItems.map((counter) => (
+                <li key={counter.id} className="desk-row">
+                  <div className="desk-row__line">
+                    <p className="desk-row__title">
+                      <span className="mono">{counter.name}</span> · {counter.value}
+                    </p>
+                    <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => onDeleteCounter(counter)}>
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SubPanel>
+
+        <SubPanel title="Quotes">
+          <Field label="Author" hint="Optional.">
+            <input className="desk-input" value={quoteDraft.author} onChange={(event) => onQuoteDraftChange({ ...quoteDraft, author: event.target.value })} placeholder="author optional" />
+          </Field>
+          <Field label="Quote text">
+            <textarea className="desk-input" value={quoteDraft.text} onChange={(event) => onQuoteDraftChange({ ...quoteDraft, text: event.target.value })} placeholder="quote text" />
+          </Field>
+          <div>
+            <button className="desk-btn desk-btn--primary" type="button" disabled={quoteDraft.text.trim() === ''} onClick={onSaveQuote}>
+              Save quote
+            </button>
           </div>
-        </div>
+          {quoteItems.length === 0 ? (
+            <Empty>No quotes yet.</Empty>
+          ) : (
+            <ul className="desk-rows">
+              {quoteItems.map((quote) => (
+                <li key={quote.id} className="desk-row">
+                  <p className="desk-row__text">{quote.text}</p>
+                  <div className="desk-row__line">
+                    <span className="desk-row__meta">{quote.author || 'unknown'}</span>
+                    <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => onDeleteQuote(quote)}>
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SubPanel>
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -575,38 +623,77 @@ function BotAPIVariablesPanel({ variables, draft, onDraftChange, onSave, onDelet
   const items = variables?.variables ?? [];
   const canSave = draft.name.trim() !== '' && draft.url.trim().startsWith('https://');
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <p className="hud-label">Bot API variables</p>
-      <p className="mt-1 text-sm text-zinc-300">Operator-defined read-only HTTP variables for templates like <code>{'{api:weather}'}</code>. GET-only, HTTPS-only, capped, cached, and blocked from private hosts.</p>
-      {variables?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">api variables unavailable :: {variables.loadError}</p> : null}
-      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_2fr_10rem_8rem]">
-        <label className="grid gap-1 text-xs text-zinc-300">Name<input className="hud-input" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="weather" /></label>
-        <label className="grid gap-1 text-xs text-zinc-300">HTTPS URL<input className="hud-input" value={draft.url} onChange={(event) => onDraftChange({ ...draft, url: event.target.value })} placeholder="https://api.example.test/value" /></label>
-        <label className="grid gap-1 text-xs text-zinc-300">JSON selector<input className="hud-input" value={draft.responseSelector} onChange={(event) => onDraftChange({ ...draft, responseSelector: event.target.value })} placeholder="data.value" /></label>
-        <label className="grid gap-1 text-xs text-zinc-300">TTL seconds<input className="hud-input" type="number" min={15} max={3600} value={draft.cacheTtlSeconds} onChange={(event) => onDraftChange({ ...draft, cacheTtlSeconds: Number(event.target.value) })} /></label>
+    <Panel
+      id="bot-api-variables"
+      kicker="Templates"
+      title="Bot API variables"
+      description={
+        <>
+          Operator-defined read-only HTTP variables for templates like <code>{'{api:weather}'}</code>. GET-only, HTTPS-only, capped, cached, and blocked from private hosts.
+        </>
+      }
+    >
+      {variables?.loadError ? <Notice tone="warn">API variables unavailable: {variables.loadError}</Notice> : null}
+      <div className="grid gap-3 md:grid-cols-[1fr_2fr_10rem_8rem]">
+        <Field label="Name">
+          <input className="desk-input desk-input--mono" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="weather" />
+        </Field>
+        <Field label="HTTPS URL">
+          <input className="desk-input desk-input--mono" value={draft.url} onChange={(event) => onDraftChange({ ...draft, url: event.target.value })} placeholder="https://api.example.test/value" />
+        </Field>
+        <Field label="JSON selector">
+          <input className="desk-input desk-input--mono" value={draft.responseSelector} onChange={(event) => onDraftChange({ ...draft, responseSelector: event.target.value })} placeholder="data.value" />
+        </Field>
+        <Field label="TTL seconds">
+          <input className="desk-input" type="number" min={15} max={3600} value={draft.cacheTtlSeconds} onChange={(event) => onDraftChange({ ...draft, cacheTtlSeconds: Number(event.target.value) })} />
+        </Field>
       </div>
-      <div className="mt-2 grid gap-2 md:grid-cols-[1fr_8rem]">
-        <label className="grid gap-1 text-xs text-zinc-300">Fallback<input className="hud-input" value={draft.fallback} onChange={(event) => onDraftChange({ ...draft, fallback: event.target.value })} placeholder="unavailable" /></label>
-        <label className="grid gap-1 text-xs text-zinc-300">Timeout ms<input className="hud-input" type="number" min={250} max={3000} value={draft.timeoutMs} onChange={(event) => onDraftChange({ ...draft, timeoutMs: Number(event.target.value) })} /></label>
+      <div className="grid gap-3 md:grid-cols-[1fr_8rem]">
+        <Field label="Fallback">
+          <input className="desk-input" value={draft.fallback} onChange={(event) => onDraftChange({ ...draft, fallback: event.target.value })} placeholder="unavailable" />
+        </Field>
+        <Field label="Timeout ms">
+          <input className="desk-input" type="number" min={250} max={3000} value={draft.timeoutMs} onChange={(event) => onDraftChange({ ...draft, timeoutMs: Number(event.target.value) })} />
+        </Field>
       </div>
-      <div className="mt-2 flex items-center gap-3">
-        <label className="flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />enabled</label>
-        <button className="hud-button" type="button" disabled={!canSave} onClick={onSave}>Save API variable</button>
+      <div className="flex flex-wrap items-center gap-3">
+        <Check label="Enabled" checked={draft.enabled} onChange={(enabled) => onDraftChange({ ...draft, enabled })} />
+        <button className="desk-btn desk-btn--primary" type="button" disabled={!canSave} onClick={onSave}>
+          Save API variable
+        </button>
       </div>
-      {items.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No API variables configured yet.</p> : null}
-      <div className="mt-3 grid gap-2">
-        {items.map((variable) => (
-          <article key={variable.id} className="border border-zinc-700 bg-black/40 p-2 text-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-cyan-100">{`{api:${variable.name}}`}</strong><span className="hud-chip hud-chip--square">{variable.enabled ? 'enabled' : 'paused'}</span></div>
-            <p className="mt-1 break-all text-zinc-400">{variable.url}</p>
-            <p className="mt-1 text-zinc-500">status {variable.lastStatus || 'untested'} · ttl {variable.cacheTtlSeconds}s · timeout {variable.timeoutMs}ms</p>
-            {variable.lastError ? <p className="mt-1 text-amber-200">{variable.lastError}</p> : null}
-            <button className="hud-button hud-button--small mt-2" type="button" onClick={() => onDelete(variable)}>Delete</button>
-          </article>
-        ))}
-      </div>
-    </section>
+      {items.length === 0 ? (
+        <Empty>No API variables configured yet.</Empty>
+      ) : (
+        <ul className="desk-rows">
+          {items.map((variable) => (
+            <li key={variable.id} className={`desk-row ${variable.lastError ? 'desk-row--warn' : ''}`}>
+              <div className="desk-row__line">
+                <p className="desk-row__title mono">{`{api:${variable.name}}`}</p>
+                <Tag tone={enabledTone(variable.enabled)}>{variable.enabled ? 'enabled' : 'paused'}</Tag>
+              </div>
+              <p className="desk-row__text mono">{variable.url}</p>
+              <p className="desk-row__meta">
+                status {variable.lastStatus || 'untested'} · ttl {variable.cacheTtlSeconds}s · timeout {variable.timeoutMs}ms
+              </p>
+              {variable.lastError ? <p className="desk-row__text">{variable.lastError}</p> : null}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => onDelete(variable)}>
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
+}
+
+function ruleState(rule: BotModerationRule): { label: string; tone: Tone } {
+  if (rule.expiresAt && new Date(rule.expiresAt).getTime() <= Date.now()) return { label: 'expired', tone: 'neutral' };
+  if (!rule.enabled) return { label: 'paused', tone: 'neutral' };
+  return rule.enforce ? { label: 'enforced', tone: 'warn' } : { label: 'dry-run', tone: 'ok' };
 }
 
 function BotModerationPanel({
@@ -659,99 +746,231 @@ function BotModerationPanel({
   const canExecuteNuke = Boolean(nukeResult && nukeResult.matches.length > 0 && nukeDraft.confirm);
   const activeRadiationRules = items.filter((rule) => rule.enabled && rule.source === 'nuke_radiation' && (!rule.expiresAt || new Date(rule.expiresAt).getTime() > Date.now()));
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <p className="hud-label">Bot moderation dry-run</p>
-      <p className="mt-1 text-sm text-zinc-300">Blocked-term rules are stored and testable here. Rules stay dry-run unless enforce is checked. Enforced delete/timeout/ban actions require Twitch moderation scopes.</p>
-      {rules?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">moderation unavailable :: {rules.loadError}</p> : null}
-      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_9rem_8rem]">
-        <input className="hud-input" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="spam_link" />
-        <input className="hud-input" value={draft.pattern} onChange={(event) => onDraftChange({ ...draft, pattern: event.target.value })} placeholder="buy now" />
-        <select className="hud-input" value={draft.matchTarget} onChange={(event) => onDraftChange({ ...draft, matchTarget: event.target.value as ModerationDraft['matchTarget'] })}>
-          <option value="message">Message</option>
-          <option value="username">Username</option>
-          <option value="both">Both</option>
-        </select>
-        <select className="hud-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as ModerationDraft['action'] })}>
-          <option value="flag">Flag</option>
-          <option value="delete">Delete label</option>
-          <option value="timeout">Timeout label</option>
-          <option value="ban">Ban label</option>
-        </select>
-      </div>
-      <input className="hud-input mt-2" value={draft.reason} onChange={(event) => onDraftChange({ ...draft, reason: event.target.value })} placeholder="reason shown in audit/planning" />
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-300">
-        <label className="flex items-center gap-2"><input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} /> enabled</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={draft.enforce} onChange={(event) => onDraftChange({ ...draft, enforce: event.target.checked })} /> enforce</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={draft.regex} onChange={(event) => onDraftChange({ ...draft, regex: event.target.checked })} /> regex</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={draft.caseSensitive} onChange={(event) => onDraftChange({ ...draft, caseSensitive: event.target.checked })} /> case sensitive</label>
-        <button className="hud-button" type="button" disabled={!canSave} onClick={onSave}>Save rule</button>
-      </div>
-      <div className="mt-4 grid gap-2 md:grid-cols-[10rem_1fr_auto]">
-        <input className="hud-input" value={test.username} onChange={(event) => onTestChange({ ...test, username: event.target.value })} placeholder="username" />
-        <input className="hud-input" value={test.message} onChange={(event) => onTestChange({ ...test, message: event.target.value })} placeholder="message to test" />
-        <button className="hud-button" type="button" onClick={onDryRun}>Dry run</button>
-      </div>
-      {dryRun ? <p className="mt-2 text-xs text-zinc-300">matches :: {dryRun.matches.length ? dryRun.matches.map((match) => `${match.ruleName}:${match.action}`).join(', ') : 'none'}</p> : null}
+    <>
+      <Panel
+        id="bot-moderation"
+        kicker="Moderation"
+        title="Bot moderation dry-run"
+        description="Blocked-term rules are stored and testable here. Rules stay dry-run unless enforce is checked. Enforced delete, timeout, and ban actions require Twitch moderation scopes."
+      >
+        {rules?.loadError ? <Notice tone="warn">Moderation unavailable: {rules.loadError}</Notice> : null}
 
-      <div className="mt-4 border border-amber-400/30 bg-black/40 p-2">
-        <p className="text-xs uppercase tracking-wide text-amber-100">Manual Twitch moderation action</p>
-        <p className="mt-1 text-xs text-zinc-400">Requires Twitch moderation scopes. Use only after dry-run evidence; failed/successful attempts are written to bot audit.</p>
-        <div className="mt-2 grid gap-2 md:grid-cols-[9rem_1fr_1fr_8rem]">
-          <select className="hud-input" value={actionDraft.action} onChange={(event) => onActionChange({ ...actionDraft, action: event.target.value as ModerationActionDraft['action'] })}>
-            <option value="delete">Delete message</option>
-            <option value="timeout">Timeout user</option>
-            <option value="ban">Ban user</option>
-            <option value="unban">Unban user</option>
-          </select>
-          <input className="hud-input" value={actionDraft.targetUserId} onChange={(event) => onActionChange({ ...actionDraft, targetUserId: event.target.value })} placeholder="target user id" />
-          <input className="hud-input" value={actionDraft.messageId} onChange={(event) => onActionChange({ ...actionDraft, messageId: event.target.value })} placeholder="message id for delete" />
-          <input className="hud-input" type="number" min={1} value={actionDraft.durationSeconds} onChange={(event) => onActionChange({ ...actionDraft, durationSeconds: Number(event.target.value) })} />
-        </div>
-        <input className="hud-input mt-2" value={actionDraft.reason} onChange={(event) => onActionChange({ ...actionDraft, reason: event.target.value })} placeholder="reason" />
-        <div className="mt-2 flex items-center gap-2">
-          <button className="hud-button" type="button" onClick={onAction}>Run guarded action</button>
-          {actionResult ? <span className="text-xs text-emerald-200">{actionResult}</span> : null}
-        </div>
-      </div>
+        <SubPanel title="New rule">
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr_9rem_8rem]">
+            <Field label="Rule name">
+              <input className="desk-input desk-input--mono" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="spam_link" />
+            </Field>
+            <Field label="Pattern">
+              <input className="desk-input desk-input--mono" value={draft.pattern} onChange={(event) => onDraftChange({ ...draft, pattern: event.target.value })} placeholder="buy now" />
+            </Field>
+            <Field label="Match target">
+              <select className="desk-input" value={draft.matchTarget} onChange={(event) => onDraftChange({ ...draft, matchTarget: event.target.value as ModerationDraft['matchTarget'] })}>
+                <option value="message">Message</option>
+                <option value="username">Username</option>
+                <option value="both">Both</option>
+              </select>
+            </Field>
+            <Field label="Action">
+              <select className="desk-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as ModerationDraft['action'] })}>
+                <option value="flag">Flag</option>
+                <option value="delete">Delete label</option>
+                <option value="timeout">Timeout label</option>
+                <option value="ban">Ban label</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Reason" hint="Shown in audit and planning.">
+            <input className="desk-input" value={draft.reason} onChange={(event) => onDraftChange({ ...draft, reason: event.target.value })} placeholder="reason shown in audit/planning" />
+          </Field>
+          <div className="flex flex-wrap items-center gap-3">
+            <Check label="Enabled" checked={draft.enabled} onChange={(enabled) => onDraftChange({ ...draft, enabled })} />
+            <Check label="Enforce" checked={draft.enforce} onChange={(enforce) => onDraftChange({ ...draft, enforce })} />
+            <Check label="Regex" checked={draft.regex} onChange={(regex) => onDraftChange({ ...draft, regex })} />
+            <Check label="Case sensitive" checked={draft.caseSensitive} onChange={(caseSensitive) => onDraftChange({ ...draft, caseSensitive })} />
+            <button className="desk-btn desk-btn--primary" type="button" disabled={!canSave} onClick={onSave}>
+              Save rule
+            </button>
+          </div>
+        </SubPanel>
 
-      <div className="hud-danger-zone mt-4 border p-2">
-        <p className="text-xs uppercase tracking-wide text-rose-100">Nuke dry-run planner</p>
-        <p className="mt-1 text-xs text-amber-100">Dry-run first. Execute requires confirmation, is capped, and only delete/timeout are supported.</p>
-        <div className="mt-2 grid gap-2 md:grid-cols-[1fr_8rem_8rem_auto]">
-          <input className="hud-input" value={nukeDraft.pattern} onChange={(event) => onNukeDraftChange({ ...nukeDraft, pattern: event.target.value, confirm: false })} placeholder="phrase or regex" />
-          <input className="hud-input" type="number" min={1} max={360} value={nukeDraft.lookbackMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, lookbackMinutes: Number(event.target.value), confirm: false })} />
-          <input className="hud-input" type="number" min={1} max={250} value={nukeDraft.limit} onChange={(event) => onNukeDraftChange({ ...nukeDraft, limit: Number(event.target.value), confirm: false })} />
-          <button className="hud-button" type="button" disabled={nukeDraft.pattern.trim() === ''} onClick={onNukeDryRun}>Plan nuke</button>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-300">
-          <label className="flex items-center gap-2"><input type="checkbox" checked={nukeDraft.regex} onChange={(event) => onNukeDraftChange({ ...nukeDraft, regex: event.target.checked, confirm: false })} /> regex</label>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={nukeDraft.caseSensitive} onChange={(event) => onNukeDraftChange({ ...nukeDraft, caseSensitive: event.target.checked, confirm: false })} /> case sensitive</label>
-          <label className="flex items-center gap-2 text-amber-100"><input type="checkbox" checked={nukeDraft.confirm} onChange={(event) => onNukeDraftChange({ ...nukeDraft, confirm: event.target.checked })} /> I reviewed this dry-run plan</label>
-        </div>
-        <div className="mt-2 grid gap-2 md:grid-cols-[8rem_8rem_9rem_auto]">
-          <select className="hud-input" value={nukeDraft.action} onChange={(event) => onNukeDraftChange({ ...nukeDraft, action: event.target.value as NukeDraft['action'], confirm: false })}>
-            <option value="delete">Delete</option>
-            <option value="timeout">Timeout</option>
-          </select>
-          <input className="hud-input" type="number" min={1} value={nukeDraft.durationSeconds} onChange={(event) => onNukeDraftChange({ ...nukeDraft, durationSeconds: Number(event.target.value), confirm: false })} />
-          <input className="hud-input" type="number" min={0} max={120} value={nukeDraft.radiationMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, radiationMinutes: Number(event.target.value), confirm: false })} placeholder="radiation min" />
-          <button className="hud-button hud-button--danger" type="button" disabled={!canExecuteNuke} onClick={onNukeExecute}>Execute planned nuke</button>
-        </div>
-        <p className="mt-1 text-xs text-zinc-500">Radiation minutes optionally enforces this pattern for future messages for up to 120 minutes. Future timeout radiation uses the standard 60-second timeout.</p>
-        {nukeResult ? <p className="mt-2 text-xs text-zinc-300">planned matches :: {nukeResult.matches.length}</p> : null}
-        {nukeExecuteResult ? <p className="mt-2 text-xs text-amber-100">executed {nukeExecuteResult.action} :: {nukeExecuteResult.succeeded}/{nukeExecuteResult.attempted} succeeded · {nukeExecuteResult.failed} failed{nukeExecuteResult.radiationRule ? ` · radiation until ${nukeExecuteResult.radiationRule.expiresAt ?? 'expiry'}` : ''}</p> : null}
-        {nukeRollbackResult ? <p className="mt-2 text-xs text-emerald-200">rollback :: {nukeRollbackResult}</p> : null}
-        {activeRadiationRules.length > 0 ? <div className="mt-2 grid gap-1 border border-amber-400/20 p-2 text-xs"><p className="uppercase tracking-wide text-amber-100">Active radiation windows</p>{activeRadiationRules.map((rule) => <div key={rule.id} className="flex flex-wrap items-center justify-between gap-2"><span className="text-zinc-300">{rule.pattern} · {rule.action} until {rule.expiresAt}</span><button className="hud-button hud-button--small" type="button" onClick={() => onNukeRollback(rule)}>Rollback window</button></div>)}</div> : null}
-        <div className="mt-2 grid gap-1">
-          {(nukeResult?.matches ?? []).slice(0, 5).map((match) => <div key={match.eventId} className="hud-terminal-line"><span className="hud-terminal-key">{match.user}</span><span className="hud-terminal-value">{match.message}</span></div>)}
-        </div>
-      </div>
+        <SubPanel title="Test a message">
+          <div className="grid items-end gap-3 md:grid-cols-[10rem_1fr_auto]">
+            <Field label="Username">
+              <input className="desk-input" value={test.username} onChange={(event) => onTestChange({ ...test, username: event.target.value })} placeholder="username" />
+            </Field>
+            <Field label="Message to test">
+              <input className="desk-input" value={test.message} onChange={(event) => onTestChange({ ...test, message: event.target.value })} placeholder="message to test" />
+            </Field>
+            <button className="desk-btn" type="button" onClick={onDryRun}>
+              Dry run
+            </button>
+          </div>
+          {dryRun ? (
+            <p className="desk-row__text">
+              Matches: <span className="mono">{dryRun.matches.length ? dryRun.matches.map((match) => `${match.ruleName}:${match.action}`).join(', ') : 'none'}</span>
+            </p>
+          ) : null}
+        </SubPanel>
 
-      {items.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No moderation rules configured yet.</p> : null}
-      <div className="mt-3 grid gap-2">
-        {items.map((rule) => <article key={rule.id} className="border border-zinc-700 bg-black/40 p-2 text-xs"><div className="flex items-center justify-between gap-2"><strong className="text-cyan-100">{rule.name}</strong><span className="hud-chip hud-chip--square">{rule.expiresAt && new Date(rule.expiresAt).getTime() <= Date.now() ? 'expired' : rule.enabled ? (rule.enforce ? 'enforced' : 'dry-run') : 'paused'}</span></div><p className="mt-1 text-zinc-300">{rule.matchTarget} · {rule.regex ? 'regex' : 'contains'} · {rule.action}</p><p className="mt-1 text-zinc-400">{rule.pattern}</p><div className="mt-2 flex justify-between gap-2"><span className="text-zinc-500">{rule.reason || 'no reason'}</span><button className="hud-button hud-button--small" type="button" onClick={() => onDelete(rule)}>Delete</button></div></article>)}
-      </div>
-    </section>
+        <SubPanel title="Manual Twitch moderation action">
+          <p className="desk-row__text">Requires Twitch moderation scopes. Use only after dry-run evidence. Failed and successful attempts are written to bot audit.</p>
+          <div className="grid gap-3 md:grid-cols-[9rem_1fr_1fr_8rem]">
+            <Field label="Action">
+              <select className="desk-input" value={actionDraft.action} onChange={(event) => onActionChange({ ...actionDraft, action: event.target.value as ModerationActionDraft['action'] })}>
+                <option value="delete">Delete message</option>
+                <option value="timeout">Timeout user</option>
+                <option value="ban">Ban user</option>
+                <option value="unban">Unban user</option>
+              </select>
+            </Field>
+            <Field label="Target user ID">
+              <input className="desk-input desk-input--mono" value={actionDraft.targetUserId} onChange={(event) => onActionChange({ ...actionDraft, targetUserId: event.target.value })} placeholder="target user id" />
+            </Field>
+            <Field label="Message ID" hint="Needed for delete.">
+              <input className="desk-input desk-input--mono" value={actionDraft.messageId} onChange={(event) => onActionChange({ ...actionDraft, messageId: event.target.value })} placeholder="message id for delete" />
+            </Field>
+            <Field label="Duration seconds">
+              <input className="desk-input" type="number" min={1} value={actionDraft.durationSeconds} onChange={(event) => onActionChange({ ...actionDraft, durationSeconds: Number(event.target.value) })} />
+            </Field>
+          </div>
+          <Field label="Reason">
+            <input className="desk-input" value={actionDraft.reason} onChange={(event) => onActionChange({ ...actionDraft, reason: event.target.value })} placeholder="reason" />
+          </Field>
+          <div className="flex flex-wrap items-center gap-3">
+            <button className="desk-btn desk-btn--danger" type="button" onClick={onAction}>
+              Run guarded action
+            </button>
+            {actionResult ? <Tag tone="ok">{actionResult}</Tag> : null}
+          </div>
+        </SubPanel>
+
+        {items.length === 0 ? (
+          <Empty>No moderation rules configured yet.</Empty>
+        ) : (
+          <ul className="desk-rows">
+            {items.map((rule) => {
+              const stateTag = ruleState(rule);
+              return (
+                <li key={rule.id} className="desk-row">
+                  <div className="desk-row__line">
+                    <p className="desk-row__title mono">{rule.name}</p>
+                    <Tag tone={stateTag.tone}>{stateTag.label}</Tag>
+                  </div>
+                  <p className="desk-row__meta">
+                    {rule.matchTarget} · {rule.regex ? 'regex' : 'contains'} · {rule.action}
+                  </p>
+                  <p className="desk-row__text mono">{rule.pattern}</p>
+                  <div className="desk-row__line">
+                    <span className="desk-row__meta">{rule.reason || 'no reason'}</span>
+                    <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => onDelete(rule)}>
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
+
+      <Panel
+        danger
+        kicker="Destructive"
+        title="Nuke dry-run planner"
+        description="Dry-run first. Execute requires confirmation, is capped, and only delete and timeout are supported."
+      >
+        <SubPanel title="1. Plan">
+          <div className="grid gap-3 md:grid-cols-[1fr_8rem_8rem]">
+            <Field label="Pattern">
+              <input className="desk-input desk-input--mono" value={nukeDraft.pattern} onChange={(event) => onNukeDraftChange({ ...nukeDraft, pattern: event.target.value, confirm: false })} placeholder="phrase or regex" />
+            </Field>
+            <Field label="Lookback minutes">
+              <input className="desk-input" type="number" min={1} max={360} value={nukeDraft.lookbackMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, lookbackMinutes: Number(event.target.value), confirm: false })} />
+            </Field>
+            <Field label="Match limit">
+              <input className="desk-input" type="number" min={1} max={250} value={nukeDraft.limit} onChange={(event) => onNukeDraftChange({ ...nukeDraft, limit: Number(event.target.value), confirm: false })} />
+            </Field>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[8rem_8rem_9rem]">
+            <Field label="Action">
+              <select className="desk-input" value={nukeDraft.action} onChange={(event) => onNukeDraftChange({ ...nukeDraft, action: event.target.value as NukeDraft['action'], confirm: false })}>
+                <option value="delete">Delete</option>
+                <option value="timeout">Timeout</option>
+              </select>
+            </Field>
+            <Field label="Duration seconds">
+              <input className="desk-input" type="number" min={1} value={nukeDraft.durationSeconds} onChange={(event) => onNukeDraftChange({ ...nukeDraft, durationSeconds: Number(event.target.value), confirm: false })} />
+            </Field>
+            <Field label="Radiation minutes">
+              <input className="desk-input" type="number" min={0} max={120} value={nukeDraft.radiationMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, radiationMinutes: Number(event.target.value), confirm: false })} placeholder="radiation min" />
+            </Field>
+          </div>
+          <p className="desk-row__meta">Radiation minutes optionally enforces this pattern for future messages for up to 120 minutes. Future timeout radiation uses the standard 60-second timeout.</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Check label="Regex" checked={nukeDraft.regex} onChange={(regex) => onNukeDraftChange({ ...nukeDraft, regex, confirm: false })} />
+            <Check label="Case sensitive" checked={nukeDraft.caseSensitive} onChange={(caseSensitive) => onNukeDraftChange({ ...nukeDraft, caseSensitive, confirm: false })} />
+            <button className="desk-btn" type="button" disabled={nukeDraft.pattern.trim() === ''} onClick={onNukeDryRun}>
+              Plan nuke
+            </button>
+          </div>
+          {nukeResult ? (
+            <>
+              <p className="desk-row__text">Planned matches: {nukeResult.matches.length}</p>
+              {nukeResult.matches.length > 0 ? (
+                <ul className="desk-rows">
+                  {nukeResult.matches.slice(0, 5).map((match) => (
+                    <li key={match.eventId} className="desk-row">
+                      <div className="desk-row__line">
+                        <span className="desk-row__title mono">{match.user}</span>
+                      </div>
+                      <p className="desk-row__text">{match.message}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          ) : null}
+        </SubPanel>
+
+        <SubPanel title="2. Review">
+          <Check label="I reviewed this dry-run plan" checked={nukeDraft.confirm} onChange={(confirm) => onNukeDraftChange({ ...nukeDraft, confirm })} />
+        </SubPanel>
+
+        <SubPanel title="3. Execute">
+          <div>
+            <button className="desk-btn desk-btn--danger" type="button" disabled={!canExecuteNuke} onClick={onNukeExecute}>
+              Execute planned nuke
+            </button>
+          </div>
+          {nukeExecuteResult ? (
+            <Notice tone="warn">
+              Executed {nukeExecuteResult.action}: {nukeExecuteResult.succeeded}/{nukeExecuteResult.attempted} succeeded · {nukeExecuteResult.failed} failed
+              {nukeExecuteResult.radiationRule ? ` · radiation until ${nukeExecuteResult.radiationRule.expiresAt ?? 'expiry'}` : ''}
+            </Notice>
+          ) : null}
+          {nukeRollbackResult ? <Notice tone="ok">Rollback: {nukeRollbackResult}</Notice> : null}
+        </SubPanel>
+
+        {activeRadiationRules.length > 0 ? (
+          <SubPanel title="Active radiation windows">
+            <ul className="desk-rows">
+              {activeRadiationRules.map((rule) => (
+                <li key={rule.id} className="desk-row desk-row--warn">
+                  <div className="desk-row__line">
+                    <span className="desk-row__text">
+                      <span className="mono">{rule.pattern}</span> · {rule.action} until {rule.expiresAt}
+                    </span>
+                    <button className="desk-btn desk-btn--small" type="button" onClick={() => onNukeRollback(rule)}>
+                      Rollback window
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </SubPanel>
+        ) : null}
+      </Panel>
+    </>
   );
 }
 
@@ -775,57 +994,64 @@ function BotTimersPanel({
   const items = timers?.timers ?? [];
   const canSave = draft.name.trim() !== '' && draft.response.trim() !== '' && draft.intervalSeconds >= 30;
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <p className="hud-label">Bot timers</p>
-      <p className="mt-1 text-sm text-zinc-300">Create safe scheduled bot messages now; runtime firing is enabled after response-command/template support lands.</p>
-      {timers?.loadError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">timers unavailable :: {timers.loadError}</p> : null}
+    <Panel
+      id="bot-timers"
+      kicker="Schedule"
+      title="Bot timers"
+      description="Create safe scheduled bot messages now. Runtime firing is enabled after response-command and template support lands."
+    >
+      {timers?.loadError ? <Notice tone="warn">Timers unavailable: {timers.loadError}</Notice> : null}
 
-      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_9rem_8rem]">
-        <label className="grid gap-1 text-xs text-zinc-300">
-          Timer name
-          <input className="hud-input" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="stream_hype" />
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          Interval seconds
-          <input className="hud-input" type="number" min={30} value={draft.intervalSeconds} onChange={(event) => onDraftChange({ ...draft, intervalSeconds: Number(event.target.value) })} />
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          Action
-          <select className="hud-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as TimerDraft['action'] })}>
+      <div className="grid gap-3 md:grid-cols-[1fr_9rem_8rem]">
+        <Field label="Timer name">
+          <input className="desk-input desk-input--mono" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="stream_hype" />
+        </Field>
+        <Field label="Interval seconds">
+          <input className="desk-input" type="number" min={30} value={draft.intervalSeconds} onChange={(event) => onDraftChange({ ...draft, intervalSeconds: Number(event.target.value) })} />
+        </Field>
+        <Field label="Action">
+          <select className="desk-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as TimerDraft['action'] })}>
             <option value="ticker">Ticker</option>
             <option value="alert">Alert</option>
           </select>
-        </label>
+        </Field>
       </div>
-      <label className="mt-2 grid gap-1 text-xs text-zinc-300">
-        Response
-        <textarea className="hud-input min-h-20" value={draft.response} onChange={(event) => onDraftChange({ ...draft, response: event.target.value })} placeholder="Hydrate, stretch, and check posture." />
-      </label>
-      <div className="mt-2 flex items-center gap-3">
-        <label className="flex items-center gap-2 text-xs text-zinc-300">
-          <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
-          enabled
-        </label>
-        <button className="hud-button" type="button" disabled={!canSave || saving} onClick={onSave}>{saving ? 'Saving…' : 'Save timer'}</button>
+      <Field label="Response">
+        <textarea className="desk-input" value={draft.response} onChange={(event) => onDraftChange({ ...draft, response: event.target.value })} placeholder="Hydrate, stretch, and check posture." />
+      </Field>
+      <div className="flex flex-wrap items-center gap-3">
+        <Check label="Enabled" checked={draft.enabled} onChange={(enabled) => onDraftChange({ ...draft, enabled })} />
+        <button className="desk-btn desk-btn--primary" type="button" disabled={!canSave || saving} onClick={onSave}>
+          {saving ? 'Saving…' : 'Save timer'}
+        </button>
       </div>
 
-      {items.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No bot timers configured yet.</p> : null}
-      <div className="mt-3 grid gap-2">
-        {items.map((timer) => (
-          <article key={timer.id} className="border border-zinc-700 bg-black/40 p-2 text-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <strong className="text-cyan-100">{timer.name}</strong>
-              <span className="hud-chip hud-chip--square">{timer.enabled ? 'enabled' : 'paused'}</span>
-            </div>
-            <p className="mt-1 text-zinc-300">every {timer.intervalSeconds}s · {timer.action}</p>
-            <p className="mt-1 text-zinc-400">{timer.response}</p>
-            <div className="mt-2 flex gap-2">
-              <button className="hud-button hud-button--small" type="button" onClick={() => onToggle(timer)}>{timer.enabled ? 'Pause' : 'Enable'}</button>
-              <button className="hud-button hud-button--small" type="button" onClick={() => onDelete(timer)}>Delete</button>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
+      {items.length === 0 ? (
+        <Empty>No bot timers configured yet.</Empty>
+      ) : (
+        <ul className="desk-rows">
+          {items.map((timer) => (
+            <li key={timer.id} className="desk-row">
+              <div className="desk-row__line">
+                <p className="desk-row__title mono">{timer.name}</p>
+                <Tag tone={enabledTone(timer.enabled)}>{timer.enabled ? 'enabled' : 'paused'}</Tag>
+              </div>
+              <p className="desk-row__meta">
+                every {timer.intervalSeconds}s · {timer.action}
+              </p>
+              <p className="desk-row__text">{timer.response}</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button className="desk-btn desk-btn--small" type="button" onClick={() => onToggle(timer)}>
+                  {timer.enabled ? 'Pause' : 'Enable'}
+                </button>
+                <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => onDelete(timer)}>
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }

@@ -1,7 +1,8 @@
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
-import { dashboardRoutes } from './lib/dashboardRoutes';
+import { dashboardRoutes, legacyDashboardPaths } from './lib/dashboardRoutes';
+import { splitLastWord } from './overlay/data';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
 import { deleteTwitchReward, fetchBotStatus, fetchTwitchInteractions, saveBotCommand, type StreamSessionReport } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
@@ -54,19 +55,30 @@ describe('App routing', () => {
   it.each(dashboardRoutes)('renders declared dashboard route $path', (route) => {
     const html = renderToString(<App pathname={route.path} />);
 
-    expect(html).toContain('Broadcast ops console');
+    expect(html).toContain('operator desk');
     expect(html).toContain(route.navLabel);
     expect(html).toContain(route.landmarkText);
   });
 
-  it('renders the broadcast ops console shell hierarchy', () => {
+  it.each(Object.entries(legacyDashboardPaths))('renders legacy dashboard path %s as %s', (legacyPath, currentPath) => {
+    const html = renderToString(<App pathname={legacyPath} />);
+    const route = dashboardRoutes.find((item) => item.path === currentPath);
+
+    expect(route).toBeDefined();
+    expect(html).toContain(route!.landmarkText);
+    expect(html).not.toContain('pick a route below');
+  });
+
+  it('renders the operator desk shell', () => {
     const html = renderToString(<App pathname="/dashboard" />);
 
-    expect(html).toContain('Broadcast ops console');
-    expect(html).toContain('Setup');
-    expect(html).toContain('Monitor');
-    expect(html).toContain('Operate');
-    expect(html).toContain('Configure');
+    expect(html).toContain('Dashboard sections');
+    expect(html).toContain('Show');
+    expect(html).toContain('Prepare');
+    expect(html).toContain('Review');
+    expect(html).toContain('Off air');
+    expect(html).toContain('secret missing');
+    expect(html).toContain('Twitch login');
   });
 
   it.each(overlayRoutes)('renders declared overlay route $path', (route) => {
@@ -90,39 +102,51 @@ describe('App routing', () => {
     expect(html).toContain('Waiting for alert events');
   });
 
-  it('renders the dashboard overview route', () => {
+  it('renders the on-air route', () => {
     const html = renderToString(<App pathname="/dashboard" />);
 
-    expect(html).toContain('Broadcast ops console');
-    expect(html).toContain('Mission control');
-    expect(html).toContain('Monitor first');
-    expect(html).toContain('System status');
-    expect(html).toContain('Twitch login');
-    expect(html).toContain('Build info');
-    expect(html).toContain('/version');
-    expect(html).toContain('Build report unavailable.');
-    expect(html).toContain('Ops route guide');
-    expect(html).toContain('monitor / recover');
-    expect(html).toContain('edit rules / profiles');
-    expect(html).toContain('package / backup');
-    expect(html).toContain(
-      'https://git.subcult.tv/PatrickFanella/over-laid/src/branch/main/docs/runbooks/production-packaging.md',
-    );
+    expect(html).toContain('On air');
+    expect(html).toContain('Run configured actions');
+    expect(html).toContain('Operator secret is missing');
+    expect(html).toContain('Be right back');
+    expect(html).toContain('Rehearsal audit');
+    expect(html).toContain('Live preflight');
+    expect(html).toContain('Latest events');
+    expect(html).toContain('Recent operator actions');
   });
 
-  it('renders the dashboard setup route', () => {
-    const html = renderToString(<App pathname="/dashboard/setup" />);
+  it('renders degraded readiness incidents', () => {
+    const html = renderToString(
+      <ReadinessPanel
+        loading={false}
+        error=""
+        report={{ status: 'degraded', checks: [{ name: 'obs_auth', status: 'degraded', hint: 'Check OBS password.' }] }}
+      />,
+    );
 
-    expect(html).toContain('OBS setup workflow');
+    expect(html).toContain('Operator incidents');
+    expect(html).toContain('obs auth');
+    expect(html).toContain('Check OBS password.');
+  });
+
+  it('renders the overlays route', () => {
+    const html = renderToString(<App pathname="/dashboard/overlays" />);
+
+    expect(html).toContain('Browser sources');
+    expect(html).toContain('/overlay/alerts');
+    expect(html).toContain('/overlay/starting?demo=1');
+    expect(html).toContain('Copy URL');
+    expect(html).toContain('Active profile');
+    expect(html).toContain('Full console');
     expect(html).toContain('Checklist');
     expect(html).toContain('Browser sources added');
+    expect(html).toContain('Stream presets');
+    expect(html).toContain('Custom CSS');
   });
 
-  it('renders the dashboard live preflight route', () => {
-    const html = renderToString(<App pathname="/dashboard/live" />);
+  it('renders the health route', () => {
+    const html = renderToString(<App pathname="/dashboard/health" />);
 
-    expect(html).toContain('Live command');
-    expect(html).toContain('Live ops cockpit');
     expect(html).toContain('Check readiness, recover production issues');
     expect(html).toContain('Customize panel layout');
     expect(html).toContain('Reset layout');
@@ -134,14 +158,20 @@ describe('App routing', () => {
     expect(html).toContain('Build info');
     expect(html).toContain('Build report unavailable.');
     expect(html).toContain('Backend readiness');
-    expect(html).toContain('Readiness report unavailable');
     expect(html).toContain('Setup checklist summary');
-    expect(html).toContain('Recent operator actions');
-    expect(html).toContain('Event history');
-    expect(html).toContain('No persisted events yet.');
     expect(html).toContain('Live preflight');
     expect(html).toContain('Chat commands');
     expect(html).toContain('mods + broadcaster only');
+  });
+
+  it('renders the sessions route', () => {
+    const html = renderToString(<App pathname="/dashboard/sessions" />);
+
+    expect(html).toContain('Rehearsal audit');
+    expect(html).toContain('Start live');
+    expect(html).toContain('Run preflight rehearsal');
+    expect(html).toContain('Event history');
+    expect(html).toContain('Recent operator actions');
   });
 
   it('renders the recovery console on the server without browser APIs', () => {
@@ -155,26 +185,14 @@ describe('App routing', () => {
     );
   });
 
-  it('renders the dashboard sources route', () => {
-    const html = renderToString(<App pathname="/dashboard/sources" />);
+  it('renders the scenes route', () => {
+    const html = renderToString(<App pathname="/dashboard/scenes" />);
 
-    expect(html).toContain('Overlay source URLs');
-    expect(html).toContain('/overlay/alerts');
+    expect(html).toContain('Scenes and actions');
+    expect(html).toContain('Operator secret is missing');
     expect(html).toContain('Active profile');
     expect(html).toContain('Full console');
-    expect(html).toContain('Stream presets');
-    expect(html).toContain('Custom CSS');
-  });
-
-  it('renders the dashboard control route', () => {
-    const html = renderToString(<App pathname="/dashboard/control" />);
-
-    expect(html).toContain('Stream control');
-    expect(html).toContain('operator secret missing');
-    expect(html).toContain('Edit secret');
-    expect(html).toContain('Active profile');
-    expect(html).toContain('Full console');
-    expect(html).toContain('Session log');
+    expect(html).toContain('OBS controls');
     expect(html).toContain('Recent operator actions');
     expect(html).toContain('Run Main preset');
     expect(html).toContain('Refresh Alerts');
@@ -186,37 +204,37 @@ describe('App routing', () => {
     expect(html).toContain('Stop sequence on first failed step');
   });
 
-  it('renders the dashboard config route', () => {
-    const html = renderToString(<App pathname="/dashboard/config" />);
+  it('renders the settings route', () => {
+    const html = renderToString(<App pathname="/dashboard/settings" />);
 
     expect(html).toContain('Configure deliberately');
-    expect(html).toContain('Operator config');
     expect(html).toContain('Secrets stay in browser session state');
     expect(html).toContain('Customize panel layout');
     expect(html).toContain('Secret controls stay locked');
     expect(html).toContain('Secret header');
     expect(html).toContain('Automation profiles');
-    expect(html).toContain('Twitch interaction rules');
     expect(html).toContain('Active profile');
     expect(html).toContain('Export dashboard config');
     expect(html).toContain('Import dashboard config');
     expect(html).toContain('operator secret is not exported');
     expect(html).toContain('MPRIS decision');
     expect(html).toContain('Overlay noise controls');
-    expect(html).toContain('Delete requires confirmation');
+    expect(html).toContain('Load from OBS');
   });
 
-  it('renders bot operations safety guidance', () => {
-    const html = renderToString(<App pathname="/dashboard/bot" />);
+  it('renders chat and bot safety guidance', () => {
+    const html = renderToString(<App pathname="/dashboard/chat" />);
 
-    expect(html).toContain('Operate with guardrails');
-    expect(html).toContain('Bot operations');
+    expect(html).toContain('Chat and bot');
     expect(html).toContain('guarded destructive actions');
     expect(html).toContain('Customize panel layout');
     expect(html).toContain('Moderation guardrails stay locked');
     expect(html).toContain('Nuke dry-run planner');
     expect(html).toContain('I reviewed this dry-run plan');
     expect(html).toContain('Radiation minutes');
+    expect(html).toContain('Twitch interaction rules');
+    expect(html).toContain('Reward queue');
+    expect(html).toContain('Delete requires confirmation');
   });
 
   it('renders the twitch interactions manager shell on the server without fetching', () => {
@@ -257,20 +275,6 @@ describe('App routing', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('renders degraded readiness incidents', () => {
-    const html = renderToString(
-      <ReadinessPanel
-        loading={false}
-        error=""
-        report={{ status: 'degraded', checks: [{ name: 'obs_auth', status: 'degraded', hint: 'Check OBS password.' }] }}
-      />,
-    );
-
-    expect(html).toContain('Operator incidents');
-    expect(html).toContain('obs auth');
-    expect(html).toContain('Check OBS password.');
-  });
-
   it('renders the goals overlay route', () => {
     const html = renderToString(<App pathname="/overlay/goals" />);
 
@@ -290,6 +294,24 @@ describe('App routing', () => {
 
     expect(html).toContain('Now playing');
     expect(html).toContain('Waiting for MPRIS');
+  });
+
+  it('renders the full-frame scene overlays', () => {
+    const starting = renderToString(<App pathname="/overlay/starting" />);
+    expect(starting).toContain('Starting soon');
+    expect(starting).toContain('sc-slab ">soon.</span>');
+    expect(starting).toContain('05:00');
+    const ending = renderToString(<App pathname="/overlay/ending" />);
+    expect(ending).toContain('Stream ending');
+    expect(ending).toContain('sc-slab ">watching.</span>');
+    const camera = renderToString(<App pathname="/overlay/camera" />);
+    expect(camera).toContain('Camera frame');
+    expect(camera).toContain('patrick__eff');
+  });
+
+  it('sets the last headline word on a slab', () => {
+    expect(splitLastWord('Be right back.')).toEqual({ lead: 'Be right', last: 'back.' });
+    expect(splitLastWord('BRB')).toEqual({ lead: '', last: 'BRB' });
   });
 
   it('renders the brb overlay route', () => {

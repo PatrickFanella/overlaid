@@ -11,6 +11,7 @@ import {
   type OBSScene,
   type OBSSceneItem,
 } from '../../../lib/api';
+import { Empty, Notice, Panel, SubPanel, Tag } from '../ui';
 
 type OBSControlsProps = {
   apiBaseUrl: string;
@@ -42,7 +43,7 @@ const defaultState: InventoryState = {
 
 export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = false, runAction }: OBSControlsProps) {
   const [state, setState] = useState<InventoryState>(defaultState);
-  const actionDisabledReason = !operatorSecret ? 'Operator secret is missing. Open Config and save the secret before running OBS actions.' : isRunning ? 'Another operator action is running.' : '';
+  const actionDisabledReason = !operatorSecret ? 'Operator secret is missing. Add it in Settings before running OBS actions.' : isRunning ? 'Another operator action is running.' : '';
 
   async function refreshSceneItems(sceneName: string) {
     try {
@@ -145,90 +146,102 @@ export function OBSControls({ apiBaseUrl, operatorSecret, isRunning, compact = f
   }
 
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="hud-label">Scene controls</p>
-          <h2 className="hud-section-title">OBS controls</h2>
-          {!compact ? <p className="hud-copy mt-1 text-xs text-zinc-300">Click refresh to load OBS inventory. This avoids WebSocket connect/disconnect spam on page load.</p> : null}
-          {actionDisabledReason ? <p className="mt-2 text-xs text-amber-200">{actionDisabledReason}</p> : null}
-        </div>
-        <div className="flex gap-2">
-          <button className="hud-chip hud-chip--square" type="button" disabled={isRunning || state.loading} title={isRunning ? actionDisabledReason : undefined} onClick={() => void loadInventory()}>{state.loading ? 'loading' : 'refresh OBS'}</button>
-          <span className="hud-chip hud-chip--square">{state.currentSceneName || 'not loaded'}</span>
-        </div>
-      </div>
+    <Panel
+      kicker="Scene controls"
+      title="OBS controls"
+      description={compact ? undefined : 'Inventory loads only when you press refresh, so opening the page does not open and close OBS WebSocket connections.'}
+      actions={
+        <>
+          <button className="desk-btn desk-btn--small" type="button" disabled={isRunning || state.loading} title={isRunning ? actionDisabledReason : undefined} onClick={() => void loadInventory()}>
+            {state.loading ? 'Loading' : 'Refresh OBS'}
+          </button>
+          <Tag tone={state.currentSceneName ? 'ok' : 'neutral'} title="Program scene">
+            {state.currentSceneName || 'not loaded'}
+          </Tag>
+        </>
+      }
+    >
+      {actionDisabledReason ? <Notice tone="warn">{actionDisabledReason}</Notice> : null}
+      {state.error ? <Notice tone="bad" role="alert">{state.error}</Notice> : null}
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
-        <article className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-          <p className="hud-kicker">Scenes</p>
-          <div className="mt-4 grid gap-2">
-            {state.loading && state.scenes.length === 0 ? <p className="text-sm text-zinc-400">Loading scene inventory…</p> : null}
-            {state.error ? <p className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">{state.error}</p> : null}
-            {state.scenes.map((scene) => (
-              <button
-                key={scene.sceneName}
-                className={`hud-chip justify-between rounded-2xl px-4 py-3 text-left ${scene.sceneName === state.currentSceneName ? 'border-emerald-300/40 text-emerald-100' : ''}`}
-                type="button"
-                disabled={!!actionDisabledReason}
-                title={actionDisabledReason || undefined}
-                onClick={() => chooseScene(scene.sceneName)}
-              >
-                <span>{scene.sceneName}</span>
-                <span>{scene.sceneIndex + 1}</span>
-              </button>
-            ))}
-          </div>
-        </article>
-
-        <article className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-          <p className="hud-kicker">Inputs</p>
-          <div className="mt-4 grid gap-2">
-            {state.inputs.length === 0 ? <p className="text-sm text-zinc-400">No input inventory loaded.</p> : null}
-            {state.inputs.map((input) => (
-              <div key={input.inputName} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">{input.inputName}</p>
-                  <p className="text-xs uppercase tracking-[0.24em] text-zinc-400">{input.inputKind || 'input'}</p>
-                </div>
-                <button className="hud-chip" type="button" disabled={!!actionDisabledReason} title={actionDisabledReason || undefined} onClick={() => toggleInput(input.inputName, true)}>
-                  Mute
+      <div className="grid gap-3 lg:grid-cols-2">
+        <SubPanel title="Scenes">
+          {state.loading && state.scenes.length === 0 ? <Empty>Loading scene inventory.</Empty> : null}
+          {!state.loading && state.scenes.length === 0 ? <Empty>No scenes loaded.</Empty> : null}
+          {state.scenes.length > 0 ? (
+            <div className="grid gap-1">
+              {state.scenes.map((scene) => (
+                <button
+                  key={scene.sceneName}
+                  className={`desk-btn justify-between ${scene.sceneName === state.currentSceneName ? 'desk-btn--active' : ''}`}
+                  type="button"
+                  aria-pressed={scene.sceneName === state.currentSceneName}
+                  disabled={!!actionDisabledReason}
+                  title={actionDisabledReason || undefined}
+                  onClick={() => chooseScene(scene.sceneName)}
+                >
+                  <span className="truncate">{scene.sceneName}</span>
+                  <span className="mono">{scene.sceneIndex + 1}</span>
                 </button>
-              </div>
-            ))}
-          </div>
-        </article>
-      </div>
-
-      <article className="mt-3 hud-panel hud-corners hud-panel--flat hud-compact-card">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="hud-kicker">Current scene items</p>
-            <p className="mt-2 text-sm text-zinc-300">{state.selectedSceneName ? `Editing ${state.selectedSceneName}` : 'Select a scene to inspect source items.'}</p>
-          </div>
-          {selectedScene ? <span className="hud-chip">#{selectedScene.sceneIndex + 1}</span> : null}
-        </div>
-
-        <div className="mt-4 grid gap-2">
-          {state.sceneItems.length === 0 ? <p className="text-sm text-zinc-400">No scene items loaded.</p> : null}
-          {state.sceneItems.map((item) => (
-            <div key={item.sceneItemId} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-3">
-              <div>
-                <p className="text-sm font-semibold text-white">{item.sourceName}</p>
-                <p className="text-xs uppercase tracking-[0.24em] text-zinc-400">{item.sceneItemEnabled ? 'enabled' : 'hidden'}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button className="hud-chip" type="button" disabled={!!actionDisabledReason} title={actionDisabledReason || undefined} onClick={() => refreshSource(item.sourceName)}>
-                  Refresh
-                </button>
-                <button className="hud-chip" type="button" disabled={!!actionDisabledReason} title={actionDisabledReason || undefined} onClick={() => toggleSceneItem(item.sceneItemId, !item.sceneItemEnabled)}>
-                  {item.sceneItemEnabled ? 'Disable' : 'Enable'}
-                </button>
-              </div>
+              ))}
             </div>
-          ))}
+          ) : null}
+        </SubPanel>
+
+        <SubPanel title="Inputs">
+          {state.inputs.length === 0 ? (
+            <Empty>No inputs loaded.</Empty>
+          ) : (
+            <ul className="desk-rows">
+              {state.inputs.map((input) => (
+                <li key={input.inputName} className="desk-row">
+                  <div className="desk-row__line">
+                    <div className="min-w-0">
+                      <p className="desk-row__title">{input.inputName}</p>
+                      <span className="desk-row__meta mono">{input.inputKind || 'input'}</span>
+                    </div>
+                    <button className="desk-btn desk-btn--small" type="button" disabled={!!actionDisabledReason} title={actionDisabledReason || undefined} onClick={() => toggleInput(input.inputName, true)}>
+                      Mute
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SubPanel>
+      </div>
+
+      <SubPanel title="Current scene items">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="desk-field__hint">{state.selectedSceneName ? `Editing ${state.selectedSceneName}` : 'Select a scene to inspect its source items.'}</p>
+          {selectedScene ? <span className="mono">#{selectedScene.sceneIndex + 1}</span> : null}
         </div>
-      </article>
-    </section>
+
+        {state.sceneItems.length === 0 ? (
+          <Empty>No scene items loaded.</Empty>
+        ) : (
+          <ul className="desk-rows">
+            {state.sceneItems.map((item) => (
+              <li key={item.sceneItemId} className={`desk-row ${item.sceneItemEnabled ? '' : 'desk-row--warn'}`}>
+                <div className="desk-row__line">
+                  <div className="min-w-0">
+                    <p className="desk-row__title">{item.sourceName}</p>
+                    <span className="desk-row__meta">{item.sceneItemEnabled ? 'enabled' : 'hidden'}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="desk-btn desk-btn--small" type="button" disabled={!!actionDisabledReason} title={actionDisabledReason || undefined} onClick={() => refreshSource(item.sourceName)}>
+                      Refresh
+                    </button>
+                    <button className="desk-btn desk-btn--small" type="button" disabled={!!actionDisabledReason} title={actionDisabledReason || undefined} onClick={() => toggleSceneItem(item.sceneItemId, !item.sceneItemEnabled)}>
+                      {item.sceneItemEnabled ? 'Disable' : 'Enable'}
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SubPanel>
+    </Panel>
   );
 }

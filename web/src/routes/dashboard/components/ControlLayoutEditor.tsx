@@ -1,4 +1,5 @@
 import type { ControlWidget, DashboardConfig } from '../../../lib/dashboardConfig';
+import { Check, Panel } from '../ui';
 
 type ControlLayoutEditorProps = {
   config: DashboardConfig;
@@ -14,36 +15,30 @@ export function ControlLayoutEditor({ config, onChange }: ControlLayoutEditorPro
   }
 
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="hud-label">Layout</p>
-          <h2 className="hud-section-title">Stream control modules</h2>
-          <p className="mt-1 text-xs text-zinc-400">Show/hide modules, move them by order, and resize between normal/compact.</p>
-        </div>
-        <span className="hud-chip hud-chip--square">configurable</span>
-      </div>
-
-      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+    <Panel kicker="Layout" title="Stream control modules" description="Show or hide modules, set their order, and switch between normal and compact size." flush>
+      <ul className="desk-rows">
         {config.controlWidgets.map((widget) => (
-          <article key={widget.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-            <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-white">
-              <input className="accent-cyan-300" type="checkbox" checked={widget.enabled} onChange={(event) => updateWidget(widget.id, { enabled: event.target.checked })} />
-              {widget.enabled ? 'show' : 'hidden'} · {widget.title}
-            </label>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <label className="grid gap-1 text-xs text-zinc-300">
-                order
-                <input className="hud-input" type="number" value={widget.order} onChange={(event) => updateWidget(widget.id, { order: Number(event.target.value) || widget.order })} />
-              </label>
-              <label className="flex items-end gap-2 pb-2 text-xs text-zinc-300">
-                <input className="accent-cyan-300" type="checkbox" checked={widget.compact} onChange={(event) => updateWidget(widget.id, { compact: event.target.checked })} />
-                compact size
-              </label>
+          <li key={widget.id} className="desk-row">
+            <div className="desk-row__line">
+              <p className="desk-row__title">{widget.title}</p>
+              <div className="flex flex-wrap items-center gap-4">
+                <Check label={widget.enabled ? 'show' : 'hidden'} checked={widget.enabled} onChange={(checked) => updateWidget(widget.id, { enabled: checked })} />
+                <label className="desk-field flex items-center gap-2">
+                  <span>order</span>
+                  <input
+                    className="desk-input w-16"
+                    type="number"
+                    aria-label={`${widget.title} order`}
+                    value={widget.order}
+                    onChange={(event) => updateWidget(widget.id, { order: Number(event.target.value) || widget.order })}
+                  />
+                </label>
+                <Check label="compact size" checked={widget.compact} onChange={(checked) => updateWidget(widget.id, { compact: checked })} />
+              </div>
             </div>
-          </article>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Panel>
   );
 }

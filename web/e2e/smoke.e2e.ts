@@ -1,32 +1,39 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('operator browser smoke', () => {
-  test('loads critical dashboard and overlay routes', async ({ page }) => {
+  test('loads the desk shell and critical routes', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.locator('header').getByText('Broadcast ops console')).toBeVisible();
-    const dashboardNav = page.getByRole('navigation', { name: 'Dashboard sections' });
-    await expect(dashboardNav.getByText('Monitor', { exact: true })).toBeVisible();
-    await expect(dashboardNav.getByText('Operate', { exact: true })).toBeVisible();
-    await expect(dashboardNav.getByText('Configure', { exact: true })).toBeVisible();
+    const nav = page.getByRole('navigation', { name: 'Dashboard sections' });
+    await expect(nav.getByText('Show', { exact: true })).toBeVisible();
+    await expect(nav.getByText('Prepare', { exact: true })).toBeVisible();
+    await expect(nav.getByText('Review', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'On air', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Run configured actions' })).toBeVisible();
+    await expect(page.getByText('Off air', { exact: true })).toBeVisible();
 
-    await page.goto('/dashboard/live');
-    await expect(page.getByText('Live command')).toBeVisible();
-    await expect(page.getByText('Rehearsal audit')).toBeVisible();
-    await expect(page.getByText('Customize panel layout')).toBeVisible();
+    await page.goto('/dashboard/health');
+    await expect(page.getByRole('heading', { name: 'Backend readiness' })).toBeVisible();
+    await page.getByText('Customize panel layout').click();
     await expect(page.getByRole('button', { name: 'Reset layout' })).toBeVisible();
     await expect(page.getByText('Locked safety panels stay fixed outside this list.', { exact: true })).toBeVisible();
 
-    await page.goto('/dashboard/control');
-    await expect(page.getByRole('heading', { name: 'Stream control', exact: true }).first()).toBeVisible();
-    await expect(page.getByText('Quick actions', { exact: true })).toBeVisible();
+    await page.goto('/dashboard/scenes');
+    await expect(page.getByRole('heading', { name: 'OBS controls' })).toBeVisible();
 
     await page.goto('/overlay/alerts');
-    await expect(page.getByText('Alert feed')).toBeVisible();
+    await expect(page.getByText('Waiting for alert events')).toBeVisible();
+  });
+
+  test('keeps legacy console paths working', async ({ page }) => {
+    await page.goto('/dashboard/control');
+    await expect(page).toHaveURL(/\/dashboard\/scenes$/);
+    await page.goto('/dashboard/config');
+    await expect(page).toHaveURL(/\/dashboard\/settings$/);
   });
 
   test('shows bot operations safety surfaces', async ({ page }) => {
-    await page.goto('/dashboard/bot');
-    await expect(page.getByText('Operate with guardrails')).toBeVisible();
+    await page.goto('/dashboard/chat');
+    await expect(page.getByText('guarded destructive actions')).toBeVisible();
     await expect(page.getByText('Bot commands', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot counters and quotes', { exact: true })).toBeVisible();
     await expect(page.getByText('Bot API variables', { exact: true })).toBeVisible();
@@ -38,14 +45,20 @@ test.describe('operator browser smoke', () => {
   });
 
   test('shows twitch reward queue lifecycle controls', async ({ page }) => {
-    await page.goto('/dashboard/config');
-    await expect(page.getByText('Configure deliberately')).toBeVisible();
-    await expect(page.getByText('Customize panel layout')).toBeVisible();
-    await expect(page.getByText('Secret controls stay locked')).toBeVisible();
-    await expect(page.getByText('OBS import').nth(1)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
-    await expect(page.getByText('Reward queue', { exact: true })).toBeVisible();
+    await page.goto('/dashboard/chat');
+    await expect(page.getByRole('heading', { name: 'Reward queue' })).toBeVisible();
     await expect(page.getByText('Load manageable rewards, create simple rewards')).toBeVisible();
     await expect(page.getByText('Delete requires confirmation')).toBeVisible();
+
+    await page.goto('/dashboard/settings');
+    await expect(page.getByText('Configure deliberately')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
+  });
+
+  test('previews every overlay in demo mode', async ({ page }) => {
+    await page.goto('/overlay/brb?demo=1');
+    await expect(page.getByText('Swapping tapes. Chat stays open.')).toBeVisible();
+    await page.goto('/overlay/starting?minutes=10');
+    await expect(page.getByText('10:00')).toBeVisible();
   });
 });

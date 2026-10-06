@@ -11,7 +11,7 @@ Use this to tag rehearsal or live-stream events for later review.
 
 ## Operator workflow
 
-1. Open `/dashboard/live`.
+1. Open `/dashboard/sessions`.
 2. For a quick smoke pass, click **Run preflight rehearsal**. This starts a rehearsal session, emits sample alert/ticker/goals/BRB events, ends the session, and loads the report.
 3. For a manual pass, click **Start rehearsal** or **Start live**.
 4. Run overlays, Twitch actions, OBS actions, and recovery checks.
@@ -52,4 +52,4 @@ If a session is accidentally left open, starting a new one automatically closes 
 
 ## Review
 
-Recent sessions appear in `/dashboard/live` under **Rehearsal audit**. Click a recent/open session card to load its report. Reports show the selected session, start/end readiness snapshots, and recent events tagged with its `sessionId`. Use **Export Markdown** or **Export JSON** to save the report after a rehearsal.
+Recent sessions appear in `/dashboard/sessions` under **Rehearsal audit**. Click a recent/open session card to load its report. Reports show the selected session, start/end readiness snapshots, and recent events tagged with its `sessionId`. Use **Export Markdown** or **Export JSON** to save the report after a rehearsal.

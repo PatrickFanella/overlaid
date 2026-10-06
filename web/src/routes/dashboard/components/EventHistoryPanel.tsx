@@ -1,68 +1,69 @@
 import type { EventHistoryItem } from '../../../lib/api';
+import { Empty, Notice, Panel, Tag, type Tone } from '../ui';
 
 type EventHistoryPanelProps = {
   events: EventHistoryItem[];
   loading?: boolean;
   error?: string;
+  limit?: number;
+  title?: string;
 };
 
 function formatEventTypeLabel(type: string) {
   return type.replaceAll('_', ' ');
 }
 
-export function EventHistoryPanel({ events, loading = false, error = '' }: EventHistoryPanelProps) {
-  const visibleEvents = events.slice(0, 12);
+function toneForSeverity(severity: string | undefined): Tone {
+  if (severity === 'error') return 'bad';
+  if (severity === 'warning') return 'warn';
+  if (severity === 'success') return 'ok';
+  return 'neutral';
+}
+
+export function EventHistoryPanel({ events, loading = false, error = '', limit = 12, title = 'Event history' }: EventHistoryPanelProps) {
+  const visibleEvents = events.slice(0, limit);
 
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="hud-label">persisted stream data</p>
-          <h2 className="hud-section-title">Event history</h2>
-          <p className="hud-copy mt-1 text-xs text-zinc-300">Recent sanitized events from <code>/api/events/history</code>.</p>
+    <Panel
+      kicker="Persisted events"
+      title={title}
+      description={
+        <>
+          Sanitized events from <code>/api/events/history</code>, newest first.
+        </>
+      }
+      actions={<Tag>{loading ? 'loading' : `${events.length} events`}</Tag>}
+      flush
+    >
+      {error ? (
+        <div className="p-4">
+          <Notice tone="bad">{error}</Notice>
         </div>
-        <span className="hud-chip hud-chip--square">{loading ? 'loading' : `${events.length} events`}</span>
-      </div>
+      ) : null}
 
-      {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
-      {!loading && visibleEvents.length === 0 ? <p className="mt-3 text-sm text-zinc-400">No persisted events yet.</p> : null}
+      <ol className="desk-rows">
+        {!loading && visibleEvents.length === 0 ? (
+          <li className="desk-row">
+            <Empty>No persisted events yet.</Empty>
+          </li>
+        ) : null}
 
-      <div className="mt-4 grid gap-2">
         {visibleEvents.map((event) => (
-          <article key={event.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-            <div className="hud-terminal-line">
-              <span className="hud-terminal-key">type</span>
-              <span className="hud-terminal-value font-bold">{formatEventTypeLabel(event.type)}</span>
+          <li key={event.id} className={`desk-row desk-row--${toneForSeverity(event.severity)}`}>
+            <div className="desk-row__line">
+              <p className="desk-row__title">{event.title || event.message || formatEventTypeLabel(event.type)}</p>
+              <time className="desk-row__meta mono" dateTime={event.createdAt}>
+                {event.createdAt}
+              </time>
             </div>
-            <div className="hud-terminal-line">
-              <span className="hud-terminal-key">source</span>
-              <span className="hud-terminal-value">{event.source}</span>
-            </div>
-            {typeof event.data?.sessionId === 'string' ? (
-              <div className="hud-terminal-line">
-                <span className="hud-terminal-key">session</span>
-                <span className="hud-terminal-value">{event.data.sessionId.slice(0, 8)}</span>
-              </div>
-            ) : null}
-            {event.title ? (
-              <div className="hud-terminal-line">
-                <span className="hud-terminal-key">title</span>
-                <span className="hud-terminal-value">{event.title}</span>
-              </div>
-            ) : null}
-            {event.message ? (
-              <div className="hud-terminal-line">
-                <span className="hud-terminal-key">message</span>
-                <span className="hud-terminal-value">{event.message}</span>
-              </div>
-            ) : null}
-            <div className="hud-terminal-line">
-              <span className="hud-terminal-key">time</span>
-              <span className="hud-terminal-value">{event.createdAt}</span>
-            </div>
-          </article>
+            {event.title && event.message ? <p className="desk-row__text">{event.message}</p> : null}
+            <p className="desk-row__meta mono">
+              {formatEventTypeLabel(event.type)} · {event.source}
+              {typeof event.data?.sessionId === 'string' ? ` · session ${event.data.sessionId.slice(0, 8)}` : ''}
+            </p>
+          </li>
         ))}
-      </div>
-    </section>
+      </ol>
+    </Panel>
   );
 }

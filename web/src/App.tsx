@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import { HomePage } from './routes/Home';
 import { OverlayAlertsPage } from './routes/OverlayAlerts';
 import { OverlayBRBPage } from './routes/OverlayBRB';
@@ -5,22 +6,41 @@ import { OverlayChatPage } from './routes/OverlayChat';
 import { OverlayDebugPage } from './routes/OverlayDebug';
 import { OverlayGoalsPage } from './routes/OverlayGoals';
 import { OverlayNowPlayingPage } from './routes/OverlayNowPlaying';
-import { OverlayPlaceholderPage } from './routes/OverlayPlaceholder';
+import { OverlayCameraPage, OverlayEndingPage, OverlayStartingPage } from './routes/OverlayScenes';
 import { OverlayTickerPage } from './routes/OverlayTicker';
-import { DashboardConfigPage } from './routes/dashboard/Config';
-import { DashboardControlPage } from './routes/dashboard/Control';
-import { DashboardBotPage } from './routes/dashboard/Bot';
-import { DashboardLivePage } from './routes/dashboard/Live';
-import { DashboardOverviewPage } from './routes/dashboard/Overview';
-import { DashboardSetupPage } from './routes/dashboard/Setup';
-import { DashboardSourcesPage } from './routes/dashboard/Sources';
-import { overlayRoutes as overlayRouteMetadata } from './lib/overlayRoutes';
+import { DashboardChatPage } from './routes/dashboard/Chat';
+import { DashboardHealthPage } from './routes/dashboard/Health';
+import { DashboardOnAirPage } from './routes/dashboard/OnAir';
+import { DashboardOverlaysPage } from './routes/dashboard/Overlays';
+import { DashboardScenesPage } from './routes/dashboard/Scenes';
+import { DashboardSessionsPage } from './routes/dashboard/Sessions';
+import { DashboardSettingsPage } from './routes/dashboard/Settings';
+import { resolveDashboardPath } from './lib/dashboardRoutes';
 
 type AppProps = {
   pathname?: string;
 };
 
-const overlayRoutePaths = new Set(overlayRouteMetadata.map((route) => route.path));
+const pages: Record<string, () => ReactElement> = {
+  '/': () => <HomePage />,
+  '/dashboard': () => <DashboardOnAirPage />,
+  '/dashboard/scenes': () => <DashboardScenesPage />,
+  '/dashboard/chat': () => <DashboardChatPage />,
+  '/dashboard/overlays': () => <DashboardOverlaysPage />,
+  '/dashboard/health': () => <DashboardHealthPage />,
+  '/dashboard/settings': () => <DashboardSettingsPage />,
+  '/dashboard/sessions': () => <DashboardSessionsPage />,
+  '/overlay/alerts': () => <OverlayAlertsPage />,
+  '/overlay/chat': () => <OverlayChatPage />,
+  '/overlay/goals': () => <OverlayGoalsPage />,
+  '/overlay/ticker': () => <OverlayTickerPage />,
+  '/overlay/now-playing': () => <OverlayNowPlayingPage />,
+  '/overlay/camera': () => <OverlayCameraPage />,
+  '/overlay/starting': () => <OverlayStartingPage />,
+  '/overlay/brb': () => <OverlayBRBPage />,
+  '/overlay/ending': () => <OverlayEndingPage />,
+  '/overlay/debug': () => <OverlayDebugPage />,
+};
 
 function resolvePathname(pathname?: string) {
   if (pathname) {
@@ -44,73 +64,9 @@ function normalizePathname(pathname: string) {
 }
 
 export function getAppRoute(pathname: string) {
-  const route = normalizePathname(pathname);
-
-  if (route === '/') {
-    return <HomePage />;
-  }
-
-  if (route === '/dashboard') {
-    return <DashboardOverviewPage />;
-  }
-
-  if (route === '/dashboard/setup') {
-    return <DashboardSetupPage />;
-  }
-
-  if (route === '/dashboard/live') {
-    return <DashboardLivePage />;
-  }
-
-  if (route === '/dashboard/sources') {
-    return <DashboardSourcesPage />;
-  }
-
-  if (route === '/dashboard/control') {
-    return <DashboardControlPage />;
-  }
-
-  if (route === '/dashboard/bot') {
-    return <DashboardBotPage />;
-  }
-
-  if (route === '/dashboard/config') {
-    return <DashboardConfigPage />;
-  }
-
-  if (route === '/overlay/alerts') {
-    return <OverlayAlertsPage />;
-  }
-
-  if (route === '/overlay/chat') {
-    return <OverlayChatPage />;
-  }
-
-  if (route === '/overlay/goals') {
-    return <OverlayGoalsPage />;
-  }
-
-  if (route === '/overlay/ticker') {
-    return <OverlayTickerPage />;
-  }
-
-  if (route === '/overlay/now-playing') {
-    return <OverlayNowPlayingPage />;
-  }
-
-  if (route === '/overlay/brb') {
-    return <OverlayBRBPage />;
-  }
-
-  if (route === '/overlay/debug') {
-    return <OverlayDebugPage />;
-  }
-
-  if (overlayRoutePaths.has(route)) {
-    return <OverlayPlaceholderPage pathname={route} />;
-  }
-
-  return <HomePage pathname={route} />;
+  const route = resolveDashboardPath(normalizePathname(pathname));
+  const page = pages[route];
+  return page ? page() : <HomePage pathname={route} />;
 }
 
 export default function App({ pathname }: AppProps = {}) {

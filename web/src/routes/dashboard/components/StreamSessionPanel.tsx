@@ -3,6 +3,7 @@ import { endStreamSession, fetchStreamSessionReport, startStreamSession, type St
 import { createRehearsalSteps } from '../../../lib/rehearsal';
 import { formatSessionReportMarkdown, formatSessionReportSummary, sessionReportFilename } from '../../../lib/sessionReports';
 import { EventHistoryPanel } from './EventHistoryPanel';
+import { Empty, Notice, Panel, SubPanel, Tag } from '../ui';
 
 type StreamSessionPanelProps = {
   apiBaseUrl: string;
@@ -11,9 +12,10 @@ type StreamSessionPanelProps = {
   loading?: boolean;
   error?: string;
   onChange: (status: StreamSessionResponse) => void;
+  compact?: boolean;
 };
 
-export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading = false, error = '', onChange }: StreamSessionPanelProps) {
+export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading = false, error = '', onChange, compact = false }: StreamSessionPanelProps) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [report, setReport] = useState<StreamSessionReport | null>(null);
@@ -142,7 +144,7 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
   const recent = status?.recent ?? [];
   const latestSession = recent[0] ?? current;
   const sessionBlockedReason = !operatorSecret
-    ? 'Operator secret is missing. Open Config and save the secret before running protected session actions.'
+    ? 'Operator secret is missing. Add it in Settings before running protected session actions.'
     : status?.loadError
       ? `Stream sessions unavailable: ${status.loadError}`
       : '';
@@ -150,120 +152,153 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
   const endBlockedReason = sessionBlockedReason || (!current ? 'No active session to end.' : busy ? 'A session action is already running.' : '');
   const preflightBlockedReason = startBlockedReason;
 
+  const steps = createRehearsalSteps(apiBaseUrl, operatorSecret);
+  const blockedReason = current ? endBlockedReason : startBlockedReason;
+
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="hud-label">stream session</p>
-          <h2 className="hud-section-title">Rehearsal audit</h2>
-          <p className="hud-copy mt-1 text-xs text-zinc-300">Start a rehearsal/live session so new events are tagged for post-stream review.</p>
-        </div>
-        <span className="hud-chip hud-chip--square">{loading ? 'loading' : current ? 'active' : 'idle'}</span>
-      </div>
+    <Panel
+      kicker="Stream session"
+      title="Rehearsal audit"
+      description={compact ? undefined : 'Start a rehearsal or live session so new events are tagged for the post-stream report.'}
+      actions={<Tag tone={current ? (current.kind === 'live' ? 'bad' : 'warn') : 'neutral'}>{loading ? 'loading' : current ? `${current.kind} running` : 'idle'}</Tag>}
+    >
+      {error || status?.loadError ? <Notice tone="bad">{error || status?.loadError}</Notice> : null}
 
-      {error || status?.loadError ? <p className="mt-3 text-sm text-rose-300">{error || status?.loadError}</p> : null}
-      {latestSession ? <LatestReportSummary session={latestSession} report={report?.session.id === latestSession.id ? report : null} busy={busy} onOpen={() => void loadReport(latestSession.id)} onCopy={() => void copyLatestReportSummary(latestSession.id)} /> : null}
-      {current ? <SessionCard session={current} label="Current" /> : <p className="mt-3 text-sm text-zinc-400">No active session. Start one before rehearsal or going live.</p>}
+      {current ? (
+        <SessionSummary session={current} label="Current" />
+      ) : (
+        <Empty>No active session. Start one before rehearsing or going live.</Empty>
+      )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={!!startBlockedReason} title={startBlockedReason || undefined} onClick={() => void start('rehearsal')}>
-          Start rehearsal
-        </button>
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={!!startBlockedReason} title={startBlockedReason || undefined} onClick={() => void start('live')}>
-          Start live
-        </button>
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={!!endBlockedReason} title={endBlockedReason || undefined} onClick={() => void end()}>
-          End session
-        </button>
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={!!preflightBlockedReason} title={preflightBlockedReason || undefined} onClick={() => void runPreflightRehearsal()}>
+      <div className="grid grid-cols-2 gap-2">
+        {current ? (
+          <button className="desk-btn desk-btn--danger col-span-2" type="button" disabled={!!endBlockedReason} title={endBlockedReason || undefined} onClick={() => void end()}>
+            End session
+          </button>
+        ) : (
+          <>
+            <button className="desk-btn desk-btn--primary" type="button" disabled={!!startBlockedReason} title={startBlockedReason || undefined} onClick={() => void start('live')}>
+              Start live
+            </button>
+            <button className="desk-btn" type="button" disabled={!!startBlockedReason} title={startBlockedReason || undefined} onClick={() => void start('rehearsal')}>
+              Start rehearsal
+            </button>
+          </>
+        )}
+        <button className="desk-btn col-span-2" type="button" disabled={!!preflightBlockedReason} title={preflightBlockedReason || undefined} onClick={() => void runPreflightRehearsal()}>
           Run preflight rehearsal
         </button>
       </div>
-      {startBlockedReason || endBlockedReason ? (
-        <p className="mt-2 text-xs text-zinc-400">{current ? endBlockedReason : startBlockedReason}</p>
+      {blockedReason && !busy ? <p className="desk-field__hint">{blockedReason}</p> : null}
+      {message ? (
+        <p className="desk-row__text" role="status">
+          {message}
+        </p>
       ) : null}
-      {message ? <p className="mt-3 text-xs text-zinc-300">{message}</p> : null}
 
       {Object.keys(preflightSteps).length > 0 ? (
-        <div className="mt-3 grid gap-2 md:grid-cols-5">
-          {createRehearsalSteps(apiBaseUrl, operatorSecret).map((step) => (
-            <span key={step.id} className="hud-chip hud-chip--square">
-              {step.label}: {preflightSteps[step.id] || 'pending'}
-            </span>
-          ))}
-        </div>
+        <ol className="desk-steps" aria-label="Preflight steps">
+          {steps.map((step) => {
+            const state = preflightSteps[step.id] || 'pending';
+            return (
+              <li key={step.id}>
+                <Tag tone={state === 'pass' ? 'ok' : state === 'fail' ? 'bad' : state === 'running' ? 'warn' : 'neutral'}>
+                  {step.label}: {state}
+                </Tag>
+              </li>
+            );
+          })}
+        </ol>
       ) : null}
 
-      {recent.length > 0 ? (
-        <div className="mt-4 grid gap-2 md:grid-cols-2">
-          {recent.slice(0, 4).map((session) => (
-            <button key={session.id} className="text-left" type="button" disabled={busy} onClick={() => void loadReport(session.id)}>
-              <SessionCard session={session} label={session.endedAt ? 'Recent' : 'Open'} />
-            </button>
-          ))}
-        </div>
+      {latestSession && !compact ? <LatestReportSummary session={latestSession} report={report?.session.id === latestSession.id ? report : null} busy={busy} onOpen={() => void loadReport(latestSession.id)} onCopy={() => void copyLatestReportSummary(latestSession.id)} /> : null}
+
+      {recent.length > 0 && !compact ? (
+        <SubPanel title="Recent sessions">
+          <ul className="grid gap-2 md:grid-cols-2">
+            {recent.slice(0, 6).map((session) => (
+              <li key={session.id}>
+                <button className="desk-btn w-full flex-col items-start" type="button" disabled={busy} onClick={() => void loadReport(session.id)}>
+                  <SessionSummary session={session} label={session.endedAt ? 'Recent' : 'Open'} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </SubPanel>
       ) : null}
-      {reportError ? <p className="mt-3 text-sm text-rose-300">{reportError}</p> : null}
-      {report ? (
-        <div className="mt-4 grid gap-3">
-          <div className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      {compact && latestSession ? (
+        <a className="desk-btn desk-btn--small desk-btn--ghost justify-self-start" href="/dashboard/sessions">
+          Reports and history
+        </a>
+      ) : null}
+      {reportError ? <Notice tone="bad">{reportError}</Notice> : null}
+      {report && !compact ? (
+        <div className="grid gap-3">
+          <SubPanel title={`Session report · ${report.session.id.slice(0, 8)}`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="hud-kicker">Session report · {report.session.id.slice(0, 8)}</p>
-                <p className="mt-1 text-sm font-bold text-white">{report.session.title}</p>
-                <p className="mt-1 text-xs text-zinc-400">{report.events.length} visible events · {report.session.eventCount} total tagged events · {report.snapshots.length} readiness snapshots</p>
+                <p className="desk-row__title">{report.session.title}</p>
+                <p className="desk-row__meta">
+                  {report.events.length} visible events · {report.session.eventCount} tagged events · {report.snapshots.length} readiness snapshots
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => downloadReport(report, 'md')}>Export Markdown</button>
-                <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => downloadReport(report, 'json')}>Export JSON</button>
+                <button className="desk-btn desk-btn--small" type="button" onClick={() => downloadReport(report, 'md')}>
+                  Export Markdown
+                </button>
+                <button className="desk-btn desk-btn--small" type="button" onClick={() => downloadReport(report, 'json')}>
+                  Export JSON
+                </button>
               </div>
             </div>
-          </div>
+          </SubPanel>
           {report.snapshots.length > 0 ? <ReadinessSnapshotGrid snapshots={report.snapshots} /> : null}
-          <EventHistoryPanel events={report.events} />
+          <EventHistoryPanel events={report.events} title="Session events" />
         </div>
       ) : null}
-    </section>
+    </Panel>
   );
 }
 
 type StepState = 'pending' | 'running' | 'pass' | 'fail';
 
-function SessionCard({ session, label }: { session: StreamSession; label: string }) {
+function SessionSummary({ session, label }: { session: StreamSession; label: string }) {
   return (
-    <article className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-      <p className="hud-kicker">{label} · {session.kind}</p>
-      <p className="mt-1 text-sm font-bold text-white">{session.title}</p>
-      <p className="mt-1 text-xs text-zinc-400">Started {new Date(session.startedAt).toLocaleString()}</p>
-      {session.endedAt ? <p className="mt-1 text-xs text-zinc-400">Ended {new Date(session.endedAt).toLocaleString()}</p> : null}
-      <span className="hud-badge mt-2 inline-flex">{session.eventCount} events</span>
-    </article>
+    <div className="grid gap-0.5 text-left">
+      <p className="desk-panel__kicker">
+        {label} · {session.kind}
+      </p>
+      <p className="desk-row__title">{session.title}</p>
+      <p className="desk-row__meta">
+        Started {new Date(session.startedAt).toLocaleString()}
+        {session.endedAt ? ` · ended ${new Date(session.endedAt).toLocaleString()}` : ''} · {session.eventCount} events
+      </p>
+    </div>
   );
 }
 
 function LatestReportSummary({ session, report, busy, onOpen, onCopy }: { session: StreamSession; report: StreamSessionReport | null; busy: boolean; onOpen: () => void; onCopy: () => void }) {
   const degradedSnapshots = report?.snapshots.filter((snapshot) => snapshot.status !== 'ok').length ?? 0;
   return (
-    <article className="hud-panel hud-corners hud-panel--flat hud-compact-card mt-3 hud-accent-cyan">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <SubPanel title={`Latest report · ${session.id.slice(0, 8)}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="hud-kicker">Latest report · {session.id.slice(0, 8)}</p>
-          <p className="mt-1 text-sm font-bold text-white">{session.title}</p>
-          <p className="mt-1 text-xs text-zinc-400">
+          <p className="desk-row__title">{session.title}</p>
+          <p className="desk-row__meta">
             {session.eventCount} tagged events · {session.endedAt ? `ended ${new Date(session.endedAt).toLocaleString()}` : 'still open'}
             {report ? ` · ${report.snapshots.length} snapshots · ${degradedSnapshots} degraded` : ''}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy} onClick={onOpen}>
+          <button className="desk-btn desk-btn--small" type="button" disabled={busy} onClick={onOpen}>
             Open latest report
           </button>
-          <button className="hud-action-button hud-action-button--compact" type="button" disabled={busy} onClick={onCopy}>
+          <button className="desk-btn desk-btn--small" type="button" disabled={busy} onClick={onCopy}>
             Copy summary
           </button>
         </div>
       </div>
-    </article>
+    </SubPanel>
   );
 }
 
@@ -273,19 +308,22 @@ function ReadinessSnapshotGrid({ snapshots }: { snapshots: StreamSessionReport['
       {snapshots.map((snapshot) => {
         const degraded = snapshot.checks.filter((check) => check.status !== 'ok');
         return (
-          <article key={snapshot.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-            <p className="hud-kicker">{snapshot.phase} readiness · {snapshot.status}</p>
-            <p className="mt-1 text-xs text-zinc-400">Captured {new Date(snapshot.capturedAt).toLocaleString()}</p>
+          <SubPanel key={snapshot.id} title={`${snapshot.phase} readiness · ${snapshot.status}`}>
+            <p className="desk-row__meta">Captured {new Date(snapshot.capturedAt).toLocaleString()}</p>
             {degraded.length > 0 ? (
-              <ul className="mt-2 grid gap-1 text-xs text-amber-200">
-                {degraded.slice(0, 4).map((check) => (
-                  <li key={`${snapshot.id}-${check.name}`}>{check.name}: {check.hint || check.status}</li>
-                ))}
-              </ul>
+              <Notice tone="warn">
+                <ul>
+                  {degraded.slice(0, 4).map((check) => (
+                    <li key={`${snapshot.id}-${check.name}`}>
+                      {check.name}: {check.hint || check.status}
+                    </li>
+                  ))}
+                </ul>
+              </Notice>
             ) : (
-              <p className="mt-2 text-xs text-emerald-200">All checks OK.</p>
+              <Notice tone="ok">All checks OK.</Notice>
             )}
-          </article>
+          </SubPanel>
         );
       })}
     </div>

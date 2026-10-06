@@ -10,7 +10,7 @@ curl http://localhost:8080/readyz
 docker compose ps
 ```
 
-Open `http://localhost:5173/dashboard/live` for the human-readable readiness cockpit; during incidents, `/dashboard/live` is the recovery console.
+Open `http://localhost:5173/dashboard/health` for the human-readable readiness cockpit; during incidents, `/dashboard/health` is the recovery console.
 
 Check API and web logs for the failing path:
 
@@ -25,7 +25,7 @@ docker compose logs -f web
 - `/readyz` is operator diagnostics. It reports dependency status and can return HTTP 200 with `status: degraded`.
 - Use `/readyz` to see whether OBS, Twitch auth, EventSub, retained state, event history, or Twitch interaction rules need attention.
 - When `DATABASE_URL` is set, `/readyz` includes `postgres`, `dashboard_config`, and `stream_sessions` checks; event history, Twitch interaction rules, shared dashboard config, stream session audit records, and session readiness snapshots depend on the database.
-- `/dashboard/live` is the human-readable view of the same readiness data, plus recent operator context and the persisted event history panel.
+- `/dashboard/health` is the human-readable view of the same readiness data, plus recent operator context and the persisted event history panel.
 - Destructive recovery remains CLI-only; use the dashboard to assess and route, then follow the runbook commands for any backup, restore, delete, or re-authentication steps.
 
 ## OBS recovery
@@ -71,7 +71,7 @@ Twitch interaction rules live in `/data/twitch-interactions.json` on the `api-da
 - A missing file is normal on first boot.
 - A malformed or unreadable file degrades `/readyz` at `twitch_interactions` and disables custom rules until you repair or replace it.
 
-If the file is corrupt, back it up, remove it, restart the API, and then repopulate valid rules from `/dashboard/config`:
+If the file is corrupt, back it up, remove it, restart the API, and then repopulate valid rules from `/dashboard/chat`:
 
 ```bash
 docker compose exec api sh -c 'cp /data/twitch-interactions.json /data/twitch-interactions.json.bak'
@@ -137,7 +137,7 @@ make db-tables
 docker compose restart api
 ```
 
-4. Recheck `/readyz` and the Event history panel on `/dashboard/live`.
+4. Recheck `/readyz` and the Event history panel on `/dashboard/sessions`.
 
 ### JSONL fallback history
 
@@ -149,7 +149,7 @@ docker compose exec api sh -c 'rm /data/event-history.jsonl'
 docker compose restart api
 ```
 
-Then recheck `/readyz` and the Event history panel on `/dashboard/live`.
+Then recheck `/readyz` and the Event history panel on `/dashboard/sessions`.
 
 ## Docker volume caution
 

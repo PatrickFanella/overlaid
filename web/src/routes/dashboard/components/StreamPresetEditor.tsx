@@ -1,4 +1,5 @@
 import type { DashboardConfig, StreamPreset } from '../../../lib/dashboardConfig';
+import { Empty, Field, Panel, SubPanel } from '../ui';
 
 type StreamPresetEditorProps = {
   config: DashboardConfig;
@@ -24,39 +25,24 @@ export function StreamPresetEditor({ config, presets, onChange }: StreamPresetEd
   const visiblePresets = presets ?? config.streamPresets;
 
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <p className="hud-label">Stream presets</p>
-      <h2 className="hud-section-title">Edit scene source bundles</h2>
-      <p className="hud-copy mt-1 text-xs text-zinc-300">Scene-specific overlay sets stored locally.</p>
+    <Panel kicker="Stream presets" title="Edit scene source bundles" description="Overlay source sets for each scene, stored locally.">
+      {visiblePresets.length > 0 ? (
+        <div className="grid gap-3 lg:grid-cols-3">
+          {visiblePresets.map((preset) => (
+            <SubPanel key={preset.id} title={`Preset ${preset.id}`}>
+              <Field label="Title">
+                <input className="desk-input" type="text" value={preset.title} onChange={(event) => onChange(updatePreset(config, preset.id, { title: event.target.value }))} />
+              </Field>
 
-      <div className="mt-3 grid gap-2 lg:grid-cols-3">
-        {visiblePresets.map((preset) => (
-          <article key={preset.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-            <p className="hud-kicker">Preset {preset.id}</p>
-
-            <label className="mt-2 grid gap-1 text-xs text-zinc-300">
-              <span className="text-white">Title</span>
-              <input
-                className="hud-input"
-                type="text"
-                value={preset.title}
-                onChange={(event) => onChange(updatePreset(config, preset.id, { title: event.target.value }))}
-              />
-            </label>
-
-            <label className="mt-2 grid gap-1 text-xs text-zinc-300">
-              <span className="text-white">Sources</span>
-              <textarea
-                className="hud-input min-h-20"
-                value={preset.sources.join(', ')}
-                onChange={(event) => onChange(updatePreset(config, preset.id, { sources: parseSources(event.target.value) }))}
-              />
-            </label>
-
-            <p className="mt-2 text-xs text-zinc-400">{preset.sources.length} source{preset.sources.length === 1 ? '' : 's'}</p>
-          </article>
-        ))}
-      </div>
-    </section>
+              <Field label="Sources" hint={`${preset.sources.length} source${preset.sources.length === 1 ? '' : 's'}, comma separated`}>
+                <textarea className="desk-input" value={preset.sources.join(', ')} onChange={(event) => onChange(updatePreset(config, preset.id, { sources: parseSources(event.target.value) }))} />
+              </Field>
+            </SubPanel>
+          ))}
+        </div>
+      ) : (
+        <Empty>No stream presets for this profile.</Empty>
+      )}
+    </Panel>
   );
 }

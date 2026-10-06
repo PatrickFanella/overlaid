@@ -11,6 +11,7 @@ import {
   type TwitchReward,
 } from '../../../../lib/api';
 import { findMatchingChannelPointRule } from '../../../../lib/twitchInteractionRules';
+import { Check, Empty, Field, Notice, Panel, SubPanel, Tag } from '../../ui';
 
 type TwitchRewardQueueManagerProps = {
   apiBaseUrl?: string;
@@ -230,101 +231,99 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
   }
 
   return (
-    <div className="mt-3 hud-panel hud-corners hud-panel--flat hud-compact-card">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="hud-kicker">Reward queue</p>
-          <p className="mt-1 text-xs text-zinc-400">Load manageable rewards, create simple rewards, and fulfill/cancel unfulfilled redemptions. Delete requires confirmation and can fulfill pending redemptions on Twitch.</p>
-        </div>
-        <button className="hud-chip" type="button" onClick={() => void loadRewards()}>
+    <Panel
+      id="reward-queue"
+      kicker="Twitch"
+      title="Reward queue"
+      description="Load manageable rewards, create simple rewards, and fulfill or cancel unfulfilled redemptions. Delete requires confirmation and can fulfill pending redemptions on Twitch."
+      actions={
+        <button className="desk-btn" type="button" onClick={() => void loadRewards()}>
           Load rewards
         </button>
-      </div>
-      {rewardError ? <p className="mt-2 border border-amber-400/40 bg-black px-2 py-1 text-xs text-amber-100">{rewardError}</p> : null}
-      <div className="mt-3 grid gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3 md:grid-cols-4 md:items-end">
-        <label className="grid gap-1 text-xs text-zinc-300 md:col-span-2">
-          <span className="hud-kicker">New reward title</span>
-          <input className="hud-input" type="text" maxLength={45} value={rewardDraft.title} onChange={(event) => setRewardDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Hydrate break" />
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          <span className="hud-kicker">Cost</span>
-          <input
-            className="hud-input"
-            type="number"
-            min={1}
-            step={1}
-            value={rewardDraft.cost}
-            onChange={(event) => {
-              const nextValue = rewardNumberInput(event.target.value);
-              if (nextValue !== undefined) setRewardDraft((current) => ({ ...current, cost: nextValue }));
-            }}
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs text-zinc-300">
-          <input type="checkbox" checked={rewardDraft.enabled} onChange={(event) => setRewardDraft((current) => ({ ...current, enabled: event.target.checked }))} />
-          Enabled
-        </label>
-        <label className="flex items-center gap-2 text-xs text-zinc-300">
-          <input type="checkbox" checked={rewardDraft.userInputRequired} onChange={(event) => setRewardDraft((current) => ({ ...current, userInputRequired: event.target.checked }))} />
-          Require input
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300 md:col-span-3">
-          <span className="hud-kicker">Prompt</span>
-          <input className="hud-input" type="text" maxLength={200} value={rewardDraft.prompt} onChange={(event) => setRewardDraft((current) => ({ ...current, prompt: event.target.value }))} placeholder="Optional viewer prompt" />
-        </label>
-        <p className="text-xs text-zinc-400 md:col-span-4">Use zero to disable optional limits; global cooldown must be 0 or at least 60 seconds for Twitch display.</p>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          <span className="hud-kicker">Global cooldown seconds</span>
-          <input
-            className="hud-input"
-            type="number"
-            min={0}
-            step={1}
-            value={rewardDraft.globalCooldownSeconds}
-            onChange={(event) => {
-              const nextValue = rewardNumberInput(event.target.value);
-              if (nextValue !== undefined) setRewardDraft((current) => ({ ...current, globalCooldownSeconds: nextValue }));
-            }}
-          />
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          <span className="hud-kicker">Max per stream</span>
-          <input
-            className="hud-input"
-            type="number"
-            min={0}
-            step={1}
-            value={rewardDraft.maxPerStream}
-            onChange={(event) => {
-              const nextValue = rewardNumberInput(event.target.value);
-              if (nextValue !== undefined) setRewardDraft((current) => ({ ...current, maxPerStream: nextValue }));
-            }}
-          />
-        </label>
-        <label className="grid gap-1 text-xs text-zinc-300">
-          <span className="hud-kicker">Max per user/stream</span>
-          <input
-            className="hud-input"
-            type="number"
-            min={0}
-            step={1}
-            value={rewardDraft.maxPerUserPerStream}
-            onChange={(event) => {
-              const nextValue = rewardNumberInput(event.target.value);
-              if (nextValue !== undefined) setRewardDraft((current) => ({ ...current, maxPerUserPerStream: nextValue }));
-            }}
-          />
-        </label>
-        <button className="hud-chip self-end" type="button" onClick={createReward} disabled={!rewardDraft.title.trim()}>
-          Create reward
-        </button>
-      </div>
+      }
+    >
+      {rewardError ? (
+        <Notice tone="bad" role="alert">
+          {rewardError}
+        </Notice>
+      ) : null}
+
+      <SubPanel title="New reward">
+        <div className="grid gap-3 md:grid-cols-4 md:items-end">
+          <Field label="New reward title" className="md:col-span-2">
+            <input className="desk-input" type="text" maxLength={45} value={rewardDraft.title} onChange={(event) => setRewardDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Hydrate break" />
+          </Field>
+          <Field label="Cost">
+            <input
+              className="desk-input"
+              type="number"
+              min={1}
+              step={1}
+              value={rewardDraft.cost}
+              onChange={(event) => {
+                const nextValue = rewardNumberInput(event.target.value);
+                if (nextValue !== undefined) setRewardDraft((current) => ({ ...current, cost: nextValue }));
+              }}
+            />
+          </Field>
+          <div className="flex min-h-8 flex-wrap items-center gap-3">
+            <Check label="Enabled" checked={rewardDraft.enabled} onChange={(checked) => setRewardDraft((current) => ({ ...current, enabled: checked }))} />
+            <Check label="Require input" checked={rewardDraft.userInputRequired} onChange={(checked) => setRewardDraft((current) => ({ ...current, userInputRequired: checked }))} />
+          </div>
+          <Field label="Prompt" className="md:col-span-4">
+            <input className="desk-input" type="text" maxLength={200} value={rewardDraft.prompt} onChange={(event) => setRewardDraft((current) => ({ ...current, prompt: event.target.value }))} placeholder="Optional viewer prompt" />
+          </Field>
+          <Field label="Global cooldown seconds">
+            <input
+              className="desk-input"
+              type="number"
+              min={0}
+              step={1}
+              value={rewardDraft.globalCooldownSeconds}
+              onChange={(event) => {
+                const nextValue = rewardNumberInput(event.target.value);
+                if (nextValue !== undefined) setRewardDraft((current) => ({ ...current, globalCooldownSeconds: nextValue }));
+              }}
+            />
+          </Field>
+          <Field label="Max per stream">
+            <input
+              className="desk-input"
+              type="number"
+              min={0}
+              step={1}
+              value={rewardDraft.maxPerStream}
+              onChange={(event) => {
+                const nextValue = rewardNumberInput(event.target.value);
+                if (nextValue !== undefined) setRewardDraft((current) => ({ ...current, maxPerStream: nextValue }));
+              }}
+            />
+          </Field>
+          <Field label="Max per user/stream">
+            <input
+              className="desk-input"
+              type="number"
+              min={0}
+              step={1}
+              value={rewardDraft.maxPerUserPerStream}
+              onChange={(event) => {
+                const nextValue = rewardNumberInput(event.target.value);
+                if (nextValue !== undefined) setRewardDraft((current) => ({ ...current, maxPerUserPerStream: nextValue }));
+              }}
+            />
+          </Field>
+          <button className="desk-btn desk-btn--primary" type="button" onClick={createReward} disabled={!rewardDraft.title.trim()}>
+            Create reward
+          </button>
+          <p className="desk-field__hint md:col-span-4">Use zero to disable optional limits. Global cooldown must be 0 or at least 60 seconds so Twitch can display it.</p>
+        </div>
+      </SubPanel>
+
       {rewards.length > 0 ? (
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <label className="grid min-w-64 gap-1 text-xs text-zinc-300">
-            <span className="hud-kicker">Reward</span>
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label="Reward" className="min-w-64">
             <select
-              className="hud-input"
+              className="desk-input"
               value={selectedRewardId}
               onChange={(event) => {
                 const nextRewardId = event.target.value;
@@ -340,126 +339,132 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
                 </option>
               ))}
             </select>
-          </label>
-          <button className="hud-chip" type="button" onClick={() => void loadRedemptions()}>
+          </Field>
+          <button className="desk-btn" type="button" onClick={() => void loadRedemptions()}>
             Load unfulfilled
           </button>
         </div>
       ) : null}
+
       {selectedReward ? (
-        <div className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-3 text-xs text-zinc-200">
-          <p className="hud-kicker">Selected reward context</p>
-          <p className="mt-1 font-semibold text-cyan-100">
-            {selectedReward.title} · {selectedReward.cost}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="hud-chip">{selectedReward.is_enabled === false ? 'Disabled' : 'Enabled'}</span>
-            <span className="hud-chip">{selectedReward.is_paused ? 'Paused' : 'Not paused'}</span>
-            {selectedReward.is_in_stock === false ? <span className="hud-chip">Out of stock</span> : null}
+        <SubPanel title="Selected reward">
+          <div className="desk-row__line">
+            <p className="desk-row__title">
+              {selectedReward.title} · <span className="mono">{selectedReward.cost}</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Tag tone={selectedReward.is_enabled === false ? 'warn' : 'ok'}>{selectedReward.is_enabled === false ? 'Disabled' : 'Enabled'}</Tag>
+              <Tag tone={selectedReward.is_paused ? 'warn' : 'neutral'}>{selectedReward.is_paused ? 'Paused' : 'Not paused'}</Tag>
+              {selectedReward.is_in_stock === false ? <Tag tone="bad">Out of stock</Tag> : null}
+            </div>
           </div>
-          {selectedRewardRule?.fulfillmentNote ? <p className="mt-1 text-zinc-200">Fulfillment note: {selectedRewardRule.fulfillmentNote}</p> : <p className="mt-1 text-zinc-400">No saved channel-point rule match.</p>}
-          <p className="mt-1 text-zinc-300">Pause or disable first when you need a reversible change. Delete remains destructive and may fulfill pending redemptions on Twitch.</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button className="hud-chip" type="button" onClick={() => void updateSelectedRewardLifecycle({ paused: !selectedReward.is_paused })}>
+          {selectedRewardRule?.fulfillmentNote ? <p className="desk-row__text">Fulfillment note: {selectedRewardRule.fulfillmentNote}</p> : <Empty>No saved channel-point rule match.</Empty>}
+          <p className="desk-row__text">Pause or disable first when you need a reversible change. Delete is permanent and may fulfill pending redemptions on Twitch.</p>
+          <div className="flex flex-wrap gap-2">
+            <button className="desk-btn desk-btn--small" type="button" onClick={() => void updateSelectedRewardLifecycle({ paused: !selectedReward.is_paused })}>
               {selectedReward.is_paused ? 'Resume reward' : 'Pause reward'}
             </button>
-            <button className="hud-chip" type="button" onClick={() => void updateSelectedRewardLifecycle({ enabled: selectedReward.is_enabled === false })}>
+            <button className="desk-btn desk-btn--small" type="button" onClick={() => void updateSelectedRewardLifecycle({ enabled: selectedReward.is_enabled === false })}>
               {selectedReward.is_enabled === false ? 'Enable reward' : 'Disable reward'}
             </button>
           </div>
-          <div className="mt-3 grid gap-2 border-t border-cyan-400/20 pt-3 md:grid-cols-3">
-            <label className="grid gap-1 text-xs text-zinc-300 md:col-span-3">
-              <span className="hud-kicker">Prompt</span>
-              <input className="hud-input" type="text" maxLength={200} value={rewardEditDraft.prompt} onChange={(event) => setRewardEditDraft((current) => ({ ...current, prompt: event.target.value }))} />
-            </label>
-            <label className="flex items-center gap-2 text-xs text-zinc-300 md:col-span-3">
-              <input type="checkbox" checked={rewardEditDraft.userInputRequired} onChange={(event) => setRewardEditDraft((current) => ({ ...current, userInputRequired: event.target.checked }))} />
-              Require viewer input
-            </label>
-            <label className="grid gap-1 text-xs text-zinc-300">
-              <span className="hud-kicker">Global cooldown seconds</span>
-              <input
-                className="hud-input"
-                type="number"
-                min={0}
-                step={1}
-                value={rewardEditDraft.globalCooldownSeconds}
-                onChange={(event) => {
-                  const nextValue = rewardNumberInput(event.target.value);
-                  if (nextValue !== undefined) setRewardEditDraft((current) => ({ ...current, globalCooldownSeconds: nextValue }));
-                }}
-              />
-            </label>
-            <label className="grid gap-1 text-xs text-zinc-300">
-              <span className="hud-kicker">Max per stream</span>
-              <input
-                className="hud-input"
-                type="number"
-                min={0}
-                step={1}
-                value={rewardEditDraft.maxPerStream}
-                onChange={(event) => {
-                  const nextValue = rewardNumberInput(event.target.value);
-                  if (nextValue !== undefined) setRewardEditDraft((current) => ({ ...current, maxPerStream: nextValue }));
-                }}
-              />
-            </label>
-            <label className="grid gap-1 text-xs text-zinc-300">
-              <span className="hud-kicker">Max per user/stream</span>
-              <input
-                className="hud-input"
-                type="number"
-                min={0}
-                step={1}
-                value={rewardEditDraft.maxPerUserPerStream}
-                onChange={(event) => {
-                  const nextValue = rewardNumberInput(event.target.value);
-                  if (nextValue !== undefined) setRewardEditDraft((current) => ({ ...current, maxPerUserPerStream: nextValue }));
-                }}
-              />
-            </label>
-            <p className="text-xs text-zinc-400 md:col-span-2">Use zero to disable optional limits; global cooldown must be 0 or at least 60 seconds for Twitch display.</p>
-            <button className="hud-chip self-end" type="button" onClick={() => void updateSelectedRewardAdvancedFields()}>
+          <div className="grid gap-3 md:grid-cols-3 md:items-end">
+            <Field label="Prompt" className="md:col-span-3">
+              <input className="desk-input" type="text" maxLength={200} value={rewardEditDraft.prompt} onChange={(event) => setRewardEditDraft((current) => ({ ...current, prompt: event.target.value }))} />
+            </Field>
+            <Check
+              label="Require viewer input"
+              className="md:col-span-3"
+              checked={rewardEditDraft.userInputRequired}
+              onChange={(checked) => setRewardEditDraft((current) => ({ ...current, userInputRequired: checked }))}
+            />
+            <Field label="Global cooldown seconds">
+            <input
+              className="desk-input"
+              type="number"
+              min={0}
+              step={1}
+              value={rewardEditDraft.globalCooldownSeconds}
+              onChange={(event) => {
+                const nextValue = rewardNumberInput(event.target.value);
+                if (nextValue !== undefined) setRewardEditDraft((current) => ({ ...current, globalCooldownSeconds: nextValue }));
+              }}
+            />
+          </Field>
+            <Field label="Max per stream">
+            <input
+              className="desk-input"
+              type="number"
+              min={0}
+              step={1}
+              value={rewardEditDraft.maxPerStream}
+              onChange={(event) => {
+                const nextValue = rewardNumberInput(event.target.value);
+                if (nextValue !== undefined) setRewardEditDraft((current) => ({ ...current, maxPerStream: nextValue }));
+              }}
+            />
+          </Field>
+            <Field label="Max per user/stream">
+            <input
+              className="desk-input"
+              type="number"
+              min={0}
+              step={1}
+              value={rewardEditDraft.maxPerUserPerStream}
+              onChange={(event) => {
+                const nextValue = rewardNumberInput(event.target.value);
+                if (nextValue !== undefined) setRewardEditDraft((current) => ({ ...current, maxPerUserPerStream: nextValue }));
+              }}
+            />
+          </Field>
+            <p className="desk-field__hint md:col-span-2">Use zero to disable optional limits. Global cooldown must be 0 or at least 60 seconds so Twitch can display it.</p>
+            <button className="desk-btn desk-btn--primary" type="button" onClick={() => void updateSelectedRewardAdvancedFields()}>
               Save reward fields
+            </button>
+          </div>
+        </SubPanel>
+      ) : null}
+
+      {rewards.length > 0 ? (
+        <div className="grid gap-2">
+          <Notice tone="warn">Delete is a last resort. Pause or disable first when the change should be reversible.</Notice>
+          <div className="flex flex-wrap items-center gap-3">
+            <Check label="Confirm delete" checked={deleteRewardConfirmed} onChange={setDeleteRewardConfirmed} />
+            <button className="desk-btn desk-btn--danger" type="button" onClick={() => void deleteReward()} disabled={!deleteRewardConfirmed || !selectedRewardId}>
+              Delete selected
             </button>
           </div>
         </div>
       ) : null}
-      {rewards.length > 0 ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
-          <p className="text-xs text-amber-100">Delete is last resort. Pause or disable first when the reward should be reversible.</p>
-          <label className="flex items-center gap-2 text-xs text-amber-100">
-            <input type="checkbox" checked={deleteRewardConfirmed} onChange={(event) => setDeleteRewardConfirmed(event.target.checked)} />
-            Confirm delete
-          </label>
-          <button className="hud-chip" type="button" onClick={() => void deleteReward()} disabled={!deleteRewardConfirmed || !selectedRewardId}>
-            Delete selected
-          </button>
-        </div>
-      ) : null}
-      <div className="mt-3 grid gap-2">
-        {redemptions.length === 0 ? <p className="text-xs text-zinc-400">No unfulfilled redemptions loaded.</p> : null}
-        {redemptionsWithRules.map(({ redemption, matchedRule }) => (
-          <article key={redemption.id} className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/5 p-3 text-xs">
-            <p className="font-semibold text-fuchsia-100">
-              {redemption.user_name || redemption.user_login} · {redemption.reward.title}
-            </p>
-            {matchedRule?.fulfillmentNote ? <p className="mt-1 text-zinc-200">Fulfillment note: {matchedRule.fulfillmentNote}</p> : null}
-            <p className="mt-1 text-zinc-300">{redemption.user_input || 'No input'}</p>
-            <p className="mt-1 text-zinc-500">
-              {redemption.status} · {redemption.redeemed_at}
-            </p>
-            <div className="mt-2 flex gap-2">
-              <button className="hud-chip" type="button" onClick={() => void updateRedemption(redemption, 'FULFILLED')}>
-                Fulfill
-              </button>
-              <button className="hud-chip" type="button" onClick={() => void updateRedemption(redemption, 'CANCELED')}>
-                Cancel
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-    </div>
+
+      {redemptions.length === 0 ? (
+        <Empty>No unfulfilled redemptions loaded.</Empty>
+      ) : (
+        <ul className="desk-rows">
+          {redemptionsWithRules.map(({ redemption, matchedRule }) => (
+            <li key={redemption.id} className="desk-row">
+              <div className="desk-row__line">
+                <p className="desk-row__title">
+                  {redemption.user_name || redemption.user_login} · {redemption.reward.title}
+                </p>
+                <span className="desk-row__meta mono">
+                  {redemption.status} · {redemption.redeemed_at}
+                </span>
+              </div>
+              {matchedRule?.fulfillmentNote ? <p className="desk-row__text">Fulfillment note: {matchedRule.fulfillmentNote}</p> : null}
+              <p className="desk-row__text">{redemption.user_input || 'No input'}</p>
+              <div className="mt-1 flex gap-2">
+                <button className="desk-btn desk-btn--small" type="button" onClick={() => void updateRedemption(redemption, 'FULFILLED')}>
+                  Fulfill
+                </button>
+                <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => void updateRedemption(redemption, 'CANCELED')}>
+                  Cancel
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }

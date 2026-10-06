@@ -9,10 +9,10 @@ make smoke
 
 ## Dashboard
 
-Start at `/dashboard/live`; it is both the preflight view and the recovery cockpit. For the full rehearsal/live checklist, use `docs/runbooks/live-qa.md`.
+Start at `/dashboard/health`; it has readiness, preflight, and the recovery console. `/dashboard` (On air) repeats the preflight next to the session controls. For the full rehearsal/live checklist, use `docs/runbooks/live-qa.md`.
 
 ```text
-http://localhost:5173/dashboard/live
+http://localhost:5173/dashboard/health
 ```
 
 Expected ready checks:
@@ -25,9 +25,9 @@ Expected ready checks:
 
 ## Rehearsal
 
-Open `/dashboard/control` and run `Run rehearsal`.
+Open `/dashboard/scenes` and run `Run rehearsal`.
 
-After the sequence completes, check the Event history panel on `/dashboard/live` to confirm the recent sample event summaries were recorded.
+After the sequence completes, check the Event history panel on `/dashboard/sessions` to confirm the recent sample event summaries were recorded.
 
 Expected sequence:
 
@@ -49,11 +49,11 @@ Check OBS WebSocket settings, host networking override, and `OBS_WEBSOCKET_PASSW
 
 ### Operator controls return 401
 
-Open `/dashboard/config` and enter `OPERATOR_SECRET`.
+Open `/dashboard/settings` and enter `OPERATOR_SECRET`.
 
 ## Browser sources during stream
 
-Do not rely on OBS browser sources until `/dashboard/live` is clear of readiness incidents. Fix any degraded checks first, then confirm the browser sources are stable before going live.
+Do not rely on OBS browser sources until `/dashboard/health` is clear of readiness incidents. Fix any degraded checks first, then confirm the browser sources are stable before going live.
 
 Use the Event history panel as a quick post-rehearsal audit trail; it should show the latest sanitized stream events newest-first.
 

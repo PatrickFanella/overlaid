@@ -1,56 +1,30 @@
-import { useEffect, useState } from 'react';
-import { connectOverlayStream, getOverlayApiBaseUrl, type OverlayStreamStatus } from '../lib/eventStream';
+import { useState } from 'react';
+import { getOverlayApiBaseUrl } from '../lib/eventStream';
 import type { OverlayEvent } from '../lib/events';
-import { formatOverlayStreamLabel } from '../lib/events';
+import { useOverlayStream } from '../lib/useOverlayStream';
+import { Kicker, OverlayStage } from '../overlay/Brand';
 
+// Setup tool, not an on-air asset: the connection pip always shows here.
 export function OverlayDebugPage() {
   const [events, setEvents] = useState<OverlayEvent[]>([]);
-  const [status, setStatus] = useState<OverlayStreamStatus>('connecting');
 
-  useEffect(() => {
-    const stream = connectOverlayStream(getOverlayApiBaseUrl(), {
-      onEvent(event) {
-        setEvents((current) => [event, ...current].slice(0, 8));
-      },
-      onStatusChange(nextStatus) {
-        setStatus(nextStatus);
-      },
-    });
-
-    return () => {
-      stream.close();
-    };
-  }, []);
+  const status = useOverlayStream((event) => {
+    setEvents((current) => [event, ...current].slice(0, 8));
+  });
 
   return (
-    <main className="hud-shell hud-shell--compact hud-shell--debug hud-scanlines text-white">
-      <section className="hud-panel hud-corners hud-accent-cyan w-full max-w-4xl p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="hud-label">/overlay/debug</p>
-            <h1 className="mt-3 text-[clamp(1.8rem,3.5vw,3rem)] font-black tracking-[-0.05em]">Event inspector</h1>
-            <p className="mt-2 text-sm text-zinc-300">tail -f {getOverlayApiBaseUrl()}/api/events/stream</p>
-          </div>
-          <span className="hud-chip">
-            <span className="hud-led" />
-            {formatOverlayStreamLabel(status)}
-          </span>
-        </div>
+    <OverlayStage name="debug" status={status} label="Event inspector" className="sc-stage--setup">
+      <section className="sc-debug">
+        <Kicker>/overlay/debug · {status}</Kicker>
+        <h1 className="sc-display">Event inspector</h1>
+        <p className="sc-label">tail -f {getOverlayApiBaseUrl()}/api/events/stream</p>
 
-        <div className="mt-5 grid gap-3">
-          {events.length === 0 ? (
-            <p className="hud-panel hud-corners border border-dashed border-white/10 px-4 py-5 text-sm text-zinc-400">
-              Waiting for events…
-            </p>
-          ) : null}
+        {events.length === 0 ? <p className="sc-standby__hint">Waiting for events…</p> : null}
 
-          {events.map((event) => (
-            <pre key={event.id} className="hud-panel hud-corners hud-event-json px-4 py-4">
-              {JSON.stringify(event, null, 2)}
-            </pre>
-          ))}
-        </div>
+        {events.map((event) => (
+          <pre key={event.id}>{JSON.stringify(event, null, 2)}</pre>
+        ))}
       </section>
-    </main>
+    </OverlayStage>
   );
 }

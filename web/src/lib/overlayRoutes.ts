@@ -4,17 +4,22 @@ export type OverlayRoute = {
   path: string;
   title: string;
   description: string;
-  defaultScene: 'main' | 'brb' | 'debug';
+  defaultScene: 'main' | 'brb' | 'starting' | 'ending' | 'camera' | 'debug';
+  // Suggested OBS browser-source size.
+  size: { width: number; height: number };
 };
 
 export const overlayRoutes: OverlayRoute[] = [
-  { path: '/overlay/alerts', title: 'Alert feed', description: 'Live alert browser source', defaultScene: 'main' },
-  { path: '/overlay/chat', title: 'Twitch chat', description: 'Live chat browser source', defaultScene: 'main' },
-  { path: '/overlay/goals', title: 'Goal rail', description: 'Progress widget browser source', defaultScene: 'main' },
-  { path: '/overlay/now-playing', title: 'Now playing', description: 'Music and media browser source', defaultScene: 'main' },
-  { path: '/overlay/ticker', title: 'Ticker rail', description: 'Lower-third event ticker', defaultScene: 'main' },
-  { path: '/overlay/brb', title: 'BRB overlay', description: 'Intermission scene control', defaultScene: 'brb' },
-  { path: '/overlay/debug', title: 'Event inspector', description: 'SSE event stream debugger', defaultScene: 'debug' },
+  { path: '/overlay/alerts', title: 'Alert feed', description: 'Follows, subs, bits, and homelab alerts on a purple card', defaultScene: 'main', size: { width: 1000, height: 720 } },
+  { path: '/overlay/chat', title: 'Twitch chat', description: 'Chat column that fills from the bottom', defaultScene: 'main', size: { width: 600, height: 900 } },
+  { path: '/overlay/goals', title: 'Goal rail', description: 'Primary goal with up to three secondary meters', defaultScene: 'main', size: { width: 780, height: 640 } },
+  { path: '/overlay/now-playing', title: 'Now playing', description: 'MPRIS track strip with progress', defaultScene: 'main', size: { width: 920, height: 260 } },
+  { path: '/overlay/ticker', title: 'Ticker rail', description: 'Full-width lower rail of recent events', defaultScene: 'main', size: { width: 1920, height: 72 } },
+  { path: '/overlay/camera', title: 'Camera frame', description: 'Purple frame and nameplate to stack on a camera source', defaultScene: 'main', size: { width: 1920, height: 1080 } },
+  { path: '/overlay/starting', title: 'Starting soon', description: 'Full-frame countdown card', defaultScene: 'starting', size: { width: 1920, height: 1080 } },
+  { path: '/overlay/brb', title: 'BRB overlay', description: 'Full-frame intermission card driven from the dashboard', defaultScene: 'brb', size: { width: 1920, height: 1080 } },
+  { path: '/overlay/ending', title: 'Stream ending', description: 'Full-frame end card', defaultScene: 'ending', size: { width: 1920, height: 1080 } },
+  { path: '/overlay/debug', title: 'Event inspector', description: 'SSE event stream debugger for setup', defaultScene: 'debug', size: { width: 1000, height: 900 } },
 ];
 
 export function getBrowserOrigin() {

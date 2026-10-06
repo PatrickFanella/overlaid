@@ -85,29 +85,29 @@ See `docs/runbooks/twitch-interaction-rules.md` for the editing, backup, and liv
 
 ### Routes
 
-- `/dashboard/live` — canonical recovery console with readiness, recovery runbook links, build info, EventSub diagnostics, setup checklist status, session log, and persisted event history.
-- `/dashboard` — overview, system status, build identity, and route guide for choosing the right runbook or dashboard path.
-- `/dashboard/setup` — setup checklist for OBS onboarding, smoke checks, and setup decisions.
-- `/dashboard/sources` — OBS browser-source URLs, active-profile preset view, and custom CSS copy helpers.
-- `/dashboard/control` — operator quick actions, rehearsals, BRB controls, OBS controls, and session log.
-- `/dashboard/config` — operator secret session storage, automation profiles, Twitch interaction rules, MPRIS decision, and overlay noise controls.
-- `/version` — public, unauthenticated non-secret build/runtime metadata for smoke checks and deploy verification.
-- `/overlay/alerts`
-- `/overlay/chat`
-- `/overlay/goals`
-- `/overlay/now-playing`
-- `/overlay/ticker`
-- `/overlay/brb`
-- `/overlay/debug`
+The operator desk groups pages by what you are doing:
 
-For live operation, open `/dashboard/live` first during degradation, then use `/dashboard` to choose the right route or runbook. Follow `docs/runbooks/live-stream-preflight.md` for quick checks and `docs/runbooks/live-qa.md` for the full rehearsal/live QA pass.
+- `/dashboard` (On air) — session tally, quick actions, BRB, live preflight, operator log, and the latest events. The screen to keep open during a stream.
+- `/dashboard/scenes` — OBS scenes, inputs and items, quick-action presets and sequences, sample events, and rehearsal runs.
+- `/dashboard/chat` — bot commands, timers, counters and quotes, API variables, moderation and the nuke planner, Twitch interaction rules, and the reward queue.
+- `/dashboard/overlays` — live previews and OBS browser-source URLs for every overlay, stream presets, custom CSS, and the setup checklist.
+- `/dashboard/health` — backend readiness, the recovery console, EventSub diagnostics, and build info. Open this first when something degrades.
+- `/dashboard/settings` — operator secret, shared config sync, OBS name import, overlay noise limits, automation profiles, and the MPRIS decision.
+- `/dashboard/sessions` — stream and rehearsal sessions, reports and exports, the operator action log, and persisted event history.
+- `/version` — public, unauthenticated non-secret build/runtime metadata for smoke checks and deploy verification.
+
+The previous console paths still work and redirect: `/dashboard/live` to Health, `/dashboard/control` to Scenes, `/dashboard/setup` and `/dashboard/sources` to Overlays, `/dashboard/bot` to Chat, and `/dashboard/config` to Settings.
+
+Overlays, all in the SUBCULT on-air style: `/overlay/alerts`, `/overlay/chat`, `/overlay/goals`, `/overlay/now-playing`, `/overlay/ticker`, `/overlay/camera`, `/overlay/starting`, `/overlay/brb`, `/overlay/ending`, and `/overlay/debug`. `docs/runbooks/overlays.md` lists their OBS sizes and query parameters; add `?demo=1` to any of them to preview with sample events.
+
+For live operation, keep `/dashboard` open and switch to `/dashboard/health` during degradation. Follow `docs/runbooks/live-stream-preflight.md` for quick checks and `docs/runbooks/live-qa.md` for the full rehearsal/live QA pass.
 For bot runtime status, FossaBot-parity audit checks, and guarded moderation/nuke operations, follow `docs/runbooks/bot-ops.md`.
 For Twitch interaction rules, follow `docs/runbooks/twitch-interaction-rules.md`.
 For production recovery, follow `docs/runbooks/production-recovery.md`.
 For persisted recent event history and recovery guidance, follow `docs/runbooks/event-history.md`.
 For OBS automation sequences, follow `docs/runbooks/obs-automation-sequences.md`.
 For moderator or broadcaster Twitch chat controls, use `docs/runbooks/twitch-chat-commands.md`.
-For post-build route checks and styling changes, use `docs/runbooks/visual-qa.md`.
+For post-build route checks and styling changes, use `docs/runbooks/visual-qa.md`. For overlay sizes, parameters, and brand rules, use `docs/runbooks/overlays.md`.
 
 `/healthz` stays the cheap liveness check used by Compose healthchecks. `curl http://localhost:8080/readyz` is the operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, retained state, event history, or Twitch interaction rules need attention.
 
@@ -124,7 +124,7 @@ If `OPERATOR_SECRET` is configured, enter it in the dashboard before using mutat
 The same secret is required to start Twitch OAuth; the dashboard sends it as a header to request a one-time Twitch authorize URL.
 It can also connect to OBS WebSocket to list scenes, switch the current program scene, mute/unmute an input, and show/hide scene items by ID.
 
-Automation profiles are stored locally in `/dashboard/config`. The active profile is respected by `/dashboard/control` and `/dashboard/sources`, which means the operator can switch between show modes without deleting unused actions or presets. Export/import on `/dashboard/config` backs up the dashboard config JSON only; it does not include the operator secret or other session-only data.
+Automation profiles are stored locally in `/dashboard/settings`. The active profile is respected by On air, Scenes, and Overlays, which means the operator can switch between show modes without deleting unused actions or presets. Export/import on `/dashboard/settings` backs up the dashboard config JSON only; it does not include the operator secret or other session-only data.
 
 OBS WebSocket notes:
 

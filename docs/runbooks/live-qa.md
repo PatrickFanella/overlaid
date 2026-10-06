@@ -17,14 +17,14 @@ Follow `docs/runbooks/visual-qa.md` after route, CSS, or layout changes.
 
 Minimum live-day route pass:
 
-- [ ] `/dashboard/live` loads without console-visible failures.
-- [ ] `/dashboard/control` shows expected quick actions and disabled-state reasons.
-- [ ] `/dashboard/config` can validate OBS quick action assignments.
+- [ ] `/dashboard/health` loads without console-visible failures.
+- [ ] `/dashboard/scenes` shows expected quick actions and disabled-state reasons.
+- [ ] `/dashboard/settings` can validate OBS quick action assignments.
 - [ ] `/overlay/alerts`, `/overlay/ticker`, `/overlay/goals`, `/overlay/brb`, and `/overlay/now-playing` fit the OBS canvas.
 
 ## Phase 2: one-click preflight rehearsal
 
-1. Open `/dashboard/live`.
+1. Open `/dashboard/sessions` (or `/dashboard`, which has the same session panel).
 2. Click **Run preflight rehearsal**.
 3. Confirm the session starts and ends automatically.
 4. Open the generated report.
@@ -38,12 +38,12 @@ Expected evidence:
 
 ## Phase 3: OBS control validation
 
-1. Open `/dashboard/config`.
+1. Open `/dashboard/settings`.
 2. Click **Load from OBS**.
 3. Confirm assigned main scene, standby/BRB scene, and alerts source match the real OBS collection.
 4. Click **Validate quick actions**.
 5. Fix missing scene/input/source warnings before continuing.
-6. Open `/dashboard/control` and run the safe rehearsal quick actions.
+6. Open `/dashboard/scenes` and run the safe rehearsal quick actions.
 
 Expected evidence:
 
@@ -54,12 +54,12 @@ Expected evidence:
 
 ## Phase 4: Twitch/EventSub validation
 
-1. Confirm `/dashboard/live` shows Twitch authenticated and EventSub connected.
+1. Confirm `/dashboard/health` shows Twitch authenticated and EventSub connected.
 2. Confirm EventSub diagnostics show expected subscription count.
 3. If `missing scopes` appears, re-run Twitch login and re-consent.
 4. From a broadcaster/moderator account, send a safe chat command such as `!alert command smoke`.
-5. Open `/dashboard/bot` and confirm bot status, recent audit, commands, timers, counters/quotes, API variables, moderation dry-run, and nuke planner panels render.
-6. Open `/dashboard/config`, load Twitch rewards, and verify the reward queue shows manageable rewards without requiring deletion.
+5. Open `/dashboard/chat` and confirm bot status, recent audit, commands, timers, counters/quotes, API variables, moderation dry-run, and nuke planner panels render.
+6. Open `/dashboard/chat`, load Twitch rewards, and verify the reward queue shows manageable rewards without requiring deletion.
 7. Trigger a configured channel-point test if available off-stream.
 
 Expected evidence:
@@ -67,7 +67,7 @@ Expected evidence:
 - [ ] `/overlay/debug` shows incoming Twitch diagnostics.
 - [ ] Chat command from broadcaster/moderator produces the expected safe overlay or chat event.
 - [ ] Viewer/non-moderator commands are denied and recorded as diagnostics/audit events.
-- [ ] `/dashboard/bot` shows recent audit entries for command/moderation checks without exposing tokens or raw EventSub payloads.
+- [ ] `/dashboard/chat` shows recent audit entries for command/moderation checks without exposing tokens or raw EventSub payloads.
 - [ ] Reward queue can load manageable rewards and shows lifecycle state, fulfillment notes, and reversible pause/disable controls before delete.
 - [ ] EventSub reconnect attempts and last disconnect remain stable during the pass.
 
@@ -92,9 +92,9 @@ After rehearsal or live stream:
 
 Controlled workspace customization evidence:
 
-- [ ] Capture the default `/dashboard/live` layout before rehearsal.
+- [ ] Capture the default `/dashboard/health` layout before rehearsal.
 - [ ] If layout customization is used, reset to default before handoff or document the operator-specific order in evidence notes.
-- [ ] Confirm locked safety panels remain visible: recovery links and stream session controls.
+- [ ] Confirm the recovery console stays fixed above the arrangeable panels on `/dashboard/health`, and session controls stay fixed on `/dashboard` and `/dashboard/sessions`.
 
 ## Latest QA status
 

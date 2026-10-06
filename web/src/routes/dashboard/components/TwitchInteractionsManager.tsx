@@ -3,6 +3,7 @@ import { fetchTwitchInteractions, type TwitchInteractionRules } from '../../../l
 import { createEmptyTwitchInteractionRules } from '../../../lib/twitchInteractionRules';
 import { TwitchInteractionRulesEditor } from './twitch-interactions/TwitchInteractionRulesEditor';
 import { TwitchRewardQueueManager } from './twitch-interactions/TwitchRewardQueueManager';
+import { Panel, Tag } from '../ui';
 
 type TwitchInteractionsManagerProps = {
   apiBaseUrl?: string;
@@ -39,26 +40,25 @@ export function TwitchInteractionsManager({ apiBaseUrl, operatorSecret }: Twitch
   }, [apiBaseUrl, operatorSecret]);
 
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="hud-label">Twitch interaction rules</p>
-          <h2 className="hud-section-title">Twitch interaction rules</h2>
-          <p className="hud-copy mt-1 text-xs text-zinc-300">Chat aliases and channel point routing live on the backend. Operator secret required to save.</p>
-        </div>
-        <span className="hud-chip">{loading ? 'Loading rules…' : 'Rules loaded'}</span>
-      </div>
-
-      <TwitchInteractionRulesEditor
-        apiBaseUrl={apiBaseUrl}
-        operatorSecret={operatorSecret}
-        rules={rules}
-        onRulesChange={setRules}
-        loadError={loadError}
-        onLoadErrorChange={setLoadError}
-      />
+    <div className="grid gap-4">
+      <Panel
+        id="twitch-rules"
+        kicker="Twitch"
+        title="Twitch interaction rules"
+        description="Chat aliases and channel point routing are stored on the backend. Operator secret required to save."
+        actions={<Tag tone={loading ? 'neutral' : 'ok'}>{loading ? 'Loading rules…' : 'Rules loaded'}</Tag>}
+      >
+        <TwitchInteractionRulesEditor
+          apiBaseUrl={apiBaseUrl}
+          operatorSecret={operatorSecret}
+          rules={rules}
+          onRulesChange={setRules}
+          loadError={loadError}
+          onLoadErrorChange={setLoadError}
+        />
+      </Panel>
 
       <TwitchRewardQueueManager apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} channelPointRules={rules.channelPointRules} />
-    </section>
+    </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   type DashboardPanelPage,
   type PanelLayoutItem,
 } from '../../../lib/dashboardLayout';
+import { Disclosure } from '../ui';
 
 type PanelDefinition = {
   id: string;
@@ -20,8 +21,11 @@ type CustomizablePanelLayoutProps = {
   onChange: (items: PanelLayoutItem[]) => void;
   title?: string;
   description?: string;
+  className?: string;
 };
 
+// Arrangeable panels. The editor stays folded away so it never competes with
+// the panels themselves; locked safety panels are rendered outside this list.
 export function CustomizablePanelLayout({
   page,
   items,
@@ -29,74 +33,64 @@ export function CustomizablePanelLayout({
   onChange,
   title = 'Customize panel layout',
   description = 'Reorder or hide safe panels. Locked safety panels stay fixed outside this list.',
+  className = 'grid gap-4',
 }: CustomizablePanelLayoutProps) {
-  const orderedItems = [...items].sort((left, right) => left.order - right.order);
   const panelMap = new Map(panels.map((panel) => [panel.id, panel.node]));
-  const visibleItems = visiblePanelLayoutItems(orderedItems).filter((item) => panelMap.has(item.id));
+  // A layout can name panels that live on another page; only list the ones here.
+  const orderedItems = [...items].sort((left, right) => left.order - right.order).filter((item) => panelMap.has(item.id));
+  const visibleItems = visiblePanelLayoutItems(orderedItems);
+
+  function update(next: PanelLayoutItem[]) {
+    const nextById = new Map(next.map((item) => [item.id, item]));
+    onChange(items.map((item) => nextById.get(item.id) ?? item));
+  }
 
   function resetLayout() {
     onChange(defaultPanelLayouts[page].map((item) => ({ ...item })));
   }
 
   return (
-    <section className="grid gap-3">
-      <div className="hud-panel hud-panel--flat border border-zinc-700/50 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="hud-label">Workspace layout</p>
-            <h2 className="text-lg font-semibold text-zinc-100">{title}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-zinc-400">{description}</p>
+    <>
+      <Disclosure summary={title}>
+        <div className="desk-sub">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="desk-row__text">{description}</p>
+            <button className="desk-btn desk-btn--small" type="button" onClick={resetLayout}>
+              Reset layout
+            </button>
           </div>
-          <button className="hud-button hud-button--small" type="button" onClick={resetLayout}>
-            Reset layout
-          </button>
-        </div>
+          <p className="desk-field__hint">Locked safety panels stay fixed outside this list.</p>
 
-        <p className="mt-3 text-xs uppercase tracking-[0.2em] text-zinc-500">Locked safety panels stay fixed outside this list.</p>
-
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          {orderedItems.map((item, index) => (
-            <article key={item.id} className="hud-compact-card flex items-center justify-between gap-2 border border-zinc-800/80 bg-black/10">
-              <div>
-                <p className="text-sm font-semibold text-zinc-100">{item.title}</p>
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">{item.visible ? 'visible' : 'hidden'}</p>
-              </div>
-              <div className="flex flex-wrap justify-end gap-1">
-                <button
-                  aria-label={`Move ${item.title} up`}
-                  className="hud-button hud-button--small"
-                  disabled={index === 0}
-                  type="button"
-                  onClick={() => onChange(movePanelLayoutItem(orderedItems, item.id, 'up'))}
-                >
-                  Up
-                </button>
-                <button
-                  aria-label={`Move ${item.title} down`}
-                  className="hud-button hud-button--small"
-                  disabled={index === orderedItems.length - 1}
-                  type="button"
-                  onClick={() => onChange(movePanelLayoutItem(orderedItems, item.id, 'down'))}
-                >
-                  Down
-                </button>
-                <button
-                  aria-label={`${item.visible ? 'Hide' : 'Show'} ${item.title}`}
-                  className="hud-button hud-button--small"
-                  type="button"
-                  onClick={() => onChange(togglePanelLayoutItem(orderedItems, item.id))}
-                >
-                  {item.visible ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </article>
-          ))}
+          <ol className="grid gap-2 md:grid-cols-2">
+            {orderedItems.map((item, index) => (
+              <li key={item.id} className="flex items-center justify-between gap-2">
+                <span className={item.visible ? '' : 'desk-empty'}>
+                  {item.title} <span className="desk-row__meta mono">{item.visible ? '' : 'hidden'}</span>
+                </span>
+                <span className="flex gap-1">
+                  <button aria-label={`Move ${item.title} up`} className="desk-btn desk-btn--small" disabled={index === 0} type="button" onClick={() => update(movePanelLayoutItem(orderedItems, item.id, 'up'))}>
+                    ↑
+                  </button>
+                  <button aria-label={`Move ${item.title} down`} className="desk-btn desk-btn--small" disabled={index === orderedItems.length - 1} type="button" onClick={() => update(movePanelLayoutItem(orderedItems, item.id, 'down'))}>
+                    ↓
+                  </button>
+                  <button aria-label={`${item.visible ? 'Hide' : 'Show'} ${item.title}`} className="desk-btn desk-btn--small" type="button" onClick={() => update(togglePanelLayoutItem(orderedItems, item.id))}>
+                    {item.visible ? 'Hide' : 'Show'}
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ol>
         </div>
+      </Disclosure>
+
+      <div className={className}>
+        {visibleItems.map((item) => (
+          <div key={item.id} className="min-w-0">
+            {panelMap.get(item.id)}
+          </div>
+        ))}
       </div>
-
-      {visibleItems.map((item) => (
-        <div key={item.id}>{panelMap.get(item.id)}</div>
-      ))}
-    </section>
+    </>
   );
 }

@@ -1,0 +1,895 @@
+/*
+ * SUBCULT on-air system ("poster press"). Overlay routes only.
+ * Source: subcult-tv studio/brands/subcult GUIDE.md and tokens.json.
+ * Purple is the field, ink sets the type, acid green is blocks and marks.
+ * Green on purple is decorative: never use it for small text.
+ */
+
+@import "@fontsource-variable/oswald";
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/jetbrains-mono";
+
+.sc-stage {
+  --sc-purple: #8b5cf6;
+  --sc-ink: #100b19;
+  --sc-acid: #00ff88;
+  --sc-bone: #f0ece4;
+  --sc-ink-glass: rgb(16 11 25 / 0.9);
+
+  --sc-display: "Oswald Variable", "Oswald", "Arial Narrow", sans-serif;
+  --sc-body: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --sc-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+
+  --sc-1: 8px;
+  --sc-2: 16px;
+  --sc-3: 24px;
+  --sc-4: 32px;
+  --sc-6: 48px;
+  --sc-8: 64px;
+  --sc-12: 96px;
+
+  --sc-tilt: -3.58deg; /* the mark's block angle */
+  --sc-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  position: relative;
+  min-height: 100vh;
+  padding: var(--sc-6);
+  color: var(--sc-ink);
+  background: transparent;
+  font-family: var(--sc-body);
+  font-size: 20px;
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  overflow: hidden;
+}
+
+.sc-stage *,
+.sc-stage *::before,
+.sc-stage *::after {
+  box-sizing: border-box;
+}
+
+.sc-stage p,
+.sc-stage h1,
+.sc-stage h2,
+.sc-stage h3,
+.sc-stage ol,
+.sc-stage ul {
+  margin: 0;
+  padding: 0;
+}
+
+/* Empty states are setup feedback. Once the stream is live they disappear so
+   a quiet chat or an unset goal never shows "waiting" on air. */
+.sc-stage[data-stream-status="live"] .sc-standby,
+.sc-stage[data-stream-status="live"] .sc-standby-row {
+  display: none;
+}
+
+/* ---------- type ---------- */
+
+.sc-display {
+  font-family: var(--sc-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  line-height: 0.92;
+}
+
+.sc-label {
+  font-family: var(--sc-mono);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.sc-label--sep::before {
+  content: "/ ";
+}
+
+/* ---------- primitives ---------- */
+
+.sc-mark,
+.sc-lockup,
+.sc-fisheye {
+  display: block;
+  flex: none;
+  height: auto;
+}
+
+/* Headlines carrying a slab isolate so the slab sits behind every line of
+   text, not just its own word. */
+.sc-slab-host {
+  isolation: isolate;
+}
+
+.sc-slab {
+  position: relative;
+  display: inline-block;
+  padding: 0 0.12em;
+  white-space: nowrap;
+}
+
+/* The mark's block uses --sc-tilt; text slabs tilt less so a long word stays
+   on the block from end to end. */
+.sc-slab::before {
+  content: "";
+  position: absolute;
+  inset: -0.02em -0.06em -0.1em;
+  z-index: -1;
+  background: var(--slab-color, var(--sc-acid));
+  transform: rotate(-1.6deg);
+  transform-origin: left center;
+  animation: sc-slab-in 520ms var(--sc-ease) 180ms both;
+}
+
+.sc-reg {
+  position: absolute;
+  width: 128px;
+  height: 128px;
+  pointer-events: none;
+  transform: rotate(var(--sc-tilt));
+}
+
+.sc-reg::before,
+.sc-reg::after {
+  content: "";
+  position: absolute;
+  background: var(--reg-color, var(--sc-ink));
+}
+
+.sc-reg::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1.5px;
+}
+
+.sc-reg::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1.5px;
+}
+
+.sc-reg--block {
+  background:
+    linear-gradient(var(--sc-acid), var(--sc-acid)) center / 62% 62% no-repeat;
+}
+
+/* ---------- connection pip ---------- */
+
+.sc-pip {
+  position: fixed;
+  top: var(--sc-2);
+  right: var(--sc-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-1);
+  padding: 6px 10px;
+  color: var(--sc-bone);
+  background: var(--sc-ink);
+  font-family: var(--sc-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sc-pip span {
+  width: 8px;
+  height: 8px;
+  background: var(--sc-acid);
+}
+
+.sc-pip--connecting span {
+  background: var(--sc-bone);
+  animation: sc-blink 1s steps(2, start) infinite;
+}
+
+.sc-pip--error span {
+  background: #ff5c7a;
+  animation: sc-blink 0.6s steps(2, start) infinite;
+}
+
+/* ---------- alerts ---------- */
+
+.sc-stage--alerts {
+  display: flex;
+  justify-content: center;
+}
+
+.sc-alerts {
+  display: grid;
+  align-content: start;
+  gap: var(--sc-2);
+  width: min(100%, 880px);
+}
+
+.sc-alert {
+  --field: var(--sc-purple);
+  --text: var(--sc-ink);
+  --edge: var(--sc-acid);
+  --slab-color: var(--sc-acid);
+  --reg-color: var(--sc-ink);
+
+  position: relative;
+  display: grid;
+  gap: var(--sc-2);
+  padding: var(--sc-4) var(--sc-6) var(--sc-4) calc(var(--sc-6) + 12px);
+  color: var(--text);
+  background: var(--field);
+  box-shadow: inset 12px 0 0 var(--edge);
+  animation: sc-wipe-in 460ms var(--sc-ease) both;
+}
+
+.sc-alert--success {
+  --field: var(--sc-acid);
+  --edge: var(--sc-ink);
+  --slab-color: var(--sc-purple);
+}
+
+.sc-alert--warning {
+  --field: var(--sc-bone);
+  --edge: var(--sc-purple);
+}
+
+.sc-alert--error {
+  --field: var(--sc-ink);
+  --text: var(--sc-bone);
+  --edge: var(--sc-acid);
+  --reg-color: var(--sc-bone);
+}
+
+.sc-alert--error .sc-slab {
+  color: var(--sc-ink);
+}
+
+.sc-alert__title {
+  font-size: 76px;
+  padding-right: 96px;
+}
+
+.sc-alert__body {
+  max-width: 44ch;
+  font-size: 26px;
+  font-weight: 500;
+}
+
+.sc-alert .sc-reg {
+  top: 8px;
+  right: 8px;
+  width: 96px;
+  height: 96px;
+}
+
+/* Older alerts step back so the newest one owns the frame. */
+.sc-alert:not(:first-child) {
+  gap: var(--sc-1);
+  padding-block: var(--sc-2);
+  opacity: 0.94;
+}
+
+.sc-alert:not(:first-child) .sc-alert__title {
+  font-size: 40px;
+}
+
+.sc-alert:not(:first-child) .sc-alert__body {
+  font-size: 18px;
+}
+
+.sc-alert:not(:first-child) .sc-reg {
+  display: none;
+}
+
+/* ---------- standby card (shared) ---------- */
+
+.sc-standby {
+  display: grid;
+  gap: var(--sc-1);
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--sc-2) var(--sc-3);
+  color: var(--sc-bone);
+  background: var(--sc-ink);
+  box-shadow: inset 6px 0 0 var(--sc-purple);
+}
+
+.sc-standby__title {
+  font-family: var(--sc-display);
+  font-size: 28px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.sc-standby__hint {
+  color: color-mix(in oklab, var(--sc-bone) 70%, var(--sc-ink));
+  font-family: var(--sc-mono);
+  font-size: 13px;
+}
+
+/* ---------- chat ---------- */
+
+.sc-stage--chat {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: var(--sc-3);
+}
+
+.sc-chat-log {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--sc-1);
+  width: min(100%, 520px);
+  min-height: 0;
+}
+
+.sc-chat {
+  display: grid;
+  gap: 4px;
+  padding: 12px var(--sc-2) 14px;
+  color: var(--sc-bone);
+  background: var(--sc-ink-glass);
+  animation:
+    sc-rise-in 320ms var(--sc-ease) both,
+    sc-press 1400ms ease-out both;
+}
+
+.sc-chat__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sc-chat__swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: var(--chatter, var(--sc-purple));
+  transform: rotate(var(--sc-tilt));
+}
+
+.sc-chat__name {
+  overflow: hidden;
+  font-family: var(--sc-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sc-chat__badge {
+  flex: none;
+  padding: 2px 6px;
+  color: var(--sc-ink);
+  background: var(--sc-acid);
+  font-size: 11px;
+}
+
+.sc-chat__text {
+  font-size: 21px;
+  font-weight: 450;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- ticker ---------- */
+
+.sc-stage--ticker {
+  display: flex;
+  align-items: flex-end;
+  padding: 0;
+}
+
+.sc-ticker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  width: 100%;
+  height: 72px;
+  background: var(--sc-purple);
+  animation: sc-wipe-in 500ms var(--sc-ease) both;
+}
+
+.sc-ticker__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 var(--sc-3) 0 var(--sc-2);
+  color: var(--sc-ink);
+  background: var(--sc-acid);
+}
+
+.sc-ticker__brand .sc-display {
+  font-size: 30px;
+}
+
+.sc-ticker__window {
+  position: relative;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent 0, #000 32px, #000 calc(100% - 64px), transparent 100%);
+}
+
+.sc-ticker__track {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  animation: sc-marquee var(--ticker-duration, 40s) linear infinite;
+}
+
+.sc-ticker__track--still {
+  animation: none;
+}
+
+.sc-ticker__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 var(--sc-3);
+  white-space: nowrap;
+}
+
+.sc-ticker__item::after {
+  content: "";
+  width: 14px;
+  height: 14px;
+  margin-left: var(--sc-3);
+  background: var(--sc-ink);
+  transform: rotate(var(--sc-tilt));
+}
+
+.sc-ticker__tag {
+  padding: 4px 8px;
+  color: var(--sc-bone);
+  background: var(--sc-ink);
+}
+
+.sc-ticker__item--error .sc-ticker__tag {
+  color: var(--sc-ink);
+  background: var(--sc-acid);
+}
+
+.sc-ticker__message {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+/* ---------- goals ---------- */
+
+.sc-goals {
+  display: grid;
+  gap: var(--sc-1);
+  width: min(100%, 680px);
+}
+
+.sc-goal {
+  position: relative;
+  display: grid;
+  gap: var(--sc-2);
+  padding: var(--sc-3) var(--sc-4) var(--sc-4) calc(var(--sc-4) + 12px);
+  background: var(--sc-purple);
+  box-shadow: inset 12px 0 0 var(--sc-acid);
+  animation: sc-wipe-in 460ms var(--sc-ease) both;
+}
+
+.sc-goal__label {
+  font-size: 48px;
+}
+
+.sc-goal__figures {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.sc-goal__current {
+  font-size: 96px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-goal__target {
+  font-size: 36px;
+}
+
+.sc-goal__percent {
+  margin-left: auto;
+  font-size: 56px;
+}
+
+.sc-meter {
+  position: relative;
+  height: 24px;
+  background: var(--sc-ink);
+}
+
+.sc-meter__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--meter, 0%);
+  background: var(--sc-acid);
+  transition: width 900ms var(--sc-ease);
+}
+
+/* Quarter ticks in the field color so they cut through the fill. */
+.sc-meter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 2px), var(--sc-purple) calc(25% - 2px) 25%);
+}
+
+.sc-goal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px var(--sc-2);
+  padding: 14px var(--sc-3);
+  color: var(--sc-bone);
+  background: var(--sc-ink);
+  animation: sc-rise-in 360ms var(--sc-ease) both;
+}
+
+.sc-goal-row .sc-display {
+  font-size: 26px;
+}
+
+.sc-goal-row .sc-meter {
+  grid-column: 1 / -1;
+  height: 8px;
+  background: color-mix(in oklab, var(--sc-bone) 18%, var(--sc-ink));
+}
+
+.sc-goal-row .sc-meter::after {
+  display: none;
+}
+
+/* ---------- now playing ---------- */
+
+.sc-np {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sc-3);
+  width: min(100%, 820px);
+  padding: var(--sc-2) var(--sc-4) var(--sc-2) calc(var(--sc-2) + 12px);
+  background: var(--sc-purple);
+  box-shadow: inset 12px 0 0 var(--sc-acid);
+  animation: sc-wipe-in 460ms var(--sc-ease) both;
+}
+
+.sc-np__art {
+  width: 136px;
+  height: 136px;
+  object-fit: cover;
+  background: var(--sc-ink);
+}
+
+.sc-np__body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sc-np__title {
+  overflow: hidden;
+  font-size: 48px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-np__artist {
+  overflow: hidden;
+  font-size: 24px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-np__progress {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.sc-np__progress .sc-meter {
+  height: 6px;
+}
+
+.sc-np__progress .sc-meter::after {
+  display: none;
+}
+
+.sc-np--paused .sc-np__title,
+.sc-np--paused .sc-np__artist {
+  opacity: 0.6;
+}
+
+/* ---------- full-frame poster scenes (brb, starting, ending) ---------- */
+
+.sc-stage--poster {
+  display: grid;
+  padding: 0;
+}
+
+.sc-poster {
+  --field: var(--sc-purple);
+  --text: var(--sc-ink);
+  --reg-color: var(--sc-ink);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
+  grid-template-rows: auto 1fr auto;
+  gap: var(--sc-6) var(--sc-12);
+  min-height: 100vh;
+  padding: var(--sc-12) var(--sc-12) var(--sc-8) calc(var(--sc-12) + 24px);
+  color: var(--text);
+  background: var(--field);
+  box-shadow: inset 24px 0 0 var(--sc-acid);
+  overflow: hidden;
+}
+
+.sc-poster--ink {
+  --field: var(--sc-ink);
+  --text: var(--sc-bone);
+  --reg-color: var(--sc-bone);
+}
+
+.sc-poster--ink .sc-slab {
+  color: var(--sc-ink);
+}
+
+.sc-poster__masthead {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-4);
+  font-size: 18px;
+}
+
+.sc-poster__headline {
+  align-self: center;
+  display: grid;
+  gap: var(--sc-6);
+  max-width: 100%;
+}
+
+.sc-poster__title {
+  font-size: clamp(96px, 11.5vw, 220px);
+  line-height: 1;
+  animation: sc-rise-in 700ms var(--sc-ease) both;
+}
+
+.sc-poster__message {
+  max-width: 30ch;
+  font-size: clamp(24px, 2.1vw, 40px);
+  font-weight: 500;
+  animation: sc-rise-in 700ms var(--sc-ease) 120ms both;
+}
+
+.sc-poster__side {
+  min-width: 0;
+  align-self: center;
+  display: grid;
+  gap: var(--sc-4);
+}
+
+.sc-poster__clock {
+  display: grid;
+  gap: var(--sc-1);
+  padding: var(--sc-4);
+  color: var(--sc-bone);
+  background: var(--sc-ink);
+}
+
+.sc-poster--ink .sc-poster__clock {
+  color: var(--sc-ink);
+  background: var(--sc-acid);
+}
+
+.sc-poster__clock .sc-display {
+  font-size: clamp(64px, 6.2vw, 120px);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.sc-poster__clock--long .sc-display {
+  font-size: clamp(44px, 3.8vw, 72px);
+  line-height: 1;
+}
+
+.sc-poster__list {
+  display: grid;
+  list-style: none;
+}
+
+.sc-poster__list li {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: baseline;
+  padding: 14px 0;
+  border-top: 2px solid var(--text);
+  font-size: clamp(20px, 1.5vw, 28px);
+  font-weight: 600;
+}
+
+.sc-poster__list li:last-child {
+  border-bottom: 2px solid var(--text);
+}
+
+.sc-poster__footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sc-4);
+}
+
+.sc-poster__track {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-size: 16px;
+}
+
+.sc-poster__track::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: var(--text);
+  animation: sc-pulse 1.6s ease-in-out infinite;
+}
+
+.sc-poster__track span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-poster .sc-reg {
+  top: 56px;
+  right: 72px;
+  width: 168px;
+  height: 168px;
+}
+
+/* ---------- camera frame ---------- */
+
+.sc-stage--camera {
+  padding: 0;
+}
+
+.sc-camera {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 var(--frame, 14px) var(--sc-purple);
+  pointer-events: none;
+}
+
+.sc-camera .sc-reg {
+  width: 72px;
+  height: 72px;
+  --reg-color: var(--sc-acid);
+}
+
+.sc-camera__corner--tl { top: -12px; left: -12px; }
+.sc-camera__corner--tr { top: -12px; right: -12px; }
+.sc-camera__corner--bl { bottom: -12px; left: -12px; }
+.sc-camera__corner--br { bottom: -12px; right: -12px; }
+
+.sc-nameplate {
+  position: absolute;
+  left: var(--sc-4);
+  bottom: var(--sc-4);
+  display: grid;
+  justify-items: start;
+  animation: sc-wipe-in 520ms var(--sc-ease) both;
+}
+
+.sc-nameplate__name {
+  padding: 8px 16px 6px;
+  color: var(--sc-ink);
+  background: var(--sc-acid);
+  font-size: 40px;
+}
+
+.sc-nameplate__role {
+  padding: 6px 16px;
+  color: var(--sc-bone);
+  background: var(--sc-ink);
+}
+
+.sc-camera__mark {
+  position: absolute;
+  top: var(--sc-4);
+  right: var(--sc-4);
+}
+
+/* ---------- debug ---------- */
+
+.sc-debug {
+  display: grid;
+  gap: var(--sc-2);
+  width: min(100%, 960px);
+  padding: var(--sc-3);
+  color: var(--sc-bone);
+  background: var(--sc-ink);
+  box-shadow: inset 6px 0 0 var(--sc-acid);
+}
+
+.sc-debug h1 {
+  font-size: 44px;
+}
+
+.sc-debug pre {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--sc-2);
+  border-left: 2px solid var(--sc-purple);
+  background: rgb(240 236 228 / 0.05);
+  font-family: var(--sc-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* ---------- motion ---------- */
+
+@keyframes sc-wipe-in {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes sc-slab-in {
+  from { transform: rotate(-1.6deg) scaleX(0); }
+  to { transform: rotate(-1.6deg) scaleX(1); }
+}
+
+@keyframes sc-rise-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A fresh chat line flashes the brand field, then settles to ink. */
+@keyframes sc-press {
+  0%, 30% { background: var(--sc-purple); color: var(--sc-ink); }
+  100% { background: var(--sc-ink-glass); color: var(--sc-bone); }
+}
+
+@keyframes sc-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes sc-blink {
+  to { visibility: hidden; }
+}
+
+@keyframes sc-pulse {
+  50% { transform: rotate(var(--sc-tilt)) scale(0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-stage *,
+  .sc-stage *::before,
+  .sc-stage *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  .sc-ticker__track {
+    animation: none;
+  }
+}

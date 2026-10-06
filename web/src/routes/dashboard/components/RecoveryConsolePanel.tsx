@@ -1,22 +1,12 @@
+import { Panel, Tag } from '../ui';
+
 const runbookBaseUrl = 'https://git.subcult.tv/PatrickFanella/over-laid/src/branch/main/docs/runbooks';
 
 const recoverySteps = [
-  {
-    label: '1 · Readiness',
-    text: 'Start with Backend readiness. Degraded checks identify OBS, Twitch, EventSub, retained state, event history, or interaction-rule failures.',
-  },
-  {
-    label: '2 · Recent events',
-    text: 'Use Event history to confirm what the API recorded before an overlay or dashboard reload.',
-  },
-  {
-    label: '3 · Rules and controls',
-    text: 'Use Config for Twitch interaction rules and Control for deliberate operator actions. Viewer rules never run arbitrary OBS actions.',
-  },
-  {
-    label: '4 · Package and backup',
-    text: 'Use CLI runbook commands for api-data backups and restores. The dashboard never displays token/state archives.',
-  },
+  { label: 'Readiness', text: 'Start with backend readiness. A degraded check names the failing part: OBS, Twitch, EventSub, retained state, event history, or interaction rules.' },
+  { label: 'Recent events', text: 'Check event history on Sessions to see what the API recorded before an overlay or dashboard reload.' },
+  { label: 'Rules and controls', text: 'Twitch rules live on Chat; deliberate operator actions live on Scenes. Viewer rules never run arbitrary OBS actions.' },
+  { label: 'Package and backup', text: 'Back up and restore api-data with the runbook CLI commands. The dashboard never displays token or state archives.' },
 ] as const;
 
 const runbookLinks = [
@@ -29,37 +19,30 @@ const runbookLinks = [
 
 export function RecoveryConsolePanel() {
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="hud-label">recovery</p>
-          <h2 className="hud-section-title">Recovery console</h2>
-          <p className="hud-copy mt-1 text-xs text-zinc-300">
-            One operator path for live incidents: diagnose first, then recover from the relevant runbook.
-          </p>
-        </div>
-        <span className="hud-chip hud-chip--square hud-accent-amber">no destructive browser actions</span>
-      </div>
-
-      <div className="mt-4 grid gap-2 md:grid-cols-2">
-        {recoverySteps.map((step) => (
-          <article key={step.label} className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-            <div className="hud-terminal-line">
-              <span className="hud-terminal-key">step</span>
-              <span className="hud-terminal-value font-bold">{step.label}</span>
-            </div>
-            <p className="mt-2 text-xs text-zinc-300">{step.text}</p>
-          </article>
+    <Panel
+      kicker="Recovery"
+      title="Recovery console"
+      description="One path for live incidents: diagnose first, then follow the matching runbook."
+      actions={<Tag tone="warn">no destructive browser actions</Tag>}
+    >
+      <ol className="grid gap-3 md:grid-cols-2">
+        {recoverySteps.map((step, index) => (
+          <li key={step.label} className="desk-sub">
+            <p className="desk-sub__title">
+              {index + 1} · {step.label}
+            </p>
+            <p className="desk-row__text">{step.text}</p>
+          </li>
         ))}
-      </div>
+      </ol>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {runbookLinks.map((link) => (
-          <a key={link.href} className="hud-action-button hud-action-button--compact" href={link.href} rel="noreferrer" target="_blank">
+          <a key={link.href} className="desk-btn desk-btn--small" href={link.href} rel="noreferrer" target="_blank">
             {link.label}
           </a>
         ))}
       </div>
-    </section>
+    </Panel>
   );
 }

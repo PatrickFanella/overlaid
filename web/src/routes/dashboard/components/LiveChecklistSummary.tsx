@@ -1,4 +1,5 @@
 import type { SetupChecklistItem } from '../../../lib/dashboardConfig';
+import { Panel, Tag } from '../ui';
 
 type LiveChecklistSummaryProps = {
   items: SetupChecklistItem[];
@@ -9,29 +10,27 @@ export function LiveChecklistSummary({ items }: LiveChecklistSummaryProps) {
   const total = items.length;
 
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="hud-label">Checklist</p>
-          <h2 className="hud-section-title">Setup checklist summary</h2>
-          <p className="hud-copy mt-1 text-xs text-zinc-300">Read-only mirror of the setup checklist.</p>
-        </div>
-        <span className={`hud-chip hud-chip--square ${completed === total ? 'hud-accent-emerald' : 'hud-accent-amber'}`}>
-          {completed}/{total} done
-        </span>
-      </div>
-
-      <div className="mt-3 grid gap-2">
+    <Panel
+      kicker="Checklist"
+      title="Setup checklist summary"
+      description={
+        <>
+          Read-only. Edit it on <a href="/dashboard/overlays">Overlays</a>.
+        </>
+      }
+      actions={<Tag tone={completed === total ? 'ok' : 'warn'}>{`${completed}/${total} done`}</Tag>}
+      flush
+    >
+      <ul className="desk-rows">
         {items.map((item) => (
-          <article key={item.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card">
-            <div className="hud-terminal-line">
-              <span className="hud-terminal-key">{item.completed ? 'done' : 'open'}</span>
-              <span className="hud-terminal-value font-bold">{item.title}</span>
+          <li key={item.id} className={`desk-row ${item.completed ? 'desk-row--ok' : ''}`}>
+            <div className="desk-row__line">
+              <p className="desk-row__title">{item.title}</p>
+              <span className="desk-row__meta mono">{item.completed ? 'done' : 'open'}</span>
             </div>
-            {item.description ? <p className="mt-1 text-xs text-zinc-300">{item.description}</p> : null}
-          </article>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Panel>
   );
 }
