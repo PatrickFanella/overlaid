@@ -130,7 +130,11 @@ To test a custom command:
 
 Timers are persisted so operator configuration survives browser/session changes. When bot storage is available, the API starts a timer worker that polls due enabled timers and publishes the configured safe `ticker` or `alert` response into the existing event pipeline. Timer executions write bot audit rows with result `allowed` and reason `timer_due`.
 
-Run once sends one saved timer response, including a paused timer. It requires operator access and bot storage, but no Twitch credentials. It does not enable the timer or update `lastRunAt`. The dashboard labels that timestamp Last scheduled run. Manual executions appear in bot audit with source `dashboard`, actor role `operator`, reason `timer_run_once`, event ID, and active stream session ID. Empty rendered responses return a validation error and write a failed audit row.
+Run once sends one saved timer response, including a paused timer. It requires operator access and bot storage, but no Twitch credentials. It does not enable the timer or update `lastRunAt`. The dashboard labels that timestamp Last scheduled run.
+
+Create, update, pause, enable, and delete operations also record bot audit rows with action `timer_create`, `timer_update`, `timer_pause`, `timer_enable`, or `timer_delete`. They include scheduling metadata and active session ID, without response templates. Failed configuration changes use result `failed`. The dashboard refreshes audit after configuration changes.
+
+Manual executions appear in bot audit with source `dashboard`, actor role `operator`, reason `timer_run_once`, event ID, and active stream session ID. Empty rendered responses return a validation error and write a failed audit row.
 
 Timer validation:
 

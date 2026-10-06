@@ -140,3 +140,33 @@ func TestBotTimerRunRequiresOperatorAndStorage(t *testing.T) {
 		t.Fatalf("expected unavailable storage, got %d", recorder.Code)
 	}
 }
+
+func TestRecordBotTimerChangesUsesSafeMetadataAndSession(t *testing.T) {
+	recorder := &recordingBotAuditStore{}
+	server := &Server{botRuntime: bot.NewRuntime(recorder), history: activeHistoryStub{sessionID: "session-1"}}
+	timer := bot.Timer{ID: "timer-1", Name: "hydrate", Enabled: true, IntervalSeconds: 300, Action: "ticker", Response: "private response"}
+	for _, operation := range []string{"create", "update", "pause", "enable", "delete"} {
+		server.recordBotTimerChange(context.Background(), timer, operation, bot.ResultAllowed)
+	}
+	server.recordBotTimerChange(context.Background(), bot.Timer{ID: "missing"}, "update", bot.ResultFailed)
+	if len(recorder.events) != 6 {
+		t.Fatalf("unexpected audit count %d", len(recorder.events))
+	}
+	for _, event := range recorder.events {
+		if event.Source != "dashboard" || event.ActorRole != "operator" || event.StreamSessionID != "session-1" {
+			t.Fatalf("unexpected identity/session: %#v", event)
+		}
+		if strings.Contains(string(event.Data), "private response") || strings.Contains(string(event.Data), "response") {
+			t.Fatalf("response leaked into audit: %s", event.Data)
+		}
+	}
+	if event := recorder.events[0]; event.Action != "timer_create" || !strings.Contains(string(event.Data), `"intervalSeconds":300`) {
+		t.Fatalf("unexpected create audit: %#v", event)
+	}
+	if event := recorder.events[4]; event.Action != "timer_delete" || string(event.Data) != `{"timerId":"timer-1"}` {
+		t.Fatalf("unexpected delete audit: %#v", event)
+	}
+	if event := recorder.events[5]; event.Result != "failed" || event.Reason != "timer_configuration_failed" {
+		t.Fatalf("unexpected failure audit: %#v", event)
+	}
+}

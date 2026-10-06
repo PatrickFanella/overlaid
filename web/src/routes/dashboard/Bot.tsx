@@ -118,8 +118,8 @@ export function BotWorkspace() {
   }, [apiBaseUrl, operatorSecret]);
 
   async function refreshTimers() {
-    const [status, timers] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret)]);
-    setState((current) => ({ ...current, status, timers }));
+    const [status, timers, audit] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret)]);
+    setState((current) => ({ ...current, status, timers, audit }));
   }
 
   async function refreshCommands() {

@@ -114,3 +114,27 @@ func firstNonEmptyString(values ...string) string {
 	}
 	return ""
 }
+
+// Record scheduling metadata only. Response templates and raw request/error
+// content do not belong in operator configuration audit rows.
+func (s *Server) recordBotTimerChange(ctx context.Context, timer bot.Timer, operation string, result bot.Result) {
+	if s == nil || s.botRuntime == nil {
+		return
+	}
+	data := map[string]any{"timerId": timer.ID}
+	if result == bot.ResultAllowed && operation != "delete" {
+		data["enabled"] = timer.Enabled
+		data["intervalSeconds"] = timer.IntervalSeconds
+		data["timerAction"] = timer.Action
+	}
+	reason := "timer_configuration_changed"
+	if result == bot.ResultFailed {
+		reason = "timer_configuration_failed"
+	}
+	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
+		Source: bot.SourceDashboard, ActorRole: bot.RoleOperator,
+		Trigger: "timer_configuration", Command: timer.Name,
+		Action: "timer_" + operation, Result: result, Reason: reason,
+		StreamSessionID: s.activeSessionID(), Data: data,
+	})
+}

@@ -51,9 +51,16 @@ test.describe('operator browser smoke', () => {
     let finishRun!: () => void;
     const pendingRun = new Promise<void>((resolve) => { finishRun = resolve; });
     let runs = 0;
+    let configurationChanged = false;
     const timer = { id: 'timer-1', name: 'hydrate', enabled: false, intervalSeconds: 300, response: 'Hydrate', action: 'ticker', createdAt: '2026-10-05T12:00:00Z', updatedAt: '2026-10-05T12:00:00Z' };
     await page.route('**/api/bot/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/timers/timer-1') && route.request().method() === 'PUT') {
+        timer.enabled = route.request().postDataJSON().enabled;
+        configurationChanged = true;
+        await route.fulfill({ json: timer });
+        return;
+      }
       if (path.endsWith('/timer-1/run')) {
         expect(route.request().method()).toBe('POST');
         runs += 1;
@@ -73,7 +80,7 @@ test.describe('operator browser smoke', () => {
         quotes: { quotes: [] },
         'api-variables': { variables: [] },
         rules: { rules: [] },
-        audit: { events: runs ? [{ id: 'audit-1', createdAt: '2026-10-05T12:01:00Z', source: 'dashboard', result: 'allowed', reason: 'timer_run_once', trigger: 'hydrate' }] : [] },
+        audit: { events: runs ? [{ id: 'audit-1', createdAt: '2026-10-05T12:01:00Z', source: 'dashboard', result: 'allowed', reason: configurationChanged ? 'timer_configuration_changed' : 'timer_run_once', trigger: 'hydrate' }] : [] },
       };
       await route.fulfill({ json: responses[path.split('/').at(-1)!] ?? {} });
     });
@@ -92,6 +99,9 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByText(/bot timer execution unavailable/)).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Run once', exact: true })).toBeEnabled();
     expect(runs).toBe(2);
+    await panel.getByRole('button', { name: 'Enable', exact: true }).click();
+    await expect(panel.getByText('enabled', { exact: true })).toBeVisible();
+    await expect(page.getByText('dashboard · timer_configuration_changed')).toBeVisible();
   });
 
   test('shows twitch reward queue lifecycle controls', async ({ page }) => {

@@ -586,8 +586,13 @@ func (s *Server) botTimerSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
+	operation := "create"
+	if strings.TrimSpace(request.ID) != "" {
+		operation = "update"
+	}
 	timer, err := s.botStore.SaveTimer(r.Context(), bot.Timer{ID: request.ID, Name: request.Name, Enabled: request.Enabled, IntervalSeconds: request.IntervalSeconds, Response: request.Response, Action: request.Action})
 	if err != nil {
+		s.recordBotTimerChange(r.Context(), bot.Timer{ID: request.ID}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -595,6 +600,7 @@ func (s *Server) botTimerSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotTimerChange(r.Context(), timer, operation, bot.ResultAllowed)
 	writeJSON(w, timer)
 }
 
@@ -607,8 +613,13 @@ func (s *Server) botTimerSetEnabled(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
+	operation := "pause"
+	if request.Enabled {
+		operation = "enable"
+	}
 	timer, err := s.botStore.SetTimerEnabled(r.Context(), r.PathValue("id"), request.Enabled)
 	if err != nil {
+		s.recordBotTimerChange(r.Context(), bot.Timer{ID: r.PathValue("id")}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -616,6 +627,7 @@ func (s *Server) botTimerSetEnabled(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotTimerChange(r.Context(), timer, operation, bot.ResultAllowed)
 	writeJSON(w, timer)
 }
 
@@ -645,6 +657,7 @@ func (s *Server) botTimerDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.botStore.DeleteTimer(r.Context(), r.PathValue("id")); err != nil {
+		s.recordBotTimerChange(r.Context(), bot.Timer{ID: r.PathValue("id")}, "delete", bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -652,5 +665,6 @@ func (s *Server) botTimerDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotTimerChange(r.Context(), bot.Timer{ID: r.PathValue("id")}, "delete", bot.ResultAllowed)
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -47,11 +47,11 @@ Deliberately carried forward:
 
 ## October 5 overnight progress
 
-The timer workflow now includes Run once for saved timers, including paused timers. Manual execution publishes the same safe ticker or alert event as the scheduler, records a dashboard/operator audit row with event and session IDs, and leaves the scheduled cadence unchanged. The dashboard shows the last scheduled run and refreshes audit after rehearsal.
+The timer workflow now includes Run once for saved timers, including paused timers. Manual execution publishes the same safe ticker or alert event as the scheduler, records a dashboard/operator audit row with event and session IDs, and leaves the scheduled cadence unchanged. The dashboard shows the last scheduled run and refreshes audit after rehearsal and timer configuration changes. Create, update, pause, enable, and delete actions now record success or failure audit rows with safe scheduling metadata and active session ID.
 
 Verification passed: `make verify`, `make smoke`, and all six `make smoke-browser` checks. Unit tests cover paused timers, missing timers, empty rendered responses, and audit-storage failure. Browser fixtures cover pending, success, audit refresh, and API failure without Twitch credentials.
 
-Local verification uses native API and Vite processes on loopback, with disposable file data under `/tmp`. Docker socket access is unavailable, but rootless Podman runs a disposable Postgres 17 database on loopback port 55439. Real Postgres checks passed for timer lookup, unchanged paused configuration, event history, manual audit, missing/empty timer errors, and active-session report linkage. `make smoke API_PORT=8081` passed with database, bot runtime, dashboard config, and session readiness checks healthy. Live Twitch/OBS execution remains unverified; readiness reports missing Twitch configuration and unreachable OBS.
+Local verification uses native API and Vite processes on loopback, with disposable file data under `/tmp`. Docker socket access is unavailable, but rootless Podman runs a disposable Postgres 17 database on loopback port 55439. Real Postgres checks passed for timer lookup, unchanged paused configuration, event history, manual audit, missing/empty timer errors, active-session report linkage, and configuration-change audit coverage without response text. `make smoke API_PORT=8081` passed with database, bot runtime, dashboard config, and session readiness checks healthy. Live Twitch/OBS execution remains unverified; readiness reports missing Twitch configuration and unreachable OBS.
 
 ---
 
@@ -169,7 +169,7 @@ Build the spine before adding feature breadth.
 - [ ] Implement list/create/update/delete for timers.
 - [ ] Validate timer interval minimum 30 seconds.
 - [ ] Validate timer response/action cannot contain secret-looking keys.
-- [ ] Record audit event when an operator changes a timer.
+- [x] Record audit events for timer create/update/pause/enable/delete and failed configuration changes.
 - [ ] Commit: `feat: add bot timer api`.
 
 ### Task B2: Timer runtime execution
