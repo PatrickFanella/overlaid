@@ -415,6 +415,76 @@ test.describe('operator browser smoke', () => {
     await expect(queue.getByText('Fulfillment note: Stable reward note')).toHaveCount(2);
   });
 
+  test('imports local profiles, filters routes, preserves hidden items, and exports without secrets', async ({ page }) => {
+    await page.addInitScript(() => sessionStorage.setItem('overlaid.operatorSecret.session.v1', 'profile-session-fixture'));
+    let writes = 0;
+    await page.route('**/api/**', async (route) => {
+      if (route.request().method() !== 'GET') {
+        writes++;
+        await route.fulfill({ status: 500, body: 'Profiles must not execute API writes' });
+      } else await route.fallback();
+    });
+    await page.goto('/dashboard/settings');
+    const profiles = page.locator('#automation-profiles');
+    const exported = profiles.locator('textarea[readonly]');
+    const fixture = {
+      activeAutomationProfileId: 'profile-fixture',
+      automationProfiles: [{ id: 'profile-fixture', title: 'Fixture show', description: 'Browser-local fixture', quickActionIds: ['fixture-alert'], streamPresetIds: ['fixture-main'] }],
+      quickActions: [
+        { id: 'fixture-alert', label: 'Fixture visible alert', kind: 'sendAlert', title: 'Fixture', message: 'Unused', severity: 'info' },
+        { id: 'fixture-hidden', label: 'Fixture hidden BRB', kind: 'hideBRB' },
+      ],
+      streamPresets: [
+        { id: 'fixture-main', title: 'Fixture main', sources: ['alerts'] },
+        { id: 'fixture-hidden', title: 'Fixture hidden preset', sources: ['brb'] },
+      ],
+      operatorSecret: 'must-not-import-or-export',
+    };
+    await profiles.getByLabel('Import dashboard config', { exact: true }).fill(JSON.stringify(fixture));
+    await profiles.getByRole('button', { name: 'Import dashboard config', exact: true }).click();
+    await expect(profiles.getByRole('combobox', { name: 'Active profile', exact: true })).toHaveValue('profile-fixture');
+    const backup = await exported.inputValue();
+    expect(backup).not.toContain('profile-session-fixture');
+    expect(backup).not.toContain('must-not-import-or-export');
+    expect(JSON.parse(backup).quickActions.map((action: { id: string }) => action.id)).toContain('fixture-hidden');
+    await profiles.getByLabel('Import dashboard config', { exact: true }).fill('{');
+    await profiles.getByRole('button', { name: 'Import dashboard config', exact: true }).click();
+    await expect(profiles.getByText('Import failed: invalid dashboard config JSON.', { exact: true })).toBeVisible();
+    await expect(exported).toHaveValue(backup);
+    await page.goto('/dashboard/scenes');
+    await expect(page.getByText('Active profile · Fixture show', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Fixture visible alert', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Fixture hidden BRB', exact: true })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByText('Active profile · Fixture show', { exact: true })).toBeVisible();
+    await page.goto('/dashboard/overlays');
+    await expect(page.getByText('Preset fixture-main', { exact: true })).toBeVisible();
+    await expect(page.getByText('Preset fixture-hidden', { exact: true })).toHaveCount(0);
+    await page.getByLabel('Title', { exact: true }).fill('Edited visible preset');
+    await page.goto('/dashboard/settings');
+    await profiles.getByRole('combobox', { name: 'Active profile', exact: true }).selectOption('full-console');
+    await page.goto('/dashboard/scenes');
+    await expect(page.getByRole('button', { name: 'Fixture hidden BRB', exact: true })).toBeVisible();
+    await page.goto('/dashboard/overlays');
+    await expect(page.getByText('Preset fixture-hidden', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Title', { exact: true }).first()).toHaveValue('Edited visible preset');
+    await expect(page.getByLabel('Title', { exact: true }).nth(1)).toHaveValue('Fixture hidden preset');
+    await page.goto('/dashboard/settings');
+    await profiles.getByLabel('Import dashboard config', { exact: true }).fill(backup);
+    await profiles.getByRole('button', { name: 'Import dashboard config', exact: true }).click();
+    await profiles.getByRole('textbox', { name: /^Quick action IDs/ }).first().fill('missing-action');
+    await profiles.getByRole('textbox', { name: /^Stream preset IDs/ }).first().fill('missing-preset');
+    await page.goto('/dashboard/scenes');
+    await expect(page.getByText('Missing quick action: missing-action', { exact: true })).toBeVisible();
+    await expect(page.getByText('No valid quick actions selected; falling back to all quick actions.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Fixture hidden BRB', exact: true })).toBeVisible();
+    await page.goto('/dashboard/overlays');
+    await expect(page.getByText('Missing stream preset: missing-preset', { exact: true })).toBeVisible();
+    await expect(page.getByText('Preset fixture-hidden', { exact: true })).toBeVisible();
+    expect(writes).toBe(0);
+    expect(await page.evaluate(() => sessionStorage.getItem('overlaid.operatorSecret.session.v1'))).toBe('profile-session-fixture');
+  });
+
   test('counts Unicode reward text consistently before create and edit writes', async ({ page }) => {
     const title = '🌊'.repeat(45);
     const prompt = '水🌊'.repeat(100);

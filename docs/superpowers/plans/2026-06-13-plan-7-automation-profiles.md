@@ -28,7 +28,7 @@ Verification passed:
 - `make smoke`
 - Route spot-checks: `/dashboard/config`, `/dashboard/control`, `/dashboard/sources`
 
-Live QA result: profile switching/import-export browser interaction pending next operator pass.
+The original closeout left profile switching/import-export browser interaction pending. October 6 automated browser acceptance now verifies that local workflow; personal live-show use remains an operator check.
 
 ---
 
@@ -407,3 +407,10 @@ git commit -m "docs: mark plan 7 complete"
 - [x] Profile filtering never deletes hidden actions/presets.
 - [x] Export JSON contains `DashboardConfig` only and does not include session-only operator secret.
 - [x] `make verify` passes after every implementation commit.
+
+
+## October 6 browser interaction acceptance
+
+A credential-free browser workflow imports a named profile, checks active selection and export, rejects malformed JSON without changing the saved configuration, and reloads Scenes to prove persistence. Scenes filters the quick-action runner while preserving the complete catalog. Overlays filters preset cards; editing a visible preset preserves hidden preset content. Switching to Full console restores the hidden action/preset, and importing the saved export restores the earlier configuration. Missing action/preset IDs show warnings and fall back to all entries.
+
+The workflow also proves that profile changes/imports make no API writes, an injected unknown operator-secret field is excluded from export, and the session-only secret survives import unchanged. All test secret strings are synthetic fixtures. `make verify` passed with 113 frontend tests, and all 23 `make smoke-browser` workflows passed. This closes the local browser interaction gap without claiming actual OBS/live-show use.

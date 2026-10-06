@@ -1,6 +1,6 @@
 # Roadmap acceptance map, October 6, 2026
 
-Source audited: `f094155` plus the Unicode reward validation changes committed with this record. This record distinguishes local implementation/contract acceptance from real-service and production acceptance. It does not mark the overnight goal or live deployment complete.
+Initial source audited: `f094155`; Unicode reward validation was verified in `a723719`. The profile browser acceptance addendum is committed with the current update. This record distinguishes local implementation/contract acceptance from real-service and production acceptance. It does not mark the overnight goal or live deployment complete.
 
 ## FossaBot parity requirements
 
@@ -32,6 +32,7 @@ Postgres-enabled tests create/drop their own schemas. The complete backend race 
 | Phase 2 and advanced rewards | Shared Helix contracts and browser lifecycle/write/redemption tests cover pause/resume, enable/disable, guarded cooldown/max limits, prompt/input fields, manual fulfillment/cancel, and delete confirmation. Cooldown 604800/604801 dispatch bounds are tested. Reward title/prompt limits count Unicode code points after trimming, with CJK/emoji create and edit boundaries covered in API and browser tests. Live Twitch writes remain unverified. |
 | Architecture deepening | The plan's current implementation map identifies Helix, moderation, configuration policy, templates/API resolver, command executors/runtime, feature hooks, reward split, and shared transport. Direct contract tests cover those seams. Historical “next” notes are checkpoint history. |
 | Operator workflow/layout/session reports | Browser tests cover confirmed sequential actions, failure/retry, pending report reads, accurate failed-report receipts, partial-route layout preservation/reset, and demo overlays. Postgres tests cover lifecycle serialization/cancellation and coherent report snapshots under concurrent writes. |
+| Local automation profiles | Browser import/export/switch/reload, Scenes action filtering, Overlays preset filtering, hidden-item preservation, invalid JSON preservation, missing-reference warnings/fallback, and secret exclusion/no API writes close the [Plan 7 local interaction gate](../superpowers/plans/2026-06-13-plan-7-automation-profiles.md). Personal OBS/live-show use remains external. |
 | Readiness monitoring | Probe CLI tests, selected/full readiness checks, signal behavior, native startup measurement, and cross-compilation are recorded. No persistent alert endpoint or deployment was installed. |
 | Process recovery | [Local restart drill](2026-10-06-local-recovery-drill.md): outage/recovery probe transition, exact retained replay/report, restored active-session tags, start/end snapshots, zero pipeline drops, cleanup. |
 | Backup/restore | [Isolated restore](2026-10-06-local-backup-restore-drill.md) and [actual Make recipes](2026-10-06-backup-make-targets.md): exact restored product responses/audits, corrected absolute paths, valid nonempty custom dumps, and fixture row restoration. |
@@ -41,7 +42,7 @@ Postgres-enabled tests create/drop their own schemas. The complete backend race 
 
 ## Verification record
 
-At the audited source, required verification passed: `make verify` (113 frontend tests, Go vet/tests, backend/probe/frontend builds, Compose config, and Open Pilot templates), all 22 `make smoke-browser` workflows, and `make smoke API_PORT=8081`. The complete Postgres-enabled `go test -race ./... -count=1` passed before the Unicode change. The affected HTTP package race suite passed again with Postgres enabled after that change. Packaging, Compose, backup/restore, and native browser checks are linked above; their engine/environment qualifications remain part of the evidence.
+At the audited source, required verification passed: `make verify` (113 frontend tests, Go vet/tests, backend/probe/frontend builds, Compose config, and Open Pilot templates), all 23 `make smoke-browser` workflows, and `make smoke API_PORT=8081`. The complete Postgres-enabled `go test -race ./... -count=1` passed before the Unicode change. The affected HTTP package race suite passed again with Postgres enabled after that change. Packaging, Compose, backup/restore, and native browser checks are linked above; their engine/environment qualifications remain part of the evidence.
 
 The official [Twitch reward reference](https://dev.twitch.tv/docs/api/reference#create-custom-rewards) defines a 45-character title and 200-character prompt limit. Local validation treats a Unicode code point as a character; a combining mark counts separately. This corrects the previous API byte count and browser UTF-16 input cap. Live Twitch acceptance of Unicode boundary text is still part of the external reward lifecycle gate.
 
