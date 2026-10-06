@@ -87,6 +87,16 @@ Verification passed: focused HTTP race tests, `make verify` (93 frontend tests a
 
 ---
 
+## October 6 scheduled timer and audit persistence contracts
+
+Scheduler tests now cover periodic polling, publication before cadence/audit writes, ticker/alert output, empty rendered responses, active-session/event audit linkage, and storage failures. Cancellation after a publication stops the rest of the loaded batch; already-canceled or unconfigured schedulers do no work. The previous loop could publish the remaining timers after cancellation.
+
+Postgres tests use private temporary schemas, leaving the running API's tables and worker untouched. They prove newest-first audit ordering with tied timestamps, safe metadata round trips, rejection before persistence, exact timer interval boundaries, paused/deleted timers, saved interval changes, and bounded due ordering. An end-to-end scheduler fixture publishes to the event bus and history, persists linked session audit, marks cadence, and dispatches the next run at the interval boundary.
+
+Verification passed: the complete backend race suite with optional Postgres tests enabled, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, and `make smoke API_PORT=8081`.
+
+---
+
 ## File structure
 
 ### Backend domain
@@ -135,7 +145,7 @@ Build the spine before adding feature breadth.
   - `bot_commands(id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at)`
   - `bot_timers(id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at)`
 - [ ] Implement `bot.Store` with `NewPostgres(databaseURL string)`, `Load()`, `RecordAudit(ctx, AuditEvent)`, `RecentAudit(ctx, limit)`, and `Close()`.
-- [ ] Add tests proving audit events are inserted newest-first and secret-looking keys are rejected from audit `data`.
+- [x] Add tests proving audit events are inserted newest-first and secret-looking keys are rejected from audit `data` (October 6: isolated Postgres round trip, bounded ordering, ties, and recursive rejection).
 - [ ] Run `cd backend && go test ./internal/bot`.
 - [ ] Run `make verify`.
 - [ ] Commit: `feat: add bot audit storage`.
@@ -211,10 +221,10 @@ Build the spine before adding feature breadth.
 - Modify: `backend/internal/http/server.go`
 - Test: `backend/internal/bot/timers_test.go`
 
-- [ ] Add a scheduler that polls due enabled timers.
-- [ ] Publish timer output into existing event pipeline as safe overlay/ticker/alert events.
-- [ ] Record audit event for each timer execution.
-- [ ] Keep scheduler disabled when bot storage is unavailable.
+- [x] Add a scheduler that polls due enabled timers (October 6: polling and Postgres cadence tests).
+- [x] Publish timer output into existing event pipeline as safe overlay/ticker/alert events (October 6: real bus/history scheduler fixture).
+- [x] Record audit event for each timer execution (October 6: persisted event/session links and template diagnostics).
+- [x] Keep scheduler disabled when bot storage is unavailable (startup guard and scheduler dependency checks).
 - [ ] Commit: `feat: run bot timers`.
 
 ### Task B3: Timer dashboard

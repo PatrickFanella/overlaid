@@ -24,6 +24,9 @@ type TimerScheduler struct {
 }
 
 func (s TimerScheduler) Run(ctx context.Context) {
+	if s.Store == nil || s.Publish == nil || ctx.Err() != nil {
+		return
+	}
 	interval := s.Interval
 	if interval <= 0 {
 		interval = 5 * time.Second
@@ -42,7 +45,7 @@ func (s TimerScheduler) Run(ctx context.Context) {
 }
 
 func (s TimerScheduler) runOnce(ctx context.Context, now time.Time) {
-	if s.Store == nil || s.Publish == nil {
+	if s.Store == nil || s.Publish == nil || ctx.Err() != nil {
 		return
 	}
 	timers, err := s.Store.DueTimers(ctx, now, 10)
@@ -51,6 +54,9 @@ func (s TimerScheduler) runOnce(ctx context.Context, now time.Time) {
 		return
 	}
 	for _, timer := range timers {
+		if ctx.Err() != nil {
+			return
+		}
 		event, render := TimerEvent(timer, s.Channel)
 		if strings.TrimSpace(event.Message) == "" {
 			continue
