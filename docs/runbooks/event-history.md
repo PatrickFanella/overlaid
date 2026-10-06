@@ -45,7 +45,7 @@ curl -fsS 'http://localhost:8080/api/events/history?limit=5' | jq .
 
 ## Dashboard
 
-Open `http://localhost:5173/dashboard/live` and check the Event history panel.
+Open `http://localhost:5173/dashboard/sessions` and check the Event history panel.
 It shows recent persisted events alongside readiness and preflight status.
 Start a session in the Rehearsal audit panel before a rehearsal/live pass to tag new events.
 

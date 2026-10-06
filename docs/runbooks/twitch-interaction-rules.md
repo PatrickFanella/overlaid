@@ -26,7 +26,7 @@ Use this when editing backend Twitch chat aliases or channel point reward rules.
 
 Recommended smoke check:
 
-1. Open `/dashboard/config`.
+1. Open `/dashboard/chat` (Twitch rules section).
 2. In the Twitch interaction rules manager, add a test alias like `!panic -> clear`.
 3. Save with the operator secret.
 4. Send `!panic` from a moderator or broadcaster account.
@@ -97,11 +97,11 @@ docker compose exec api sh -c 'rm /data/twitch-interactions.json'
 docker compose restart api
 ```
 
-Then repopulate valid rules from `/dashboard/config`.
+Then repopulate valid rules from `/dashboard/chat`.
 
 ## Live QA
 
-- Open `/dashboard/live` and confirm `twitch_interactions` is `ok`.
+- Open `/dashboard/health` and confirm `twitch_interactions` is `ok`.
 - Open `/overlay/debug` and verify alias attempts emit `custom_command` diagnostics.
 - Test one broadcaster/mod alias, one channel point `alert`, one `clear`, and one `ignore` rule.
 - Confirm `ignore` suppresses the redemption alert and produces only the diagnostic event in debug/history surfaces.

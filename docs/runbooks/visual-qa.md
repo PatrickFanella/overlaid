@@ -12,129 +12,73 @@ Manual route-by-route checklist for confirming overlay and dashboard rendering a
 
 Open routes at the deployed web origin, for example `http://<host>:5173`. Check dashboard routes at a standard desktop/laptop viewport and overlay routes at a 16:9 OBS canvas such as 1920×1080.
 
-## Broadcast ops console checks
+## Operator desk checks
 
-- [ ] Dashboard shell renders `Broadcast ops console` and groups navigation into Monitor, Setup, Operate, and Configure.
-- [ ] `/dashboard` shows the Mission control header, system status, build info, and route guide without pushing primary links below the fold on desktop.
-- [ ] `/dashboard/live` prioritizes recovery/readiness/preflight before secondary evidence panels.
-- [ ] `/dashboard/bot` shows `Operate with guardrails`; destructive nuke/radiation controls are visually distinct from commands, counters, quotes, and timers.
-- [ ] `/dashboard/config` shows `Configure deliberately`; Twitch reward delete controls remain separated behind confirmation and lower visual priority than pause/disable/update controls.
-- [ ] Keyboard focus remains visible on buttons, chips, inputs, and route navigation.
+- [ ] The sidebar groups pages into Show (On air, Scenes, Chat), Prepare (Overlays, Health, Settings) and Review (Sessions). Alt+1 to Alt+7 jumps between them.
+- [ ] The top bar tally reads Off air, Rehearsal or On air and matches the stream session state. OBS, Twitch, EventSub, Ready and Operator lamps are readable without hovering.
+- [ ] Old paths (`/dashboard/live`, `/control`, `/setup`, `/sources`, `/bot`, `/config`) land on the new page and the address bar updates.
+- [ ] Keyboard focus shows an amber outline on links, buttons, inputs and disclosures.
+- [ ] Tally red appears only for On air and destructive controls.
 
 ## Dashboard routes
 
-### `/dashboard`
+### `/dashboard` (On air)
 
-- [ ] Page loads without a blank screen or console overlay.
-- [ ] Header, status cards, build-info card, and ops route guide are readable.
-- [ ] Route guide points operators to live recovery, config/rules, stream control, sources, and packaging/backup guidance.
-- [ ] No text overflows or clipped panels at the default desktop width.
+- [ ] Quick-action tiles, BRB control, session controls, preflight and latest events fit a laptop viewport without horizontal scrolling.
+- [ ] With no operator secret, tiles are disabled and the reason is visible.
+- [ ] Confirmable quick actions show the red armed state before they run, and disarm when focus leaves them.
 
-### `/dashboard/live`
+### `/dashboard/scenes`
 
-- [ ] Recovery console, build info, backend readiness, live preflight, EventSub diagnostics, setup checklist, session log, and event history panels are visible.
-- [ ] Recovery-console runbook links are clearly external and do not look like destructive browser actions.
-- [ ] Twitch, EventSub, OBS, operator-secret, event-history, and interaction-rule indicators are easy to scan.
-- [ ] Degraded states are obvious without horizontal scrolling.
+- [ ] OBS controls load inventory only after **Refresh OBS**. The program scene is marked.
+- [ ] **Arrange modules** opens the module editor; hidden modules disappear from the page.
+- [ ] The quick-action preset editor keeps sequence warnings visible.
 
-### Controlled workspace customization
+### `/dashboard/chat`
 
-- [ ] `/dashboard/live` shows `Customize panel layout`, `Reset layout`, and copy that locked safety panels stay fixed.
-- [ ] Reorder/hide controls affect only safe panels; recovery and stream-session controls remain fixed.
-- [ ] `/dashboard/bot` keeps moderation/nuke guardrails visible outside customizable bot panels.
-- [ ] `/dashboard/config` keeps operator secret and webhook secret controls locked outside customizable config panels.
-- [ ] Reset restores default order and visibility.
-- [ ] Keyboard focus remains visible on Up, Down, Hide/Show, and Reset buttons.
+- [ ] Section links jump to commands, timers, counters and quotes, API variables, moderation, Twitch rules and the reward queue.
+- [ ] The nuke planner sits in its own red-edged panel with plan, review and execute steps in order.
+- [ ] Reward delete stays behind the confirmation checkbox and below pause and enable controls.
+- [ ] Dry-run results and audit rows do not expose tokens, cookies or raw EventSub payloads.
 
-### `/dashboard/setup`
+### `/dashboard/overlays`
 
-- [ ] Setup checklist is readable from top to bottom.
-- [ ] Completed/open setup decisions are visually distinct.
-- [ ] Checklist hiding or completion states do not leave empty-looking panels.
+- [ ] Every preview renders its overlay on the checkerboard. A white preview means the iframe lost transparency.
+- [ ] Copy URL copies the browser-source URL; the copied tag appears.
+- [ ] Checklist, stream presets and custom CSS stay readable with long hostnames.
 
-### `/dashboard/sources`
+### `/dashboard/health`
 
-- [ ] Source URL helpers and any alias content are legible.
-- [ ] Layout still works with long hostnames and URLs.
-- [ ] Browser-source URLs render as copyable text blocks.
-- [ ] Stream preset cards and guidance sections do not overlap.
+- [ ] The recovery console stays above the arrangeable panels.
+- [ ] **Customize panel layout** opens the editor with `Reset layout` and the locked-panel copy.
+- [ ] Degraded readiness checks are listed as incidents with their hints.
 
-### `/dashboard/control`
+### `/dashboard/settings`
 
-- [ ] Control groups are separated clearly.
-- [ ] Quick actions, rehearsal controls, and OBS controls remain visible.
-- [ ] Buttons have obvious hover/active states and no wrapping glitches.
-- [ ] Session log is compact, readable, and does not crowd the primary controls.
+- [ ] The operator secret and webhook secret fields sit outside the arrangeable panels.
+- [ ] Export JSON does not contain the operator secret.
+- [ ] OBS import shows the scene and input counts and lists validation issues.
 
-### `/dashboard/config`
+### `/dashboard/sessions`
 
-- [ ] Operator secret inputs, automation profiles, Twitch interaction rules, MPRIS decision, and overlay noise controls are aligned.
-- [ ] Import/export textareas stay readable and do not expose operator secret values.
-- [ ] Configuration panels stay readable on a standard laptop viewport.
-- [ ] No form controls are clipped by cards or columns.
-- [ ] Reward queue lifecycle controls show pause/resume and enable/disable before the delete confirmation controls.
-- [ ] Fulfillment notes are visible for matched rewards/redemptions and read as operator-only guidance.
-
-### `/dashboard/bot`
-
-- [ ] Bot status, audit, commands, timers, counters/quotes, API variables, moderation dry-run, nuke planner, and active radiation windows are visible without horizontal scrolling.
-- [ ] Destructive actions such as manual moderation, nuke execute, radiation rollback, and delete controls require clear confirmation or explicit operator input.
-- [ ] Dry-run results and audit entries are readable in dense cases and do not expose secrets, OAuth tokens, cookies, or raw EventSub payloads.
-- [ ] Empty states explain what to configure next instead of looking broken.
-
-### Control/config interaction checks
-
-- [ ] On `/dashboard/control`, confirm destructive quick actions show the `Confirm ...` armed state before running.
-- [ ] Confirm quick-action sequences only show when at least one runnable child action is available in the full catalog.
-- [ ] Run a rehearsal off-stream and confirm the session log records success/failure summaries.
-- [ ] On `/dashboard/config`, confirm operator secret text remains session-only and is not present in dashboard config export JSON.
-- [ ] Import a Twitch interaction rules JSON sample and confirm invalid actions are normalized before save.
+- [ ] Start live, start rehearsal and end session buttons match the session state.
+- [ ] Opening a recent session shows its report, snapshots and tagged events; Markdown and JSON export work.
 
 ## Overlay routes
 
-### `/overlay/alerts`
+Check overlays at 1920×1080 and at the OBS sizes listed in `overlays.md`. Use `?demo=1` to fill them with sample events. Put a busy image behind the browser source; the overlays must stay readable over gameplay.
 
-- [ ] Alert container is centered and balanced in the frame.
-- [ ] Title, message, and severity styling remain readable at a glance.
-- [ ] Empty state or idle state does not crowd the screen.
+- [ ] `/overlay/alerts`: newest alert is large, older alerts are smaller. All four severity fields (purple, green, bone, ink) are readable. The slab covers the whole last word.
+- [ ] `/overlay/chat`: lines fill from the bottom, long names truncate, long messages wrap, badges read as mod, sub, vip or host.
+- [ ] `/overlay/goals`: numbers do not clip, quarter ticks cut through the fill, secondary meters line up.
+- [ ] `/overlay/now-playing`: long titles truncate with an ellipsis; the paused state dims the text; no album art shows the circle mark.
+- [ ] `/overlay/ticker`: the rail sits flush at the bottom, scrolls without a visible seam, and the brand block stays fixed.
+- [ ] `/overlay/camera`: frame and corner marks align with the camera source; nameplate text is not clipped.
+- [ ] `/overlay/starting`, `/overlay/brb`, `/overlay/ending`: the slab sits behind the headline without covering the line above, long `next` values wrap inside the side block, and the mark is bottom-right with clear space.
+- [ ] `/overlay/debug`: shows JSON for recent events and the connection state.
+- [ ] Without `?demo=1` or `?status=1`, no connection pip or "waiting" copy is visible once the stream connects.
 
-### `/overlay/chat`
-
-- [ ] Chat rows are aligned and easy to scan.
-- [ ] Long usernames/messages wrap cleanly.
-- [ ] Timestamp and metadata treatment matches the rest of the HUD.
-
-### `/overlay/goals`
-
-- [ ] Goal labels, counts, and progress cues stay legible.
-- [ ] Progress bars or rails do not clip at the edges.
-- [ ] The route still feels like a minimal broadcast overlay.
-
-### `/overlay/now-playing`
-
-- [ ] Track metadata is readable and not overly dense.
-- [ ] Artist/title truncation behaves cleanly.
-- [ ] Loading or no-track states remain visually calm.
-
-### `/overlay/ticker`
-
-- [ ] Ticker height is stable and text baseline looks aligned.
-- [ ] Long messages scroll or wrap without breaking the lower third.
-- [ ] Recent event styling stays consistent across severities.
-
-### `/overlay/brb`
-
-- [ ] BRB title, message, ETA, and item list are easy to read.
-- [ ] The intermission screen fills the frame cleanly.
-- [ ] Empty/hidden state does not leave stray artifacts.
-
-### `/overlay/debug`
-
-- [ ] Debug content is clearly secondary to production overlays.
-- [ ] Raw state, diagnostics, or test data remain contained.
-- [ ] Nothing spills outside the viewport.
-
-Overlay routes should remain sparse and broadcast-safe. Generic diagnostic or command events may appear in ticker/debug routes; production overlays should not expose raw secrets or token material.
+Overlays must not expose secrets or token material. Diagnostic and command events may appear on the ticker and debug routes only.
 
 ## Finish
 
@@ -142,12 +86,8 @@ Overlay routes should remain sparse and broadcast-safe. Generic diagnostic or co
 - [ ] Confirm typography, spacing, and contrast are still consistent.
 - [ ] If a route regressed, capture the exact route and viewport before changing code.
 
-## Minimal operator style checks
+## Style separation checks
 
-- Dashboard shell uses a quiet near-monochrome style: no scanline overlay, no neon corner brackets, no heavy offset shadows.
-- Overlay routes retain their existing broadcast HUD style; this sprint only applies minimal styling under `.hud-shell--dashboard`.
-- Grouped dashboard navigation remains visible and keyboard-focusable.
-- `Customize panel layout`, `Reset layout`, and locked-panel copy remain visible on Live/Bot/Config.
-- Danger zones remain visually distinct from ordinary panels, especially the bot nuke planner and delete-confirmation areas.
-- Minimal style does not remove operator/webhook secret controls, Twitch login, reward queue safety copy, or moderation confirmations.
-- Monospace remains available for logs, IDs, JSON, terminal rows, and payload-like data.
+- The dashboard uses only `desk-*` classes and IBM Plex. No SUBCULT purple, slab or Oswald appears in the dashboard.
+- Overlays use only `sc-*` classes and the brand fonts. No dashboard grey panels appear on air.
+- Monospace stays in use for logs, IDs, JSON and URLs.

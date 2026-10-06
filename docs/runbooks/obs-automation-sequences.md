@@ -33,21 +33,21 @@ If a default sequence is missing after an update, refresh the dashboard config s
 
 ## Automation profiles and show modes
 
-The dashboard now supports local automation profiles in `/dashboard/config`. Use these as show modes, not as access control:
+The dashboard now supports local automation profiles in `/dashboard/settings`. Use these as show modes, not as access control:
 
 - `Full console` — everything visible; best for setup, testing, and editing.
 - `Main live` — the normal live-show profile for primary scene switching and alert refresh actions.
 - `BRB ops` — the intermission profile for BRB and standby controls.
 
-Profile filtering changes what `/dashboard/control` and `/dashboard/sources` show, but it does not delete any hidden quick actions or presets. The full catalog stays in config so you can switch profiles later without rebuilding the show setup.
+Profile filtering changes what `/dashboard/scenes` and `/dashboard/overlays` show, but it does not delete any hidden quick actions or presets. The full catalog stays in config so you can switch profiles later without rebuilding the show setup.
 
 For sequences, the visible button list is filtered by the active profile, but sequence execution still resolves child actions from the full catalog. That means a visible sequence can still call hidden child actions when they exist in the dashboard config, while missing child IDs are warned about and skipped.
 
-Before changing a show setup or reshaping the profile list, export the dashboard JSON from `/dashboard/config` first so you have a local backup of the current automation profiles and other dashboard settings.
+Before changing a show setup or reshaping the profile list, export the dashboard JSON from `/dashboard/settings` first so you have a local backup of the current automation profiles and other dashboard settings.
 
 ## Editing a sequence
 
-1. Open `/dashboard/control`.
+1. Open `/dashboard/scenes`.
 2. Open the quick action editor.
 3. Create or edit a quick action with kind `sequence`.
 4. Enter the child quick action IDs in the order you want them to run.
@@ -64,7 +64,7 @@ Recommended editing rules:
 
 ## Pre-stream check
 
-1. Open `/dashboard/control` and confirm the expected default sequences are visible.
+1. Open `/dashboard/scenes` and confirm the expected default sequences are visible.
 2. Run `Go Live Main` in a safe rehearsal window.
 3. Confirm the steps run in order: main scene, refresh alerts, hide BRB.
 4. Run `Start BRB` and confirm the BRB scene and overlay appear together.

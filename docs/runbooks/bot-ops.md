@@ -16,7 +16,7 @@ Implemented now:
 - Operator-protected custom API variable list/create/delete at `/api/bot/api-variables`.
 - Operator-protected moderation rule list/create/delete and dry-run matching at `/api/bot/moderation/*`.
 - Enabled timers publish safe ticker or alert overlay events when due.
-- `/dashboard/bot` overview, command manager, counters/quotes manager, moderation dry-run panel, timer manager, and audit panel.
+- `/dashboard/chat` overview, command manager, counters/quotes manager, moderation dry-run panel, timer manager, and audit panel.
 - Existing Twitch chat command diagnostic events are mapped into bot audit events.
 - Custom Twitch commands can publish safe ticker/alert overlays, guarded outbound Twitch chat replies, or both, with bounded template variables.
 - Templates can use operator-configured `{api:name}` variables for read-only HTTPS GET data.
@@ -33,7 +33,7 @@ Still carried forward:
 
 ## Stabilization QA checklist
 
-- [ ] `/dashboard/bot` loads with bot status and recent audit.
+- [ ] `/dashboard/chat` loads with bot status and recent audit.
 - [ ] A safe custom command can be previewed without sending chat.
 - [ ] A timer can be enabled/paused without losing its response text.
 - [ ] Counter and quote panels show empty states or configured items clearly.
@@ -65,7 +65,7 @@ Expected status:
 
 ## Dashboard check
 
-1. Open `/dashboard/bot`.
+1. Open `/dashboard/chat`.
 2. Confirm Bot runtime shows storage availability.
 3. Confirm Bot commands shows existing commands or the empty state.
 4. Create a safe test command with name `discord`, action `Ticker`, role `Viewer`, cooldown `10`, and a short response.
@@ -78,7 +78,7 @@ Expected status:
 11. Confirm Bot moderation dry-run shows existing rules or the empty state.
 12. Create a safe `spam_link` rule matching message text `buy now`; dry-run a sample message; delete it if verification-only.
 13. Confirm Bot audit shows either recent events or the empty state.
-14. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/config`.
+14. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/settings`.
 
 ## Custom command behavior
 
@@ -111,7 +111,7 @@ Unknown variables render empty and are included in command audit data. Rendered 
 
 API variables are safer than FossaBot-style inline custom API URLs:
 
-- Operators define named variables in `/dashboard/bot`; chat cannot provide URLs.
+- Operators define named variables in `/dashboard/chat`; chat cannot provide URLs.
 - Variables are GET-only and HTTPS-only.
 - Local/private hosts, user-info URLs, fragments, unsafe names, long responses, and slow responses are rejected or capped.
 - Cache TTL is 15-3600 seconds; timeout is 250-3000ms; at most three unique API variables resolve per template render.
@@ -120,10 +120,10 @@ API variables are safer than FossaBot-style inline custom API URLs:
 
 To test a custom command:
 
-1. Create `!discord` in `/dashboard/bot` with response `Join {user}: https://example.test {args}`.
+1. Create `!discord` in `/dashboard/chat` with response `Join {user}: https://example.test {args}`.
 2. Send `!discord today` in Twitch chat.
 3. Confirm `/overlay/ticker` or `/overlay/alerts` shows the configured response for `overlay`/`both` modes, or Twitch chat receives the rendered response for `chat`/`both` modes.
-4. Confirm `/dashboard/bot` audit records the command with result `allowed`.
+4. Confirm `/dashboard/chat` audit records the command with result `allowed`.
 
 ## Timer behavior
 
@@ -161,7 +161,7 @@ Moderation rules are dry-run by default. They only call Twitch delete, timeout, 
 - Dry-run requests return the rules that would match a sample username/message.
 - Keep new rules in dry-run until a live sample confirms the pattern is correct; regex mistakes can otherwise delete, timeout, or ban real users.
 
-Manual guarded Twitch moderation actions are available from `/dashboard/bot` and `POST /api/bot/moderation/action`:
+Manual guarded Twitch moderation actions are available from `/dashboard/chat` and `POST /api/bot/moderation/action`:
 
 - `delete` requires `messageId` and Twitch scope `moderator:manage:chat_messages`.
 - `timeout` requires `targetUserId`, `durationSeconds` from `1` to `1209600`, and Twitch scope `moderator:manage:banned_users`.
@@ -172,7 +172,7 @@ Manual guarded Twitch moderation actions are available from `/dashboard/bot` and
 
 If the dashboard reports missing moderation scopes, update `TWITCH_SCOPES`, re-run Twitch login, and re-consent before retrying. Enforced rules fail closed when the required Twitch scope is missing and write a failed audit row.
 
-Nuke planning and guarded execution are available from `/dashboard/bot`:
+Nuke planning and guarded execution are available from `/dashboard/chat`:
 
 - It scans recent persisted `chat_message` history only.
 - It supports plain contains matching or RE2 regular expressions.
@@ -184,14 +184,14 @@ Nuke planning and guarded execution are available from `/dashboard/bot`:
 - Execution is capped to 50 matching chat events per request and writes bot audit rows for successful and failed Twitch moderation attempts.
 - The dashboard clears confirmation whenever the plan inputs change; run the dry-run, review the listed matches, check `I reviewed this dry-run plan`, then execute.
 - Optional radiation minutes create a temporary enforced moderation rule from the nuke pattern for future matching chat messages. Radiation windows are capped at 120 minutes and appear under active radiation windows. Future timeout radiation uses the standard 60-second timeout.
-- Roll back a radiation window from `/dashboard/bot` or `POST /api/bot/moderation/nuke/radiation/rollback` with `ruleId` and `confirm: true`; rollback disables enforcement and writes a bot audit row.
+- Roll back a radiation window from `/dashboard/chat` or `POST /api/bot/moderation/nuke/radiation/rollback` with `ruleId` and `confirm: true`; rollback disables enforcement and writes a bot audit row.
 - It does not ban users or undo already-deleted chat messages. Timeout rollback is limited to disabling the future-enforcement window; manual unban/untimeout remains available through the guarded moderation action controls.
 
 ## Command audit check
 
-1. Start a rehearsal session from `/dashboard/live` if you want session tagging.
+1. Start a rehearsal session from `/dashboard` or `/dashboard/sessions` if you want session tagging.
 2. From a broadcaster/moderator account, send `!alert audit smoke`.
-3. Open `/dashboard/bot`.
+3. Open `/dashboard/chat`.
 4. Confirm a bot audit row appears with result `allowed`.
 5. From a viewer account, send `!clear`.
 6. Confirm a bot audit row appears with result `denied` and reason `permission_denied`.

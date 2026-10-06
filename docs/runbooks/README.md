@@ -18,6 +18,7 @@ Add stack-specific runbooks as this template is specialized.
 - `live-qa.md` — canonical live/rehearsal QA checklist.
 - `live-stream-preflight.md` — quick pre-stream readiness procedure.
 - `visual-qa.md` — route-by-route visual pass.
+- `overlays.md` — overlay routes, OBS sizes, query parameters, and SUBCULT brand rules.
 - `stream-sessions.md` — session audit reports and readiness snapshots.
 - `event-history.md` — persisted event history and event pipeline diagnostics.
 - `bot-ops.md` — bot runtime status, audit checks, and FossaBot-parity operation notes.
