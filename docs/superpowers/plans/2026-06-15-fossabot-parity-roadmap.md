@@ -135,6 +135,12 @@ A scheduled timer whose response renders empty now writes a failed audit with re
 
 An isolated Postgres fixture puts ten empty timers ahead of a valid timer in the bounded due batch. The first poll records all ten failed attempts; the next poll delivers the valid timer, and failed timers become due again at their exact thirty-second boundary. Unit coverage verifies failed audit metadata and attempt ordering alongside successful ticker/alert publication. Native API verification created an enabled empty timer, observed its failed audit and advanced cadence without an event link, then deleted the fixture. `make verify`, all fourteen browser smoke tests, bot race tests with Postgres enabled, and `make smoke API_PORT=8081` passed.
 
+## October 6 timer API validation and CRUD verification
+
+Timer response templates that are valid JSON now reject secret-looking keys recursively, including arrays, escaped key names, and duplicate object members. Token-stream inspection retains duplicate keys that a decoded map would erase. Ordinary text templates remain valid; the action allowlist remains ticker/alert.
+
+Unit tests cover secret/public keys, ordinary prose and template variables, and interval boundaries 29/30/86400/86401. Isolated Postgres tests cover create, same-ID editing, enable, field and creation-timestamp preservation, rejected creates/edits without saved-row changes, delete, and missing lookup results. The scheduler fairness fixture now documents and uses the actual name ordering rather than an unrelated creation-time adjustment. Native API checks confirm three unsafe JSON edits return HTTP 400, preserve the saved timer, and record failed configuration audits with safe metadata; the fixture was deleted. `make verify`, all fourteen browser smoke tests, bot race tests with Postgres enabled, and `make smoke API_PORT=8081` passed.
+
 ---
 
 ## File structure
@@ -248,11 +254,11 @@ Build the spine before adding feature breadth.
 - Extend: `web/src/lib/api.ts`
 - Test: `backend/internal/bot/store_test.go`, HTTP handler tests.
 
-- [ ] Implement list/create/update/delete for timers.
-- [ ] Validate timer interval minimum 30 seconds.
-- [ ] Validate timer response/action cannot contain secret-looking keys.
+- [x] Implement list/create/update/delete for timers (October 6: isolated Postgres CRUD and rejected-write preservation).
+- [x] Validate timer interval minimum 30 seconds (29/30 and 86400/86401 boundary coverage).
+- [x] Validate timer response/action cannot contain secret-looking keys (October 6: recursive JSON-response key inspection, including duplicate/escaped keys; ticker/alert action allowlist).
 - [x] Record audit events for timer create/update/pause/enable/delete and failed configuration changes.
-- [ ] Commit: `feat: add bot timer api`.
+- [x] Commit: `feat: add bot timer api` (`af32236`; October 6 response-key validation and CRUD verification).
 
 ### Task B2: Timer runtime execution
 

@@ -359,14 +359,11 @@ func TestEmptyTimerAttemptsDoNotStarveValidTimersPostgres(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	valid, err := store.SaveTimer(ctx, Timer{Name: "valid", Enabled: true, IntervalSeconds: 30, Response: "Welcome", Action: "ticker"})
+	_, err := store.SaveTimer(ctx, Timer{Name: "valid", Enabled: true, IntervalSeconds: 30, Response: "Welcome", Action: "ticker"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Give the empty fixtures priority in the first bounded batch.
-	if _, err := store.db.ExecContext(ctx, `UPDATE bot_timers SET created_at = now() - interval '1 minute' WHERE id <> $1`, valid.ID); err != nil {
-		t.Fatal(err)
-	}
+	// Names sort the empty fixtures ahead of the valid timer in the first batch.
 	published := []events.Event{}
 	scheduler := TimerScheduler{Store: store, Publish: func(event events.Event) {
 		published = append(published, event)
@@ -399,5 +396,52 @@ func TestEmptyTimerAttemptsDoNotStarveValidTimersPostgres(t *testing.T) {
 	due, err = store.DueTimers(ctx, now.Add(30*time.Second), 20)
 	if err != nil || len(due) != 10 {
 		t.Fatalf("failed attempt cadence=%d, %v", len(due), err)
+	}
+}
+
+func TestTimerCRUDAndRejectedJSONPostgres(t *testing.T) {
+	store, _ := isolatedPostgresBotStore(t)
+	ctx := context.Background()
+	created, err := store.SaveTimer(ctx, Timer{Name: " JSON_NOTICE ", IntervalSeconds: 30, Response: `{"message":"Welcome {channel}"}`, Action: "ticker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID == "" || created.Name != "json_notice" || created.Enabled || created.CreatedAt.IsZero() {
+		t.Fatalf("created timer=%#v", created)
+	}
+	edited := created
+	edited.Response, edited.Action, edited.IntervalSeconds = "Welcome again", "alert", 86400
+	updated, err := store.SaveTimer(ctx, edited)
+	if err != nil || updated.ID != created.ID || !updated.CreatedAt.Equal(created.CreatedAt) || updated.Response != edited.Response || updated.Action != "alert" || updated.IntervalSeconds != 86400 {
+		t.Fatalf("updated timer=%#v, %v", updated, err)
+	}
+	enabled, err := store.SetTimerEnabled(ctx, created.ID, true)
+	if err != nil || !enabled.Enabled || enabled.Response != edited.Response {
+		t.Fatalf("enable=%#v, %v", enabled, err)
+	}
+	for _, response := range []string{`{"API_KEY":"value"}`, `[{"nested":{"cookie":"value"}}]`, `{"safe":{"privateKey":"value"},"safe":{}}`} {
+		invalid := edited
+		invalid.Response = response
+		if _, err := store.SaveTimer(ctx, invalid); err == nil {
+			t.Fatalf("invalid edit persisted: %s", response)
+		}
+		invalid.ID = ""
+		if _, err := store.SaveTimer(ctx, invalid); err == nil {
+			t.Fatalf("invalid create persisted: %s", response)
+		}
+	}
+	rows, err := store.ListTimers(ctx)
+	if err != nil || len(rows) != 1 || rows[0].Response != edited.Response || !rows[0].Enabled {
+		t.Fatalf("rejected writes changed timers: %#v, %v", rows, err)
+	}
+	if err := store.DeleteTimer(ctx, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = store.ListTimers(ctx)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("deleted timer remains: %#v, %v", rows, err)
+	}
+	if _, err := store.GetTimer(ctx, created.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing timer lookup=%v", err)
 	}
 }

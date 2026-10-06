@@ -222,3 +222,23 @@ func TestNormalizeCommandNameContract(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeTimerJSONResponseKeysAndIntervalBoundaries(t *testing.T) {
+	for _, response := range []string{`{"token":"{channel}"}`, `[{"nested":{"API_KEY":"value"}}]`, `{"headers":{"Authorization":"value"}}`, `{"safe":{"privateKey":"value"},"safe":{}}`, `{"\u0074oken":"value"}`} {
+		if _, err := NormalizeTimer(Timer{Name: "fixture", IntervalSeconds: 30, Response: response, Action: "ticker"}); err == nil {
+			t.Errorf("secret JSON keys accepted: %s", response)
+		}
+	}
+	for _, response := range []string{"Token reminder for {channel}", "API keys are private", `{"message":"{channel}","publicKey":"public"}`, `[{"label":"token reminder"}]`, `{channel}`, `"token"`} {
+		if _, err := NormalizeTimer(Timer{Name: "fixture", IntervalSeconds: 30, Response: response, Action: "ticker"}); err != nil {
+			t.Errorf("ordinary response rejected: %s: %v", response, err)
+		}
+	}
+	for _, interval := range []int{29, 30, 86400, 86401} {
+		_, err := NormalizeTimer(Timer{Name: "fixture", IntervalSeconds: interval, Response: "Hello"})
+		valid := interval == 30 || interval == 86400
+		if (err == nil) != valid {
+			t.Errorf("interval %d: %v", interval, err)
+		}
+	}
+}
