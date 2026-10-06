@@ -12,13 +12,20 @@ import {
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { validateQuickActionsAgainstOBS, type OBSValidationIssue } from '../../lib/obsValidation';
 import { DashboardShell } from './DashboardShell';
-import { ConsolePageHeader } from './components/ConsolePageHeader';
 import { AutomationProfileManager } from './components/AutomationProfileManager';
 import { CustomizablePanelLayout } from './components/CustomizablePanelLayout';
-import { TwitchInteractionsManager } from './components/TwitchInteractionsManager';
 import type { PanelLayoutItem } from '../../lib/dashboardLayout';
+import { Field, Notice, PageHead, Panel, SubPanel, Tag } from './ui';
 
-export function DashboardConfigPage() {
+export function DashboardSettingsPage() {
+  return (
+    <DashboardShell activePath="/dashboard/settings">
+      <Settings />
+    </DashboardShell>
+  );
+}
+
+function Settings() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const [operatorSecret, setOperatorSecret] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
@@ -129,166 +136,153 @@ export function DashboardConfigPage() {
     updateConfig(next);
   }
 
+  const obsLoaded = obsSceneNames.length > 0 || obsInputNames.length > 0;
+
   const safeConfigPanels = [
     {
       id: 'dashboard-config',
       node: (
-        <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="hud-label">Shared dashboard config</p>
-              <p className="hud-copy mt-1 text-xs text-zinc-300">Push or pull non-secret dashboard preferences through the API. Operator and webhook secrets stay out of shared config.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => void loadSharedConfig()}>
+        <Panel
+          kicker="Shared dashboard config"
+          title="Sync between browsers"
+          description="Push or pull non-secret dashboard preferences through the API. Operator and webhook secrets never leave this browser."
+          actions={
+            <>
+              <button className="desk-btn desk-btn--small" type="button" onClick={() => void loadSharedConfig()}>
                 Load shared
               </button>
-              <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => void saveSharedConfig()}>
+              <button className="desk-btn desk-btn--small desk-btn--primary" type="button" onClick={() => void saveSharedConfig()}>
                 Save shared
               </button>
-            </div>
-          </div>
-          {sharedConfigStatus ? <p className="mt-3 text-xs text-zinc-300">{sharedConfigStatus}</p> : null}
-        </section>
+            </>
+          }
+        >
+          {sharedConfigStatus ? <p className="desk-row__text" role="status">{sharedConfigStatus}</p> : <p className="desk-empty">Nothing loaded or saved this session.</p>}
+        </Panel>
       ),
     },
     {
       id: 'obs-import',
       node: (
-        <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="hud-label">OBS import</p>
-              <p className="hud-copy mt-1 text-xs text-zinc-300">Import live OBS scene/source names into built-in quick actions. If auto-match misses, assign them manually.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button className="hud-action-button hud-action-button--compact" type="button" onClick={() => void loadOBSAssignments()}>
-                Load from OBS
-              </button>
-              <button className="hud-action-button hud-action-button--compact" type="button" disabled={!obsAssignments.mainScene && !obsAssignments.brbScene && !obsAssignments.alertsSource} onClick={applyOBSAssignments}>
-                Apply assignments
-              </button>
-              <button className="hud-action-button hud-action-button--compact" type="button" onClick={validateOBSAssignments}>
-                Validate quick actions
-              </button>
-            </div>
+        <Panel
+          kicker="OBS import"
+          title="Map OBS names to quick actions"
+          description="Pull live scene and source names from OBS into the built-in quick actions. Assign them by hand where auto-match misses."
+          actions={
+            <>
+              <Tag tone={obsValidationIssues.length > 0 ? 'bad' : obsLoaded ? 'ok' : 'neutral'}>{obsLoaded ? `${obsValidationIssues.length} OBS issues` : 'OBS not loaded'}</Tag>
+              <Tag>{obsSceneNames.length} scenes</Tag>
+              <Tag>{obsInputNames.length} inputs</Tag>
+            </>
+          }
+        >
+          <div className="flex flex-wrap gap-2">
+            <button className="desk-btn" type="button" onClick={() => void loadOBSAssignments()}>
+              Load from OBS
+            </button>
+            <button className="desk-btn desk-btn--primary" type="button" disabled={!obsAssignments.mainScene && !obsAssignments.brbScene && !obsAssignments.alertsSource} onClick={applyOBSAssignments}>
+              Apply assignments
+            </button>
+            <button className="desk-btn" type="button" onClick={validateOBSAssignments}>
+              Validate quick actions
+            </button>
           </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-3">
             <AssignmentSelect label="Main scene" value={obsAssignments.mainScene} options={obsSceneNames} onChange={(mainScene) => setOBSAssignments((current) => ({ ...current, mainScene }))} />
             <AssignmentSelect label="BRB / standby scene" value={obsAssignments.brbScene} options={obsSceneNames} onChange={(brbScene) => setOBSAssignments((current) => ({ ...current, brbScene }))} />
             <AssignmentSelect label="Alerts browser source" value={obsAssignments.alertsSource} options={obsBrowserInputNames} onChange={(alertsSource) => setOBSAssignments((current) => ({ ...current, alertsSource }))} />
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className={`hud-chip hud-chip--square ${obsValidationIssues.length === 0 && (obsSceneNames.length > 0 || obsInputNames.length > 0) ? 'hud-accent-emerald' : obsValidationIssues.length > 0 ? 'hud-accent-rose' : ''}`}>
-              {obsSceneNames.length || obsInputNames.length ? `${obsValidationIssues.length} OBS issues` : 'OBS not loaded'}
-            </span>
-            <span className="hud-chip hud-chip--square">{obsSceneNames.length} scenes</span>
-            <span className="hud-chip hud-chip--square">{obsInputNames.length} inputs</span>
-          </div>
           {obsValidationIssues.length > 0 ? (
-            <ul className="mt-3 grid gap-1 rounded-2xl border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-xs text-rose-100">
-              {obsValidationIssues.slice(0, 8).map((issue) => (
-                <li key={`${issue.actionId}:${issue.field}:${issue.value}`}>{issue.label}: {issue.message}</li>
-              ))}
-            </ul>
+            <Notice tone="bad">
+              <ul>
+                {obsValidationIssues.slice(0, 8).map((issue) => (
+                  <li key={`${issue.actionId}:${issue.field}:${issue.value}`}>
+                    {issue.label}: {issue.message}
+                  </li>
+                ))}
+              </ul>
+            </Notice>
           ) : null}
-          {obsImportStatus ? <p className="mt-3 text-xs text-zinc-300">{obsImportStatus}</p> : null}
-        </section>
+          {obsImportStatus ? <p className="desk-row__text" role="status">{obsImportStatus}</p> : null}
+        </Panel>
       ),
     },
     {
       id: 'overlay-noise',
       node: (
-        <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-          <p className="hud-label">Overlay noise controls</p>
-          <p className="hud-copy mt-1 text-xs text-zinc-300">Tune how many live items stay visible and how aggressively repeated alerts are suppressed.</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Panel kicker="Overlay limits" title="Overlay noise controls" description="How many items stay on screen, and how long a repeated alert is suppressed. Overlays read these when they load.">
+          <div className="grid gap-3 sm:grid-cols-2">
             <NumberControl label="Alert max visible" value={config.display.alertMaxVisible} onChange={(value) => updateDisplay('alertMaxVisible', value)} />
             <NumberControl label="Alert dedupe seconds" value={config.display.alertDedupeSeconds} onChange={(value) => updateDisplay('alertDedupeSeconds', value)} />
             <NumberControl label="Chat max visible" value={config.display.chatMaxVisible} onChange={(value) => updateDisplay('chatMaxVisible', value)} />
             <NumberControl label="Ticker max items" value={config.display.tickerMaxItems} onChange={(value) => updateDisplay('tickerMaxItems', value)} />
           </div>
-        </section>
+        </Panel>
       ),
     },
     {
       id: 'automation-profiles',
-      node: <AutomationProfileManager config={config} onChange={updateConfig} />,
+      node: (
+        <div id="automation-profiles">
+          <AutomationProfileManager config={config} onChange={updateConfig} />
+        </div>
+      ),
     },
     {
       id: 'mpris',
       node: (
-        <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-          <p className="hud-label">MPRIS decision</p>
-          <p className="hud-copy mt-1 text-xs text-zinc-300">Use host MPRIS now-playing, keep it disabled, or decide later.</p>
-          <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <Panel kicker="Now playing" title="MPRIS decision" description="Use host MPRIS for the now-playing overlay, keep it off, or decide later.">
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="MPRIS decision">
             {(['enabled', 'disabled', 'undecided'] as const).map((value) => (
-              <button key={value} className={`hud-panel hud-corners hud-panel--flat hud-compact-card text-left transition hover:border-cyan-200/50 ${config.mprisDecision === value ? 'hud-accent-cyan border-cyan-200/50' : ''}`} type="button" onClick={() => setMprisDecision(value)}>
-                <span className="hud-kicker">MPRIS</span>
-                <span className="mt-1 block text-sm font-bold capitalize text-white">{value}</span>
-                {config.mprisDecision === value ? <span className="hud-badge mt-2 inline-flex">selected</span> : null}
+              <button
+                key={value}
+                className={`desk-btn capitalize ${config.mprisDecision === value ? 'desk-btn--active' : ''}`}
+                type="button"
+                role="radio"
+                aria-checked={config.mprisDecision === value}
+                onClick={() => setMprisDecision(value)}
+              >
+                {value}
               </button>
             ))}
           </div>
-        </section>
+        </Panel>
       ),
     },
   ];
 
   return (
-    <DashboardShell activePath="/dashboard/config">
-      <ConsolePageHeader
-        eyebrow="Configure deliberately"
-        title="Operator config"
-        description="Edit local operator preferences, OBS mappings, Twitch interaction rules, and overlay display behavior. Secrets stay in browser session state."
-        accent="purple"
-        chips={[`API ${apiBaseUrl}`, operatorSecret ? 'operator secret loaded' : 'operator secret missing']}
+    <>
+      <PageHead
+        title="Settings"
+        lede="Configure deliberately. Changes save to this browser immediately; use Save shared to send non-secret settings to the API. Secrets stay in browser session state."
+        actions={<Tag>API {apiBaseUrl}</Tag>}
       />
 
-      <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="hud-label">Operator config</p>
-            <h2 className="hud-section-title">Config</h2>
-            <p className="hud-copy mt-1 text-xs text-zinc-300">Local operator-console preferences. Secrets stay in browser session state.</p>
-          </div>
-          <span className="hud-chip">API {apiBaseUrl}</span>
+      <Panel kicker="Operator access" title="Operator secret" description="Used for protected dashboard actions. Stored for this browser session only, and this is the only page that edits it.">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SubPanel>
+            <Field label="Secret header" hint={operatorSecret ? 'Operator secret loaded.' : 'No operator secret stored.'}>
+              <input className="desk-input" type="password" autoComplete="off" value={operatorSecret} onChange={(event) => updateOperatorSecret(event.target.value)} placeholder="optional unless the API requires it" />
+            </Field>
+          </SubPanel>
+          <SubPanel>
+            <Field label="Webhook test secret" hint={webhookSecret ? 'Webhook secret ready. Not persisted.' : 'Optional helper for webhook tests. Not persisted.'}>
+              <input className="desk-input" type="password" autoComplete="off" value={webhookSecret} onChange={(event) => setWebhookSecret(event.target.value)} placeholder="optional" />
+            </Field>
+          </SubPanel>
         </div>
-
-        <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          <div className="hud-panel hud-corners hud-panel--flat hud-accent-fuchsia hud-compact-card">
-            <p className="hud-label">Operator secret</p>
-            <p className="mt-1 text-xs leading-5 text-zinc-300">Used for protected dashboard actions. Session-only.</p>
-            <label className="mt-2 grid gap-1 text-xs text-zinc-300">
-              <span className="hud-kicker">Secret header</span>
-              <input className="hud-input" type="password" value={operatorSecret} onChange={(event) => updateOperatorSecret(event.target.value)} placeholder="optional unless API requires it" />
-            </label>
-            <p className="mt-2 text-xs text-zinc-400">{operatorSecret ? 'Operator secret loaded.' : 'No operator secret stored.'}</p>
-            <p className="mt-2 text-xs text-zinc-400">This is the only dashboard route that edits the operator secret.</p>
-          </div>
-
-          <div className="hud-panel hud-corners hud-panel--flat hud-accent-amber hud-compact-card">
-            <p className="hud-label">Webhook secret</p>
-            <p className="mt-1 text-xs leading-5 text-zinc-300">Optional helper field for webhook tests. Not persisted.</p>
-            <label className="mt-2 grid gap-1 text-xs text-zinc-300">
-              <span className="hud-kicker">Webhook test secret</span>
-              <input className="hud-input" type="password" value={webhookSecret} onChange={(event) => setWebhookSecret(event.target.value)} placeholder="optional" />
-            </label>
-            <p className="mt-2 text-xs text-zinc-400">{webhookSecret ? 'Webhook secret ready.' : 'Webhook secret empty.'}</p>
-          </div>
-        </div>
-      </section>
+      </Panel>
 
       <CustomizablePanelLayout
         page="config"
         items={config.panelLayouts.config}
         onChange={updateConfigPanelLayout}
         description="Reorder or hide safe configuration panels. Secret controls stay locked."
+        className="grid items-start gap-4 xl:grid-cols-2"
         panels={safeConfigPanels}
       />
-
-      <TwitchInteractionsManager apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} />
-    </DashboardShell>
+    </>
   );
 }
 
@@ -300,13 +294,16 @@ type OBSAssignments = {
 
 function AssignmentSelect({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
   return (
-    <label className="grid gap-2 text-xs text-zinc-300">
-      <span className="hud-kicker">{label}</span>
-      <select className="hud-input" value={value} onChange={(event) => onChange(event.target.value)}>
+    <Field label={label}>
+      <select className="desk-input" value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">Assign…</option>
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
       </select>
-    </label>
+    </Field>
   );
 }
 
@@ -360,9 +357,8 @@ function applyOBSAssignmentToAction(action: QuickAction, assignments: OBSAssignm
 
 function NumberControl({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
   return (
-    <label className="grid gap-2 text-xs text-zinc-300">
-      <span className="hud-kicker">{label}</span>
-      <input className="hud-input" type="number" min="0" value={value} onChange={(event) => onChange(Number(event.target.value))} />
-    </label>
+    <Field label={label}>
+      <input className="desk-input" type="number" min="0" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </Field>
   );
 }

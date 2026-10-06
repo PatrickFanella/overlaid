@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { DashboardConfig } from '../../../lib/dashboardConfig';
+import { Check, Notice, Panel } from '../ui';
 
 type SetupChecklistProps = {
   config: DashboardConfig;
@@ -19,45 +20,33 @@ export function SetupChecklist({ config, onChange }: SetupChecklistProps) {
   }
 
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="hud-label">OBS setup workflow</p>
-          <h2 className="hud-section-title">Checklist</h2>
-          <p className="hud-copy mt-1 text-xs text-zinc-300">Track OBS onboarding, smoke tests, and setup decisions locally.</p>
-        </div>
-
-        <button
-          className="hud-chip hud-chip--square"
-          type="button"
-          onClick={() => setShowCompleted((current) => !current)}
-        >
+    <Panel
+      kicker="OBS setup workflow"
+      title="Checklist"
+      description="Track OBS onboarding, smoke tests, and setup decisions locally."
+      flush
+      actions={
+        <button className="desk-btn desk-btn--small desk-btn--ghost" type="button" onClick={() => setShowCompleted((current) => !current)}>
           {showCompleted ? 'Hide completed' : 'Show completed'}
         </button>
-      </div>
-
+      }
+    >
       {allComplete ? (
-        <p className="mt-5 rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">
-          Setup complete. All workflow items are green.
-        </p>
+        <div className="p-4 pb-0">
+          <Notice tone="ok" role="status">
+            Setup complete. Every workflow item is checked.
+          </Notice>
+        </div>
       ) : null}
 
-      <div className="mt-3 grid gap-2 md:grid-cols-2">
+      <ul className="desk-rows">
         {visibleItems.map((item) => (
-          <label key={item.id} className="hud-panel hud-corners hud-panel--flat hud-compact-card flex cursor-pointer gap-2">
-            <input
-              className="mt-1 size-4 accent-cyan-300"
-              type="checkbox"
-              checked={item.completed}
-              onChange={() => toggle(item.id)}
-            />
-            <span>
-              <span className="block text-sm font-bold text-white">{item.title}</span>
-              <span className="mt-1 block text-xs text-zinc-300">{item.description}</span>
-            </span>
-          </label>
+          <li key={item.id} className={`desk-row ${item.completed ? 'desk-row--ok' : ''}`}>
+            <Check label={<span className="desk-row__title">{item.title}</span>} checked={item.completed} onChange={() => toggle(item.id)} />
+            <p className="desk-row__text pl-[23px]">{item.description}</p>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Panel>
   );
 }

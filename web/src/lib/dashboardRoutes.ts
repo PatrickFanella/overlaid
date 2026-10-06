@@ -1,4 +1,8 @@
-export type DashboardRouteGroup = 'monitor' | 'setup' | 'operate' | 'configure';
+// Dashboard navigation, grouped by what the operator is doing rather than by
+// subsystem. `landmarkText` is a string each page must render; route tests use
+// it to prove the right page mounted.
+
+export type DashboardRouteGroup = 'show' | 'prepare' | 'review';
 
 export type DashboardRoute = {
   path: string;
@@ -7,90 +11,97 @@ export type DashboardRoute = {
   description: string;
   landmarkText: string;
   intent: DashboardRouteGroup;
-  groupLabel: 'Monitor' | 'Setup' | 'Operate' | 'Configure';
-  priority: 'primary' | 'secondary';
+  shortcut: string;
 };
 
-export const dashboardRouteGroups: { label: DashboardRoute['groupLabel']; intent: DashboardRouteGroup }[] = [
-  { label: 'Monitor', intent: 'monitor' },
-  { label: 'Setup', intent: 'setup' },
-  { label: 'Operate', intent: 'operate' },
-  { label: 'Configure', intent: 'configure' },
+export const dashboardRouteGroups: { label: string; intent: DashboardRouteGroup }[] = [
+  { label: 'Show', intent: 'show' },
+  { label: 'Prepare', intent: 'prepare' },
+  { label: 'Review', intent: 'review' },
 ];
 
 export const dashboardRoutes: DashboardRoute[] = [
   {
     path: '/dashboard',
-    navLabel: 'Overview',
-    title: 'Dashboard overview',
-    description: 'Status, build identity, and route guide for choosing the right operator surface.',
-    landmarkText: 'Ops route guide',
-    intent: 'monitor',
-    groupLabel: 'Monitor',
-    priority: 'primary',
+    navLabel: 'On air',
+    title: 'On air',
+    description: 'Session tally, quick actions, BRB, preflight, and the latest events in one screen.',
+    landmarkText: 'Run configured actions',
+    intent: 'show',
+    shortcut: '1',
   },
   {
-    path: '/dashboard/live',
-    navLabel: 'Live',
-    title: 'Live ops cockpit',
-    description: 'Recovery cockpit with readiness, runbook links, build info, EventSub diagnostics, checklist, session log, and event history.',
-    landmarkText: 'Recovery console',
-    intent: 'monitor',
-    groupLabel: 'Monitor',
-    priority: 'primary',
+    path: '/dashboard/scenes',
+    navLabel: 'Scenes',
+    title: 'Scenes and actions',
+    description: 'OBS scenes, inputs and items, quick-action presets, sample events, and rehearsal runs.',
+    landmarkText: 'OBS controls',
+    intent: 'show',
+    shortcut: '2',
   },
   {
-    path: '/dashboard/setup',
-    navLabel: 'Setup',
-    title: 'OBS setup workflow',
-    description: 'Setup checklist, browser-source URLs, and stream preset guidance.',
-    landmarkText: 'Checklist',
-    intent: 'setup',
-    groupLabel: 'Setup',
-    priority: 'secondary',
+    path: '/dashboard/chat',
+    navLabel: 'Chat',
+    title: 'Chat and bot',
+    description: 'Bot commands, timers, counters, quotes, moderation, Twitch rules, and the reward queue.',
+    landmarkText: 'Bot commands',
+    intent: 'show',
+    shortcut: '3',
   },
   {
-    path: '/dashboard/sources',
-    navLabel: 'Sources',
-    title: 'Overlay source URLs',
-    description: 'OBS browser-source URLs, active-profile preset view, and custom CSS copy helpers.',
-    landmarkText: 'Stream presets',
-    intent: 'setup',
-    groupLabel: 'Setup',
-    priority: 'secondary',
+    path: '/dashboard/overlays',
+    navLabel: 'Overlays',
+    title: 'Overlays',
+    description: 'Live previews and OBS browser-source URLs for every overlay, plus presets, custom CSS, and the setup checklist.',
+    landmarkText: 'Browser sources',
+    intent: 'prepare',
+    shortcut: '4',
   },
   {
-    path: '/dashboard/control',
-    navLabel: 'Stream control',
-    title: 'Stream control',
-    description: 'Operator quick actions, rehearsals, BRB controls, OBS controls, and session log.',
-    landmarkText: 'Session log',
-    intent: 'operate',
-    groupLabel: 'Operate',
-    priority: 'primary',
+    path: '/dashboard/health',
+    navLabel: 'Health',
+    title: 'Health',
+    description: 'Backend readiness, EventSub, build identity, and recovery runbooks.',
+    landmarkText: 'Backend readiness',
+    intent: 'prepare',
+    shortcut: '5',
   },
   {
-    path: '/dashboard/bot',
-    navLabel: 'Bot',
-    title: 'Bot operations',
-    description: 'Twitch bot audit, future custom commands, timers, counters, and moderation controls.',
-    landmarkText: 'Bot audit',
-    intent: 'operate',
-    groupLabel: 'Operate',
-    priority: 'primary',
+    path: '/dashboard/settings',
+    navLabel: 'Settings',
+    title: 'Settings',
+    description: 'Operator secret, shared config, OBS import, overlay limits, automation profiles, and MPRIS.',
+    landmarkText: 'Operator secret',
+    intent: 'prepare',
+    shortcut: '6',
   },
   {
-    path: '/dashboard/config',
-    navLabel: 'Config',
-    title: 'Operator config',
-    description: 'Operator secret, automation profiles, Twitch interaction rules, MPRIS decision, and overlay noise controls.',
-    landmarkText: 'Twitch interaction rules',
-    intent: 'configure',
-    groupLabel: 'Configure',
-    priority: 'primary',
+    path: '/dashboard/sessions',
+    navLabel: 'Sessions',
+    title: 'Sessions',
+    description: 'Stream and rehearsal sessions, reports, the operator action log, and persisted event history.',
+    landmarkText: 'Rehearsal audit',
+    intent: 'review',
+    shortcut: '7',
   },
 ];
 
+// Paths from the previous console layout. They keep working so OBS docks and
+// bookmarks do not break.
+export const legacyDashboardPaths: Record<string, string> = {
+  '/dashboard/live': '/dashboard/health',
+  '/dashboard/control': '/dashboard/scenes',
+  '/dashboard/setup': '/dashboard/overlays',
+  '/dashboard/sources': '/dashboard/overlays',
+  '/dashboard/bot': '/dashboard/chat',
+  '/dashboard/config': '/dashboard/settings',
+};
+
+export function resolveDashboardPath(path: string) {
+  return legacyDashboardPaths[path] ?? path;
+}
+
 export function getDashboardRoute(path: string) {
-  return dashboardRoutes.find((route) => route.path === path);
+  const resolved = resolveDashboardPath(path);
+  return dashboardRoutes.find((route) => route.path === resolved);
 }

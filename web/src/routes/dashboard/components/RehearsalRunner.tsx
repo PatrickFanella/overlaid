@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createRehearsalSteps } from '../../../lib/rehearsal';
+import { Panel, Tag, type Tone } from '../ui';
 
 type StepState = 'pending' | 'running' | 'pass' | 'fail';
 
@@ -29,23 +30,34 @@ export function RehearsalRunner({ apiBaseUrl, operatorSecret }: { apiBaseUrl: st
   }
 
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="hud-label">Rehearsal</p>
-          <h2 className="hud-section-title">Run overlay smoke sequence</h2>
-        </div>
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={running} onClick={() => void runAll()}>
+    <Panel
+      kicker="Rehearsal"
+      title="Run overlay smoke sequence"
+      actions={
+        <button className="desk-btn desk-btn--primary" type="button" disabled={running} onClick={() => void runAll()}>
           {running ? 'Running' : 'Run rehearsal'}
         </button>
-      </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-5">
-        {steps.map((step) => (
-          <span key={step.id} className="hud-chip hud-chip--square">
-            {step.label}: {states[step.id] || 'pending'}
-          </span>
-        ))}
-      </div>
-    </section>
+      }
+    >
+      <ol className="desk-steps">
+        {steps.map((step) => {
+          const state = states[step.id] || 'pending';
+          return (
+            <li key={step.id}>
+              <Tag tone={toneForStep(state)}>
+                {step.label}: {state}
+              </Tag>
+            </li>
+          );
+        })}
+      </ol>
+    </Panel>
   );
+}
+
+function toneForStep(state: StepState): Tone {
+  if (state === 'pass') return 'ok';
+  if (state === 'fail') return 'bad';
+  if (state === 'running') return 'warn';
+  return 'neutral';
 }

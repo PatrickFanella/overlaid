@@ -1,4 +1,5 @@
 import type { DashboardConfig } from '../../../lib/dashboardConfig';
+import { Panel } from '../ui';
 
 type CustomCSSPanelProps = {
   config: DashboardConfig;
@@ -12,24 +13,23 @@ export function CustomCSSPanel({ config, onChange, onCopy }: CustomCSSPanelProps
   }
 
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="hud-label">Custom CSS</p>
-          <h2 className="hud-section-title">OBS browser source CSS</h2>
-        </div>
-        <button className="hud-chip hud-chip--square" type="button" onClick={() => onCopy('Custom CSS', config.customCSS)}>
+    <Panel
+      kicker="Custom CSS"
+      title="OBS browser source CSS"
+      description="Paste this into the Custom CSS field of an OBS browser source. It overrides overlay styles on this workstation without editing app files."
+      actions={
+        <button className="desk-btn desk-btn--small" type="button" onClick={() => onCopy('Custom CSS', config.customCSS)}>
           Copy CSS
         </button>
-      </div>
-
+      }
+    >
       <textarea
-        className="hud-input hud-input--mono mt-3 min-h-40"
+        className="desk-input desk-input--mono min-h-40"
+        aria-label="Custom CSS"
         value={config.customCSS}
         onChange={(event) => updateCustomCSS(event.target.value)}
         spellCheck={false}
       />
-      <p className="mt-2 text-xs leading-5 text-zinc-400">Paste this into OBS Browser Source → Custom CSS. This gives each browser source a per-workstation CSS override without editing app files.</p>
-    </section>
+    </Panel>
   );
 }

@@ -10,47 +10,54 @@ export function HomePage({ pathname }: HomePageProps = {}) {
   const apiBaseUrl = getOverlayApiBaseUrl();
 
   return (
-    <main className="hud-shell hud-scanlines bg-transparent px-6 py-10 text-zinc-100">
-      <section className="hud-panel hud-corners mx-auto max-w-5xl rounded-[1.6rem] p-8">
-        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+    <div className="desk desk--home">
+      <main className="desk-home">
+        <header className="desk-page__head">
           <div>
-            <p className="hud-label">over-laid</p>
-            <h1 className="mt-4 text-[clamp(2.6rem,5vw,4.4rem)] font-semibold tracking-tight text-white">Overlay routes</h1>
-            <p className="mt-3 max-w-2xl text-zinc-300">
-              Browser-source pages for OBS, starting with live alerts over SSE.
-              Target streamer: <span className="font-medium text-white">patrick__eff</span>, with Twitch OAuth support for any streamer.
+            <p className="desk-panel__kicker">over-laid</p>
+            <h1 className="desk-page__title">Overlay routes</h1>
+            <p className="desk-page__lede">
+              OBS browser sources and the operator desk for <strong>patrick__eff</strong>. Twitch OAuth works for any channel.
             </p>
           </div>
-
-          <div className="flex flex-wrap gap-3 text-sm">
-            <a className="hud-chip" href={`${apiBaseUrl}/api/auth/twitch/login`}>
+          <div className="desk-panel__actions">
+            <a className="desk-btn desk-btn--small" href={`${apiBaseUrl}/api/auth/twitch/login`}>
               Twitch login
             </a>
-            <a className="hud-chip" href={`${apiBaseUrl}/api/auth/twitch/status`}>
+            <a className="desk-btn desk-btn--small desk-btn--ghost" href={`${apiBaseUrl}/api/auth/twitch/status`}>
               Twitch status JSON
             </a>
           </div>
-        </div>
+        </header>
 
         {pathname ? (
-          <p className="mt-5 rounded-[1.2rem] border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-            No overlay exists for <code>{pathname}</code>; pick a route below.
-          </p>
+          <div className="desk-notice desk-notice--warn">
+            Nothing lives at <code>{pathname}</code>; pick a route below.
+          </div>
         ) : null}
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[
-            ...dashboardRoutes.map((route) => [route.path, route.title, route.description] as const),
-            ...overlayRoutes.map((route) => [route.path, route.title, route.description] as const),
-          ].map(([href, title, description]) => (
-            <a key={href} href={href} className="hud-panel hud-corners hud-home-card rounded-[1.25rem] p-4 transition duration-200 hover:-translate-y-0.5 hover:border-fuchsia-300/40">
-              <p className="hud-kicker">{href}</p>
-              <h2 className="mt-2 text-lg font-semibold text-white">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-zinc-300">{description}</p>
+        <RouteList title="Operator desk" routes={dashboardRoutes.map((route) => ({ path: route.path, title: route.title, description: route.description }))} />
+        <RouteList title="Browser sources" routes={overlayRoutes.map((route) => ({ path: route.path, title: route.title, description: `${route.description} · ${route.size.width}×${route.size.height}` }))} />
+      </main>
+    </div>
+  );
+}
+
+function RouteList({ title, routes }: { title: string; routes: { path: string; title: string; description: string }[] }) {
+  return (
+    <section className="grid gap-3" aria-label={title}>
+      <h2 className="desk-nav__heading">{title}</h2>
+      <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {routes.map((route) => (
+          <li key={route.path}>
+            <a className="desk-link-card" href={route.path}>
+              <span className="desk-row__meta mono">{route.path}</span>
+              <span className="desk-row__title">{route.title}</span>
+              <span className="desk-row__text">{route.description}</span>
             </a>
-          ))}
-        </div>
-      </section>
-    </main>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

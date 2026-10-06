@@ -1,5 +1,6 @@
 import { sendTestAlert, setBRBStatus } from '../../../lib/api';
 import { sampleAlert, sampleBRBHide, sampleBRBShow, sampleGoals, sampleTicker } from '../../../lib/dashboardSamples';
+import { Panel } from '../ui';
 
 type SampleEventControlsProps = {
   apiBaseUrl: string;
@@ -11,37 +12,33 @@ type SampleEventControlsProps = {
 
 export function SampleEventControls({ apiBaseUrl, operatorSecret, isRunning, compact = false, runAction }: SampleEventControlsProps) {
   return (
-    <section className="hud-panel hud-corners hud-panel--flat rounded-sm p-3">
-      <p className="hud-label">Sample events</p>
-      <h2 className="hud-section-title">Send test payloads</h2>
-      {!compact ? <p className="hud-copy mt-1 text-xs text-zinc-300">Smoke test alerts, ticker, goals, and BRB payloads.</p> : null}
-
-      <div className="hud-dashboard-grid hud-dashboard-grid--three mt-5">
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={isRunning} onClick={() => runAction('Sample alert', () => sendTestAlert(sampleAlert, apiBaseUrl, operatorSecret))}>
-          <span className="hud-kicker">Alert</span>
-          <span className="mt-1 block text-sm font-bold text-white">Sample alert</span>
+    <Panel kicker="Sample events" title="Send test payloads" description={compact ? undefined : 'Send sample alert, ticker, goals, and BRB payloads to the overlays.'}>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <button className="desk-btn desk-btn--tile flex-col items-start" type="button" disabled={isRunning} onClick={() => runAction('Sample alert', () => sendTestAlert(sampleAlert, apiBaseUrl, operatorSecret))}>
+          <span className="desk-panel__kicker">Alert</span>
+          <span>Sample alert</span>
         </button>
 
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={isRunning} onClick={() => runAction('Sample ticker', () => sendTestAlert(sampleTicker, apiBaseUrl, operatorSecret))}>
-          <span className="hud-kicker">Ticker</span>
-          <span className="mt-1 block text-sm font-bold text-white">Sample ticker</span>
+        <button className="desk-btn desk-btn--tile flex-col items-start" type="button" disabled={isRunning} onClick={() => runAction('Sample ticker', () => sendTestAlert(sampleTicker, apiBaseUrl, operatorSecret))}>
+          <span className="desk-panel__kicker">Ticker</span>
+          <span>Sample ticker</span>
         </button>
 
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={isRunning} onClick={() => runAction('Sample goals', () => sendTestAlert(sampleGoals, apiBaseUrl, operatorSecret))}>
-          <span className="hud-kicker">Goals</span>
-          <span className="mt-1 block text-sm font-bold text-white">Sample goals</span>
+        <button className="desk-btn desk-btn--tile flex-col items-start" type="button" disabled={isRunning} onClick={() => runAction('Sample goals', () => sendTestAlert(sampleGoals, apiBaseUrl, operatorSecret))}>
+          <span className="desk-panel__kicker">Goals</span>
+          <span>Sample goals</span>
         </button>
 
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={isRunning} onClick={() => runAction('Show BRB sample', () => setBRBStatus(sampleBRBShow, apiBaseUrl, operatorSecret))}>
-          <span className="hud-kicker">BRB</span>
-          <span className="mt-1 block text-sm font-bold text-white">Show BRB</span>
+        <button className="desk-btn desk-btn--tile flex-col items-start" type="button" disabled={isRunning} onClick={() => runAction('Show BRB sample', () => setBRBStatus(sampleBRBShow, apiBaseUrl, operatorSecret))}>
+          <span className="desk-panel__kicker">BRB</span>
+          <span>Show BRB</span>
         </button>
 
-        <button className="hud-action-button hud-action-button--compact" type="button" disabled={isRunning} onClick={() => runAction('Hide BRB sample', () => setBRBStatus(sampleBRBHide, apiBaseUrl, operatorSecret))}>
-          <span className="hud-kicker">BRB</span>
-          <span className="mt-1 block text-sm font-bold text-white">Hide BRB</span>
+        <button className="desk-btn desk-btn--tile flex-col items-start" type="button" disabled={isRunning} onClick={() => runAction('Hide BRB sample', () => setBRBStatus(sampleBRBHide, apiBaseUrl, operatorSecret))}>
+          <span className="desk-panel__kicker">BRB</span>
+          <span>Hide BRB</span>
         </button>
       </div>
-    </section>
+    </Panel>
   );
 }
