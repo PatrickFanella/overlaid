@@ -248,6 +248,7 @@ export function BotModerationPanel({
             {nukeExecuteResult ? (
               <Notice tone="warn">
                 Executed {nukeExecuteResult.action}: {nukeExecuteResult.succeeded}/{nukeExecuteResult.attempted} succeeded · {nukeExecuteResult.failed} failed
+                {nukeExecuteResult.interrupted ? ` · execution interrupted; ${nukeExecuteResult.matches.length - nukeExecuteResult.attempted} not attempted` : ''}
                 {nukeExecuteResult.radiationRule ? ` · radiation until ${nukeExecuteResult.radiationRule.expiresAt ?? 'expiry'}` : ''}
               </Notice>
             ) : null}

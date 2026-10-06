@@ -673,7 +673,7 @@ test.describe('operator browser smoke', () => {
         executions += 1;
         await executionReady;
         auditUnavailable = true;
-        await route.fulfill({ json: { matches: [], attempted: 1, succeeded: 1, failed: 0, action: 'delete', radiationRule: radiation } });
+        await route.fulfill({ json: { matches: [1, 2, 3].map((id) => ({ eventId: `chat-${id}`, user: 'fixture', message: 'spam two' })), attempted: 1, succeeded: 1, failed: 0, interrupted: true, action: 'delete', radiationRule: radiation } });
         return;
       }
       if (path.endsWith('/nuke/radiation/rollback')) {
@@ -719,6 +719,7 @@ test.describe('operator browser smoke', () => {
     await expect(page.locator('#bot-moderation').getByRole('button', { name: 'Run guarded action' })).toBeDisabled();
     releaseExecution();
     await expect(panel.getByText(/Executed delete: 1\/1 succeeded/)).toBeVisible();
+    await expect(panel.getByText(/execution interrupted; 2 not attempted/)).toBeVisible();
     await expect(panel.getByRole('alert')).toContainText('Operation completed. Status/audit refresh failed:');
     await expect(panel.getByRole('button', { name: 'Rollback window' })).toBeEnabled();
     await expect(execute).toBeDisabled();

@@ -508,3 +508,88 @@ func TestAutomaticModerationAuditFollowsHistoryAppend(t *testing.T) {
 		t.Fatal("no moderation audit")
 	}
 }
+
+func TestNukeExecutionStopsBetweenActionsAfterCancellation(t *testing.T) {
+	for _, cancelDuring := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cancel_during_request_%t", cancelDuring), func(t *testing.T) {
+			server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+			server.botRuntime = nil
+			server.botStore = newModerationRuleTestStore(t)
+			server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"moderator:manage:chat_messages"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123"}
+			history := eventHistoryListStub{}
+			for i := 0; i < 3; i++ {
+				history.events = append(history.events, events.Event{ID: fmt.Sprint(i), Type: events.EventTypeChatMessage, Message: "spam", CreatedAt: time.Now().UTC(), Data: map[string]any{"messageId": fmt.Sprint(i)}})
+			}
+			server.history = history
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			calls := 0
+			oldClient := twitchHTTPClient
+			twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				calls++
+				if req.URL.Query().Get("message_id") != "0" {
+					t.Fatalf("unexpected next action: %s", req.URL)
+				}
+				cancel()
+				if cancelDuring {
+					return nil, context.Canceled
+				}
+				return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+			})}
+			t.Cleanup(func() { twitchHTTPClient = oldClient })
+			response, err := server.executeNukeWorkflow(ctx, botNukeDryRunRequest{Pattern: "spam", RadiationMinutes: 5}, "delete")
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantSuccess, wantFailed := 1, 0
+			if cancelDuring {
+				wantSuccess, wantFailed = 0, 1
+			}
+			if calls != 1 || response.Attempted != 1 || response.Succeeded != wantSuccess || response.Failed != wantFailed || !response.Interrupted || len(response.Matches) != 3 || response.RadiationRule == nil || !response.RadiationRule.Enforce {
+				t.Fatalf("partial execution: calls=%d response=%#v", calls, response)
+			}
+			// A request canceled before execution starts must neither plan nor write.
+			response, err = server.executeNukeWorkflow(ctx, botNukeDryRunRequest{Pattern: "spam", RadiationMinutes: 5}, "delete")
+			if !errors.Is(err, context.Canceled) || response.Attempted != 0 || calls != 1 {
+				t.Fatalf("pre-canceled execution: calls=%d response=%#v err=%v", calls, response, err)
+			}
+			rules, err := server.botStore.ListModerationRules(t.Context())
+			if err != nil || len(rules) != 1 {
+				t.Fatalf("pre-canceled request changed radiation rules: %#v err=%v", rules, err)
+			}
+
+		})
+	}
+}
+
+func TestNukeExecutionCapsBatchAndContinuesIndividualFailures(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+	server.botRuntime = nil
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"moderator:manage:chat_messages"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123"}
+	history := eventHistoryListStub{}
+	for i := 0; i < 51; i++ {
+		history.events = append(history.events, events.Event{ID: fmt.Sprint(i), Type: events.EventTypeChatMessage, Message: "spam", CreatedAt: time.Now().UTC(), Data: map[string]any{"messageId": fmt.Sprint(i)}})
+	}
+	server.history = history
+	calls := 0
+	oldClient := twitchHTTPClient
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.URL.Query().Get("message_id"); got != fmt.Sprint(calls) {
+			t.Fatalf("message order: %s at %d", got, calls)
+		}
+		calls++
+		status := http.StatusNoContent
+		if calls%2 == 0 {
+			status = http.StatusForbidden
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	})}
+	t.Cleanup(func() { twitchHTTPClient = oldClient })
+	response, err := server.executeNukeWorkflow(t.Context(), botNukeDryRunRequest{Pattern: "spam"}, "delete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 50 || len(response.Matches) != 50 || response.Attempted != 50 || response.Succeeded != 25 || response.Failed != 25 || response.Interrupted {
+		t.Fatalf("bounded execution: calls=%d response=%#v", calls, response)
+	}
+}

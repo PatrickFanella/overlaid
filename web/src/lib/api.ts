@@ -115,7 +115,7 @@ export type BotModerationActionResponse = { action: string; result: string; reas
 export type BotNukeDryRunPayload = { pattern: string; regex: boolean; caseSensitive: boolean; lookbackMinutes: number; limit: number; action?: 'delete' | 'timeout'; durationSeconds?: number; confirm?: boolean; radiationMinutes?: number };
 export type BotNukeDryRunMatch = { eventId: string; messageId?: string; userId?: string; user: string; message: string; createdAt: string };
 export type BotNukeDryRunResponse = { matches: BotNukeDryRunMatch[]; pattern: string; action: string };
-export type BotNukeExecuteResponse = { matches: BotNukeDryRunMatch[]; attempted: number; succeeded: number; failed: number; action: string; radiationRule?: BotModerationRule };
+export type BotNukeExecuteResponse = { interrupted?: boolean; matches: BotNukeDryRunMatch[]; attempted: number; succeeded: number; failed: number; action: string; radiationRule?: BotModerationRule };
 export type BotNukeRollbackResponse = { rule: BotModerationRule };
 
 export type BotCommandPayload = {

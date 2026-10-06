@@ -122,6 +122,7 @@ type botNukeDryRunResponse struct {
 }
 
 type botNukeExecuteResponse struct {
+	Interrupted   bool                 `json:"interrupted,omitempty"`
 	Matches       []botNukeDryRunMatch `json:"matches"`
 	Attempted     int                  `json:"attempted"`
 	Succeeded     int                  `json:"succeeded"`

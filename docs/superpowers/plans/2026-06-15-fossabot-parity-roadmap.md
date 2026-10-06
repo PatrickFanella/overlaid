@@ -431,3 +431,12 @@ Automatic enforcement previously reused dashboard operator receipts, omitted the
 EventSub now publishes and appends the event before enforcement, so queued moderation audit references can resolve their event foreign key. A blocked-recorder test verifies chat is delivered and the EventSub callback returns before audit storage resumes; a history-checking recorder verifies persistence precedes the audit dispatch. No live moderation action is sent by these fixture tests.
 
 Validation: `make verify`, all 17 browser smoke workflows, HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Twitch and OBS readiness remain degraded for the known missing external setup.
+
+
+### Overnight progress: bounded nuke cancellation receipts
+
+Nuke batches now check request cancellation before planning and between actions. Attempted counts increase only for started actions; a canceled batch preserves its success/failure counts, matches, and any already-created radiation window, and marks the partial response `interrupted`. The dashboard shows the number not attempted alongside the execution receipt and keeps radiation rollback available. Cancellation does not undo accepted Twitch actions or remove an already-active window.
+
+Transport fixtures verify interruption both after an accepted action and during a failing request, no dispatch or rule creation for a pre-canceled context, and retention of the existing window. A separate 51-match fixture proves only 50 actions run, in order, and individual remote failures do not stop an uncanceled batch. Browser coverage shows the partial receipt, its unattempted count, and rollback even when audit refresh fails.
+
+Validation: `make verify`, all 17 browser smoke workflows, HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch execution remains unverified; fixtures sent no external moderation writes.

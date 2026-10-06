@@ -145,6 +145,9 @@ func (w *moderationWorkflow) executeNuke(ctx context.Context, request botNukeDry
 	if err != nil {
 		return botNukeExecuteResponse{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return botNukeExecuteResponse{}, err
+	}
 	matches, err := w.planNukeDryRun(request)
 	if err != nil {
 		return botNukeExecuteResponse{}, err
@@ -152,7 +155,7 @@ func (w *moderationWorkflow) executeNuke(ctx context.Context, request botNukeDry
 	if len(matches) > 50 {
 		matches = matches[:50]
 	}
-	response := botNukeExecuteResponse{Matches: matches, Attempted: len(matches), Action: action}
+	response := botNukeExecuteResponse{Matches: matches, Action: action}
 	if request.RadiationMinutes > 0 {
 		rule, err := w.createNukeRadiationRule(ctx, request, action)
 		if err != nil {
@@ -161,6 +164,11 @@ func (w *moderationWorkflow) executeNuke(ctx context.Context, request botNukeDry
 		response.RadiationRule = &rule
 	}
 	for _, match := range matches {
+		if ctx.Err() != nil {
+			response.Interrupted = true
+			break
+		}
+		response.Attempted++
 		mod := botModerationActionRequest{Action: action, TargetUserID: match.UserID, TargetUserLogin: match.User, MessageID: match.MessageID, DurationSeconds: request.DurationSeconds, Reason: "nuke:" + strings.TrimSpace(request.Pattern)}
 		if action == "timeout" && mod.DurationSeconds == 0 {
 			mod.DurationSeconds = 60
