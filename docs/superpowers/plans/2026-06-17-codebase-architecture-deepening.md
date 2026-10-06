@@ -248,3 +248,9 @@ Verification passed: `make verify`, all eight `make smoke-browser` checks, and `
 Shared summary refreshes ignore responses after a workspace change and responses from older overlapping refreshes. Commands, API variables, and moderation remain in workspace state and are the next parts of the route split.
 
 Verification passed: `make verify` (93 frontend tests and the Go suite) and all ten `make smoke-browser` checks. Browser coverage includes quote writes during a pending counter request, failed counter draft retention, delete retry, audit refresh, and a successful receipt after a failed refresh. The collaborative browser created and deleted both community records against disposable Postgres.
+
+## October 6 command operation state
+
+`bot/useBotCommands.ts` now owns command loading, drafts, saved-command editing, mutations, pending controls, and local errors/results. Command requests no longer wait for the workspace loader or API variables. The editor preserves the existing ID, paused state, response mode, role, and action. Cancel, failed-save retry, toggle synchronization, and deletion of the selected command are covered by browser workflows. Returned records update the list immediately; a failed summary refresh retains the successful operation result.
+
+Verification passed: `make verify` (93 frontend tests and the Go suite), all eleven `make smoke-browser` checks, and `make smoke API_PORT=8081`. The collaborative browser updated the response and cooldown of a paused Postgres command while preserving its ID, mode, role, and action, then deleted the fixture. API-variable and moderation state remain to be separated.

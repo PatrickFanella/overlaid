@@ -253,9 +253,9 @@ Build the spine before adding feature breadth.
 - Modify: `web/src/routes/dashboard/Bot.tsx`
 - Test: frontend tests.
 
-- [ ] Add command list and editor.
-- [ ] Add test-render preview for template variables.
-- [ ] Show cooldown/role fields.
+- [x] Add command list and saved-record editor (October 6: edit/cancel/retry with existing ID and pending controls).
+- [x] Add test-render preview for template variables.
+- [x] Show cooldown/role fields.
 - [ ] Commit: `feat: manage custom bot commands`.
 
 ---

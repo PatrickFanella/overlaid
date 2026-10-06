@@ -125,7 +125,7 @@ export type BotCommandPayload = {
   response: string;
   action: 'ticker' | 'alert';
   responseMode: 'overlay' | 'chat' | 'both';
-  roleRequired: 'viewer' | 'moderator' | 'broadcaster';
+  roleRequired: 'viewer' | 'moderator' | 'broadcaster' | 'operator' | 'system';
   cooldownSeconds: number;
 };
 

@@ -1,7 +1,6 @@
 import type {
   BotAPIVariablesResponse,
   BotAuditResponse,
-  BotCommandsResponse,
   BotModerationDryRunResponse,
   BotModerationRulesResponse,
   BotStatus,
@@ -10,7 +9,6 @@ import type {
 export type BotPageState = {
   status: BotStatus | null;
   audit: BotAuditResponse | null;
-  commands: BotCommandsResponse | null;
   apiVariables: BotAPIVariablesResponse | null;
   moderation: BotModerationRulesResponse | null;
   moderationDryRun: BotModerationDryRunResponse | null;
@@ -19,11 +17,12 @@ export type BotPageState = {
 };
 
 export type CommandDraft = {
+  id?: string;
   name: string;
   response: string;
   action: 'ticker' | 'alert';
   responseMode: 'overlay' | 'chat' | 'both';
-  roleRequired: 'viewer' | 'moderator' | 'broadcaster';
+  roleRequired: 'viewer' | 'moderator' | 'broadcaster' | 'operator' | 'system';
   cooldownSeconds: number;
   enabled: boolean;
 };

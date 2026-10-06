@@ -481,7 +481,6 @@ describe('overlay event utilities', () => {
     }));
     const state = await loadBotWorkspace('http://example.test', 'operator-secret');
     expect(state.status?.available).toBe(true);
-    expect(state.commands?.commands).toEqual([command]);
     expect(state.apiVariables?.loadError).toContain('variables offline');
     expect(state.apiVariables?.variables).toEqual([]);
     expect(state.loading).toBe(false);
@@ -491,7 +490,7 @@ describe('overlay event utilities', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'operator access required' }));
     const state = await loadBotWorkspace('http://example.test', '');
     expect(state.status?.available).toBe(false);
-    for (const panel of [state.status, state.audit, state.commands, state.apiVariables, state.moderation]) {
+    for (const panel of [state.status, state.audit, state.apiVariables, state.moderation]) {
       expect(panel?.loadError).toContain('operator access required');
     }
     expect(state.loading).toBe(false);

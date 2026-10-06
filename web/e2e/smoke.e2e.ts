@@ -232,6 +232,92 @@ test.describe('operator browser smoke', () => {
     await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
   });
 
+  test('edits commands independently, retries failed drafts, and preserves successful writes after refresh failure', async ({ page }) => {
+    let releaseSave!: () => void;
+    const delayedSave = new Promise<void>((resolve) => { releaseSave = resolve; });
+    let writes = 0;
+    let deleted = false;
+    let auditUnavailable = false;
+    let command = { id: 'command-edit', name: 'welcome', enabled: false, response: 'Original response', action: 'alert', responseMode: 'both', roleRequired: 'moderator', cooldownSeconds: 45 };
+    await page.route('**/api/bot/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const method = route.request().method();
+      if (path.endsWith('/api-variables') || (path.endsWith('/audit') && auditUnavailable)) {
+        await route.fulfill({ status: 503, body: 'summary temporarily unavailable' });
+        return;
+      }
+      if (path.endsWith('/commands') && method === 'POST') {
+        const payload = route.request().postDataJSON();
+        expect(payload.id).toBe('command-edit');
+        expect(payload.responseMode).toBe('both');
+        expect(payload.roleRequired).toBe('moderator');
+        expect(payload.enabled).toBe(false);
+        expect(payload.action).toBe('alert');
+        writes += 1;
+        if (writes === 1) await route.fulfill({ status: 503, body: 'command save unavailable' });
+        else {
+          await delayedSave;
+          command = { ...command, ...payload };
+          auditUnavailable = true;
+          await route.fulfill({ json: command });
+        }
+        return;
+      }
+      if (path.endsWith('/commands/command-edit') && method === 'PUT') {
+        command = { ...command, enabled: route.request().postDataJSON().enabled };
+        await route.fulfill({ json: command });
+        return;
+      }
+      if (path.endsWith('/commands/command-edit') && method === 'DELETE') {
+        deleted = true;
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      const responses: Record<string, unknown> = {
+        status: { available: true, commandCount: deleted ? 0 : 1, timerCount: 0, counterCount: 0, quoteCount: 0, auditCount: 0 },
+        commands: { commands: deleted ? [] : [command] }, timers: { timers: [] }, counters: { counters: [] }, quotes: { quotes: [] }, rules: { rules: [] }, audit: { events: [] },
+      };
+      await route.fulfill({ json: responses[path.split('/').at(-1)!] ?? {} });
+    });
+    await page.goto('/dashboard/chat');
+    const panel = page.locator('#bot-commands');
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(panel.getByLabel('Response mode')).toHaveValue('both');
+    await expect(panel.getByLabel('Required role')).toHaveValue('moderator');
+    await expect(panel.getByLabel('Enabled', { exact: true })).not.toBeChecked();
+    await panel.locator('textarea').fill('Abandoned edit');
+    await panel.getByRole('button', { name: 'Cancel edit' }).click();
+    await expect(panel.locator('textarea')).toHaveValue('');
+    expect(writes).toBe(0);
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    await panel.getByLabel('Cooldown seconds').fill('3601');
+    await expect(panel.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    await panel.getByLabel('Cooldown seconds').fill('60');
+    await panel.locator('textarea').fill('Updated {user}');
+    await panel.getByRole('button', { name: 'Save changes' }).click();
+    await expect(panel.getByRole('alert')).toContainText('command save unavailable');
+    await expect(panel.locator('textarea')).toHaveValue('Updated {user}');
+    await panel.getByRole('button', { name: 'Save changes' }).click();
+    await expect(panel.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    await expect(panel.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled();
+    await expect(panel.getByRole('button', { name: 'Cancel edit' })).toBeDisabled();
+    await expect(panel.locator('textarea')).toBeDisabled();
+    releaseSave();
+    await expect(panel.getByText('Updated welcome.', { exact: true })).toBeVisible();
+    await expect(panel.getByRole('alert')).toContainText('Command operation succeeded. Status/audit refresh failed:');
+    await expect(panel.getByText('Updated {user}', { exact: true })).toBeVisible();
+    await expect(panel.getByText('alert · both · moderator+ · 60s cooldown')).toBeVisible();
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    await panel.getByRole('button', { name: 'Enable', exact: true }).click();
+    await expect(panel.getByText('Enabled welcome.', { exact: true })).toBeVisible();
+    await expect(panel.getByLabel('Enabled', { exact: true })).toBeChecked();
+    await panel.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(panel.getByText('Deleted welcome.', { exact: true })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Cancel edit' })).toHaveCount(0);
+    await expect(panel.getByText('No bot commands configured yet.')).toBeVisible();
+    expect(writes).toBe(2);
+  });
+
   test('isolates counter and quote writes, preserves failed drafts, and retains successful receipts', async ({ page }) => {
     let releaseCounter!: () => void;
     const delayedCounter = new Promise<void>((resolve) => { releaseCounter = resolve; });

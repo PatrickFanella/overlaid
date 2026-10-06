@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  deleteBotCommand,
   deleteBotAPIVariable,
   deleteBotModerationRule,
   dryRunBotModeration,
@@ -9,18 +8,14 @@ import {
   executeBotModerationAction,
   fetchBotAudit,
   fetchBotAPIVariables,
-  fetchBotCommands,
   fetchBotModerationRules,
   fetchBotStatus,
   rollbackBotNukeRadiation,
-  saveBotCommand,
   saveBotAPIVariable,
   saveBotModerationRule,
-  setBotCommandEnabled,
   type BotNukeDryRunResponse,
   type BotNukeExecuteResponse,
   type BotAPIVariable,
-  type BotCommand,
   type BotModerationRule,
 } from '../../lib/api';
 import { loadOperatorSecret } from '../../lib/dashboardConfig';
@@ -29,13 +24,11 @@ import { BotStatusSummary } from './bot/BotStatusSummary';
 import { loadBotWorkspace } from './bot/loadBotWorkspace';
 import {
   defaultAPIVariableDraft,
-  defaultCommandDraft,
   defaultModerationAction,
   defaultModerationDraft,
   defaultModerationTest,
   defaultNukeDraft,
   type BotPageState,
-  type CommandDraft,
   type ModerationDraft,
 } from './bot/types';
 import { CustomizablePanelLayout } from './components/CustomizablePanelLayout';
@@ -49,6 +42,7 @@ import { BotModerationPanel } from './bot/BotModerationPanel';
 import { BotTimersPanel } from './bot/BotTimersPanel';
 import { useBotTimers } from './bot/useBotTimers';
 import { useBotCommunity } from './bot/useBotCommunity';
+import { useBotCommands } from './bot/useBotCommands';
 
 export function BotWorkspace() {
   const apiBaseUrl = getOverlayApiBaseUrl();
@@ -56,9 +50,7 @@ export function BotWorkspace() {
   const [config, setConfig] = useState(() => loadDashboardConfig());
   const workspaceGeneration = useRef(0);
   const summaryRequest = useRef(0);
-  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, apiVariables: null, moderation: null, moderationDryRun: null, loading: false, error: '' });
-  const [commandDraft, setCommandDraft] = useState<CommandDraft>(defaultCommandDraft);
-  const [savingCommand, setSavingCommand] = useState(false);
+  const [state, setState] = useState<BotPageState>({ status: null, audit: null, apiVariables: null, moderation: null, moderationDryRun: null, loading: false, error: '' });
   const [apiVariableDraft, setAPIVariableDraft] = useState(defaultAPIVariableDraft);
   const [moderationDraft, setModerationDraft] = useState<ModerationDraft>(defaultModerationDraft);
   const [moderationTest, setModerationTest] = useState(defaultModerationTest);
@@ -71,6 +63,7 @@ export function BotWorkspace() {
 
   const timers = useBotTimers(apiBaseUrl, operatorSecret, refreshBotSummary);
   const community = useBotCommunity(apiBaseUrl, operatorSecret, refreshBotSummary);
+  const commands = useBotCommands(apiBaseUrl, operatorSecret, refreshBotSummary);
 
   function updateBotPanelLayout(items: PanelLayoutItem[]) {
     setConfig((current) => {
@@ -104,11 +97,6 @@ export function BotWorkspace() {
     if (generation === workspaceGeneration.current && request === summaryRequest.current) {
       setState((current) => ({ ...current, status, audit }));
     }
-  }
-
-  async function refreshCommands() {
-    const [status, commands] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCommands(apiBaseUrl, operatorSecret)]);
-    setState((current) => ({ ...current, status, commands }));
   }
 
   async function refreshAPIVariables() {
@@ -197,41 +185,6 @@ export function BotWorkspace() {
     catch (error) { setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'api variable delete failed' })); }
   }
 
-  async function handleSaveCommand() {
-    setSavingCommand(true);
-    setState((current) => ({ ...current, error: '' }));
-    try {
-      await saveBotCommand(commandDraft, apiBaseUrl, operatorSecret);
-      setCommandDraft(defaultCommandDraft);
-      await refreshCommands();
-    } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'command save failed' }));
-    } finally {
-      setSavingCommand(false);
-    }
-  }
-
-  async function handleToggleCommand(command: BotCommand) {
-    setState((current) => ({ ...current, error: '' }));
-    try {
-      await setBotCommandEnabled(command.id, !command.enabled, apiBaseUrl, operatorSecret);
-      await refreshCommands();
-    } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'command update failed' }));
-    }
-  }
-
-  async function handleDeleteCommand(command: BotCommand) {
-    setState((current) => ({ ...current, error: '' }));
-    try {
-      await deleteBotCommand(command.id, apiBaseUrl, operatorSecret);
-      await refreshCommands();
-    } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'command delete failed' }));
-    }
-  }
-
-
   return (
     <>
       {state.error ? (
@@ -251,15 +204,7 @@ export function BotWorkspace() {
           {
             id: 'commands',
             node: (
-              <BotCommandsPanel
-                draft={commandDraft}
-                commands={state.commands}
-                saving={savingCommand}
-                onDraftChange={setCommandDraft}
-                onSave={handleSaveCommand}
-                onToggle={handleToggleCommand}
-                onDelete={handleDeleteCommand}
-              />
+              <BotCommandsPanel {...commands} />
             ),
           },
           {
