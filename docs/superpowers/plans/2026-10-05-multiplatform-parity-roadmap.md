@@ -10,12 +10,14 @@
 - Platforms: Twitch, Kick, YouTube Live, Discord.
 - The bot chats as its own account, not as the broadcaster.
 - First priorities: chat-bot depth and the automation engine. Loyalty, games, and media come later.
-- Funding: a free tier supported by donations, plus a paid tier.
+- Funding: a free tier supported by donations, plus a paid tier, both through Stripe.
+- Name: "overlaid" is the working name. The product name, domain, and bot username are configuration values, never hard-coded, so the rename is a settings change.
+- Out of scope: Trovo (Tencent's gaming platform) and SOOP (formerly AfreecaTV, Korea's largest platform). Nightbot supports both, but neither matters to our audience. The adapter design means either can be added later.
 - Hosting: self-hosted on our own infrastructure for now (the homelab, behind the public edge).
 - Single-tenant self-hosting stays a supported product, not just a development mode.
 - Media requests are open, not songs only. Viewers are told that the streamer will stop anything that draws a DMCA claim, and the streamer has the tools to do it fast.
 
-**Still to decide:** the service name, domain, and bot username, plus two smaller questions under "Open questions". None of them block Phase 0 or Phase 1.
+**Still to decide:** the final name, domain, and bot username. They do not block Phase 0 or Phase 1, but they gate the external sign-ups.
 
 ---
 
@@ -203,7 +205,7 @@ Built as triggers, effects, and variables on the Phase 3 engine.
 
 ### Phase 11: Ecosystem and the paid tier (M)
 
-- Payments: one-off and recurring donations to the service, and a paid-tier subscription that switches the tenant's plan row. Pick a payment provider with webhooks for subscription state; the entitlement model from Phase 1 does the rest.
+- Payments through Stripe: one-off and recurring donations via Payment Links or Checkout, and the paid tier as a Stripe subscription managed in the Customer Portal. A signed webhook handler (`checkout.session.completed`, `customer.subscription.*`, `invoice.payment_failed`) switches the tenant's plan row; the entitlement model from Phase 1 does the rest. Self-host mode never loads the Stripe integration.
 - Paid-tier candidates, to confirm once usage data exists: bring-your-own bot account, higher limits on commands, timers, and HTTP calls, longer chat-log retention, more media storage, more overlay instances, priority in outbound queues.
 
 - Public REST API with OAuth apps and scopes; WebSocket event stream for third-party tools.
@@ -232,6 +234,7 @@ These have long lead times and gate later phases.
 | --- | --- | --- |
 | Create the Twitch bot account and register the app's redirect URIs | Phase 2 | Decide the bot's name (open question). |
 | Domain, privacy policy, terms of service | Phases 1, 6–8 | Every platform review asks for them. |
+| Stripe account, products for donations and the paid tier | Phase 11 | Test mode is enough until launch. |
 | Google Cloud project, OAuth consent screen, sensitive-scope verification | Phase 8 | Needs domain verification and a demo video. |
 | YouTube API quota-extension audit | Phase 8 | Without it, one channel can exhaust the shared daily quota. |
 | Kick developer app (needs 2FA on the account) | Phase 6 | Verification by email later. |
@@ -251,9 +254,7 @@ These have long lead times and gate later phases.
 
 ## Open questions
 
-1. **Name and domain** for the hosted service, and the bot account's username. Needed before the external sign-ups below.
-2. **Payment provider** for donations and the paid tier. Not needed until Phase 11.
-3. **Trovo and SOOP.** Nightbot supports them; they are out of scope unless you want them.
+1. **Final name and domain**, and the bot account's username. "overlaid" stands in until then. Needed before the external sign-ups below.
 
 ## Next step
 
