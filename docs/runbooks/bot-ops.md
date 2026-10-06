@@ -1,6 +1,6 @@
 # Bot Ops Runbook
 
-Use this runbook when checking over-laid's FossaBot-parity bot runtime: audit storage, commands, timers, counters, quotes, future channel-point workflows, and moderation.
+Use this runbook when checking over-laid's FossaBot-parity bot runtime: audit storage, commands, timers, counters, quotes, channel-point workflows, and moderation.
 
 ## Current scope
 
@@ -25,11 +25,11 @@ Implemented now:
 Implemented in later FossaBot parity slices:
 
 - Nuke-style dry-run, guarded delete/timeout execution, temporary radiation windows, and rollback.
-- Twitch reward inventory, minimal creation/deletion, pause/resume, enable/disable, redemption fulfillment/canceling, and fulfillment-note visibility through the Twitch interaction rules page.
+- Twitch reward inventory, guarded creation/deletion, pause/resume, enable/disable, prompt and user-input edits, cooldown and per-stream/user limits, redemption fulfillment/canceling, and fulfillment-note visibility through the Twitch interaction rules page.
 
 Still carried forward:
 
-- Advanced Twitch reward fields such as cooldowns, per-stream/user limits, and other non-minimal Helix settings.
+- Higher-risk Twitch reward fields, including images, background colors, and queue bypass.
 - Cloud-hosted uptime parity; see `docs/superpowers/plans/2026-06-16-fossabot-uptime-parity-options.md` before changing deployment architecture.
 
 ## Stabilization QA checklist

@@ -186,6 +186,9 @@ func addRewardLimitPayload(payload map[string]any, globalCooldownSeconds, maxPer
 	if globalCooldownSeconds < 0 {
 		return fmt.Errorf("global cooldown seconds must be zero or greater")
 	}
+	if globalCooldownSeconds > 604800 {
+		return fmt.Errorf("global cooldown seconds must be 604800 or fewer")
+	}
 	if maxPerStream < 0 {
 		return fmt.Errorf("max per stream must be zero or greater")
 	}
@@ -219,6 +222,9 @@ func addRewardLimitPatch(payload map[string]any, field, enabledKey, valueKey str
 	}
 	if field == "global cooldown seconds" && *value > 0 && *value < 60 {
 		return fmt.Errorf("global cooldown seconds must be 0 or at least 60")
+	}
+	if field == "global cooldown seconds" && *value > 604800 {
+		return fmt.Errorf("global cooldown seconds must be 604800 or fewer")
 	}
 	payload[enabledKey] = *value > 0
 	if *value > 0 {

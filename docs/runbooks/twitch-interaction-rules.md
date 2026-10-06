@@ -117,3 +117,6 @@ IDs persist in backend rules JSON and export/import. The reward queue uses the s
 The reward queue allows one write at a time. While creating, editing, pausing/enabling, deleting, fulfilling, or canceling, queue controls and reload actions are disabled. Delete consumes its confirmation when the request starts. A failed write retains its draft for retry.
 
 Successful writes update the visible returned reward or remove the completed redemption immediately, and show a success receipt. If the following reload fails, the receipt stays visible beside the reload error. Reload failures do not mean the write failed. Older list responses cannot overwrite newer write results. Changing API or operator credentials invalidates pending UI responses and clears the old queue; it cannot undo an already-sent request.
+
+
+Reward global cooldowns use zero to disable the limit, or 60–604800 seconds (seven days). Both create and edit validate the upper bound before writing; correct the retained draft and retry if validation fails. This keeps the existing display minimum and follows the [Helix maximum](https://dev.twitch.tv/docs/api/reference#update-custom-reward).

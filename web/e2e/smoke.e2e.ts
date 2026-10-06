@@ -320,6 +320,11 @@ test.describe('operator browser smoke', () => {
     await queue.getByRole('button', { name: 'Load rewards', exact: true }).click();
     await expect.poll(() => reads).toBe(1);
     await queue.getByLabel('New reward title').fill('Hydrate');
+    await queue.getByLabel('Global cooldown seconds').first().fill('604801');
+    await queue.getByRole('button', { name: 'Create reward', exact: true }).click();
+    await expect(queue.getByText('Global cooldown seconds must be 604800 or fewer.', { exact: true })).toBeVisible();
+    expect(writes).toBe(0);
+    await queue.getByLabel('Global cooldown seconds').first().fill('0');
     await queue.getByRole('button', { name: 'Create reward', exact: true }).click();
     await expect.poll(() => writes).toBe(1);
     await expect(queue.getByRole('button', { name: 'Create reward', exact: true })).toBeDisabled();
@@ -333,6 +338,11 @@ test.describe('operator browser smoke', () => {
     await expect.poll(() => oldLoadFinished).toBe(true);
     await expect(queue.getByText('Reward ID: created-reward', { exact: true })).toBeVisible();
     await expect(queue.getByText('Reward ID: older-reward', { exact: true })).toHaveCount(0);
+    await queue.getByLabel('Global cooldown seconds').last().fill('604801');
+    await queue.getByRole('button', { name: 'Save reward fields', exact: true }).click();
+    await expect(queue.getByText('Global cooldown seconds must be 604800 or fewer.', { exact: true })).toBeVisible();
+    expect(writes).toBe(1);
+    await queue.getByLabel('Global cooldown seconds').last().fill('0');
     await queue.getByLabel('Prompt', { exact: true }).last().fill('Remember water');
     await queue.getByRole('button', { name: 'Save reward fields', exact: true }).click();
     await expect(queue.getByText(/reward edit unavailable/)).toBeVisible();

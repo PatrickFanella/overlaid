@@ -381,7 +381,7 @@ Build the spine before adding feature breadth.
 - [x] Expand exact-title rules into richer reward mappings (October 6: stable reward IDs, label-only titles, ID precedence, legacy fallback, editor/import/export and queue note matching).
 - [x] Add per-reward cooldowns and templates (October 6: client-owned atomic reservations, identity/channel isolation, expiry/configuration tests, and reward/user/input template fixtures).
 - [x] Reward queue shows fulfillment notes alongside selected rewards and matching redemptions (October 6: renamed ID-based reward and redemption browser workflow).
-- Twitch reward management has minimal create/delete controls after scoped API research; advanced fields and safer disable/pause lifecycle remain follow-up.
+- Twitch reward management supports guarded create/delete, pause/resume and enable/disable, prompt/input edits, and bounded cooldown/per-stream/user limits. Images, colors, and queue bypass remain deferred.
 
 ---
 
@@ -413,3 +413,12 @@ curl -fsS http://localhost:8080/readyz | jq .
 Do not push or deploy unless explicitly requested. Do not log or commit secrets.
 
 Verification for the reward operation slice passed: `make verify` (95 frontend tests and the Go suite), all seventeen `make smoke-browser` checks, and `make smoke API_PORT=8081`. Browser fixtures perform no live Twitch writes.
+
+
+### Overnight progress: advanced reward cooldown boundary
+
+The advanced reward sprint was already implemented; its historical step-by-step recipe remains below the current closeout in the sprint plan. This pass reconciles stale bot-ops and roadmap scope text with the shipped controls. It also closes a missing upper bound: create and update reject global cooldowns above 604800 seconds before Helix dispatch, and both dashboard drafts report the same validation without sending a write. Zero disables the limit; the existing 60-second display minimum remains deliberate.
+
+The [Twitch API reference](https://dev.twitch.tv/docs/api/reference#update-custom-reward) documents the seven-day maximum. Fixture transport coverage verifies that the exact maximum is sent with its enabled flag and decoded on both create and update, while the next second never reaches Helix. Browser workflow coverage verifies invalid create and edit drafts preserve the current write count and can be corrected. Live Twitch writes still require credentials.
+
+Validation: `make verify` (95 frontend tests and all Go checks), all 17 browser smoke workflows, and `make smoke API_PORT=8081` passed. Local readiness confirms Postgres and the bot runtime are healthy; Twitch authentication and OBS connectivity remain unavailable.

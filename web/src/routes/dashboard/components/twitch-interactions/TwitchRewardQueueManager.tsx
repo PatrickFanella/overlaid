@@ -73,6 +73,7 @@ function validateRewardLimits(values: { globalCooldownSeconds: number; maxPerStr
   if (!Number.isInteger(values.maxPerUserPerStream)) return 'Max per user/stream must be a whole number.';
   if (values.globalCooldownSeconds < 0) return 'Global cooldown seconds must be zero or greater.';
   if (values.globalCooldownSeconds > 0 && values.globalCooldownSeconds < 60) return 'Global cooldown seconds must be 0 or at least 60 so Twitch can display it.';
+  if (values.globalCooldownSeconds > 604800) return 'Global cooldown seconds must be 604800 or fewer.';
   if (values.maxPerStream < 0) return 'Max per stream must be zero or greater.';
   if (values.maxPerUserPerStream < 0) return 'Max per user/stream must be zero or greater.';
   return '';
@@ -297,6 +298,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
               type="number"
               min={0}
               step={1}
+              max={604800}
               value={rewardDraft.globalCooldownSeconds}
               onChange={(event) => {
                 const nextValue = rewardNumberInput(event.target.value);
@@ -333,7 +335,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
           <button className="desk-btn desk-btn--primary" type="button" onClick={createReward} disabled={!rewardDraft.title.trim()}>
             Create reward
           </button>
-          <p className="desk-field__hint md:col-span-4">Use zero to disable optional limits. Global cooldown must be 0 or at least 60 seconds so Twitch can display it.</p>
+          <p className="desk-field__hint md:col-span-4">Use zero to disable optional limits. Global cooldown must be 0 or between 60 and 604800 seconds (seven days).</p>
         </div>
       </SubPanel>
 
@@ -405,6 +407,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
               type="number"
               min={0}
               step={1}
+              max={604800}
               value={rewardEditDraft.globalCooldownSeconds}
               onChange={(event) => {
                 const nextValue = rewardNumberInput(event.target.value);
@@ -438,7 +441,7 @@ export function TwitchRewardQueueManager({ apiBaseUrl, operatorSecret, channelPo
               }}
             />
           </Field>
-            <p className="desk-field__hint md:col-span-2">Use zero to disable optional limits. Global cooldown must be 0 or at least 60 seconds so Twitch can display it.</p>
+            <p className="desk-field__hint md:col-span-2">Use zero to disable optional limits. Global cooldown must be 0 or between 60 and 604800 seconds (seven days).</p>
             <button className="desk-btn desk-btn--primary" type="button" onClick={() => void updateSelectedRewardAdvancedFields()}>
               Save reward fields
             </button>
