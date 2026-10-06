@@ -502,3 +502,10 @@ Verification passed: full `make verify`, 17 browser smoke workflows, Bot/Twitch/
 Saved rules and nuke previews now use the same literal/regex matcher. A reproduced defect in saved-rule matching is corrected: lowercasing regex input no longer defeats explicit case-sensitive groups. Rule normalization, target and expiry policy moved out of SQL storage; matching uses one expiry snapshot per batch.
 
 Full verification, 17 browser workflows, Bot/Twitch/HTTP race tests with isolated Postgres contracts, and runtime smoke passed. A disposable public-API rule confirmed the corrected matches and was removed. Live Twitch enforcement remains pending external credentials.
+
+
+### Overnight progress: frontend API transport consistency
+
+All dashboard operation families now use one transport for auth headers, JSON requests, error details, optional empty responses, and labelled parsing failures. Session/login receipts and OBS/recovery reads keep their public APIs; webhook credentials remain separate from operator credentials.
+
+Full verification passed with 111 frontend tests, all 17 browser workflows passed, and runtime smoke passed. Health and Sessions also loaded against disposable Postgres in the collaborative browser. External Twitch/OBS availability remains unchanged.
