@@ -91,3 +91,19 @@ export function movePanelLayoutItem(items: PanelLayoutItem[], id: string, direct
 export function togglePanelLayoutItem(items: PanelLayoutItem[], id: string) {
   return items.map((item) => (item.id === id ? { ...item, visible: !item.visible } : item));
 }
+
+// Replace only the edited panels, using their existing slots in the full layout.
+// Panels omitted by a route retain their position and visibility.
+export function mergePanelLayoutSubset(items: PanelLayoutItem[], edited: PanelLayoutItem[]) {
+  const known = new Set(items.map((item) => item.id));
+  const seen = new Set<string>();
+  const replacements = [...edited].sort((a, b) => a.order - b.order).filter((item) => {
+    if (!known.has(item.id) || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+  let index = 0;
+  return [...items].sort((a, b) => a.order - b.order).map((item) => (
+    seen.has(item.id) ? { ...replacements[index++], order: item.order } : { ...item }
+  ));
+}

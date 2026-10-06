@@ -895,3 +895,10 @@ git commit -m "docs: close operator layout customization sprint"
 - Final verification passed: `make verify`, `make smoke`, and `make smoke-browser` passed. The first browser smoke run caught duplicate text locators; locators were tightened and the rerun passed.
 - Local readiness note: `/readyz` remained degraded for local EventSub/OBS reachability/auth, matching the known local environment; smoke targets still passed.
 - Deferred: free drag/drop, resizing, overlapping widgets, shared server-side operator profiles, and customization of destructive controls.
+
+
+## October 6 route-local layout correction
+
+The current desk splits the former Live surface across Health and Sessions. Health exposes only five entries from the persisted seven-entry `live` layout. Its editor now merges edits into those entries’ original slots, preserving omitted entries’ visibility and order. Reset restores defaults only for panels rendered by that editor, so retained session-log/event-history preferences survive. Full-page Bot and Settings editors continue resetting their complete safe panel sets. Locked safety panels remain outside the editor.
+
+Pure helper contracts cover slot preservation, immutable input, toggles, reset, unknown IDs, and duplicate definitions. A browser workflow starts with omitted panels interleaved and hidden, reorders Health panels, hides Readiness, reloads, then resets. It verifies persistence, restored Readiness, unique order values, untouched omitted preferences, and absence of recovery hide controls. `make verify` passed with 113 frontend tests; all 18 browser smoke workflows and runtime smoke at port 8081 passed. Browser fixtures change isolated localStorage only.

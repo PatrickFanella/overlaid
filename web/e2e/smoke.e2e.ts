@@ -2,6 +2,43 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 test.describe('operator browser smoke', () => {
+  test('preserves omitted layout preferences when reordering and resetting Health panels', async ({ page }) => {
+    await page.addInitScript(() => {
+      const key = 'overlaid.dashboard.config.v1';
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ panelLayouts: { live: [
+        { id: 'event-history', visible: false, order: 1 },
+        { id: 'readiness', visible: true, order: 2 },
+        { id: 'session-log', visible: false, order: 3 },
+        { id: 'preflight', visible: true, order: 4 },
+        { id: 'eventsub', visible: true, order: 5 },
+        { id: 'build-info', visible: true, order: 6 },
+        { id: 'checklist', visible: true, order: 7 },
+      ] } }));
+    });
+    const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('overlaid.dashboard.config.v1')!).panelLayouts.live as { id: string; order: number; visible: boolean }[]);
+    await page.goto('/dashboard/health');
+    await page.getByText('Customize panel layout', { exact: true }).click();
+    await page.getByRole('button', { name: 'Move Live preflight up', exact: true }).click();
+    const moved = await stored();
+    expect(moved.find((item) => item.id === 'preflight')?.order).toBe(2);
+    expect(moved.find((item) => item.id === 'readiness')?.order).toBe(4);
+    expect(moved.find((item) => item.id === 'event-history')).toMatchObject({ visible: false, order: 1 });
+    expect(moved.find((item) => item.id === 'session-log')).toMatchObject({ visible: false, order: 3 });
+    await page.getByRole('button', { name: 'Hide Readiness', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Backend readiness', exact: true })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Backend readiness', exact: true })).toHaveCount(0);
+    await page.getByText('Customize panel layout', { exact: true }).click();
+    await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Backend readiness', exact: true })).toBeVisible();
+    const reset = await stored();
+    expect(reset.find((item) => item.id === 'readiness')).toMatchObject({ visible: true, order: 2 });
+    expect(reset.find((item) => item.id === 'event-history')).toMatchObject({ visible: false, order: 1 });
+    expect(reset.find((item) => item.id === 'session-log')).toMatchObject({ visible: false, order: 3 });
+    expect(new Set(reset.map((item) => item.order)).size).toBe(reset.length);
+    await expect(page.getByRole('button', { name: /Hide.*[Rr]ecovery/ })).toHaveCount(0);
+  });
+
   test('loads the desk shell and critical routes', async ({ page }) => {
     await page.goto('/dashboard');
     const nav = page.getByRole('navigation', { name: 'Dashboard sections' });
