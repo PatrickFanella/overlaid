@@ -188,6 +188,8 @@ Public reverse proxy:
 
 Use `docs/runbooks/production-packaging.md` for the full packaging, smoke, backup, and restore flow.
 
+Container Dockerfiles use qualified Docker Hub base-image names and context-local `.dockerignore` files. This keeps local environment files, frontend dependencies, and generated output out of the build context, and lets rootless Podman resolve the same images for local packaging verification when the Docker socket is unavailable.
+
 - `/version` returns `name`, `version`, `commit`, `builtAt`, `goVersion`, `os`, and `arch` without exposing secrets.
 - Local `make build` uses `VERSION`, `BUILD_COMMIT`, and `BUILD_DATE`; `make docker-build` passes those values as Docker `BUILD_VERSION`, `BUILD_COMMIT`, and `BUILD_DATE`. Plain `docker compose up --build` uses `BUILD_VERSION`, `BUILD_COMMIT`, and `BUILD_DATE` from the shell or `.env`, defaulting to `dev`/`unknown`/`unknown`.
 - Run `make postgres-backup` to snapshot Postgres and `make api-data-backup` to snapshot the Compose `api-data` volume.

@@ -520,3 +520,8 @@ Do not push unless explicitly instructed by the user.
 ## October 6 isolated backup/restore evidence
 
 A stopped native API backup was restored into a separate disposable Postgres database and private retained-state directory. A fresh API returned identical BRB/goals/ticker replay, eight history rows, a session report with three events and both readiness snapshots, shared config, interaction rules, and 25 recent audit rows (51 total). Restored dependency readiness and `make smoke API_PORT=8082` passed. The temporary restore process/database and retained fixtures were cleaned up. [Recorded evidence](../../qa/2026-10-06-local-backup-restore-drill.md) names the accepted integration/deployment limits. Restore guidance now rejects a missing api-data volume and uses `pg_restore --exit-on-error`.
+
+
+## October 6 packaged image and volume verification
+
+Rootless Podman built both Dockerfiles and exercised isolated API/Nginx containers. The web build exposed a short-name resolution failure; qualified Docker Hub base-image names fix it without changing versions. Context-local ignore files now keep environment files, installed frontend dependencies, generated assets, and test artifacts out of builds. The packaged Go 1.26 runtime repaired a root-owned named volume, ran as UID 100, persisted BRB/history across restart, served healthy product storage, and passed packaged smoke and native browser rendering. All 21 browser workflows and `make verify` passed. [Recorded evidence](../../qa/2026-10-06-container-packaging.md) names image IDs, cleanup, and remaining Compose/deployment/live-integration gates.
