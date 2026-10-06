@@ -72,21 +72,22 @@ Expected status:
 5. Toggle the command paused/enabled and delete it if it was only for verification.
 6. Confirm Bot timers shows existing timers or the empty state.
 7. Create a safe test timer with name `stream_hype`, interval `300`, action `Ticker`, and a short response.
-8. Pause the timer and click Run once. Check its ticker or alert output and the `timer_run_once` bot audit row. The timer stays paused and its schedule stays unchanged.
-9. Toggle the timer paused/enabled and delete it if it was only for verification.
-9. Confirm Bot counters and quotes shows existing entries or the empty state.
-10. Create a safe `hype` counter and a short quote, then delete them if verification-only.
-11. Confirm Bot moderation dry-run shows existing rules or the empty state.
-12. Create a safe `spam_link` rule matching message text `buy now`; dry-run a sample message; delete it if verification-only.
-13. Confirm Bot audit shows either recent events or the empty state.
-14. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/settings`.
+8. Click Edit on the saved timer. Change its interval or response and save changes, then confirm the same timer row and `timer_update` audit. Cancel edit abandons changes without writing.
+9. Pause the timer and click Run once. Check its ticker or alert output and the `timer_run_once` bot audit row. The timer stays paused and its schedule stays unchanged.
+10. Toggle the timer paused/enabled and delete it if it was only for verification.
+11. Confirm Bot counters and quotes shows existing entries or the empty state.
+12. Create a safe `hype` counter and a short quote, then delete them if verification-only.
+13. Confirm Bot moderation dry-run shows existing rules or the empty state.
+14. Create a safe `spam_link` rule matching message text `buy now`; dry-run a sample message; delete it if verification-only.
+15. Confirm Bot audit shows either recent events or the empty state.
+16. If the page reports `bot status failed: 401`, enter the operator secret in `/dashboard/settings`.
 
 ## Custom command behavior
 
 Custom commands are intentionally safer and smaller than FossaBot's full command language in this milestone:
 
 - Names use lowercase letters, numbers, dash, or underscore. Built-ins `alert`, `clear`, `brb`, and `back` are reserved.
-- Responses are required and capped at 500 characters.
+- Responses are required and capped at 500 UTF-8 bytes.
 - Actions are `ticker` or `alert` only.
 - Required roles are `viewer`, `moderator`, or `broadcaster`.
 - Cooldowns are per custom command and live in memory until API restart.
@@ -132,6 +133,8 @@ If one bot operation fails to load, its panel reports the failure and the other 
 
 Timers are persisted so operator configuration survives browser/session changes. When bot storage is available, the API starts a timer worker that polls due enabled timers and publishes the configured safe `ticker` or `alert` response into the existing event pipeline. Timer executions write bot audit rows with result `allowed` and reason `timer_due`.
 
+Use Edit on a saved timer to change its name, interval, response, action, or enabled state. Save changes updates its existing ID and preserves the last scheduled run timestamp. Cancel edit returns to the new-timer form without writing. Failed saves keep the edited draft for retry. Timer controls stay disabled while an operation is pending. A successful operation stays visible even if the subsequent status/audit refresh fails.
+
 Run once sends one saved timer response, including a paused timer. It requires operator access and bot storage, but no Twitch credentials. It does not enable the timer or update `lastRunAt`. The dashboard labels that timestamp Last scheduled run.
 
 Create, update, pause, enable, and delete operations also record bot audit rows with action `timer_create`, `timer_update`, `timer_pause`, `timer_enable`, or `timer_delete`. They include scheduling metadata and active session ID, without response templates. Failed configuration changes use result `failed`. The dashboard refreshes audit after configuration changes.
@@ -143,7 +146,7 @@ Timer validation:
 - Names use lowercase letters, numbers, dash, or underscore.
 - Intervals must be between 30 seconds and 24 hours.
 - Actions are currently `ticker` or `alert`.
-- Responses are required and capped at 500 characters.
+- Responses are required and capped at 500 UTF-8 bytes.
 - Template variables use the same renderer as custom commands. `{channel}` and `{command}` are useful for timers; user/args variables render empty for timer-triggered messages.
 
 ## Counters and quotes behavior

@@ -7,7 +7,6 @@ import type {
   BotModerationRulesResponse,
   BotQuotesResponse,
   BotStatus,
-  BotTimersResponse,
 } from '../../../lib/api';
 
 export type BotPageState = {
@@ -19,7 +18,6 @@ export type BotPageState = {
   apiVariables: BotAPIVariablesResponse | null;
   moderation: BotModerationRulesResponse | null;
   moderationDryRun: BotModerationDryRunResponse | null;
-  timers: BotTimersResponse | null;
   loading: boolean;
   error: string;
 };
@@ -35,6 +33,7 @@ export type CommandDraft = {
 };
 
 export type TimerDraft = {
+  id?: string;
   name: string;
   intervalSeconds: number;
   response: string;

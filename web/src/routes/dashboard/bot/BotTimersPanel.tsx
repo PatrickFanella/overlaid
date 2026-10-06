@@ -1,32 +1,15 @@
-import type { BotTimer, BotTimersResponse } from '../../../lib/api';
+import type { BotTimersState } from './useBotTimers';
 import type { TimerDraft } from './types';
 import { Check, Empty, Field, Notice, Panel, Tag } from '../ui';
 
 export function BotTimersPanel({
-  draft,
-  timers,
-  saving,
-  runningId,
-  runResult,
-  onRun,
-  onDraftChange,
-  onSave,
-  onToggle,
-  onDelete,
-}: {
-  draft: TimerDraft;
-  timers: BotTimersResponse | null;
-  saving: boolean;
-  runningId: string | null;
-  runResult: string;
-  onRun: (timer: BotTimer) => void;
-  onDraftChange: (draft: TimerDraft) => void;
-  onSave: () => void;
-  onToggle: (timer: BotTimer) => void;
-  onDelete: (timer: BotTimer) => void;
-}) {
+  draft, timers, pending, loading, error, result,
+  onRun, onEdit, onCancel, onDraftChange, onSave, onToggle, onDelete,
+}: BotTimersState) {
   const items = timers?.timers ?? [];
-  const canSave = draft.name.trim() !== '' && draft.response.trim() !== '' && draft.intervalSeconds >= 30;
+  const responseTooLong = new TextEncoder().encode(draft.response.trim()).length > 500;
+  const canSave = /^[a-z0-9_-]+$/.test(draft.name.trim().toLowerCase()) && draft.response.trim() !== '' && !responseTooLong && Number.isInteger(draft.intervalSeconds) && draft.intervalSeconds >= 30 && draft.intervalSeconds <= 86400;
+  const busy = pending !== null || loading;
   return (
     <Panel
       id="bot-timers"
@@ -36,33 +19,40 @@ export function BotTimersPanel({
     >
       {timers?.loadError ? <Notice tone="warn">Timers unavailable: {timers.loadError}</Notice> : null}
 
-      <div className="grid gap-3 md:grid-cols-[1fr_9rem_8rem]">
-        <Field label="Timer name">
-          <input className="desk-input desk-input--mono" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="stream_hype" />
-        </Field>
-        <Field label="Interval seconds">
-          <input className="desk-input" type="number" min={30} value={draft.intervalSeconds} onChange={(event) => onDraftChange({ ...draft, intervalSeconds: Number(event.target.value) })} />
-        </Field>
-        <Field label="Action">
-          <select className="desk-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as TimerDraft['action'] })}>
-            <option value="ticker">Ticker</option>
-            <option value="alert">Alert</option>
-          </select>
-        </Field>
-      </div>
-      <Field label="Response">
-        <textarea className="desk-input" value={draft.response} onChange={(event) => onDraftChange({ ...draft, response: event.target.value })} placeholder="Hydrate, stretch, and check posture." />
-      </Field>
-      <div className="flex flex-wrap items-center gap-3">
-        <Check label="Enabled" checked={draft.enabled} onChange={(enabled) => onDraftChange({ ...draft, enabled })} />
-        <button className="desk-btn desk-btn--primary" type="button" disabled={!canSave || saving} onClick={onSave}>
-          {saving ? 'Saving…' : 'Save timer'}
-        </button>
-      </div>
+      {error ? <Notice tone="bad" role="alert">{error}</Notice> : null}
+      {draft.id ? <Notice>Editing {draft.name || 'saved timer'}. Save changes updates this timer.</Notice> : null}
 
-      {runResult ? <Notice tone="ok">{runResult}</Notice> : null}
+      <fieldset className="grid min-w-0 gap-3" disabled={busy}>
+        <legend className="sr-only">Timer editor</legend>
+        <div className="grid gap-3 md:grid-cols-[1fr_9rem_8rem]">
+          <Field label="Timer name" hint="Letters, numbers, dash, or underscore.">
+            <input className="desk-input desk-input--mono" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} placeholder="stream_hype" />
+          </Field>
+          <Field label="Interval seconds" hint="30 to 86,400 seconds.">
+            <input className="desk-input" type="number" min={30} max={86400} step={1} value={draft.intervalSeconds} onChange={(event) => onDraftChange({ ...draft, intervalSeconds: Number(event.target.value) })} />
+          </Field>
+          <Field label="Action">
+            <select className="desk-input" value={draft.action} onChange={(event) => onDraftChange({ ...draft, action: event.target.value as TimerDraft['action'] })}>
+              <option value="ticker">Ticker</option>
+              <option value="alert">Alert</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="Response" hint={responseTooLong ? 'Response is too long. Shorten it before saving.' : undefined}>
+          <textarea className="desk-input" maxLength={500} value={draft.response} onChange={(event) => onDraftChange({ ...draft, response: event.target.value })} placeholder="Hydrate, stretch, and check posture." />
+        </Field>
+        <div className="flex flex-wrap items-center gap-3">
+          <Check label="Enabled" checked={draft.enabled} onChange={(enabled) => onDraftChange({ ...draft, enabled })} />
+          <button className="desk-btn desk-btn--primary" type="button" disabled={!canSave || busy} onClick={onSave}>
+            {pending?.action === 'save' ? 'Saving…' : draft.id ? 'Save changes' : 'Save timer'}
+          </button>
+          {draft.id ? <button className="desk-btn" type="button" onClick={onCancel}>Cancel edit</button> : null}
+        </div>
+      </fieldset>
 
-      {items.length === 0 ? (
+      {result ? <Notice tone="ok" role="status">{result}</Notice> : null}
+
+      {loading ? <Empty>Loading timers…</Empty> : items.length === 0 ? (
         <Empty>No bot timers configured yet.</Empty>
       ) : (
         <ul className="desk-rows">
@@ -78,13 +68,16 @@ export function BotTimersPanel({
               <p className="desk-row__text">{timer.response}</p>
               <p className="desk-row__meta">Last scheduled run: {timer.lastRunAt ? new Date(timer.lastRunAt).toLocaleString() : 'Never'}</p>
               <div className="flex flex-wrap gap-2 pt-1">
-                <button className="desk-btn desk-btn--small" type="button" disabled={runningId !== null} onClick={() => onRun(timer)}>
-                  {runningId === timer.id ? 'Running…' : 'Run once'}
+                <button className="desk-btn desk-btn--small" type="button" disabled={busy} onClick={() => onRun(timer)}>
+                  {pending?.action === 'run' && pending.id === timer.id ? 'Running…' : 'Run once'}
                 </button>
-                <button className="desk-btn desk-btn--small" type="button" onClick={() => onToggle(timer)}>
+                <button className="desk-btn desk-btn--small" type="button" disabled={busy} onClick={() => onEdit(timer)}>
+                  Edit
+                </button>
+                <button className="desk-btn desk-btn--small" type="button" disabled={busy} onClick={() => onToggle(timer)}>
                   {timer.enabled ? 'Pause' : 'Enable'}
                 </button>
-                <button className="desk-btn desk-btn--small desk-btn--danger" type="button" onClick={() => onDelete(timer)}>
+                <button className="desk-btn desk-btn--small desk-btn--danger" type="button" disabled={busy} onClick={() => onDelete(timer)}>
                   Delete
                 </button>
               </div>

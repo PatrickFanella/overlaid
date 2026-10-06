@@ -6,7 +6,6 @@ import {
   fetchBotQuotes,
   fetchBotAPIVariables,
   fetchBotModerationRules,
-  fetchBotTimers,
 } from '../../../lib/api';
 import type { BotPageState } from './types';
 
@@ -18,7 +17,7 @@ function panelResult<T extends { loadError?: string }>(result: PromiseSettledRes
 
 // Loading one operation must not hide data from the other bot panels.
 export async function loadBotWorkspace(apiBaseUrl: string, operatorSecret: string): Promise<BotPageState> {
-  const [status, audit, commands, counters, quotes, apiVariables, moderation, timers] = await Promise.allSettled([
+  const [status, audit, commands, counters, quotes, apiVariables, moderation] = await Promise.allSettled([
     fetchBotStatus(apiBaseUrl, operatorSecret),
     fetchBotAudit(25, apiBaseUrl, operatorSecret),
     fetchBotCommands(apiBaseUrl, operatorSecret),
@@ -26,7 +25,6 @@ export async function loadBotWorkspace(apiBaseUrl: string, operatorSecret: strin
     fetchBotQuotes(apiBaseUrl, operatorSecret),
     fetchBotAPIVariables(apiBaseUrl, operatorSecret),
     fetchBotModerationRules(apiBaseUrl, operatorSecret),
-    fetchBotTimers(apiBaseUrl, operatorSecret),
   ]);
   return {
     status: panelResult(status, { available: false, commandCount: 0, timerCount: 0, counterCount: 0, quoteCount: 0, auditCount: 0 }),
@@ -36,7 +34,6 @@ export async function loadBotWorkspace(apiBaseUrl: string, operatorSecret: strin
     quotes: panelResult(quotes, { quotes: [] }),
     apiVariables: panelResult(apiVariables, { variables: [] }),
     moderation: panelResult(moderation, { rules: [] }),
-    timers: panelResult(timers, { timers: [] }),
     moderationDryRun: null,
     loading: false,
     error: '',

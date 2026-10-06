@@ -52,9 +52,14 @@ test.describe('operator browser smoke', () => {
     const pendingRun = new Promise<void>((resolve) => { finishRun = resolve; });
     let runs = 0;
     let configurationChanged = false;
+    let auditUnavailable = false;
     const timer = { id: 'timer-1', name: 'hydrate', enabled: false, intervalSeconds: 300, response: 'Hydrate', action: 'ticker', createdAt: '2026-10-05T12:00:00Z', updatedAt: '2026-10-05T12:00:00Z' };
     await page.route('**/api/bot/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/audit') && auditUnavailable) {
+        await route.fulfill({ status: 503, body: 'audit temporarily unavailable' });
+        return;
+      }
       if (path.endsWith('/timers/timer-1') && route.request().method() === 'PUT') {
         timer.enabled = route.request().postDataJSON().enabled;
         configurationChanged = true;
@@ -67,8 +72,11 @@ test.describe('operator browser smoke', () => {
         if (runs === 1) {
           await pendingRun;
           await route.fulfill({ json: { eventId: 'event-1' } });
-        } else {
+        } else if (runs === 2) {
           await route.fulfill({ status: 503, body: 'bot timer execution unavailable' });
+        } else {
+          auditUnavailable = true;
+          await route.fulfill({ json: { eventId: 'event-3' } });
         }
         return;
       }
@@ -102,6 +110,93 @@ test.describe('operator browser smoke', () => {
     await panel.getByRole('button', { name: 'Enable', exact: true }).click();
     await expect(panel.getByText('enabled', { exact: true })).toBeVisible();
     await expect(page.getByText('dashboard · timer_configuration_changed')).toBeVisible();
+    await panel.getByRole('button', { name: 'Run once', exact: true }).click();
+    await expect(panel.getByText('Sent hydrate. Event event-3. Schedule unchanged.')).toBeVisible();
+    await expect(panel.getByRole('alert')).toContainText('Timer operation succeeded. Status/audit refresh failed:');
+    await expect(panel.getByRole('button', { name: 'Run once', exact: true })).toBeEnabled();
+    expect(runs).toBe(3);
+  });
+
+  test('edits saved timers, preserves failed drafts, and keeps newer audit after a late load', async ({ page }) => {
+    let releaseVariables!: () => void;
+    const variablesReady = new Promise<void>((resolve) => { releaseVariables = resolve; });
+    let writes = 0;
+    let saved = false;
+    let deleted = false;
+    let timer = { id: 'timer-1', name: 'hydrate_edit', enabled: false, intervalSeconds: 300, response: 'Original response', action: 'ticker', createdAt: '2026-10-05T12:00:00Z', updatedAt: '2026-10-05T12:00:00Z', lastRunAt: '2026-10-05T12:00:00Z' };
+    await page.route('**/api/bot/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/timers') && route.request().method() === 'POST') {
+        const payload = route.request().postDataJSON();
+        expect(payload.id).toBe('timer-1');
+        expect(payload.enabled).toBe(false);
+        writes += 1;
+        if (writes === 1) {
+          await route.fulfill({ status: 503, body: 'save temporarily unavailable' });
+          return;
+        }
+        timer = { ...timer, ...payload };
+        saved = true;
+        await route.fulfill({ json: timer });
+        return;
+      }
+      if (path.endsWith('/timers/timer-1') && route.request().method() === 'DELETE') {
+        deleted = true;
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      if (path.endsWith('/api-variables')) {
+        await variablesReady;
+        await route.fulfill({ json: { variables: [] } });
+        return;
+      }
+      const responses: Record<string, unknown> = {
+        status: { available: true, commandCount: 0, timerCount: deleted ? 0 : 1, counterCount: 0, quoteCount: 0, auditCount: saved ? 1 : 0 },
+        timers: { timers: deleted ? [] : [timer] },
+        commands: { commands: [] }, counters: { counters: [] }, quotes: { quotes: [] }, rules: { rules: [] },
+        audit: { events: saved ? [{ id: 'audit-edit', createdAt: '2026-10-05T12:01:00Z', source: 'dashboard', result: 'allowed', reason: 'timer_configuration_changed', trigger: 'hydrate_edit' }] : [] },
+      };
+      await route.fulfill({ json: responses[path.split('/').at(-1)!] ?? {} });
+    });
+    await page.goto('/dashboard/chat');
+    const panel = page.locator('#bot-timers');
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(panel.getByLabel('Timer name')).toHaveValue('hydrate_edit');
+    await panel.getByLabel('Response').fill('Unsaved response');
+    await panel.getByRole('button', { name: 'Cancel edit' }).click();
+    await expect(panel.getByLabel('Timer name')).toHaveValue('');
+    expect(writes).toBe(0);
+
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    await panel.getByLabel('Interval seconds').fill('90000');
+    await expect(panel.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    await panel.getByLabel('Interval seconds').fill('30.5');
+    await expect(panel.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    await panel.getByLabel('Interval seconds').fill('600');
+    await panel.getByLabel('Response').fill('Updated response');
+    await panel.getByLabel('Action').selectOption('alert');
+    await panel.getByRole('button', { name: 'Save changes' }).click();
+    await expect(panel.getByRole('alert')).toContainText('save temporarily unavailable');
+    await expect(panel.getByLabel('Response')).toHaveValue('Updated response');
+    await expect(panel.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    await panel.getByRole('button', { name: 'Save changes' }).click();
+    await expect(panel.getByText('Updated hydrate_edit.', { exact: true })).toBeVisible();
+    await expect(panel.getByText('every 600s · alert')).toBeVisible();
+    await expect(panel.getByText('Updated response', { exact: true })).toBeVisible();
+    await expect(panel.getByText('paused', { exact: true })).toBeVisible();
+    await expect(panel.getByLabel('Timer name')).toHaveValue('');
+    await expect(page.getByText('dashboard · timer_configuration_changed')).toBeVisible();
+    releaseVariables();
+    await expect(page.locator('#bot-api-variables').getByText('No API variables configured yet.')).toBeVisible();
+    await expect(page.getByText('dashboard · timer_configuration_changed')).toBeVisible();
+    expect(writes).toBe(2);
+    expect(timer.lastRunAt).toBe('2026-10-05T12:00:00Z');
+
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    await panel.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(panel.getByText('No bot timers configured yet.')).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Cancel edit' })).toHaveCount(0);
+    await expect(panel.getByLabel('Timer name')).toHaveValue('');
   });
 
   test('keeps available bot panels when API variables cannot load', async ({ page }) => {

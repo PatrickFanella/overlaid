@@ -232,3 +232,11 @@ This is the first part of the bot dashboard split. Request state, drafts, and re
 Moved initial workspace loading into `bot/loadBotWorkspace.ts`. Each request result is handled separately. A failed operation now supplies a panel-specific load error while successful panels keep their data. Counters and quotes also display their load errors. The workspace keeps the cancellation guard for navigation.
 
 Verification passed: `make verify`, including 92 frontend tests, and all seven `make smoke-browser` checks. Coverage includes an API-variable failure alongside a working saved timer and bot runtime, and denied operator access across all bot operations. Per-operation drafts and mutation state still belong to the workspace.
+
+## October 6 timer operation state
+
+`bot/useBotTimers.ts` now owns timer loading, drafts, saved timer editing, mutations, pending operations, and local errors/results. Timer requests no longer depend on the workspace's initial load. The hook retains drafts when the panel is hidden and ignores responses after unmount or a change of API/credentials. The route is now 351 lines. Commands, community tools, API variables, and moderation state remain to be separated.
+
+The editor updates the existing timer ID, preserves paused state and the last scheduled run, supports cancel, and retains drafts after failed saves. Browser coverage exercises those behaviors, pending controls, and an initial load that finishes after a successful timer action. Newer status/audit data survives that late load.
+
+Verification passed: `make verify`, all eight `make smoke-browser` checks, and `make smoke API_PORT=8081`. A collaborative-browser edit against disposable Postgres updated the same timer ID and wrote a `timer_update` audit row. Live Twitch/OBS verification remains pending.

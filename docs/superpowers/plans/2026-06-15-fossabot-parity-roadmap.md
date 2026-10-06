@@ -192,7 +192,7 @@ Build the spine before adding feature breadth.
 - Modify: `web/src/routes/dashboard/Bot.tsx`
 - Test: `web/src/App.test.tsx`
 
-- [ ] Add timer list, enable/disable, interval, response/action editor.
+- [x] Add timer list, enable/disable, and a saved-timer interval/response/action editor with cancellation and retry.
 - [x] Add a manual “Run once” operator action backed by `POST /api/bot/timers/{id}/run`.
 - [x] Show last scheduled run time and refresh the audit after manual execution.
 - [ ] Commit: `feat: manage bot timers`.

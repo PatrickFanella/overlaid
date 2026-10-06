@@ -467,13 +467,12 @@ describe('overlay event utilities', () => {
   });
 
   it('keeps successful bot panel data when one operation fails', async () => {
-    const timer = { id: 'timer-1', name: 'hydrate', enabled: false };
     const command = { id: 'command-1', name: 'hello' };
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url.endsWith('/api-variables')) return { ok: false, status: 503, text: async () => 'variables offline' };
       const responses: Record<string, unknown> = {
         status: { available: true, commandCount: 1, timerCount: 1, counterCount: 0, quoteCount: 0, auditCount: 0 },
-        commands: { commands: [command] }, timers: { timers: [timer] },
+        commands: { commands: [command] },
         counters: { counters: [] }, quotes: { quotes: [] }, rules: { rules: [] }, audit: { events: [] },
       };
       const key = new URL(url).pathname.split('/').at(-1)!;
@@ -481,7 +480,6 @@ describe('overlay event utilities', () => {
     }));
     const state = await loadBotWorkspace('http://example.test', 'operator-secret');
     expect(state.status?.available).toBe(true);
-    expect(state.timers?.timers).toEqual([timer]);
     expect(state.commands?.commands).toEqual([command]);
     expect(state.apiVariables?.loadError).toContain('variables offline');
     expect(state.apiVariables?.variables).toEqual([]);
@@ -492,7 +490,7 @@ describe('overlay event utilities', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'operator access required' }));
     const state = await loadBotWorkspace('http://example.test', '');
     expect(state.status?.available).toBe(false);
-    for (const panel of [state.status, state.audit, state.commands, state.counters, state.quotes, state.apiVariables, state.moderation, state.timers]) {
+    for (const panel of [state.status, state.audit, state.commands, state.counters, state.quotes, state.apiVariables, state.moderation]) {
       expect(panel?.loadError).toContain('operator access required');
     }
     expect(state.loading).toBe(false);

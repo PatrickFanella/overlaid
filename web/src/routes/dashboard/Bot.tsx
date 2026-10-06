@@ -5,7 +5,6 @@ import {
   deleteBotAPIVariable,
   deleteBotModerationRule,
   deleteBotQuote,
-  deleteBotTimer,
   dryRunBotModeration,
   dryRunBotNuke,
   executeBotNuke,
@@ -17,17 +16,13 @@ import {
   fetchBotModerationRules,
   fetchBotQuotes,
   fetchBotStatus,
-  fetchBotTimers,
   rollbackBotNukeRadiation,
   saveBotCommand,
   saveBotCounter,
   saveBotAPIVariable,
   saveBotModerationRule,
   saveBotQuote,
-  saveBotTimer,
-  runBotTimer,
   setBotCommandEnabled,
-  setBotTimerEnabled,
   type BotNukeDryRunResponse,
   type BotNukeExecuteResponse,
   type BotAPIVariable,
@@ -35,7 +30,6 @@ import {
   type BotCounter,
   type BotModerationRule,
   type BotQuote,
-  type BotTimer,
 } from '../../lib/api';
 import { loadOperatorSecret } from '../../lib/dashboardConfig';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
@@ -50,11 +44,9 @@ import {
   defaultModerationTest,
   defaultNukeDraft,
   defaultQuoteDraft,
-  defaultTimerDraft,
   type BotPageState,
   type CommandDraft,
   type ModerationDraft,
-  type TimerDraft,
 } from './bot/types';
 import { CustomizablePanelLayout } from './components/CustomizablePanelLayout';
 import type { PanelLayoutItem } from '../../lib/dashboardLayout';
@@ -65,18 +57,15 @@ import { BotCommunityPanel } from './bot/BotCommunityPanel';
 import { BotAPIVariablesPanel } from './bot/BotAPIVariablesPanel';
 import { BotModerationPanel } from './bot/BotModerationPanel';
 import { BotTimersPanel } from './bot/BotTimersPanel';
+import { useBotTimers } from './bot/useBotTimers';
 
 export function BotWorkspace() {
   const apiBaseUrl = getOverlayApiBaseUrl();
   const operatorSecret = loadOperatorSecret();
   const [config, setConfig] = useState(() => loadDashboardConfig());
-  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, counters: null, quotes: null, apiVariables: null, moderation: null, moderationDryRun: null, timers: null, loading: false, error: '' });
+  const [state, setState] = useState<BotPageState>({ status: null, audit: null, commands: null, counters: null, quotes: null, apiVariables: null, moderation: null, moderationDryRun: null, loading: false, error: '' });
   const [commandDraft, setCommandDraft] = useState<CommandDraft>(defaultCommandDraft);
-  const [draft, setDraft] = useState<TimerDraft>(defaultTimerDraft);
   const [savingCommand, setSavingCommand] = useState(false);
-  const [savingTimer, setSavingTimer] = useState(false);
-  const [runningTimer, setRunningTimer] = useState<string | null>(null);
-  const [timerRunResult, setTimerRunResult] = useState('');
   const [counterDraft, setCounterDraft] = useState(defaultCounterDraft);
   const [quoteDraft, setQuoteDraft] = useState(defaultQuoteDraft);
   const [apiVariableDraft, setAPIVariableDraft] = useState(defaultAPIVariableDraft);
@@ -89,6 +78,8 @@ export function BotWorkspace() {
   const [nukeExecuteResult, setNukeExecuteResult] = useState<BotNukeExecuteResponse | null>(null);
   const [nukeRollbackResult, setNukeRollbackResult] = useState('');
 
+  const timers = useBotTimers(apiBaseUrl, operatorSecret, refreshBotSummary);
+
   function updateBotPanelLayout(items: PanelLayoutItem[]) {
     setConfig((current) => {
       const next = { ...current, panelLayouts: { ...current.panelLayouts, bot: items } };
@@ -100,9 +91,11 @@ export function BotWorkspace() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      setState((current) => ({ ...current, loading: true, error: '' }));
+      setState((current) => ({ ...current, status: null, audit: null, loading: true, error: '' }));
       const loaded = await loadBotWorkspace(apiBaseUrl, operatorSecret);
-      if (!cancelled) setState(loaded);
+      if (!cancelled) {
+        setState((current) => ({ ...loaded, status: current.status ?? loaded.status, audit: current.audit ?? loaded.audit }));
+      }
     }
     void load();
     return () => {
@@ -110,9 +103,9 @@ export function BotWorkspace() {
     };
   }, [apiBaseUrl, operatorSecret]);
 
-  async function refreshTimers() {
-    const [status, timers, audit] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotTimers(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret)]);
-    setState((current) => ({ ...current, status, timers, audit }));
+  async function refreshBotSummary() {
+    const [status, audit] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret)]);
+    setState((current) => ({ ...current, status, audit }));
   }
 
   async function refreshCommands() {
@@ -260,55 +253,6 @@ export function BotWorkspace() {
     }
   }
 
-  async function handleSaveTimer() {
-    setSavingTimer(true);
-    setState((current) => ({ ...current, error: '' }));
-    try {
-      await saveBotTimer(draft, apiBaseUrl, operatorSecret);
-      setDraft(defaultTimerDraft);
-      await refreshTimers();
-    } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'timer save failed' }));
-    } finally {
-      setSavingTimer(false);
-    }
-  }
-
-  async function handleToggleTimer(timer: BotTimer) {
-    setState((current) => ({ ...current, error: '' }));
-    try {
-      await setBotTimerEnabled(timer.id, !timer.enabled, apiBaseUrl, operatorSecret);
-      await refreshTimers();
-    } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'timer update failed' }));
-    }
-  }
-
-  async function handleRunTimer(timer: BotTimer) {
-    setRunningTimer(timer.id);
-    setTimerRunResult('');
-    setState((current) => ({ ...current, error: '' }));
-    try {
-      const result = await runBotTimer(timer.id, apiBaseUrl, operatorSecret);
-      setTimerRunResult(`Sent ${timer.name}. Event ${result.eventId}. Schedule unchanged.`);
-      const audit = await fetchBotAudit(25, apiBaseUrl, operatorSecret);
-      setState((current) => ({ ...current, audit }));
-    } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'timer run failed' }));
-    } finally {
-      setRunningTimer(null);
-    }
-  }
-
-  async function handleDeleteTimer(timer: BotTimer) {
-    setState((current) => ({ ...current, error: '' }));
-    try {
-      await deleteBotTimer(timer.id, apiBaseUrl, operatorSecret);
-      await refreshTimers();
-    } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : 'timer delete failed' }));
-    }
-  }
 
   return (
     <>
@@ -372,18 +316,7 @@ export function BotWorkspace() {
           {
             id: 'timers',
             node: (
-              <BotTimersPanel
-                draft={draft}
-                timers={state.timers}
-                saving={savingTimer}
-                runningId={runningTimer}
-                runResult={timerRunResult}
-                onRun={handleRunTimer}
-                onDraftChange={setDraft}
-                onSave={handleSaveTimer}
-                onToggle={handleToggleTimer}
-                onDelete={handleDeleteTimer}
-              />
+              <BotTimersPanel {...timers} />
             ),
           },
         ]}
