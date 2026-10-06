@@ -135,6 +135,8 @@ To test a custom command:
 3. Confirm `/overlay/ticker` or `/overlay/alerts` shows the configured response for `overlay`/`both` modes, or Twitch chat receives the rendered response for `chat`/`both` modes.
 4. Confirm `/dashboard/chat` audit records the command with result `allowed`.
 
+Command names are normalized to lowercase, start with a letter or number, and contain at most 32 letters, numbers, dashes, or underscores. The API enforces the same name rule as the editor.
+
 Use Edit on a saved command to change its response, response mode, overlay action, required role, cooldown, or enabled state. Save changes keeps the existing command ID; Cancel edit abandons the draft. Failed writes keep the draft for retry, and pending operations disable editing and row controls. Pause/enable updates the editor if that command is selected; deleting it returns to the new-command form. A successful write remains visible if the later status/audit refresh fails.
 
 If one bot operation fails to load, its panel reports the failure and the other panels keep their successful results. Check the affected panel before assuming all bot storage is unavailable. Counters and quotes report load errors separately.

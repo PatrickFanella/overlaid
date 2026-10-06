@@ -117,6 +117,12 @@ Verification passed: bot/HTTP/Twitch race tests with Postgres integration tests 
 
 A2's command recording now uses a bounded FIFO queue with one worker that exits when idle. `Runtime.Record` snapshots audit data and returns without waiting for storage; each write gets a five-second deadline. Queue overflow records a readiness error and drops the new audit rather than delaying commands. Dashboard mutation receipts retain synchronous recording. Shutdown waits for HTTP requests and drains pending command audits within its ten-second budget. Tests hold an audit writer open while both diagnostic and action events reach the bus, exercise queue capacity/order/cancellation/snapshots/restart and bounded flush, and verify queued persistence and event foreign keys against isolated Postgres. Event history is appended before the command audit is queued. Verification passed: `make verify`, all fourteen browser smoke checks, bot/HTTP/Twitch race tests with Postgres enabled, and `make smoke API_PORT=8081`.
 
+## October 6 command name and CRUD verification
+
+The backend now enforces the command-name pattern already used by the dashboard: 1–32 ASCII letters/numbers/dashes/underscores, beginning with a letter or number after normalization. Leading punctuation and overlong names previously passed backend validation. Boundary tests cover these cases and accepted normalized names.
+
+Isolated Postgres coverage verifies create/edit/pause/delete, preserved IDs and creation timestamps, response mode/action/role/cooldown round trips, rejected names and OBS actions, unchanged records after rejected edits, and missing-ID results. Native API checks confirm HTTP 400 for malformed names and rejected edits, plus successful create/pause/delete; the fixture was removed. `make verify`, all fourteen browser smoke tests, bot race tests with Postgres enabled, and `make smoke API_PORT=8081` passed. C1 and the existing command-dashboard commit checklist now reflect the inspected implementation and this evidence.
+
 ---
 
 ## File structure
@@ -272,11 +278,11 @@ Build the spine before adding feature breadth.
 - Extend: `backend/internal/http/bot_handlers.go`
 - Test: backend bot and HTTP tests.
 
-- [ ] Implement list/create/update/delete for response commands.
-- [ ] Enforce command names matching `^[a-z0-9][a-z0-9_-]{0,31}$`.
-- [ ] Support fields: `enabled`, `response`, `roleRequired`, `cooldownSeconds`.
-- [ ] Do not allow custom commands to trigger OBS actions in this milestone.
-- [ ] Commit: `feat: add custom command api`.
+- [x] Implement list/create/update/delete for response commands (October 6: isolated Postgres CRUD, identity/field preservation, missing IDs, and rejected-write checks).
+- [x] Enforce command names matching `^[a-z0-9][a-z0-9_-]{0,31}$` (October 6: backend boundary checks aligned with the dashboard).
+- [x] Support fields: `enabled`, `response`, `roleRequired`, `cooldownSeconds` (Postgres create/edit/pause round trip).
+- [x] Do not allow custom commands to trigger OBS actions in this milestone (only ticker/alert actions accepted; rejected OBS write verified).
+- [x] Commit: `feat: add custom command api` (`96f2158`; October 6 name-contract correction).
 
 ### Task C2: Template variables
 
@@ -312,7 +318,7 @@ Build the spine before adding feature breadth.
 - [x] Add command list and saved-record editor (October 6: edit/cancel/retry with existing ID and pending controls).
 - [x] Add test-render preview for template variables.
 - [x] Show cooldown/role fields.
-- [ ] Commit: `feat: manage custom bot commands`.
+- [x] Commit: `feat: manage custom bot commands` (`96f2158`; saved-editor coverage `09b6c83`).
 
 ---
 

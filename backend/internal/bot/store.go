@@ -840,8 +840,8 @@ func NormalizeCommand(command Command) (Command, error) {
 	if command.Name == "" {
 		return Command{}, errors.New("command name is required")
 	}
-	if !isSafeBotName(command.Name) {
-		return Command{}, errors.New("command name must use lowercase letters, numbers, dash, or underscore")
+	if len(command.Name) > 32 || !isSafeBotName(command.Name) || !isBotNameInitial(command.Name[0]) {
+		return Command{}, errors.New("command name must start with a letter or number and use 1-32 lowercase letters, numbers, dashes, or underscores")
 	}
 	if isReservedCommandName(command.Name) {
 		return Command{}, fmt.Errorf("command name %q is reserved", command.Name)
@@ -899,6 +899,10 @@ func NormalizeTimer(timer Timer) (Timer, error) {
 		return Timer{}, fmt.Errorf("unsupported timer action %q", timer.Action)
 	}
 	return timer, nil
+}
+
+func isBotNameInitial(initial byte) bool {
+	return (initial >= 'a' && initial <= 'z') || (initial >= '0' && initial <= '9')
 }
 
 func isSafeBotName(name string) bool {

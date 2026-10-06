@@ -209,3 +209,16 @@ func TestNormalizeQuoteRejectsUnsafeValues(t *testing.T) {
 		t.Fatal("expected long author rejection")
 	}
 }
+
+func TestNormalizeCommandNameContract(t *testing.T) {
+	for _, name := range []string{"a", "1", "9hello-world_2", strings.Repeat("a", 32), " !HELLO "} {
+		if _, err := NormalizeCommand(Command{Name: name, Response: "Hello"}); err != nil {
+			t.Errorf("valid name %q: %v", name, err)
+		}
+	}
+	for _, name := range []string{"", "!", "-hello", "_hello", strings.Repeat("a", 33), "a.b", "a b", "café", "💬hello"} {
+		if _, err := NormalizeCommand(Command{Name: name, Response: "Hello"}); err == nil {
+			t.Errorf("invalid name %q accepted", name)
+		}
+	}
+}

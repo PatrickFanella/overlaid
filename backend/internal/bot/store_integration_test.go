@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"os"
 	"sort"
@@ -290,5 +291,60 @@ func TestRuntimeQueuedAuditPersistencePostgres(t *testing.T) {
 	}
 	if runtime.LastAuditError() != "" {
 		t.Fatal(runtime.LastAuditError())
+	}
+}
+
+func TestCommandCRUDPostgres(t *testing.T) {
+	store, _ := isolatedPostgresBotStore(t)
+	ctx := context.Background()
+	original, err := store.SaveCommand(ctx, Command{Name: " !HELLO ", Enabled: true, Response: "Hello {user}", Action: "ticker", ResponseMode: "both", RoleRequired: "moderator", CooldownSeconds: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if original.ID == "" || original.Name != "hello" || original.CreatedAt.IsZero() {
+		t.Fatalf("invalid created command: %#v", original)
+	}
+	original.Name, original.Response, original.Action = "hello_2", "Welcome {displayName}", "alert"
+	original.ResponseMode, original.RoleRequired, original.CooldownSeconds = "chat", "operator", 120
+	updated, err := store.SaveCommand(ctx, original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != original.ID || !updated.CreatedAt.Equal(original.CreatedAt) || updated.Name != "hello_2" || updated.Response != original.Response || updated.Action != "alert" || updated.ResponseMode != "chat" || updated.RoleRequired != "operator" || updated.CooldownSeconds != 120 {
+		t.Fatalf("edit lost fields or identity: %#v", updated)
+	}
+	paused, err := store.SetCommandEnabled(ctx, updated.ID, false)
+	if err != nil || paused.Enabled || paused.Response != updated.Response {
+		t.Fatalf("pause=%#v err=%v", paused, err)
+	}
+	for _, invalid := range []Command{{Name: "_hidden", Response: "Hello"}, {Name: strings.Repeat("a", 33), Response: "Hello"}, {Name: "unsafe", Response: "Hello", Action: "obs"}} {
+		if _, err := store.SaveCommand(ctx, invalid); err == nil {
+			t.Fatalf("invalid command persisted: %#v", invalid)
+		}
+	}
+	invalidUpdate := updated
+	invalidUpdate.Name = "-invalid"
+	if _, err := store.SaveCommand(ctx, invalidUpdate); err == nil {
+		t.Fatal("invalid update accepted")
+	}
+	rows, err := store.ListCommands(ctx)
+	if err != nil || len(rows) != 1 || rows[0].ID != paused.ID || rows[0].Name != paused.Name || rows[0].Enabled {
+		t.Fatalf("invalid writes changed saved command: %#v, %v", rows, err)
+	}
+	if err := store.DeleteCommand(ctx, paused.ID); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = store.ListCommands(ctx)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("deleted command remains: %#v, %v", rows, err)
+	}
+	if err := store.DeleteCommand(ctx, paused.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing delete=%v", err)
+	}
+	if _, err := store.SaveCommand(ctx, updated); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing update=%v", err)
+	}
+	if _, err := store.SetCommandEnabled(ctx, paused.ID, true); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing enable=%v", err)
 	}
 }
