@@ -77,6 +77,16 @@ Verification passed: bot/Twitch race tests, `make verify` (93 frontend tests and
 
 ---
 
+## October 6 unavailable audit storage and template diagnostics
+
+Server initialization now supplies a nil audit recorder when bot storage is unavailable, avoiding a typed-nil store panic while publishing Twitch command diagnostics. Local tests drive `!alert`, `!clear`, `!brb`, and `!back` through command processing and event publication without Postgres. Another fixture verifies that an audit write failure retains command delivery and exposes the audit error through runtime diagnostics.
+
+Custom-command audit now retains the renderer's unknown-variable names. A command-to-audit test confirms that unknown placeholders render empty, diagnostics retain the active session ID, and injected token/raw EventSub fields stay out of audit data.
+
+Verification passed: focused HTTP race tests, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, Postgres cache/session-audit tests, and API smoke checks both with and without Postgres (`API_PORT=8081` and `API_PORT=8080`).
+
+---
+
 ## File structure
 
 ### Backend domain
@@ -243,7 +253,7 @@ Build the spine before adding feature breadth.
 - Test: `backend/internal/bot/templates_test.go`
 
 - [ ] Implement safe variables: `{user}`, `{displayName}`, `{channel}`, `{args}`, `{command}`, `{nowPlaying.title}`, `{nowPlaying.artist}`.
-- [ ] Unknown variables render as empty strings and are recorded in audit data.
+- [x] Unknown variables render as empty strings and are recorded in audit data (October 6: command-to-audit test and session linkage).
 - [ ] Limit rendered response length to 400 characters.
 - [ ] Commit: `feat: render bot command templates`.
 

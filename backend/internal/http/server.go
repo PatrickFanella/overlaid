@@ -75,7 +75,10 @@ func NewServer(cfg config.Config, bus *events.Bus) *Server {
 	server.sessions, server.sessionsLoadError = newSessionStore(cfg)
 	server.refreshActiveSession(context.Background())
 	server.botStore, server.botLoadError = newBotStore(cfg)
-	server.botRuntime = bot.NewRuntime(server.botStore)
+	server.botRuntime = bot.NewRuntime(nil)
+	if server.botStore != nil {
+		server.botRuntime = bot.NewRuntime(server.botStore)
+	}
 	server.interactions, server.interactionsLoadError = newInteractionStore(cfg)
 	rules := interactions.Rules{}
 	if server.interactions != nil {

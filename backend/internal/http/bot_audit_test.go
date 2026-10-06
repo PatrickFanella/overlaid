@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,15 +12,107 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 )
 
 type recordingBotAuditStore struct {
 	events []bot.AuditEvent
+	err    error
 }
 
 func (r *recordingBotAuditStore) RecordAudit(_ context.Context, event bot.AuditEvent) (bot.AuditEvent, error) {
+	if r.err != nil {
+		return bot.AuditEvent{}, r.err
+	}
 	r.events = append(r.events, event)
 	return event, nil
+}
+
+func TestTwitchCommandsPublishWithoutBotStorage(t *testing.T) {
+	for _, name := range []string{"alert", "clear", "brb", "back"} {
+		t.Run(name, func(t *testing.T) {
+			bus := events.NewBus(4)
+			client := bus.Subscribe()
+			defer bus.Unsubscribe(client.ID)
+			server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+			if server.botStore != nil {
+				t.Fatal("fixture unexpectedly has database storage")
+			}
+			produced := server.twitchCommandProcessor.Handle(twitch.ChatCommand{Name: name, Args: "local rehearsal"}, twitch.ChatCommandUser{Name: "Streamer", IsBroadcaster: true})
+			if len(produced) != 2 {
+				t.Fatalf("expected diagnostic and action, got %#v", produced)
+			}
+			for _, event := range produced {
+				server.publishEventSubEvent(event)
+			}
+			for _, event := range produced {
+				select {
+				case got := <-client.Events:
+					if got.ID != event.ID {
+						t.Fatalf("wrong delivered event: %#v", got)
+					}
+				default:
+					t.Fatal("command event was not delivered without audit storage")
+				}
+			}
+		})
+	}
+}
+
+func TestTwitchCommandDeliverySurvivesAuditStorageFailure(t *testing.T) {
+	bus := events.NewBus(4)
+	client := bus.Subscribe()
+	defer bus.Unsubscribe(client.ID)
+	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
+	server.botRuntime = bot.NewRuntime(&recordingBotAuditStore{err: errors.New("audit database unavailable")})
+	produced := server.twitchCommandProcessor.Handle(twitch.ChatCommand{Name: "alert", Args: "local rehearsal"}, twitch.ChatCommandUser{Name: "Streamer", IsBroadcaster: true})
+	for _, event := range produced {
+		server.publishEventSubEvent(event)
+	}
+	for _, event := range produced {
+		select {
+		case got := <-client.Events:
+			if got.ID != event.ID {
+				t.Fatalf("wrong delivered event: %#v", got)
+			}
+		default:
+			t.Fatal("audit failure prevented command delivery")
+		}
+	}
+	if server.botRuntime.LastAuditError() != "audit database unavailable" {
+		t.Fatalf("audit failure not visible: %q", server.botRuntime.LastAuditError())
+	}
+}
+
+func TestCustomCommandAuditRetainsUnknownVariablesWithoutRawPayload(t *testing.T) {
+	recorder := &recordingBotAuditStore{}
+	server := &Server{botRuntime: bot.NewRuntime(recorder), history: activeHistoryStub{sessionID: "session-1"}}
+	processor := twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Custom: []twitch.CustomCommand{{Name: "hello", Enabled: true, Response: "Hello {user} {missing}", Action: "ticker", RoleRequired: "viewer"}}})
+	produced := processor.Handle(twitch.ChatCommand{Name: "hello"}, twitch.ChatCommandUser{Name: "Viewer"})
+	if len(produced) != 2 || produced[1].Message != "Hello Viewer" {
+		t.Fatalf("template did not omit unknown variable: %#v", produced)
+	}
+	produced[0].Data["accessToken"] = "PRIVATE_TOKEN"
+	produced[0].Data["rawEventSub"] = map[string]any{"payload": "PRIVATE_RAW_PAYLOAD"}
+	for _, event := range produced {
+		server.recordBotAuditForEvent(context.Background(), event)
+	}
+	if len(recorder.events) != 1 {
+		t.Fatalf("expected one diagnostic audit, got %#v", recorder.events)
+	}
+	audit := recorder.events[0]
+	var data struct {
+		UnknownVariables []string `json:"unknownVariables"`
+	}
+	if err := json.Unmarshal(audit.Data, &data); err != nil || len(data.UnknownVariables) != 1 || data.UnknownVariables[0] != "missing" {
+		t.Fatalf("unknown variables missing from audit: %s, %v", audit.Data, err)
+	}
+	if audit.StreamSessionID != "session-1" || audit.Result != "allowed" || strings.Contains(string(audit.Data), "PRIVATE_") {
+		t.Fatalf("unsafe or unlinked audit: %#v", audit)
+	}
+	if err := bot.ValidateAuditData(audit.Data); err != nil {
+		t.Fatalf("generated audit does not pass storage validation: %v", err)
+	}
 }
 
 type activeHistoryStub struct {

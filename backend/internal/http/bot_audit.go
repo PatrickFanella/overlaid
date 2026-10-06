@@ -32,6 +32,9 @@ func (s *Server) recordBotAuditForEvent(ctx context.Context, event events.Event)
 		"custom":          boolData(data, "custom"),
 		"eventSeverity":   string(event.Severity),
 	}
+	if unknown, ok := data["unknownVariables"].([]string); ok {
+		auditData["unknownVariables"] = unknown
+	}
 	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
 		Source:           bot.SourceChat,
 		ActorLogin:       stringData(data, "login"),
