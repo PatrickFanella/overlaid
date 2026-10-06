@@ -8,16 +8,14 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type Store struct {
-	db         *sql.DB
-	apiCacheMu sync.Mutex
-	apiCache   map[string]apiVariableCacheEntry
+	db           *sql.DB
+	apiVariables *APIVariableResolver
 }
 
 type AuditEvent struct {
@@ -110,7 +108,8 @@ func NewPostgres(databaseURL string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := &Store{db: db, apiCache: make(map[string]apiVariableCacheEntry)}
+	store := &Store{db: db}
+	store.apiVariables = newAPIVariableResolver(store, fetchAPIVariable, time.Now)
 	if err := store.Load(); err != nil {
 		_ = db.Close()
 		return nil, err

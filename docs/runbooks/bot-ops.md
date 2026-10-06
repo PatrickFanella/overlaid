@@ -120,6 +120,7 @@ API variables are safer than FossaBot-style inline custom API URLs:
 - At most one HTTPS redirect is followed, with the same URL and connection checks. Responses over 32 KiB or interrupted reads fail; rendered variable values are capped at 200 characters. Request diagnostics omit the URL and query values.
 - Cache TTL is 15-3600 seconds; timeout is 250-3000ms; at most three unique API variables resolve per template render.
 - Supported responses are `text/plain` or scalar/selected `application/json` values via a simple dot selector such as `data.value`.
+- A missing variable returns `missing`; unavailable configuration storage returns `unavailable`. Neither fetches an upstream URL or exposes storage errors. Fetch failures use the configured fallback and retry on the next render. A diagnostics-write failure does not discard a fetched value or its cache.
 - Headers, request bodies, POST/PUT/DELETE, scripts, jq, HTML scraping, and arbitrary chat-provided URLs are intentionally not supported.
 
 To test a custom command:

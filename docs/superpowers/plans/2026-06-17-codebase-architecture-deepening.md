@@ -269,6 +269,12 @@ API-variable HTTP connections now validate every DNS answer and dial the approve
 
 Offline tests cover DNS rejection, pinned-address retries, cancellation, redirects, body limits, and safe errors. A local TLS fixture verifies the complete HTTP path and confirms that an environment proxy receives no request. Verification passed: race testing, `make verify` (93 frontend tests and the Go suite), all fourteen `make smoke-browser` checks, optional Postgres cache/session-audit tests, and `make smoke API_PORT=8081`. Storage/cache ownership still belongs to `Store`; this closes a concrete network gap before the resolver extraction.
 
+## October 6 API-variable resolver module
+
+`api_variable_resolver.go` now owns name normalization, the three-variable limit, shared fetch deadline, fallback selection, and the mutex-protected configuration-revision cache. The command processor receives this resolver directly. `Store` supplies lookup and revision-conditional diagnostics through a small repository interface; HTTP/DNS/selector behavior lives in `api_variable_http.go`. Each Postgres store initializes one shared resolver, so later renders retain their cache. Missing rows return `missing`; storage failures now return `unavailable` without copying database errors into command data.
+
+Offline resolver tests exercise fetch/cache/expiry, edits and recreated records, disabled/deleted variables, fallback retries, diagnostic-write failures, normalized render limits, and concurrent renders. Verification passed: `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, the Postgres cache/session-audit tests, and `make smoke API_PORT=8081`. Bot and Twitch race tests pass. Broader HTTP race testing exposed existing unsynchronized response-buffer reads in SSE replay tests; fixing those tests is the next verification slice.
+
 ## October 6 moderation operation state
 
 `bot/useBotModeration.ts` now owns moderation-rule loading and writes, test-message drafts/results, manual action state, and nuke planning/execution/rollback. The workspace coordinates panel layout and status/audit; each bot operation owns its requests and drafts. `Bot.tsx` is now 110 lines. Pending moderation operations disable overlapping moderation/nuke controls, and responses after navigation or API/credential changes are ignored.

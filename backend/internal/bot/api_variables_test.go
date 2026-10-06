@@ -56,29 +56,29 @@ func TestAPIVariableResolverNormalizesAndLimitsNames(t *testing.T) {
 }
 
 func TestAPIVariableCacheRejectsChangedConfigurationAndExpiredValues(t *testing.T) {
-	store := &Store{}
+	resolver := NewAPIVariableResolver(nil)
 	original := APIVariable{ID: "first-record", Name: "weather", UpdatedAt: time.Now()}
-	store.cacheAPIVariable(original, "72F", time.Hour)
-	if value, hit := store.cachedAPIVariable(original); !hit || value != "72F" {
+	resolver.cacheAPIVariable(original, "72F", time.Hour)
+	if value, hit := resolver.cachedAPIVariable(original); !hit || value != "72F" {
 		t.Fatalf("healthy cache: %q, %v", value, hit)
 	}
 	changed := original
 	changed.UpdatedAt = original.UpdatedAt.Add(time.Second)
-	if _, hit := store.cachedAPIVariable(changed); hit {
+	if _, hit := resolver.cachedAPIVariable(changed); hit {
 		t.Fatal("edited configuration reused cache")
 	}
 	recreated := original
 	recreated.ID = "replacement-record"
-	if _, hit := store.cachedAPIVariable(recreated); hit {
+	if _, hit := resolver.cachedAPIVariable(recreated); hit {
 		t.Fatal("recreated record reused cache")
 	}
-	store.cacheAPIVariable(changed, "73F", time.Hour)
-	store.cacheAPIVariable(original, "late old response", time.Hour)
-	if _, hit := store.cachedAPIVariable(changed); hit {
+	resolver.cacheAPIVariable(changed, "73F", time.Hour)
+	resolver.cacheAPIVariable(original, "late old response", time.Hour)
+	if _, hit := resolver.cachedAPIVariable(changed); hit {
 		t.Fatal("late old response became a current cache hit")
 	}
-	store.cacheAPIVariable(original, "expired", -time.Second)
-	if _, hit := store.cachedAPIVariable(original); hit {
+	resolver.cacheAPIVariable(original, "expired", -time.Second)
+	if _, hit := resolver.cachedAPIVariable(original); hit {
 		t.Fatal("expired cache served a value")
 	}
 }
