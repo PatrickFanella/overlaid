@@ -234,6 +234,26 @@ func TestCommandProcessorCustomCommandPermissionAndCooldown(t *testing.T) {
 	}
 }
 
+func TestCommandProcessorBroadcasterCanRunEveryConfiguredBotRole(t *testing.T) {
+	for _, required := range []string{"viewer", "moderator", "broadcaster", "operator", "system"} {
+		t.Run(required, func(t *testing.T) {
+			processor := NewCommandProcessor(CommandProcessorConfig{Custom: []CustomCommand{{Name: "private_response", Enabled: true, Response: "Ready for {user}", Action: "ticker", RoleRequired: required}}})
+			if required == "operator" || required == "system" {
+				for _, user := range []ChatCommandUser{{Name: "Viewer"}, {Name: "Mod", IsModerator: true}} {
+					denied := processor.Handle(ChatCommand{Name: "private_response"}, user)
+					if len(denied) != 1 || denied[0].Message != "Permission denied" {
+						t.Fatalf("expected lower-role denial, got %#v", denied)
+					}
+				}
+			}
+			allowed := processor.Handle(ChatCommand{Name: "private_response"}, ChatCommandUser{Name: "Streamer", IsBroadcaster: true})
+			if len(allowed) != 2 || allowed[0].Message != "Command accepted" || allowed[1].Message != "Ready for Streamer" {
+				t.Fatalf("broadcaster could not run %s command: %#v", required, allowed)
+			}
+		})
+	}
+}
+
 func TestCommandProcessorCounterCommand(t *testing.T) {
 	community := &fakeCommunityStore{}
 	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Community: community})

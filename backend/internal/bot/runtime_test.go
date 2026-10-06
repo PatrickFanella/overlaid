@@ -20,27 +20,31 @@ func (f *fakeAuditRecorder) RecordAudit(_ context.Context, event AuditEvent) (Au
 	return event, nil
 }
 
-func TestRuntimeAllowsRankedRoles(t *testing.T) {
+func TestRuntimeAllowsRoadmapRoleMatrix(t *testing.T) {
 	runtime := NewRuntime(nil)
-	cases := []struct {
-		actor    Role
-		required Role
-		want     bool
-	}{
-		{RoleViewer, RoleViewer, true},
-		{RoleViewer, RoleModerator, false},
-		{RoleModerator, RoleViewer, true},
-		{RoleModerator, RoleBroadcaster, false},
-		{RoleBroadcaster, RoleModerator, true},
-		{RoleOperator, RoleBroadcaster, true},
-		{RoleSystem, RoleOperator, true},
-	}
-	for _, tc := range cases {
-		if got := runtime.Allowed(tc.actor, tc.required); got != tc.want {
-			t.Fatalf("Allowed(%s,%s)=%v want %v", tc.actor, tc.required, got, tc.want)
+	roles := []Role{RoleViewer, RoleModerator, RoleBroadcaster, RoleOperator, RoleSystem}
+	for _, actor := range roles {
+		for _, required := range roles {
+			want := actor == RoleBroadcaster || actor == RoleOperator || actor == RoleSystem || required == RoleViewer || (actor == RoleModerator && required == RoleModerator)
+			t.Run(string(actor)+"/"+string(required), func(t *testing.T) {
+				if got := runtime.Allowed(actor, required); got != want {
+					t.Fatalf("Allowed(%s,%s)=%v want %v", actor, required, got, want)
+				}
+				if got := RoleAllows(actor, required); got != want {
+					t.Fatalf("RoleAllows(%s,%s)=%v want %v", actor, required, got, want)
+				}
+			})
 		}
-		if got := RoleAllows(tc.actor, tc.required); got != tc.want {
-			t.Fatalf("RoleAllows(%s,%s)=%v want %v", tc.actor, tc.required, got, tc.want)
+	}
+}
+
+func TestRuntimeRoleNormalizationDoesNotElevateUnknownActors(t *testing.T) {
+	if !RoleAllows(Role(" BROADCASTER "), RoleSystem) {
+		t.Fatal("normalized broadcaster cannot run system role command")
+	}
+	for _, actor := range []Role{"", "admin", "unknown"} {
+		if RoleAllows(actor, RoleModerator) || RoleAllows(actor, RoleSystem) {
+			t.Fatalf("unknown actor %q was elevated", actor)
 		}
 	}
 }

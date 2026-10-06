@@ -142,6 +142,10 @@ func NormalizeRole(role Role) Role {
 }
 
 func RoleAllows(actor Role, required Role) bool {
+	switch NormalizeRole(actor) {
+	case RoleBroadcaster, RoleOperator, RoleSystem:
+		return true
+	}
 	return roleRank(NormalizeRole(actor)) >= roleRank(NormalizeRole(required))
 }
 

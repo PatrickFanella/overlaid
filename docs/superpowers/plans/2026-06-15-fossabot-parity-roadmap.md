@@ -69,6 +69,14 @@ Private-host blocking now applies at connection time as well as URL validation. 
 
 ---
 
+## October 6 role-policy audit
+
+Milestone A2's privileged-role requirement is now enforced: broadcaster, operator, and system actors can run every configured bot role. The previous numeric ranking incorrectly denied broadcasters operator/system commands and operators system commands. Tests cover all 25 actor/required-role pairs, unknown-actor normalization, and actual custom-command execution for each role. Viewer/moderator denial remains covered for operator/system commands. HTTP operator authentication is separate from this bot command policy.
+
+Verification passed: bot/Twitch race tests, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, and `make smoke API_PORT=8081`.
+
+---
+
 ## File structure
 
 ### Backend domain
@@ -128,9 +136,9 @@ Build the spine before adding feature breadth.
 - Create: `backend/internal/bot/runtime.go`
 - Test: `backend/internal/bot/runtime_test.go`
 
-- [ ] Define roles: `viewer`, `moderator`, `broadcaster`, `operator`, `system`.
-- [ ] Define sources: `chat`, `channel_point`, `dashboard`, `timer`, `webhook`.
-- [ ] Implement role comparison so broadcaster/operator/system can run everything, moderator can run moderator-safe commands, viewer can only run viewer-safe response commands.
+- [x] Define roles: `viewer`, `moderator`, `broadcaster`, `operator`, `system`.
+- [x] Define sources: `chat`, `channel_point`, `dashboard`, `timer`, `webhook`.
+- [x] Implement role comparison so broadcaster/operator/system can run everything, moderator can run moderator-safe commands, viewer can only run viewer-safe response commands (October 6: full role matrix and custom-command execution tests).
 - [ ] Implement `Runtime.Record(ctx, AuditEvent)` wrapper that never blocks command execution if audit storage is unavailable.
 - [ ] Test allowed/denied role decisions and audit fallback behavior.
 - [ ] Run `cd backend && go test ./internal/bot`.

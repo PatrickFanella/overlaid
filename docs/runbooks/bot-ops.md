@@ -89,7 +89,7 @@ Custom commands are intentionally safer and smaller than FossaBot's full command
 - Names use lowercase letters, numbers, dash, or underscore. Built-ins `alert`, `clear`, `brb`, and `back` are reserved.
 - Responses are required and capped at 500 UTF-8 bytes.
 - Actions are `ticker` or `alert` only.
-- Required roles are `viewer`, `moderator`, or `broadcaster`.
+- New-command forms offer `viewer`, `moderator`, or `broadcaster`; saved `operator` and `system` roles are preserved by the editor. Broadcaster, operator, and system actors can run every configured bot role. Moderators can run viewer/moderator commands; viewers can run viewer commands.
 - Cooldowns are per custom command and live in memory until API restart.
 - Response mode is `overlay`, `chat`, or `both`. `chat` uses Twitch Helix `POST /helix/chat/messages` server-side with the stored OAuth token.
 - Chat replies require `user:write:chat`; if Twitch status reports that scope missing, re-run Twitch login and re-consent.
