@@ -83,7 +83,7 @@ make postgres-backup
 make api-data-backup
 ```
 
-The backup lands in `$(BACKUP_DIR)`, which defaults to `backups/`.
+The backup lands in `$(BACKUP_DIR)`, which defaults to `backups/`. Both targets accept relative or absolute directories, including paths containing spaces. The api-data target resolves that existing directory before mounting it into its backup container.
 
 ### Sensitivity warning
 
@@ -112,9 +112,12 @@ docker compose stop api
 volume=$(docker volume ls -q \
   --filter label=com.docker.compose.project=${COMPOSE_PROJECT_NAME:-$(basename "$PWD")} \
   --filter label=com.docker.compose.volume=api-data)
+: "${volume:?api-data Compose volume not found; check the project before restoring}"
+backup_path=$(cd -- "${BACKUP_DIR:-backups}" && pwd -P)
+: "${backup_path:?Backup directory not found; select the archive directory before restoring}"
 docker run --rm \
   -v "$volume:/data" \
-  -v "$PWD/${BACKUP_DIR:-backups}:/backup" \
+  -v "$backup_path:/backup" \
   alpine:3.22 \
   sh -c 'tar -xzf /backup/<backup-file>.tar.gz -C /data'
 docker compose up -d api
@@ -141,7 +144,7 @@ docker compose stop api
 2. Restore a selected dump into the Compose database:
 
 ```bash
-docker compose exec -T postgres sh -c 'pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "${BACKUP_DIR:-backups}/<postgres-backup>.dump"
+docker compose exec -T postgres sh -c 'pg_restore --clean --if-exists --exit-on-error -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "${BACKUP_DIR:-backups}/<postgres-backup>.dump"
 ```
 
 3. Restart the API and re-run smoke checks:
@@ -150,3 +153,8 @@ docker compose exec -T postgres sh -c 'pg_restore --clean --if-exists -U "$POSTG
 docker compose up -d api
 make smoke
 ```
+
+
+## Local restore evidence
+
+The [October 6 disposable restore drill](../qa/2026-10-06-local-backup-restore-drill.md) verified a custom-format Postgres dump and retained-state archive through a fresh native API. It compared replay, history, session/readiness evidence, shared configuration, interaction rules, and bot audits. Compose-volume ownership and production backup/restore remain separate deployment checks.

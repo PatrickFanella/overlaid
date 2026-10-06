@@ -2,6 +2,7 @@ package twitch
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -234,6 +235,26 @@ func TestCommandProcessorCustomCommandPermissionAndCooldown(t *testing.T) {
 	}
 }
 
+func TestCommandProcessorBroadcasterCanRunEveryConfiguredBotRole(t *testing.T) {
+	for _, required := range []string{"viewer", "moderator", "broadcaster", "operator", "system"} {
+		t.Run(required, func(t *testing.T) {
+			processor := NewCommandProcessor(CommandProcessorConfig{Custom: []CustomCommand{{Name: "private_response", Enabled: true, Response: "Ready for {user}", Action: "ticker", RoleRequired: required}}})
+			if required == "operator" || required == "system" {
+				for _, user := range []ChatCommandUser{{Name: "Viewer"}, {Name: "Mod", IsModerator: true}} {
+					denied := processor.Handle(ChatCommand{Name: "private_response"}, user)
+					if len(denied) != 1 || denied[0].Message != "Permission denied" {
+						t.Fatalf("expected lower-role denial, got %#v", denied)
+					}
+				}
+			}
+			allowed := processor.Handle(ChatCommand{Name: "private_response"}, ChatCommandUser{Name: "Streamer", IsBroadcaster: true})
+			if len(allowed) != 2 || allowed[0].Message != "Command accepted" || allowed[1].Message != "Ready for Streamer" {
+				t.Fatalf("broadcaster could not run %s command: %#v", required, allowed)
+			}
+		})
+	}
+}
+
 func TestCommandProcessorCounterCommand(t *testing.T) {
 	community := &fakeCommunityStore{}
 	processor := NewCommandProcessor(CommandProcessorConfig{Cooldown: 0, Community: community})
@@ -438,3 +459,233 @@ func TestCommandProcessorRejectsEmptyAlertWithoutCooldown(t *testing.T) {
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+func TestCustomCommandEmptyResponseDoesNotConsumeCooldown(t *testing.T) {
+	for _, mode := range []string{"overlay", "chat", "both"} {
+		t.Run(mode, func(t *testing.T) {
+			current := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+			command := CustomCommand{Name: "hello", Enabled: true, Response: "{missing}", Action: "ticker", ResponseMode: mode, RoleRequired: "viewer", CooldownSeconds: 30}
+			processor := NewCommandProcessor(CommandProcessorConfig{Now: func() time.Time { return current }, Custom: []CustomCommand{command}})
+			failed := processor.Handle(ChatCommand{Name: "hello"}, ChatCommandUser{Name: "Viewer"})
+			if len(failed) != 1 || failed[0].Severity != events.SeverityWarning || failed[0].Message != "Command response is empty" || failed[0].Data["chatResponse"] != nil {
+				t.Fatalf("empty response accepted: %#v", failed)
+			}
+			unknown, ok := failed[0].Data["unknownVariables"].([]string)
+			if !ok || len(unknown) != 1 || unknown[0] != "missing" {
+				t.Fatalf("empty response lost template diagnostics: %#v", failed[0].Data)
+			}
+			command.Response = "Hello {user}"
+			processor.SetCustomCommands([]CustomCommand{command})
+			accepted := processor.Handle(ChatCommand{Name: "hello"}, ChatCommandUser{Name: "Viewer"})
+			if accepted[0].Severity != events.SeveritySuccess {
+				t.Fatalf("failed render consumed cooldown: %#v", accepted)
+			}
+			cooldown := processor.Handle(ChatCommand{Name: "hello"}, ChatCommandUser{Name: "Viewer"})
+			if len(cooldown) != 1 || cooldown[0].Message != "Command cooling down" {
+				t.Fatalf("success did not reserve cooldown: %#v", cooldown)
+			}
+		})
+	}
+}
+
+func TestCustomCommandConcurrentRendersReserveOneCooldown(t *testing.T) {
+	arrived, release := make(chan struct{}, 2), make(chan struct{})
+	current := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	processor := NewCommandProcessor(CommandProcessorConfig{Now: func() time.Time { return current }, NowPlaying: func() bot.NowPlayingMetadata {
+		arrived <- struct{}{}
+		<-release
+		return bot.NowPlayingMetadata{Title: "Song"}
+	}, Custom: []CustomCommand{{Name: "song", Enabled: true, Response: "{nowPlaying.title}", Action: "ticker", CooldownSeconds: 30}}})
+	results := make(chan []events.Event, 2)
+	var workers sync.WaitGroup
+	for range 2 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			results <- processor.Handle(ChatCommand{Name: "song"}, ChatCommandUser{Name: "Viewer"})
+		}()
+	}
+	defer func() { close(release); workers.Wait() }()
+	for range 2 {
+		select {
+		case <-arrived:
+		case <-time.After(time.Second):
+			t.Fatal("concurrent render did not reach fixture")
+		}
+	}
+	// Both renders started before either reserved a cooldown.
+	release <- struct{}{}
+	release <- struct{}{}
+	allowed, cooldown := 0, 0
+	for range 2 {
+		select {
+		case result := <-results:
+			if len(result) == 2 && result[0].Severity == events.SeveritySuccess {
+				allowed++
+			} else if len(result) == 1 && result[0].Message == "Command cooling down" {
+				cooldown++
+			} else {
+				t.Fatalf("unexpected concurrent result: %#v", result)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("concurrent command did not finish")
+		}
+	}
+	if allowed != 1 || cooldown != 1 {
+		t.Fatalf("allowed=%d cooldown=%d", allowed, cooldown)
+	}
+}
+
+func TestCustomCommandCooldownSkipsTemplateDependencies(t *testing.T) {
+	calls := 0
+	processor := NewCommandProcessor(CommandProcessorConfig{NowPlaying: func() bot.NowPlayingMetadata { calls++; return bot.NowPlayingMetadata{Title: "Song"} }, Custom: []CustomCommand{{Name: "song", Enabled: true, Response: "{nowPlaying.title}", Action: "ticker", CooldownSeconds: 30}}})
+	processor.Handle(ChatCommand{Name: "song"}, ChatCommandUser{Name: "Viewer"})
+	processor.Handle(ChatCommand{Name: "song"}, ChatCommandUser{Name: "Viewer"})
+	if calls != 1 {
+		t.Fatalf("cooldown triggered %d template dependency calls", calls)
+	}
+}
+
+func TestCommunityMutationPermissionsPrecedeUnavailableStorage(t *testing.T) {
+	processor := NewCommandProcessor(CommandProcessorConfig{})
+	for _, command := range []ChatCommand{{Name: "count", Args: "hype"}, {Name: "addquote", Args: "Hello"}, {Name: "quote", Args: "add Hello"}, {Name: "delquote", Args: "quote-id"}} {
+		denied := processor.Handle(command, ChatCommandUser{Name: "Viewer"})
+		if len(denied) != 1 || denied[0].Message != "Permission denied" || denied[0].Data["roleRequired"] != "moderator" {
+			t.Errorf("mutation %s not role-gated without storage: %#v", command.Name, denied)
+		}
+		for _, user := range []ChatCommandUser{{Name: "Mod", IsModerator: true}, {Name: "Streamer", IsBroadcaster: true}} {
+			unavailable := processor.Handle(command, user)
+			if len(unavailable) != 1 || !strings.Contains(unavailable[0].Message, "storage unavailable") {
+				t.Errorf("authorized mutation %s: %#v", command.Name, unavailable)
+			}
+		}
+	}
+	read := processor.Handle(ChatCommand{Name: "quote"}, ChatCommandUser{Name: "Viewer"})
+	if len(read) != 1 || read[0].Message != "Quote storage unavailable" {
+		t.Fatalf("read-only quote was role-gated: %#v", read)
+	}
+}
+
+func TestCommunityViewerCannotMutateConfiguredStorage(t *testing.T) {
+	community := &fakeCommunityStore{counter: bot.Counter{Name: "hype", Value: 7}, quote: bot.Quote{ID: "quote-id", Text: "Original", Author: "Author"}}
+	processor := NewCommandProcessor(CommandProcessorConfig{Community: community})
+	for _, command := range []ChatCommand{{Name: "count", Args: "hype"}, {Name: "addquote", Args: "Replacement"}, {Name: "quote", Args: "add Replacement"}, {Name: "delquote", Args: "quote-id"}} {
+		denied := processor.Handle(command, ChatCommandUser{Name: "Viewer"})
+		if len(denied) != 1 || denied[0].Message != "Permission denied" {
+			t.Fatalf("viewer mutation %s=%#v", command.Name, denied)
+		}
+	}
+	if community.counter.Value != 7 || community.quote.ID != "quote-id" || community.quote.Text != "Original" {
+		t.Fatalf("denial mutated community storage: %#v", community)
+	}
+}
+
+func TestCustomCommandReloadKeepsInFlightSnapshotAndCooldown(t *testing.T) {
+	now := time.Now().UTC()
+	started, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	p := NewCommandProcessor(CommandProcessorConfig{
+		Cooldown: 10 * time.Second,
+		Now:      func() time.Time { return now },
+		Aliases:  map[string]string{"water": "hydrate"},
+		Custom:   []CustomCommand{{Name: "hydrate", Enabled: true, Response: "Before {nowPlaying.title}", Action: "ticker", CooldownSeconds: 10}},
+		NowPlaying: func() bot.NowPlayingMetadata {
+			once.Do(func() { close(started) })
+			<-release
+			return bot.NowPlayingMetadata{Title: "Song"}
+		},
+	})
+	produced := make(chan []events.Event, 1)
+	go func() { produced <- p.Handle(ChatCommand{Name: "water"}, ChatCommandUser{Name: "Viewer"}) }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("render did not start")
+	}
+	replacement := []CustomCommand{{Name: "hydrate", Enabled: true, Response: "After", Action: "alert", ResponseMode: "chat", CooldownSeconds: 10}}
+	p.SetCustomCommands(replacement)
+	// The saved snapshot must also survive a caller mutating its input slice.
+	replacement[0].Response = "Changed outside executor"
+	close(release)
+	var previous []events.Event
+	select {
+	case previous = <-produced:
+	case <-time.After(time.Second):
+		t.Fatal("in-flight render did not finish")
+	}
+	if len(previous) != 2 || previous[1].Message != "Before Song" || previous[1].Data["action"] != "ticker" || previous[0].Data["alias"] != true {
+		t.Fatalf("mixed in-flight configuration: %#v", previous)
+	}
+	cooled := p.Handle(ChatCommand{Name: "hydrate"}, ChatCommandUser{})
+	if len(cooled) != 1 || cooled[0].Message != "Command cooling down" {
+		t.Fatalf("reload reset custom cooldown: %#v", cooled)
+	}
+	// Built-in cooldown ownership is independent of saved-command reservations.
+	builtin := p.Handle(ChatCommand{Name: "alert", Args: "Builtin still available"}, ChatCommandUser{IsModerator: true})
+	if len(builtin) != 2 || builtin[0].Severity != events.SeveritySuccess {
+		t.Fatalf("custom cooldown affected built-in: %#v", builtin)
+	}
+	now = now.Add(10 * time.Second)
+	current := p.Handle(ChatCommand{Name: "water"}, ChatCommandUser{})
+	if len(current) != 1 || current[0].Data["responseMode"] != "chat" {
+		t.Fatalf("replacement mode not used: %#v", current)
+	}
+	response, ok := current[0].Data["chatResponse"].(map[string]any)
+	if !ok || response["message"] != "After" {
+		t.Fatalf("replacement snapshot changed: %#v", current)
+	}
+	p.SetCustomCommands(nil)
+	removed := p.Handle(ChatCommand{Name: "hydrate"}, ChatCommandUser{})
+	if len(removed) != 1 || removed[0].Message != "Unsupported command" {
+		t.Fatalf("removed command still resolved: %#v", removed)
+	}
+}
+
+func TestCommandProcessorZeroValueKeepsPublicDispatchBehavior(t *testing.T) {
+	var p CommandProcessor
+	unsupported := p.Handle(ChatCommand{Name: "unknown"}, ChatCommandUser{})
+	if len(unsupported) != 1 || unsupported[0].Message != "Unsupported command" {
+		t.Fatalf("zero-value unsupported: %#v", unsupported)
+	}
+	community := p.Handle(ChatCommand{Name: "count", Args: "hype"}, ChatCommandUser{IsModerator: true})
+	if len(community) != 1 || community[0].Message != "Counter storage unavailable" {
+		t.Fatalf("zero-value community: %#v", community)
+	}
+	builtin := p.Handle(ChatCommand{Name: "alert", Args: "Hello"}, ChatCommandUser{IsModerator: true})
+	if len(builtin) != 2 || builtin[1].Message != "Hello" {
+		t.Fatalf("zero-value built-in: %#v", builtin)
+	}
+	p.SetAliases(map[string]string{"hi": "hello"})
+	p.SetCustomCommands([]CustomCommand{{Name: "hello", Enabled: true, Response: "Welcome", Action: "ticker"}})
+	custom := p.Handle(ChatCommand{Name: "hi"}, ChatCommandUser{})
+	if len(custom) != 2 || custom[1].Message != "Welcome" || custom[0].Data["alias"] != true {
+		t.Fatalf("zero-value configured custom: %#v", custom)
+	}
+}
+
+func TestCommandDispatcherCommunityPrecedenceAndExecutorIsolation(t *testing.T) {
+	store := &fakeCommunityStore{quote: bot.Quote{ID: "quote-1", Text: "A real community quote"}}
+	p := NewCommandProcessor(CommandProcessorConfig{
+		Cooldown:  time.Hour,
+		Community: store,
+		Aliases:   map[string]string{"q": "quote", "notice": "alert"},
+		Custom:    []CustomCommand{{Name: "quote", Enabled: true, Response: "Shadowed custom", Action: "alert"}, {Name: "hello", Enabled: true, Response: "Custom available", Action: "ticker"}},
+	})
+	quote := p.Handle(ChatCommand{Name: "q"}, ChatCommandUser{})
+	if len(quote) != 2 || quote[1].Message != store.quote.Text || quote[0].Data["action"] != "quote" {
+		t.Fatalf("community precedence: %#v", quote)
+	}
+	builtin := p.Handle(ChatCommand{Name: "notice", Args: "One"}, ChatCommandUser{IsModerator: true})
+	if len(builtin) != 2 || builtin[0].Severity != events.SeveritySuccess {
+		t.Fatalf("built-in dispatch: %#v", builtin)
+	}
+	cooled := p.Handle(ChatCommand{Name: "alert", Args: "Two"}, ChatCommandUser{IsModerator: true})
+	if len(cooled) != 1 || cooled[0].Message != "Command cooling down" {
+		t.Fatalf("alias cooldown: %#v", cooled)
+	}
+	custom := p.Handle(ChatCommand{Name: "hello"}, ChatCommandUser{})
+	quote = p.Handle(ChatCommand{Name: "quote"}, ChatCommandUser{})
+	if len(custom) != 2 || custom[1].Message != "Custom available" || len(quote) != 2 {
+		t.Fatalf("built-in cooldown leaked into other executors: custom=%#v community=%#v", custom, quote)
+	}
+}

@@ -1,3 +1,4 @@
+import { requestJSON } from './apiRequest';
 import { getOverlayApiBaseUrl } from './eventStream';
 import type { DashboardConfig } from './dashboardConfig';
 import type { OverlayEventType, OverlaySeverity } from './events';
@@ -105,17 +106,17 @@ export type BotAPIVariablesResponse = { variables: BotAPIVariable[]; loadError?:
 export type BotCounterPayload = { id?: string; name: string; value: number };
 export type BotQuotePayload = { id?: string; text: string; author?: string };
 export type BotAPIVariablePayload = { id?: string; name: string; enabled: boolean; url: string; responseSelector?: string; fallback?: string; cacheTtlSeconds: number; timeoutMs: number };
-export type BotModerationRule = { id: string; name: string; enabled: boolean; enforce?: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both' | string; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban' | string; reason?: string; source?: string; expiresAt?: string; createdAt: string; updatedAt: string };
+export type BotModerationRule = { id: string; name: string; enabled: boolean; enforce?: boolean; exemptRole?: string; timeoutSeconds?: number; pattern: string; matchTarget: 'message' | 'username' | 'both' | string; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban' | string; reason?: string; source?: string; expiresAt?: string; createdAt: string; updatedAt: string };
 export type BotModerationRulesResponse = { rules: BotModerationRule[]; loadError?: string };
-export type BotModerationRulePayload = { id?: string; name: string; enabled: boolean; enforce?: boolean; pattern: string; matchTarget: 'message' | 'username' | 'both'; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban'; reason?: string };
-export type BotModerationMatch = { ruleId: string; ruleName: string; pattern: string; matchTarget: string; action: string; reason?: string };
+export type BotModerationRulePayload = { id?: string; name: string; enabled: boolean; enforce?: boolean; exemptRole?: string; timeoutSeconds?: number; pattern: string; matchTarget: 'message' | 'username' | 'both'; caseSensitive: boolean; regex: boolean; action: 'flag' | 'delete' | 'timeout' | 'ban'; reason?: string };
+export type BotModerationMatch = { ruleId: string; ruleName: string; pattern: string; matchTarget: string; action: string; reason?: string; skipped?: boolean; note?: string };
 export type BotModerationDryRunResponse = { matches: BotModerationMatch[]; loadError?: string };
 export type BotModerationActionPayload = { action: 'delete' | 'timeout' | 'ban' | 'unban'; targetUserId?: string; targetUserLogin?: string; messageId?: string; durationSeconds?: number; reason?: string };
 export type BotModerationActionResponse = { action: string; result: string; reason?: string };
 export type BotNukeDryRunPayload = { pattern: string; regex: boolean; caseSensitive: boolean; lookbackMinutes: number; limit: number; action?: 'delete' | 'timeout'; durationSeconds?: number; confirm?: boolean; radiationMinutes?: number };
 export type BotNukeDryRunMatch = { eventId: string; messageId?: string; userId?: string; user: string; message: string; createdAt: string };
 export type BotNukeDryRunResponse = { matches: BotNukeDryRunMatch[]; pattern: string; action: string };
-export type BotNukeExecuteResponse = { matches: BotNukeDryRunMatch[]; attempted: number; succeeded: number; failed: number; action: string; radiationRule?: BotModerationRule };
+export type BotNukeExecuteResponse = { interrupted?: boolean; matches: BotNukeDryRunMatch[]; attempted: number; succeeded: number; failed: number; action: string; radiationRule?: BotModerationRule };
 export type BotNukeRollbackResponse = { rule: BotModerationRule };
 
 export type BotCommandPayload = {
@@ -125,7 +126,7 @@ export type BotCommandPayload = {
   response: string;
   action: 'ticker' | 'alert';
   responseMode: 'overlay' | 'chat' | 'both';
-  roleRequired: 'viewer' | 'moderator' | 'broadcaster';
+  roleRequired: 'viewer' | 'moderator' | 'broadcaster' | 'operator' | 'system';
   cooldownSeconds: number;
 };
 
@@ -145,6 +146,7 @@ export type ChatAliasRule = {
 };
 
 export type ChannelPointRule = {
+  rewardId?: string;
   rewardTitle: string;
   action: 'alert' | 'brb' | 'clear' | 'ignore';
   title?: string;
@@ -253,10 +255,17 @@ export type StreamSessionReadinessSnapshot = {
   capturedAt: string;
 };
 
+export type SessionBotAudit = {
+  events: BotAuditEvent[];
+  total: number;
+  loadError?: string;
+};
+
 export type StreamSessionReport = {
   session: StreamSession;
   events: EventHistoryItem[];
   snapshots: StreamSessionReadinessSnapshot[];
+  botAudit?: SessionBotAudit;
 };
 
 export type EventHistoryResponse = {
@@ -341,11 +350,7 @@ export function apiUrl(path: string, explicitBaseUrl?: string) {
 }
 
 export async function fetchTwitchStatus(explicitBaseUrl?: string) {
-  const response = await fetch(apiUrl('/api/auth/twitch/status', explicitBaseUrl), { headers: { Accept: 'application/json' } });
-  if (!response.ok) {
-    throw new Error(`Twitch status failed: ${response.status}`);
-  }
-  return (await response.json()) as TwitchStatus;
+  return requestJSON<TwitchStatus>('/api/auth/twitch/status', { method: 'GET', explicitBaseUrl, errorLabel: 'Twitch status' });
 }
 
 export async function fetchBotStatus(explicitBaseUrl?: string, operatorSecret?: string) {
@@ -431,6 +436,15 @@ export async function setBotTimerEnabled(id: string, enabled: boolean, explicitB
     operatorSecret,
     body: { enabled },
     errorLabel: 'set bot timer enabled',
+  });
+}
+
+export async function runBotTimer(id: string, explicitBaseUrl?: string, operatorSecret?: string) {
+  return requestJSON<{ eventId: string }>(`/api/bot/timers/${encodeURIComponent(id)}/run`, {
+    method: 'POST',
+    explicitBaseUrl,
+    operatorSecret,
+    errorLabel: 'run bot timer',
   });
 }
 
@@ -560,7 +574,7 @@ export async function deleteBotModerationRule(id: string, explicitBaseUrl?: stri
   });
 }
 
-export async function dryRunBotModeration(payload: { message: string; username: string }, explicitBaseUrl?: string, operatorSecret?: string) {
+export async function dryRunBotModeration(payload: { message: string; username: string; role?: string }, explicitBaseUrl?: string, operatorSecret?: string) {
   return requestJSON<BotModerationDryRunResponse>('/api/bot/moderation/dry-run', {
     method: 'POST',
     explicitBaseUrl,
@@ -611,8 +625,7 @@ export async function rollbackBotNukeRadiation(ruleId: string, explicitBaseUrl?:
 }
 
 export async function fetchTwitchLoginURL(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/auth/twitch/login-url', {}, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as { authorizeUrl: string };
+  return requestJSON<{ authorizeUrl: string }>('/api/auth/twitch/login-url', { method: 'POST', explicitBaseUrl, operatorSecret, body: {}, errorLabel: '/api/auth/twitch/login-url' });
 }
 
 export async function fetchTwitchInteractions(explicitBaseUrl?: string, operatorSecret?: string): Promise<TwitchInteractionsResponse>;
@@ -696,139 +709,86 @@ export async function updateTwitchRedemptionStatus(rewardId: string, redemptionI
 }
 
 export async function fetchOBSStatus(explicitBaseUrl?: string) {
-  const response = await fetch(apiUrl('/api/obs/status', explicitBaseUrl), { headers: { Accept: 'application/json' } });
-  if (!response.ok) {
-    throw new Error(`OBS status failed: ${response.status}`);
-  }
-  return (await response.json()) as OBSStatus;
+  return requestJSON<OBSStatus>('/api/obs/status', { method: 'GET', explicitBaseUrl, errorLabel: 'OBS status' });
 }
 
 export async function fetchReadiness(explicitBaseUrl?: string) {
-  const response = await fetch(apiUrl('/readyz', explicitBaseUrl), { headers: { Accept: 'application/json' } });
-  if (!response.ok) {
-    throw new Error(`Readiness failed: ${response.status}`);
-  }
-  return (await response.json()) as ReadinessReport;
+  return requestJSON<ReadinessReport>('/readyz', { method: 'GET', explicitBaseUrl, errorLabel: 'Readiness' });
 }
 
 export async function fetchBuildInfo(explicitBaseUrl?: string) {
-  const response = await fetch(apiUrl('/version', explicitBaseUrl), { headers: { Accept: 'application/json' } });
-  if (!response.ok) {
-    throw new Error(`Build info failed: ${response.status}`);
-  }
-  return (await response.json()) as BuildInfo;
+  return requestJSON<BuildInfo>('/version', { method: 'GET', explicitBaseUrl, errorLabel: 'Build info' });
 }
 
-export async function fetchEventHistory(limit = 24, explicitBaseUrl?: string) {
+export async function fetchEventHistory(limit = 24, explicitBaseUrl?: string, operatorSecret?: string) {
   const boundedLimit = Math.max(1, Math.min(limit, 250));
-  const response = await fetch(apiUrl(`/api/events/history?limit=${boundedLimit}`, explicitBaseUrl), { headers: { Accept: 'application/json' } });
-  if (!response.ok) {
-    throw new Error(`Event history failed: ${response.status}`);
-  }
-  return (await response.json()) as EventHistoryResponse;
+  return requestJSON<EventHistoryResponse>(`/api/events/history?limit=${boundedLimit}`, { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'Event history' });
 }
 
 export async function fetchStreamSession(explicitBaseUrl?: string, operatorSecret?: string) {
-  const headers = operatorHeaders(operatorSecret);
-  const response = await fetch(apiUrl('/api/stream/session', explicitBaseUrl), { headers });
-  if (!response.ok) {
-    throw new Error(`Stream session status failed: ${response.status}`);
-  }
-  return (await response.json()) as StreamSessionResponse;
+  return requestJSON<StreamSessionResponse>('/api/stream/session', { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'Stream session status' });
 }
 
 export async function fetchStreamSessionReport(sessionId: string, limit = 100, explicitBaseUrl?: string, operatorSecret?: string) {
   const boundedLimit = Math.max(1, Math.min(limit, 250));
-  const headers = operatorHeaders(operatorSecret);
-  const response = await fetch(apiUrl(`/api/stream/session/${encodeURIComponent(sessionId)}?limit=${boundedLimit}`, explicitBaseUrl), { headers });
-  if (!response.ok) {
-    throw new Error(`Stream session report failed: ${response.status}`);
-  }
-  return (await response.json()) as StreamSessionReport;
+  return requestJSON<StreamSessionReport>(`/api/stream/session/${encodeURIComponent(sessionId)}?limit=${boundedLimit}`, { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'Stream session report' });
 }
 
 export async function startStreamSession(payload: { title: string; kind: 'rehearsal' | 'live'; notes?: string }, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/stream/session/start', payload, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as StreamSession;
+  return requestJSON<StreamSession>('/api/stream/session/start', { method: 'POST', explicitBaseUrl, operatorSecret, body: payload, errorLabel: '/api/stream/session/start' });
 }
 
 export async function endStreamSession(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await postJSON('/api/stream/session/end', {}, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as StreamSession | StreamSessionResponse;
+  return requestJSON<StreamSession | StreamSessionResponse>('/api/stream/session/end', { method: 'POST', explicitBaseUrl, operatorSecret, body: {}, errorLabel: '/api/stream/session/end' });
 }
 
 export async function fetchDashboardConfig(explicitBaseUrl?: string, operatorSecret?: string) {
-  const headers = operatorHeaders(operatorSecret);
-  const response = await fetch(apiUrl('/api/dashboard/config', explicitBaseUrl), { headers });
-  if (!response.ok) {
-    throw new Error(`Dashboard config fetch failed: ${response.status}`);
-  }
-  return (await response.json()) as DashboardConfigResponse;
+  return requestJSON<DashboardConfigResponse>('/api/dashboard/config', { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'Dashboard config fetch' });
 }
 
 export async function saveSharedDashboardConfig(config: DashboardConfig, explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await sendJSON('PUT', '/api/dashboard/config', { config }, explicitBaseUrl, { operatorSecret });
-  return (await response.json()) as DashboardConfigResponse;
+  return requestJSON<DashboardConfigResponse>('/api/dashboard/config', { method: 'PUT', explicitBaseUrl, operatorSecret, body: { config }, errorLabel: '/api/dashboard/config' });
 }
 
 export async function fetchOBSScenes(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/obs/scenes', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) {
-    throw new Error(`OBS scenes failed: ${response.status}`);
-  }
-  return (await response.json()) as OBSSceneList;
+  return requestJSON<OBSSceneList>('/api/obs/scenes', { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'OBS scenes' });
 }
 
 export async function fetchOBSInputs(explicitBaseUrl?: string, operatorSecret?: string) {
-  const response = await fetch(apiUrl('/api/obs/inputs', explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) {
-    throw new Error(`OBS inputs failed: ${response.status}`);
-  }
-  return (await response.json()) as OBSInput[];
+  return requestJSON<OBSInput[]>('/api/obs/inputs', { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'OBS inputs' });
 }
 
 export async function fetchOBSSceneItems(sceneName: string, explicitBaseUrl?: string, operatorSecret?: string) {
   const trimmedSceneName = sceneName.trim();
-  const response = await fetch(apiUrl(`/api/obs/scene-items?sceneName=${encodeURIComponent(trimmedSceneName)}`, explicitBaseUrl), { headers: operatorHeaders(operatorSecret) });
-  if (!response.ok) {
-    throw new Error(`OBS scene items failed: ${response.status}`);
-  }
-  return (await response.json()) as OBSSceneItem[];
+  return requestJSON<OBSSceneItem[]>(`/api/obs/scene-items?sceneName=${encodeURIComponent(trimmedSceneName)}`, { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'OBS scene items' });
 }
 
 export async function setOBSScene(sceneName: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  await postJSON('/api/obs/scene', { sceneName }, explicitBaseUrl, { operatorSecret });
+  await requestJSON('/api/obs/scene', { method: 'POST', explicitBaseUrl, operatorSecret, body: { sceneName }, errorLabel: '/api/obs/scene', expectJson: false });
 }
 
 export async function setOBSInputMute(inputName: string, muted: boolean, explicitBaseUrl?: string, operatorSecret?: string) {
-  await postJSON('/api/obs/input/mute', { inputName, muted }, explicitBaseUrl, { operatorSecret });
+  await requestJSON('/api/obs/input/mute', { method: 'POST', explicitBaseUrl, operatorSecret, body: { inputName, muted }, errorLabel: '/api/obs/input/mute', expectJson: false });
 }
 
 export async function setOBSSceneItemEnabled(sceneName: string, sceneItemId: number, enabled: boolean, explicitBaseUrl?: string, operatorSecret?: string) {
-  await postJSON('/api/obs/scene-item/enabled', { sceneName, sceneItemId, enabled }, explicitBaseUrl, { operatorSecret });
+  await requestJSON('/api/obs/scene-item/enabled', { method: 'POST', explicitBaseUrl, operatorSecret, body: { sceneName, sceneItemId, enabled }, errorLabel: '/api/obs/scene-item/enabled', expectJson: false });
 }
 
 export async function refreshOBSSource(inputName: string, explicitBaseUrl?: string, operatorSecret?: string) {
-  await postJSON('/api/obs/source/refresh', { inputName }, explicitBaseUrl, { operatorSecret });
+  await requestJSON('/api/obs/source/refresh', { method: 'POST', explicitBaseUrl, operatorSecret, body: { inputName }, errorLabel: '/api/obs/source/refresh', expectJson: false });
 }
 
 export async function sendTestAlert(payload: AlertPayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  await postJSON('/api/events/test-alert', payload, explicitBaseUrl, { operatorSecret });
+  await requestJSON('/api/events/test-alert', { method: 'POST', explicitBaseUrl, operatorSecret, body: payload, errorLabel: '/api/events/test-alert', expectJson: false });
 }
 
 export async function clearOverlays(explicitBaseUrl?: string, operatorSecret?: string) {
-  const headers: Record<string, string> = {};
-  if (operatorSecret?.trim()) {
-    headers['X-Overlay-Operator-Secret'] = operatorSecret.trim();
-  }
-  const response = await fetch(apiUrl('/api/events/clear', explicitBaseUrl), { method: 'POST', headers });
-  if (!response.ok) {
-    throw new Error(`Clear overlays failed: ${response.status}`);
-  }
+  await requestJSON('/api/events/clear', { method: 'POST', explicitBaseUrl, operatorSecret, errorLabel: 'Clear overlays', expectJson: false });
 }
 
 export async function setBRBStatus(payload: BRBPayload, explicitBaseUrl?: string, operatorSecret?: string) {
-  await postJSON('/api/events/brb', payload, explicitBaseUrl, { operatorSecret });
+  await requestJSON('/api/events/brb', { method: 'POST', explicitBaseUrl, operatorSecret, body: payload, errorLabel: '/api/events/brb', expectJson: false });
 }
 
 export async function saveTwitchInteractions(payload: TwitchInteractionRules, explicitBaseUrl?: string, operatorSecret?: string) {
@@ -842,86 +802,9 @@ export async function saveTwitchInteractions(payload: TwitchInteractionRules, ex
 }
 
 export async function sendWebhook(source: string, payload: AlertPayload, explicitBaseUrl?: string, webhookSecret?: string) {
-  await postJSON(`/api/integrations/webhook/${encodeURIComponent(source)}`, payload, explicitBaseUrl, { webhookSecret });
+  await requestJSON(`/api/integrations/webhook/${encodeURIComponent(source)}`, { method: 'POST', explicitBaseUrl, webhookSecret, body: payload, errorLabel: `/api/integrations/webhook/${encodeURIComponent(source)}`, expectJson: false });
 }
 
-type PostJSONOptions = {
-  operatorSecret?: string;
-  webhookSecret?: string;
-};
-
-type RequestJSONOptions = PostJSONOptions & {
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  body?: Record<string, unknown>;
-  errorLabel: string;
-  includeDetail?: boolean;
-  expectJson?: boolean;
-};
-
-async function requestJSON(path: string, options: RequestJSONOptions & { explicitBaseUrl?: string; expectJson: false }): Promise<void>;
-async function requestJSON<T>(path: string, options: RequestJSONOptions & { explicitBaseUrl?: string; expectJson?: true }): Promise<T>;
-async function requestJSON<T>(path: string, options: RequestJSONOptions & { explicitBaseUrl?: string }) {
-  const headers = operatorHeaders(options.operatorSecret);
-  if (options.webhookSecret?.trim()) {
-    headers['X-Overlay-Webhook-Secret'] = options.webhookSecret.trim();
-  }
-  if (options.body !== undefined) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  const response = await fetch(apiUrl(path, options.explicitBaseUrl), {
-    method: options.method,
-    headers,
-    ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
-  });
-
-  if (!response.ok) {
-    const detail = options.includeDetail === false ? '' : await response.text().catch(() => '');
-    throw new Error(`${options.errorLabel} failed: ${response.status}${detail.trim() ? ` — ${detail.trim()}` : ''}`);
-  }
-
-  if (options.expectJson === false) {
-    return;
-  }
-
-  return (await response.json()) as T;
-}
-
-function operatorHeaders(operatorSecret?: string) {
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (operatorSecret?.trim()) {
-    headers['X-Overlay-Operator-Secret'] = operatorSecret.trim();
-  }
-  return headers;
-}
-
-async function postJSON(path: string, payload: Record<string, unknown>, explicitBaseUrl?: string, options: PostJSONOptions = {}) {
-  return sendJSON('POST', path, payload, explicitBaseUrl, options);
-}
-
-async function sendJSON(
-  method: 'POST' | 'PUT' | 'PATCH',
-  path: string,
-  payload: Record<string, unknown>,
-  explicitBaseUrl?: string,
-  options: PostJSONOptions = {},
-) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
-  if (options.operatorSecret?.trim()) {
-    headers['X-Overlay-Operator-Secret'] = options.operatorSecret.trim();
-  }
-  if (options.webhookSecret?.trim()) {
-    headers['X-Overlay-Webhook-Secret'] = options.webhookSecret.trim();
-  }
-
-  const response = await fetch(apiUrl(path, explicitBaseUrl), {
-    method,
-    headers,
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(`${path} failed: ${response.status}${detail.trim() ? ` — ${detail.trim()}` : ''}`);
-  }
-  return response;
+export async function fetchOverlayToken(explicitBaseUrl?: string, operatorSecret?: string) {
+  return requestJSON<{ key: string }>('/api/dashboard/overlay-token', { method: 'GET', explicitBaseUrl, operatorSecret, errorLabel: 'Overlay token' });
 }

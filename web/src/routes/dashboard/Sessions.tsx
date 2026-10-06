@@ -18,7 +18,7 @@ export function DashboardSessionsPage() {
 function Sessions() {
   const status = useDeskStatus();
   const { sessionLog, clearLog } = useOperatorActions();
-  const history = useRecentEvents(status.apiBaseUrl, status.checkedAt, 100);
+  const history = useRecentEvents(status.apiBaseUrl, status.checkedAt, 100, status.operatorSecret);
 
   return (
     <>

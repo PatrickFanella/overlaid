@@ -121,7 +121,7 @@ function sanitizeControlWidget(widget: unknown, fallback: ControlWidget): Contro
   };
 }
 
-function sanitizeDisplayConfig(display: unknown): DisplayConfig {
+export function sanitizeDisplayConfig(display: unknown): DisplayConfig {
   const fallback = defaultDashboardConfig.display;
   if (!isRecord(display)) return { ...fallback };
 

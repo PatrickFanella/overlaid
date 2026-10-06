@@ -22,7 +22,8 @@ import (
 
 type streamRecorder struct {
 	*httptest.ResponseRecorder
-	flushed bool
+	frames chan string
+	ctx    context.Context
 }
 
 type readyzResponse struct {
@@ -47,7 +48,47 @@ type readyzCheck struct {
 }
 
 func (r *streamRecorder) Flush() {
-	r.flushed = true
+	r.ResponseRecorder.Flush()
+	// Capture the complete frame on the writer goroutine. Tests receive immutable
+	// snapshots rather than reading ResponseRecorder while the handler writes.
+	select {
+	case r.frames <- r.Body.String():
+	case <-r.ctx.Done():
+	}
+}
+
+func startTestEventStream(t *testing.T, server *Server) (*streamRecorder, <-chan struct{}) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	rec := &streamRecorder{ResponseRecorder: httptest.NewRecorder(), frames: make(chan string), ctx: ctx}
+	req := httptest.NewRequest(http.MethodGet, "/api/events/stream", nil).WithContext(ctx)
+	done := make(chan struct{})
+	go func() {
+		server.Handler().ServeHTTP(rec, req)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Error("stream handler did not stop after cancellation")
+		}
+	})
+	return rec, done
+}
+
+func waitTestStreamFlush(t *testing.T, rec *streamRecorder, done <-chan struct{}) string {
+	t.Helper()
+	select {
+	case frame := <-rec.frames:
+		return frame
+	case <-done:
+		t.Fatal("stream closed before flushing")
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for stream flush")
+	}
+	return ""
 }
 
 func TestHealthz(t *testing.T) {
@@ -970,29 +1011,10 @@ func TestStreamEventsReplaysRetainedBRB(t *testing.T) {
 		t.Fatalf("expected brb setup 202, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	streamReq := httptest.NewRequest(http.MethodGet, "/api/events/stream", nil).WithContext(ctx)
-	streamRec := &streamRecorder{ResponseRecorder: httptest.NewRecorder()}
-
-	done := make(chan struct{})
-	go func() {
-		server.Handler().ServeHTTP(streamRec, streamReq)
-		close(done)
-	}()
-
-	deadline := time.After(time.Second)
-	for !bytes.Contains(streamRec.Body.Bytes(), []byte("event: brb")) {
-		select {
-		case <-deadline:
-			cancel()
-			<-done
-			t.Fatalf("expected retained brb replay, got %q", streamRec.Body.String())
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
+	streamRec, done := startTestEventStream(t, server)
+	if frame := waitTestStreamFlush(t, streamRec, done); !strings.Contains(frame, "event: brb") || !strings.Contains(frame, "Stretch break") {
+		t.Fatalf("expected retained brb replay, got %q", frame)
 	}
-	cancel()
-	<-done
 }
 
 func TestOverlayStatePersistsAcrossServerRestart(t *testing.T) {
@@ -1009,34 +1031,14 @@ func TestOverlayStatePersistsAcrossServerRestart(t *testing.T) {
 	}
 
 	restarted := NewServer(config.Config{AllowedOrigin: "*", OverlayStateFile: stateFile}, events.NewBus(4))
-	ctx, cancel := context.WithCancel(context.Background())
-	streamReq := httptest.NewRequest(http.MethodGet, "/api/events/stream", nil).WithContext(ctx)
-	streamRec := &streamRecorder{ResponseRecorder: httptest.NewRecorder()}
-
-	done := make(chan struct{})
-	go func() {
-		restarted.Handler().ServeHTTP(streamRec, streamReq)
-		close(done)
-	}()
-
-	deadline := time.After(time.Second)
-	for !bytes.Contains(streamRec.Body.Bytes(), []byte("Follower goal")) {
-		select {
-		case <-deadline:
-			cancel()
-			<-done
-			t.Fatalf("expected retained goal replay, got %q", streamRec.Body.String())
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
+	streamRec, done := startTestEventStream(t, restarted)
+	frame := waitTestStreamFlush(t, streamRec, done)
+	if !strings.Contains(frame, "Follower goal") {
+		t.Fatalf("expected retained goal replay, got %q", frame)
 	}
-	if !bytes.Contains(streamRec.Body.Bytes(), []byte(`"retainedStateKey":"goals"`)) {
-		cancel()
-		<-done
-		t.Fatalf("expected retained state marker, got %q", streamRec.Body.String())
+	if !strings.Contains(frame, `"retainedStateKey":"goals"`) {
+		t.Fatalf("expected retained state marker, got %q", frame)
 	}
-	cancel()
-	<-done
 }
 
 func TestStateKeysForEventWithGoalAndTickerAreScoped(t *testing.T) {
@@ -1082,22 +1084,10 @@ func TestClearResetsRetainedBRB(t *testing.T) {
 		t.Fatalf("expected clear 202, got %d: %s", clearRec.Code, clearRec.Body.String())
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	streamReq := httptest.NewRequest(http.MethodGet, "/api/events/stream", nil).WithContext(ctx)
-	streamRec := &streamRecorder{ResponseRecorder: httptest.NewRecorder()}
-
-	done := make(chan struct{})
-	go func() {
-		server.Handler().ServeHTTP(streamRec, streamReq)
-		close(done)
-	}()
-
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-	<-done
-
-	if bytes.Contains(streamRec.Body.Bytes(), []byte("event: brb")) {
-		t.Fatalf("expected no retained brb replay after clear, got %q", streamRec.Body.String())
+	streamRec, done := startTestEventStream(t, server)
+	frame := waitTestStreamFlush(t, streamRec, done)
+	if !strings.Contains(frame, ": connected") || strings.Contains(frame, "event: brb") {
+		t.Fatalf("expected connected stream without cleared brb replay, got %q", frame)
 	}
 }
 
@@ -1219,36 +1209,13 @@ func TestStreamEventsWritesSSE(t *testing.T) {
 	bus := events.NewBus(4)
 	server := NewServer(config.Config{AllowedOrigin: "*"}, bus)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/api/events/stream", nil).WithContext(ctx)
-	rec := &streamRecorder{ResponseRecorder: httptest.NewRecorder()}
-
-	done := make(chan struct{})
-	go func() {
-		server.Handler().ServeHTTP(rec, req)
-		close(done)
-	}()
-
-	select {
-	case <-time.After(100 * time.Millisecond):
-	case <-done:
-		t.Fatal("stream closed before event")
+	streamRec, done := startTestEventStream(t, server)
+	if frame := waitTestStreamFlush(t, streamRec, done); !strings.Contains(frame, ": connected") {
+		t.Fatalf("expected connection frame, got %q", frame)
 	}
-
 	bus.Publish(events.NewAlert("manual", "stream", "hello", events.SeverityInfo))
-	cancel()
-
-	select {
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for stream write")
-	case <-done:
-	}
-
-	if !rec.flushed {
-		t.Fatal("expected stream to flush")
-	}
-	if got := rec.Body.String(); got == "" || !bytes.Contains([]byte(got), []byte("event: alert")) {
-		t.Fatalf("expected SSE alert payload, got %q", got)
+	if frame := waitTestStreamFlush(t, streamRec, done); !strings.Contains(frame, "event: alert") || !strings.Contains(frame, "hello") {
+		t.Fatalf("expected SSE alert payload, got %q", frame)
 	}
 }
 

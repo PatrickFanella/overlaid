@@ -515,3 +515,28 @@ git commit -m "docs: mark plan 10 complete"
 ```
 
 Do not push unless explicitly instructed by the user.
+
+
+## October 6 isolated backup/restore evidence
+
+A stopped native API backup was restored into a separate disposable Postgres database and private retained-state directory. A fresh API returned identical BRB/goals/ticker replay, eight history rows, a session report with three events and both readiness snapshots, shared config, interaction rules, and 25 recent audit rows (51 total). Restored dependency readiness and `make smoke API_PORT=8082` passed. The temporary restore process/database and retained fixtures were cleaned up. [Recorded evidence](../../qa/2026-10-06-local-backup-restore-drill.md) names the accepted integration/deployment limits. Restore guidance now rejects a missing api-data volume and uses `pg_restore --exit-on-error`.
+
+
+## October 6 packaged image and volume verification
+
+Rootless Podman built both Dockerfiles and exercised isolated API/Nginx containers. The web build exposed a short-name resolution failure; qualified Docker Hub base-image names fix it without changing versions. Context-local ignore files now keep environment files, installed frontend dependencies, generated assets, and test artifacts out of builds. The packaged Go 1.26 runtime repaired a root-owned named volume, ran as UID 100, persisted BRB/history across restart, served healthy product storage, and passed packaged smoke and native browser rendering. All 21 browser workflows and `make verify` passed. [Recorded evidence](../../qa/2026-10-06-container-packaging.md) names image IDs, cleanup, and remaining Compose/deployment/live-integration gates.
+
+
+## October 6 Compose dependency and exposure correction
+
+A disposable Compose project ran through the rootless Podman API with fresh volumes and loopback ports. Postgres health gated API startup; all three services became healthy, and BRB/session/readiness evidence survived an API restart. Inspection found that the documented `EXPOSURE_MODE` setting was not forwarded to the API. Compose now passes it through with the existing local default; all three modes resolve correctly, and public-mode runtime readiness reports missing operator/webhook fixture secrets. `make verify`, all 21 browser workflows, and Compose-stack smoke passed. [Recorded evidence](../../qa/2026-10-06-compose-wiring.md) distinguishes completed local wiring from remaining Docker-engine, production, and live integration checks.
+
+
+## October 6 backup Make recipe corrections
+
+Actual recipe verification found two silent backup failures: absolute api-data destinations were prefixed with the repository path, and `pg_dump --file=-` wrote a literal dash file inside Postgres while leaving the host dump empty. The api-data recipe now resolves its existing destination; Postgres uses custom-format stdout without the file option. Real archives passed absolute/spaced/relative destination checks, and a Make-produced Postgres dump restored the exact fixture row in a separate database. Restore guidance now resolves and validates the archive directory. [Recorded evidence](../../qa/2026-10-06-backup-make-targets.md) covers the baseline failures, Podman compatibility adjustment, verification, and cleanup. Full verification, all 21 browser workflows, and native smoke passed.
+
+
+## October 6 browser artifact build isolation
+
+Generated browser results were eligible for Git and Tailwind source detection. A controlled artifact added an unused arbitrary utility to production CSS. `.gitignore` now excludes browser result/report directories, matching the existing Docker context exclusions. With fixtures in both directories, production CSS matches the artifact-free build byte for byte. Full verification and all 23 browser workflows passed. [Recorded evidence](../../qa/2026-10-06-browser-artifact-build-isolation.md) preserves the reproduction, hash, and cleanup.

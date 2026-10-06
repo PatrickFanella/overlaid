@@ -117,11 +117,20 @@ func (s *Store) Start(ctx context.Context, title, kind, notes string) (Session, 
 		return Session{}, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `UPDATE stream_sessions SET ended_at = now() WHERE ended_at IS NULL`); err != nil {
+	if _, err := tx.ExecContext(ctx, lifecycleLockSQL); err != nil {
+		return Session{}, err
+	}
+	// Capture time after acquiring the lock; transaction start may precede a
+	// session created by another writer while this transaction was waiting.
+	var startedAt time.Time
+	if err := tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&startedAt); err != nil {
+		return Session{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE stream_sessions SET ended_at = $1 WHERE ended_at IS NULL`, startedAt); err != nil {
 		return Session{}, err
 	}
 	var id string
-	err = tx.QueryRowContext(ctx, `INSERT INTO stream_sessions (title, kind, notes) VALUES ($1, $2, $3) RETURNING id`, title, kind, notes).Scan(&id)
+	err = tx.QueryRowContext(ctx, `INSERT INTO stream_sessions (title, kind, notes, started_at) VALUES ($1, $2, $3, $4) RETURNING id`, title, kind, notes, startedAt).Scan(&id)
 	if err != nil {
 		return Session{}, err
 	}
@@ -134,9 +143,17 @@ func (s *Store) Start(ctx context.Context, title, kind, notes string) (Session, 
 func (s *Store) End(ctx context.Context) (Session, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Session{}, false, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, lifecycleLockSQL); err != nil {
+		return Session{}, false, err
+	}
 	var id string
-	err := s.db.QueryRowContext(ctx, `
-		UPDATE stream_sessions SET ended_at = now() WHERE id = (
+	err = tx.QueryRowContext(ctx, `
+		UPDATE stream_sessions SET ended_at = clock_timestamp() WHERE id = (
 			SELECT id FROM stream_sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1
 		) RETURNING id
 	`).Scan(&id)
@@ -146,6 +163,9 @@ func (s *Store) End(ctx context.Context) (Session, bool, error) {
 		}
 		return Session{}, false, err
 	}
+	if err := tx.Commit(); err != nil {
+		return Session{}, false, err
+	}
 	session, err := s.ByID(context.Background(), id)
 	return session, err == nil, err
 }
@@ -153,12 +173,25 @@ func (s *Store) End(ctx context.Context) (Session, bool, error) {
 func (s *Store) ByID(ctx context.Context, id string) (Session, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, sessionSelectSQL+` WHERE stream_sessions.id = $1 GROUP BY stream_sessions.id`, id)
+	return sessionByID(ctx, s.db, id)
+}
+
+// Both the pool and report transactions use these readers. Reports supply a
+// repeatable-read transaction so summary, events, and snapshots agree.
+type reportQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func sessionByID(ctx context.Context, db reportQueryer, id string) (Session, error) {
+	rows, err := db.QueryContext(ctx, sessionSelectSQL+` WHERE stream_sessions.id = $1 GROUP BY stream_sessions.id`, id)
 	if err != nil {
 		return Session{}, err
 	}
 	defer rows.Close()
 	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return Session{}, err
+		}
 		return Session{}, sql.ErrNoRows
 	}
 	return scanSession(rows)
@@ -172,13 +205,18 @@ func (s *Store) Report(ctx context.Context, id string, limit int) (Report, error
 	if limit <= 0 || limit > 250 {
 		limit = 100
 	}
-	session, err := s.ByID(ctx, id)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return Report{}, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `
+	defer tx.Rollback()
+	session, err := sessionByID(ctx, tx, id)
+	if err != nil {
+		return Report{}, err
+	}
+	rows, err := tx.QueryContext(ctx, `
 		SELECT id, type, source, title, message, severity, data, created_at
 		FROM stream_events
 		WHERE session_id = $1
@@ -200,8 +238,14 @@ func (s *Store) Report(ctx context.Context, id string, limit int) (Report, error
 	if err := rows.Err(); err != nil {
 		return Report{}, err
 	}
-	snapshots, err := s.ReadinessSnapshots(ctx, id)
+	if err := rows.Close(); err != nil {
+		return Report{}, err
+	}
+	snapshots, err := readinessSnapshots(ctx, tx, id)
 	if err != nil {
+		return Report{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return Report{}, err
 	}
 	return Report{Session: session, Events: items, Snapshots: snapshots}, nil
@@ -240,7 +284,11 @@ func (s *Store) ReadinessSnapshots(ctx context.Context, sessionID string) ([]Rea
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `
+	return readinessSnapshots(ctx, s.db, sessionID)
+}
+
+func readinessSnapshots(ctx context.Context, db reportQueryer, sessionID string) ([]ReadinessSnapshot, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT id, session_id, phase, status, checks, captured_at
 		FROM stream_session_readiness_snapshots
 		WHERE session_id = $1
@@ -297,6 +345,10 @@ func scanEvent(row rowScanner) (events.Event, error) {
 	}
 	return event, nil
 }
+
+// Table identity scopes the transaction lock to this database/schema. All
+// lifecycle writers share it, including separate API processes.
+const lifecycleLockSQL = `SELECT pg_advisory_xact_lock('stream_sessions'::regclass::oid::bigint)`
 
 const sessionSelectSQL = `
 SELECT stream_sessions.id, stream_sessions.title, stream_sessions.kind, stream_sessions.notes, stream_sessions.started_at, stream_sessions.ended_at, COUNT(stream_events.id)::int AS event_count

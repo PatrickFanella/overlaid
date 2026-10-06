@@ -66,3 +66,9 @@ The BRB, starting and ending cards also show the current now-playing track in th
 2. Copy the changed SVGs into `web/public/brand/subcult/`. The circle PNG is in Git LFS. If the checkout only has a pointer file, extract it with `git show HEAD:studio/brands/subcult/logos/mark-fisheye-circle.png | git lfs smudge > mark-fisheye-circle.png`.
 3. Update the commit and hashes in `PROVENANCE.md`.
 4. Run the visual QA overlay pass in `visual-qa.md`.
+
+## Stream access and shared display settings
+
+Set `OVERLAY_TOKEN` separately from `OPERATOR_SECRET`. Authenticate the desk with the operator secret, then copy Browser Source URLs from Overlays; they include `?key=<OVERLAY_TOKEN>` and any API base override. Direct overlay URLs must carry the same key. Keep keyed URLs private and rotate the environment value plus OBS sources if a URL leaks. Reverse proxies must redact query credentials from logs. `?demo=1` previews stay offline and require no key.
+
+The stream and display-settings API validate the key. History uses the operator header instead. Empty credentials are permitted for local development; LAN/public requests fail closed when the matching credential is missing, and `/readyz` reports degraded configuration. The read-only display endpoint returns no quick actions, integrations, or operator configuration. Save shared display settings in the desk and reload an OBS source to apply them; reconnect also refreshes settings. API failures use default display values rather than the OBS browser's localStorage.

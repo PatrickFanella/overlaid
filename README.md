@@ -12,6 +12,8 @@ make verify
 docker compose up --build
 ```
 
+Set `OVERLAID_TEST_DATABASE_URL` to a disposable Postgres database to include persistence integration tests in `make verify` or the backend race suite. They work without preloaded application tables, create/drop their own schemas, and retain the shared `pgcrypto` extension in `public`. Without that variable, persistence integration tests are skipped.
+
 ## Overlay MVP
 
 ### Environment
@@ -19,14 +21,15 @@ docker compose up --build
 - `API_ADDR` / `API_PORT` — backend listen address and host port.
 - `POSTGRES_PORT` — host Postgres port. Defaults to `55432` to avoid clashing with a local Postgres on `5432`.
 - `CORS_ALLOWED_ORIGIN` — browser origin allowed to call the API.
-- `EXPOSURE_MODE` — `local`, `lan`, or `public`. Non-local modes make `/readyz` degrade when `OPERATOR_SECRET` or `WEBHOOK_SECRET` is empty.
-- `OPERATOR_SECRET` — optional shared secret for dashboard/operator mutating routes. Send as `X-Overlay-Operator-Secret` or `Authorization: Bearer <secret>`.
+- `EXPOSURE_MODE` — `local`, `lan`, or `public`. Non-local modes make `/readyz` degrade when `OPERATOR_SECRET`, `OVERLAY_TOKEN`, or `WEBHOOK_SECRET` is empty. Protected reads reject missing credentials in non-local modes.
+- `OVERLAY_TOKEN` — separate read-only credential for `/api/events/stream` and `/api/overlay/display`, accepted as `?key=`. The Overlays page copies keyed OBS source URLs after operator authentication. Treat these URLs as credentials; demo previews need no key.
+- `OPERATOR_SECRET` — shared secret for dashboard/operator routes, including event history. Optional only in local mode. Send as `X-Overlay-Operator-Secret` or `Authorization: Bearer <secret>`.
 - `WEBHOOK_SECRET` — optional shared secret for `POST /api/integrations/webhook/{source}`. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
 - `OVERLAY_STATE_FILE` — retained overlay state snapshot path. Defaults to `/data/overlay-state.json` in Docker.
 - `EVENT_HISTORY_FILE` / `EVENT_HISTORY_LIMIT` — persisted recent event history path and count limit. Defaults to `/data/event-history.jsonl` and `250` in Docker.
 - `DATABASE_URL` — Postgres connection string. When set, event history is stored in Postgres `stream_events`; when unset, the API uses the JSONL file fallback.
 - Shared dashboard config is stored in Postgres through operator-protected `/api/dashboard/config` when `DATABASE_URL` is set. The browser still keeps a local config cache; secrets remain session-only.
-- Stream/rehearsal sessions are stored in Postgres through operator-protected `/api/stream/session*` endpoints when `DATABASE_URL` is set. Active sessions tag new event-history rows with `sessionId`; `/api/stream/session/{id}` returns a review report with tagged events and readiness snapshots.
+- Stream/rehearsal sessions are stored in Postgres through operator-protected `/api/stream/session*` endpoints when `DATABASE_URL` is set. Active sessions tag new event-history rows with `sessionId`; `/api/stream/session/{id}` returns a review report with tagged events, readiness snapshots, and session-specific bot audit rows. Reports and exports show loaded versus total bot actions and flag unavailable audit storage.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
 - `VITE_API_BASE_URL` — optional build-time API base URL for local Vite builds. If unset, overlays derive the API URL from the browser host on port `8080`.
 - `OBS_WEBSOCKET_URL` — OBS WebSocket v5 endpoint. Docker defaults to `ws://host.docker.internal:4455` to reach OBS on the host desktop; native API runs can use `ws://localhost:4455`.
@@ -36,6 +39,7 @@ docker compose up --build
 - `TWITCH_TOKEN_FILE` — durable OAuth token path. Defaults to `/data/twitch-token.json` in Docker.
 - `TWITCH_INTERACTIONS_FILE` — durable Twitch interaction-rules path. Defaults to `/data/twitch-interactions.json` in Docker.
 - `TWITCH_EVENTSUB_ENABLED` — starts the Twitch EventSub WebSocket worker when OAuth is configured. Defaults to `true`.
+- Changing scope defaults does not update existing grants. Run Twitch login again and consent to the added moderation scopes before enforcing rules.
 - `TWITCH_SCOPES` — space-delimited scopes used for the login redirect. Defaults to chat, redemption, subscription, bits/follower, and guarded moderation scopes: `user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers moderator:manage:chat_messages moderator:manage:banned_users`.
 
 Twitch auth routes:
@@ -111,6 +115,8 @@ For post-build route checks and styling changes, use `docs/runbooks/visual-qa.md
 
 `/healthz` stays the cheap liveness check used by Compose healthchecks. `curl http://localhost:8080/readyz` is the operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, retained state, event history, or Twitch interaction rules need attention.
 
+`make build` also builds `bin/over-laid-probe`, a read-only readiness monitor. `make probe` fails when the JSON report is degraded even if HTTP returns 200. Select explicit requirements with `make probe API_PORT=8081 PROBE_CHECKS=process,postgres,bot_runtime` when monitoring local bot storage before Twitch/OBS setup. Missing checks fail rather than silently passing. See [uptime monitoring](docs/runbooks/uptime-monitoring.md) for exit codes, external probes, and alerting policy.
+
 ### OBS browser source
 
 Open the operator dashboard at:
@@ -139,13 +145,13 @@ OBS WebSocket notes:
 Use this for the main alert source:
 
 ```text
-http://<homelab-host>:5173/overlay/alerts
+http://<homelab-host>:5173/overlay/alerts?key=<OVERLAY_TOKEN>
 ```
 
 The Docker web image supports direct overlay URLs with an nginx SPA fallback, so OBS can open `/overlay/alerts` directly. By default, the browser source connects to `http://<same-host>:8080/api/events/stream`. If your API is on a different host or port, add an override query parameter:
 
 ```text
-http://<homelab-host>:5173/overlay/alerts?apiBaseUrl=http://<api-host>:8080
+http://<homelab-host>:5173/overlay/alerts?key=<OVERLAY_TOKEN>&apiBaseUrl=http://<api-host>:8080
 ```
 
 Recommended settings:
@@ -167,8 +173,8 @@ Local dev:
 
 LAN-only streaming:
 
-- Set a non-empty `OPERATOR_SECRET` before using the dashboard on your network.
-- Set `EXPOSURE_MODE=lan` so `/readyz` warns if operator/webhook secrets are empty.
+- Set non-empty `OPERATOR_SECRET` and `OVERLAY_TOKEN` values before using the dashboard and OBS sources on your network.
+- Set `EXPOSURE_MODE=lan` so `/readyz` warns if operator, overlay, or webhook credentials are empty.
 - Keep overlay browser-source routes readable for OBS, but treat API port `8080` as a trusted-LAN service.
 - Set `CORS_ALLOWED_ORIGIN` to the dashboard/web origin instead of `*` when the host name is stable.
 - Use `docker-compose.override.example.yml` as a template when you need host MPRIS session-bus access.
@@ -176,7 +182,7 @@ LAN-only streaming:
 Public reverse proxy:
 
 - Put `/dashboard` and API mutating routes behind reverse-proxy authentication in addition to `OPERATOR_SECRET`.
-- Set `EXPOSURE_MODE=public`, `OPERATOR_SECRET`, and `WEBHOOK_SECRET` before exposing any API route.
+- Set `EXPOSURE_MODE=public`, `OPERATOR_SECRET`, `OVERLAY_TOKEN`, and `WEBHOOK_SECRET` before exposing any API route.
 - OBS scene/input inventory endpoints are operator-protected because they reveal local OBS structure.
 - Expose only the overlay routes needed by OBS/browser sources when possible.
 - Do not publish the API directly to the internet without auth/rate-limit/reverse-proxy controls.
@@ -185,6 +191,8 @@ Public reverse proxy:
 ### Production packaging and backups
 
 Use `docs/runbooks/production-packaging.md` for the full packaging, smoke, backup, and restore flow.
+
+Container Dockerfiles use qualified Docker Hub base-image names and context-local `.dockerignore` files. This keeps local environment files, frontend dependencies, and generated output out of the build context, and lets rootless Podman resolve the same images for local packaging verification when the Docker socket is unavailable.
 
 - `/version` returns `name`, `version`, `commit`, `builtAt`, `goVersion`, `os`, and `arch` without exposing secrets.
 - Local `make build` uses `VERSION`, `BUILD_COMMIT`, and `BUILD_DATE`; `make docker-build` passes those values as Docker `BUILD_VERSION`, `BUILD_COMMIT`, and `BUILD_DATE`. Plain `docker compose up --build` uses `BUILD_VERSION`, `BUILD_COMMIT`, and `BUILD_DATE` from the shell or `.env`, defaulting to `dev`/`unknown`/`unknown`.
@@ -312,3 +320,7 @@ open-pilot labels bootstrap PatrickFanella/over-laid
 ## License
 
 GPL-3.0-only. See `LICENSE`.
+
+Overlay display limits are read from the shared dashboard configuration through `GET /api/overlay/display?key=<OVERLAY_TOKEN>`. Save shared settings, then reload the OBS source; overlays also refetch after SSE reconnect. Missing storage or failed fetches use built-in defaults, and demo mode stays offline. This endpoint returns only the display block. Event history requires operator headers and omits raw Twitch payloads; stored audit evidence remains intact.
+
+The October multi-platform program starts with [Phase 0](docs/superpowers/plans/2026-10-06-multiplatform-phase-0.md) and [proposed architecture decisions](docs/adr/README.md). The June roadmap acceptance record covers the earlier Twitch-only work.

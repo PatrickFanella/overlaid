@@ -15,6 +15,13 @@ func TestRenderTemplateKnownVariables(t *testing.T) {
 	}
 }
 
+func TestRenderTemplateNowPlayingVariables(t *testing.T) {
+	result := RenderTemplate("{nowPlaying.title} by {NOWPLAYING.ARTIST}", TemplateContext{NowPlayingTitle: "Song", NowPlayingArtist: "Artist"})
+	if result.Text != "Song by Artist" || len(result.UnknownVariables) != 0 {
+		t.Fatalf("media template=%#v", result)
+	}
+}
+
 func TestRenderTemplateUnknownVariablesBecomeEmpty(t *testing.T) {
 	result := RenderTemplate("hello {missing} {user}", TemplateContext{User: "viewer"})
 	if result.Text != "hello  viewer" {

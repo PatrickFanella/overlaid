@@ -32,6 +32,9 @@ func (s *Server) recordBotAuditForEvent(ctx context.Context, event events.Event)
 		"custom":          boolData(data, "custom"),
 		"eventSeverity":   string(event.Severity),
 	}
+	if unknown, ok := data["unknownVariables"].([]string); ok {
+		auditData["unknownVariables"] = unknown
+	}
 	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
 		Source:           bot.SourceChat,
 		ActorLogin:       stringData(data, "login"),
@@ -65,7 +68,7 @@ func botResultForCommandEvent(event events.Event) string {
 		return string(bot.ResultAllowed)
 	case strings.Contains(message, "cooling down"):
 		return string(bot.ResultCooldown)
-	case strings.Contains(message, "permission denied") || strings.Contains(message, "unsupported"):
+	case strings.Contains(message, "permission denied") || strings.Contains(message, "unsupported") || message == "command disabled":
 		return string(bot.ResultDenied)
 	default:
 		return string(bot.ResultFailed)
@@ -81,6 +84,10 @@ func botReasonForCommandEvent(event events.Event) string {
 		return "permission_denied"
 	case strings.Contains(message, "unsupported"):
 		return "unsupported_command"
+	case message == "command disabled":
+		return "command_disabled"
+	case message == "command response is empty":
+		return "empty_response"
 	case strings.Contains(message, "ignored"):
 		return "invalid_command"
 	case event.Severity == events.SeveritySuccess:
@@ -113,4 +120,85 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// Record scheduling metadata only. Response templates and raw request/error
+// content do not belong in operator configuration audit rows.
+func (s *Server) recordBotTimerChange(ctx context.Context, timer bot.Timer, operation string, result bot.Result) {
+	if s == nil || s.botRuntime == nil {
+		return
+	}
+	data := map[string]any{"timerId": timer.ID}
+	if result == bot.ResultAllowed && operation != "delete" {
+		data["enabled"] = timer.Enabled
+		data["intervalSeconds"] = timer.IntervalSeconds
+		data["timerAction"] = timer.Action
+	}
+	reason := "timer_configuration_changed"
+	if result == bot.ResultFailed {
+		reason = "timer_configuration_failed"
+	}
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{
+		Source: bot.SourceDashboard, ActorRole: bot.RoleOperator,
+		Trigger: "timer_configuration", Command: timer.Name,
+		Action: "timer_" + operation, Result: result, Reason: reason,
+		StreamSessionID: s.activeSessionID(), Data: data,
+	})
+}
+
+func (s *Server) recordBotCommunityChange(ctx context.Context, kind, operation, name string, result bot.Result, data map[string]any) {
+	if s == nil || s.botRuntime == nil {
+		return
+	}
+	reason := kind + "_configuration_changed"
+	if result == bot.ResultFailed {
+		reason = kind + "_configuration_failed"
+	}
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{
+		Source: bot.SourceDashboard, ActorRole: bot.RoleOperator,
+		Trigger: kind + "_configuration", Command: name,
+		Action: kind + "_" + operation, Result: result, Reason: reason,
+		StreamSessionID: s.activeSessionID(), Data: data,
+	})
+}
+
+func (s *Server) recordBotCounterChange(ctx context.Context, counter bot.Counter, operation string, result bot.Result) {
+	data := map[string]any{"counterId": counter.ID}
+	if result == bot.ResultAllowed && operation != "delete" {
+		data["value"] = counter.Value
+	}
+	s.recordBotCommunityChange(ctx, "counter", operation, counter.Name, result, data)
+}
+
+func (s *Server) recordBotQuoteChange(ctx context.Context, quote bot.Quote, operation string, result bot.Result) {
+	// Quote text and authors are free-form content. Keep only the record ID.
+	s.recordBotCommunityChange(ctx, "quote", operation, "", result, map[string]any{"quoteId": quote.ID})
+}
+
+// Configuration receipts retain rule metadata, not free-form patterns/reasons
+// or rejected request content. Failed writes contain only the attempted ID.
+func (s *Server) recordBotModerationChange(ctx context.Context, rule bot.ModerationRule, operation string, result bot.Result) {
+	if s == nil || s.botRuntime == nil {
+		return
+	}
+	data := map[string]any{"ruleId": strings.TrimSpace(rule.ID)}
+	name := ""
+	reason := "moderation_configuration_failed"
+	if result == bot.ResultAllowed {
+		name = rule.Name
+		reason = "moderation_configuration_changed"
+		if operation != "delete" {
+			data["enabled"], data["enforce"] = rule.Enabled, rule.Enforce
+			data["moderationAction"], data["matchTarget"] = rule.Action, rule.MatchTarget
+			data["regex"], data["caseSensitive"] = rule.Regex, rule.CaseSensitive
+			data["source"] = rule.Source
+			data["exemptRole"], data["timeoutSeconds"] = rule.ExemptRole, rule.TimeoutSeconds
+			if rule.ExpiresAt != nil {
+				data["expiresAt"] = rule.ExpiresAt
+			}
+		}
+	}
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator,
+		Trigger: "moderation_configuration", Command: name, Action: "moderation_" + operation, Result: result, Reason: reason,
+		StreamSessionID: s.activeSessionID(), Data: data})
 }

@@ -261,15 +261,22 @@ func (c Client) SetSceneItemEnabled(ctx context.Context, sceneName string, scene
 	return err
 }
 
-func (c Client) call(ctx context.Context, requestType string, payload map[string]any) (map[string]any, error) {
+func (c Client) call(ctx context.Context, requestType string, payload map[string]any) (data map[string]any, err error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
+	defer func() {
+		if err != nil && ctx.Err() != nil {
+			err = ctx.Err()
+		}
+	}()
 
 	conn, _, err := c.connect(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
+	stopCancellation := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopCancellation()
 	deadline := deadlineFromContext(ctx)
 
 	requestID := newRequestID()
@@ -310,12 +317,21 @@ func (c Client) call(ctx context.Context, requestType string, payload map[string
 	}
 }
 
-func (c Client) connect(ctx context.Context) (*websocket.Conn, helloData, error) {
+func (c Client) connect(ctx context.Context) (connection *websocket.Conn, metadata helloData, err error) {
 	if strings.TrimSpace(c.URL) == "" {
 		return nil, helloData{}, errors.New("obs websocket url is not configured")
 	}
 	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
+	defer func() {
+		if err != nil && ctx.Err() != nil {
+			if errors.Is(err, errOBSAuthFailed) {
+				err = fmt.Errorf("%w: %w", errOBSAuthFailed, ctx.Err())
+			} else {
+				err = ctx.Err()
+			}
+		}
+	}()
 	deadline := deadlineFromContext(ctx)
 
 	dialer := c.Dialer
@@ -326,6 +342,10 @@ func (c Client) connect(ctx context.Context) (*websocket.Conn, helloData, error)
 	if err != nil {
 		return nil, helloData{}, err
 	}
+	// The handshake owns this cancellation callback only until it returns.
+	// Successful callers install their own callback for the request lifetime.
+	stopCancellation := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopCancellation()
 	if err := setConnDeadline(conn, deadline); err != nil {
 		conn.Close()
 		return nil, helloData{}, err

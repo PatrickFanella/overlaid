@@ -1,10 +1,11 @@
-import { renderToString } from 'react-dom/server';
+import { renderToString, renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { loadBotWorkspace } from './routes/dashboard/bot/loadBotWorkspace';
 import { dashboardRoutes, legacyDashboardPaths } from './lib/dashboardRoutes';
 import { splitLastWord } from './overlay/data';
 import { getDefaultApiBaseUrl, getOverlayStreamUrl } from './lib/eventStream';
-import { deleteTwitchReward, fetchBotStatus, fetchTwitchInteractions, saveBotCommand, type StreamSessionReport } from './lib/api';
+import { deleteTwitchReward, runBotTimer, fetchBotStatus, fetchTwitchInteractions, saveBotCommand, type StreamSessionReport } from './lib/api';
 import { parseOverlayEvent } from './lib/events';
 import {
   defaultPanelLayouts,
@@ -39,8 +40,9 @@ import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
 import { TwitchInteractionsManager } from './routes/dashboard/components/TwitchInteractionsManager';
 import { RecoveryConsolePanel } from './routes/dashboard/components/RecoveryConsolePanel';
 import { SessionLogPanel } from './routes/dashboard/components/SessionLogPanel';
+import { SessionBotAuditPanel } from './routes/dashboard/components/SessionBotAuditPanel';
 import { validateQuickActionsAgainstOBS } from './lib/obsValidation';
-import { formatSessionReportMarkdown, sessionReportFilename } from './lib/sessionReports';
+import { formatSessionReportMarkdown, formatSessionReportSummary, sessionReportFilename } from './lib/sessionReports';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -462,6 +464,44 @@ describe('overlay event utilities', () => {
         Accept: 'application/json',
         'X-Overlay-Operator-Secret': 'operator-secret',
       },
+    });
+  });
+
+  it('keeps successful bot panel data when one operation fails', async () => {
+    const audit = { id: 'audit-1', action: 'timer_run_once' };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/status')) return { ok: false, status: 503, text: async () => 'status offline' };
+      const responses: Record<string, unknown> = {
+        status: { available: true, commandCount: 1, timerCount: 1, counterCount: 0, quoteCount: 0, auditCount: 0 },
+        counters: { counters: [] }, quotes: { quotes: [] }, rules: { rules: [] }, audit: { events: [audit] },
+      };
+      const key = new URL(url).pathname.split('/').at(-1)!;
+      return { ok: true, json: async () => responses[key] };
+    }));
+    const state = await loadBotWorkspace('http://example.test', 'operator-secret');
+    expect(state.status?.available).toBe(false);
+    expect(state.status?.loadError).toContain('status offline');
+    expect(state.audit?.events).toEqual([audit]);
+    expect(state.loading).toBe(false);
+  });
+
+  it('reports each bot panel failure when operator access is denied', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'operator access required' }));
+    const state = await loadBotWorkspace('http://example.test', '');
+    expect(state.status?.available).toBe(false);
+    for (const panel of [state.status, state.audit]) {
+      expect(panel?.loadError).toContain('operator access required');
+    }
+    expect(state.loading).toBe(false);
+  });
+
+  it('runs a saved timer with an encoded ID and operator credentials', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ eventId: 'event-1' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(runBotTimer('timer/id', 'http://example.test', 'operator-secret')).resolves.toEqual({ eventId: 'event-1' });
+    expect(fetchMock).toHaveBeenCalledWith('http://example.test/api/bot/timers/timer%2Fid/run', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'X-Overlay-Operator-Secret': 'operator-secret' },
     });
   });
 
@@ -1007,11 +1047,28 @@ describe('quick action sequence utilities', () => {
       session: { id: 'abcdef123456', title: 'Preflight rehearsal', kind: 'rehearsal', startedAt: '2026-06-15T00:00:00Z', eventCount: 1 },
       events: [{ id: 'e1', type: 'alert', source: 'test', title: 'Sample alert', message: '', severity: 'success', createdAt: '2026-06-15T00:01:00Z' }],
       snapshots: [{ id: 's1', sessionId: 'abcdef123456', phase: 'start', status: 'ok', checks: [], capturedAt: '2026-06-15T00:00:00Z' }],
+      botAudit: { total: 2, events: [{ id: 'audit-1', streamSessionId: 'abcdef123456', createdAt: '2026-06-15T00:01:00Z', source: 'dashboard', actorRole: 'operator', action: 'counter_create', result: 'allowed', reason: 'counter_configuration_changed' }] },
     };
 
     expect(formatSessionReportMarkdown(report)).toContain('# Preflight rehearsal');
     expect(formatSessionReportMarkdown(report)).toContain('## Events');
+    expect(formatSessionReportMarkdown(report)).toContain('## Bot actions');
+    expect(formatSessionReportMarkdown(report)).toContain('counter_create');
+    expect(formatSessionReportMarkdown(report)).toContain('1 of 2 bot actions exported.');
+    expect(formatSessionReportSummary(report)).toContain('1 of 2 bot actions loaded.');
     expect(sessionReportFilename(report, 'md')).toBe('preflight-rehearsal-abcdef12.md');
+  });
+
+  it('shows incomplete or unavailable session bot audit without claiming an empty audit', () => {
+    const partial = { total: 3, events: [{ id: 'audit-1', createdAt: '2026-06-15T00:01:00Z', source: 'dashboard', action: 'quote_delete', result: 'allowed' }] };
+    const html = renderToStaticMarkup(<SessionBotAuditPanel audit={partial} />);
+    expect(html).toContain('1 of 3 bot actions loaded.');
+    expect(html).toContain('Only the newest 1 of 3 bot actions are loaded.');
+    expect(html).toContain('quote_delete');
+    const failed = renderToString(<SessionBotAuditPanel audit={{ events: [], total: 0, loadError: 'session bot audit unavailable' }} />);
+    expect(failed).toContain('Bot audit unavailable');
+    expect(failed).not.toContain('No bot actions recorded');
+    expect(renderToString(<SessionBotAuditPanel audit={undefined} />)).toContain('Bot audit not included by this server.');
   });
 
   it('resolves atomic quick actions in sequence order', () => {
@@ -1173,5 +1230,23 @@ describe('twitch interaction rule helpers', () => {
 
     expect(rule?.fulfillmentNote).toBe('Check the water timer.');
     expect(findMatchingChannelPointRule([], 'hydrate')).toBeUndefined();
+  });
+});
+
+describe('reward ID mapping', () => {
+  it('prefers stable IDs over titles and never matches an ID rule by its label', () => {
+    const rules = [
+      { rewardTitle: 'Renamed', action: 'ignore' as const, enabled: true, fulfillmentNote: 'Title fallback' },
+      { rewardId: 'stable-id', rewardTitle: 'Original', action: 'alert' as const, enabled: true, fulfillmentNote: 'ID note' },
+    ];
+    expect(findMatchingChannelPointRule(rules, 'Renamed', 'stable-id')?.fulfillmentNote).toBe('ID note');
+    expect(findMatchingChannelPointRule(rules, 'Original', 'other-id')).toBeUndefined();
+    expect(findMatchingChannelPointRule(rules, 'Renamed', 'other-id')?.fulfillmentNote).toBe('Title fallback');
+  });
+  it('preserves reward IDs through JSON import and saved draft editing', () => {
+    const rules = normalizeImportedTwitchInteractionRules({ chatAliases: [], channelPointRules: [{ rewardId: ' stable-id ', action: 'alert', enabled: true, fulfillmentNote: 'ID note' }] });
+    expect(rules.channelPointRules[0]).toMatchObject({ rewardId: 'stable-id', rewardTitle: '' });
+    expect(updateTwitchRewardRule(rules, 0, { rewardTitle: 'Renamed' }).channelPointRules[0].rewardId).toBe('stable-id');
+    expect(rules.channelPointRules[0].rewardTitle).toBe('');
   });
 });

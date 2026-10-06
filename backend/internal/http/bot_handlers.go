@@ -77,20 +77,23 @@ type botModerationRulesResponse struct {
 	LoadError string               `json:"loadError,omitempty"`
 }
 type botModerationRuleRequest struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Enabled       bool   `json:"enabled"`
-	Enforce       bool   `json:"enforce"`
-	Pattern       string `json:"pattern"`
-	MatchTarget   string `json:"matchTarget"`
-	CaseSensitive bool   `json:"caseSensitive"`
-	Regex         bool   `json:"regex"`
-	Action        string `json:"action"`
-	Reason        string `json:"reason"`
+	ExemptRole     string `json:"exemptRole"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Enabled        bool   `json:"enabled"`
+	Enforce        bool   `json:"enforce"`
+	Pattern        string `json:"pattern"`
+	MatchTarget    string `json:"matchTarget"`
+	CaseSensitive  bool   `json:"caseSensitive"`
+	Regex          bool   `json:"regex"`
+	Action         string `json:"action"`
+	Reason         string `json:"reason"`
 }
 type botModerationDryRunRequest struct {
-	Message  string `json:"message"`
-	Username string `json:"username"`
+	Role     bot.Role `json:"role"`
+	Message  string   `json:"message"`
+	Username string   `json:"username"`
 }
 type botModerationDryRunResponse struct {
 	Matches   []bot.ModerationMatch `json:"matches"`
@@ -122,6 +125,7 @@ type botNukeDryRunResponse struct {
 }
 
 type botNukeExecuteResponse struct {
+	Interrupted   bool                 `json:"interrupted,omitempty"`
 	Matches       []botNukeDryRunMatch `json:"matches"`
 	Attempted     int                  `json:"attempted"`
 	Succeeded     int                  `json:"succeeded"`
@@ -213,8 +217,13 @@ func (s *Server) botCounterSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
+	operation := "create"
+	if strings.TrimSpace(request.ID) != "" {
+		operation = "update"
+	}
 	counter, err := s.botStore.SaveCounter(r.Context(), bot.Counter{ID: request.ID, Name: request.Name, Value: request.Value})
 	if err != nil {
+		s.recordBotCounterChange(r.Context(), bot.Counter{ID: request.ID}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -222,6 +231,7 @@ func (s *Server) botCounterSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotCounterChange(r.Context(), counter, operation, bot.ResultAllowed)
 	writeJSON(w, counter)
 }
 
@@ -231,6 +241,7 @@ func (s *Server) botCounterDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.botStore.DeleteCounter(r.Context(), r.PathValue("id")); err != nil {
+		s.recordBotCounterChange(r.Context(), bot.Counter{ID: r.PathValue("id")}, "delete", bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -238,6 +249,7 @@ func (s *Server) botCounterDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotCounterChange(r.Context(), bot.Counter{ID: r.PathValue("id")}, "delete", bot.ResultAllowed)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -276,8 +288,13 @@ func (s *Server) botModerationRuleSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	rule, err := s.botStore.SaveModerationRule(r.Context(), bot.ModerationRule{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Enforce: request.Enforce, Pattern: request.Pattern, MatchTarget: request.MatchTarget, CaseSensitive: request.CaseSensitive, Regex: request.Regex, Action: request.Action, Reason: request.Reason})
+	operation := "create"
+	if strings.TrimSpace(request.ID) != "" {
+		operation = "update"
+	}
+	rule, err := s.botStore.SaveModerationRule(r.Context(), bot.ModerationRule{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Enforce: request.Enforce, ExemptRole: request.ExemptRole, TimeoutSeconds: request.TimeoutSeconds, Pattern: request.Pattern, MatchTarget: request.MatchTarget, CaseSensitive: request.CaseSensitive, Regex: request.Regex, Action: request.Action, Reason: request.Reason})
 	if err != nil {
+		s.recordBotModerationChange(r.Context(), bot.ModerationRule{ID: request.ID}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -285,6 +302,7 @@ func (s *Server) botModerationRuleSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotModerationChange(r.Context(), rule, operation, bot.ResultAllowed)
 	writeJSON(w, rule)
 }
 
@@ -294,6 +312,7 @@ func (s *Server) botModerationRuleDelete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := s.botStore.DeleteModerationRule(r.Context(), r.PathValue("id")); err != nil {
+		s.recordBotModerationChange(r.Context(), bot.ModerationRule{ID: r.PathValue("id")}, "delete", bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -301,6 +320,7 @@ func (s *Server) botModerationRuleDelete(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotModerationChange(r.Context(), bot.ModerationRule{ID: r.PathValue("id")}, "delete", bot.ResultAllowed)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -318,7 +338,7 @@ func (s *Server) botModerationDryRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bot moderation dry-run unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	writeJSON(w, botModerationDryRunResponse{Matches: matches})
+	writeJSON(w, botModerationDryRunResponse{Matches: bot.ApplyModerationExemptions(matches, request.Role)})
 }
 
 func (s *Server) botModerationNukeDryRun(w http.ResponseWriter, r *http.Request) {
@@ -393,8 +413,13 @@ func (s *Server) botQuoteSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
+	operation := "create"
+	if strings.TrimSpace(request.ID) != "" {
+		operation = "update"
+	}
 	quote, err := s.botStore.SaveQuote(r.Context(), bot.Quote{ID: request.ID, Text: request.Text, Author: request.Author})
 	if err != nil {
+		s.recordBotQuoteChange(r.Context(), bot.Quote{ID: request.ID}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -402,6 +427,7 @@ func (s *Server) botQuoteSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotQuoteChange(r.Context(), quote, operation, bot.ResultAllowed)
 	writeJSON(w, quote)
 }
 
@@ -411,6 +437,7 @@ func (s *Server) botQuoteDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.botStore.DeleteQuote(r.Context(), r.PathValue("id")); err != nil {
+		s.recordBotQuoteChange(r.Context(), bot.Quote{ID: r.PathValue("id")}, "delete", bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -418,6 +445,7 @@ func (s *Server) botQuoteDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotQuoteChange(r.Context(), bot.Quote{ID: r.PathValue("id")}, "delete", bot.ResultAllowed)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -586,8 +614,13 @@ func (s *Server) botTimerSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
+	operation := "create"
+	if strings.TrimSpace(request.ID) != "" {
+		operation = "update"
+	}
 	timer, err := s.botStore.SaveTimer(r.Context(), bot.Timer{ID: request.ID, Name: request.Name, Enabled: request.Enabled, IntervalSeconds: request.IntervalSeconds, Response: request.Response, Action: request.Action})
 	if err != nil {
+		s.recordBotTimerChange(r.Context(), bot.Timer{ID: request.ID}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -595,6 +628,7 @@ func (s *Server) botTimerSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotTimerChange(r.Context(), timer, operation, bot.ResultAllowed)
 	writeJSON(w, timer)
 }
 
@@ -607,8 +641,13 @@ func (s *Server) botTimerSetEnabled(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
+	operation := "pause"
+	if request.Enabled {
+		operation = "enable"
+	}
 	timer, err := s.botStore.SetTimerEnabled(r.Context(), r.PathValue("id"), request.Enabled)
 	if err != nil {
+		s.recordBotTimerChange(r.Context(), bot.Timer{ID: r.PathValue("id")}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -616,7 +655,28 @@ func (s *Server) botTimerSetEnabled(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotTimerChange(r.Context(), timer, operation, bot.ResultAllowed)
 	writeJSON(w, timer)
+}
+
+func (s *Server) botTimerRun(w http.ResponseWriter, r *http.Request) {
+	if s.botStore == nil {
+		http.Error(w, "bot timers unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	event, err := bot.RunTimerOnce(r.Context(), s.botStore, s.botRuntime, r.PathValue("id"), s.config.TwitchChannel, s.activeSessionID(), s.publishEvent)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			http.Error(w, "bot timer not found", http.StatusNotFound)
+		case errors.Is(err, bot.ErrEmptyTimerResponse):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "bot timer execution unavailable", http.StatusServiceUnavailable)
+		}
+		return
+	}
+	writeJSON(w, map[string]string{"eventId": event.ID})
 }
 
 func (s *Server) botTimerDelete(w http.ResponseWriter, r *http.Request) {
@@ -625,6 +685,7 @@ func (s *Server) botTimerDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.botStore.DeleteTimer(r.Context(), r.PathValue("id")); err != nil {
+		s.recordBotTimerChange(r.Context(), bot.Timer{ID: r.PathValue("id")}, "delete", bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -632,5 +693,6 @@ func (s *Server) botTimerDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotTimerChange(r.Context(), bot.Timer{ID: r.PathValue("id")}, "delete", bot.ResultAllowed)
 	w.WriteHeader(http.StatusNoContent)
 }

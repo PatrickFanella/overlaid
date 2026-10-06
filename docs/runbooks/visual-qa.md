@@ -91,3 +91,8 @@ Overlays must not expose secrets or token material. Diagnostic and command event
 - The dashboard uses only `desk-*` classes and IBM Plex. No SUBCULT purple, slab or Oswald appears in the dashboard.
 - Overlays use only `sc-*` classes and the brand fonts. No dashboard grey panels appear on air.
 - Monospace stays in use for logs, IDs, JSON and URLs.
+
+
+### Route-local layout reset
+
+On Health, reorder or hide a safe panel, reload, and confirm the preference persists. Reset restores the default order and visibility for the panels in that editor. Preferences for omitted panels in an imported or older layout remain intact, including session-log and event-history entries from the former Live page. Recovery stays outside the editor. Bot and Settings use the same rule for their safe panels; moderation, reward deletion, and secrets remain fixed.

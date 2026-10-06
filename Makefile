@@ -8,8 +8,11 @@ BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf unknown
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GO_LDFLAGS := -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Version=$(VERSION) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Commit=$(BUILD_COMMIT) -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.BuiltAt=$(BUILD_DATE)
 BACKUP_DIR ?= backups
+PROBE_URL ?= http://127.0.0.1:$(API_PORT)/readyz
+PROBE_CHECKS ?=
+PROBE_TIMEOUT ?= 5s
 
-.PHONY: help verify deps fmt lint test build compose-config open-pilot-check dev up down restart ps logs docker-build wait-api smoke smoke-browser smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup postgres-backup
+.PHONY: help verify deps fmt lint test build build-probe probe compose-config open-pilot-check dev up down restart ps logs docker-build wait-api smoke smoke-browser smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup postgres-backup
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -31,10 +34,17 @@ test: ## Run backend and frontend tests
 	cd backend && go test ./...
 	pnpm --dir web run test
 
-build: ## Build backend binary and frontend assets
+build: build-probe ## Build backend binaries and frontend assets
 	mkdir -p bin
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/over-laid-api ./cmd/app
 	pnpm --dir web run build
+
+build-probe: ## Build the readiness monitoring probe
+	mkdir -p bin
+	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/over-laid-probe ./cmd/probe
+
+probe: build-probe ## Probe full readiness or explicitly selected checks
+	bin/over-laid-probe --url "$(PROBE_URL)" --checks "$(PROBE_CHECKS)" --timeout "$(PROBE_TIMEOUT)"
 
 compose-config: ## Validate Docker Compose configuration
 	docker compose config --quiet
@@ -102,15 +112,16 @@ api-data-backup: api-data-volume-check ## Back up the Compose api-data volume in
 	volume=$$(docker volume ls -q \
 		--filter label=com.docker.compose.project=$${COMPOSE_PROJECT_NAME:-$$(basename "$$PWD")} \
 		--filter label=com.docker.compose.volume=api-data); \
+	api_data_backup_path=$$(cd -- "$(BACKUP_DIR)" && pwd -P) || exit 1; \
 	docker run --rm \
 		-v "$$volume:/data:ro" \
-		-v "$$PWD/$(BACKUP_DIR):/backup" \
+		-v "$$api_data_backup_path:/backup" \
 		alpine:3.22 \
 		sh -c 'tar -czf /backup/api-data-$$(date -u +%Y%m%dT%H%M%SZ).tar.gz -C /data .'
 
 postgres-backup: ## Back up the Compose Postgres database into ./backups
 	mkdir -p "$(BACKUP_DIR)"
-	docker compose exec -T postgres sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" --format=custom --file=-' > "$(BACKUP_DIR)/postgres-$$(date -u +%Y%m%dT%H%M%SZ).dump"
+	docker compose exec -T postgres sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" --format=custom' > "$(BACKUP_DIR)/postgres-$$(date -u +%Y%m%dT%H%M%SZ).dump"
 
 smoke-alert: ## Send a test alert to the running API
 	@ : "$${OPERATOR_SECRET:?OPERATOR_SECRET must be set}"

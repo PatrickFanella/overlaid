@@ -33,9 +33,9 @@ Recommended smoke check:
 
 ## Channel point reward rules
 
-- Reward-title matching is exact after case-insensitive normalization.
+- Enabled reward-ID rules take precedence; rules without an ID use exact case-insensitive title matching.
 - Supported actions are `alert`, `brb`, `clear`, and `ignore`.
-- Optional cooldown seconds suppress repeated matching reward actions and emit a diagnostic event while cooling down.
+- Optional cooldown seconds suppress repeated matching reward actions and emit a diagnostic event while cooling down. Reservation is atomic and belongs to the EventSub client, scoped by broadcaster and Twitch reward ID (normalized title when an ID is absent). Reconnects preserve the client state; separate clients and channels do not share cooldowns. Reward renames retain cooldown when the reward ID stays the same. Expired entries are reclaimed as notifications arrive.
 - Optional fulfillment notes are stored with the rule and included in emitted overlay event metadata for operator review.
 - Title/message overrides support `{user}`, `{reward}`, and `{input}` variables.
 - `ignore` suppresses the normal redemption alert and emits a `custom_command` diagnostic event. Diagnostic events can still appear in broad diagnostic surfaces such as `/overlay/debug`, event history, or ticker-style feeds that intentionally show generic event summaries.
@@ -105,3 +105,18 @@ Then repopulate valid rules from `/dashboard/chat`.
 - Open `/overlay/debug` and verify alias attempts emit `custom_command` diagnostics.
 - Test one broadcaster/mod alias, one channel point `alert`, one `clear`, and one `ignore` rule.
 - Confirm `ignore` suppresses the redemption alert and produces only the diagnostic event in debug/history surfaces.
+
+## Stable reward ID rules
+
+Set **Reward ID (optional)** to the Twitch reward ID to keep a rule attached when its title changes. Its reward title becomes a display label and may be empty. Leave the ID blank for the existing case-insensitive exact-title match. Enabled ID rules take precedence over title rules; an ID rule never matches a different reward by its label. Duplicate IDs keep the first configured rule.
+
+IDs persist in backend rules JSON and export/import. The reward queue uses the same precedence for selected reward and redemption fulfillment notes. Rule IDs and redemption/reward IDs are identifiers, not credentials. Load rewards and copy the displayed Reward ID from Selected reward, or use an existing rules export.
+
+## Reward operation receipts
+
+The reward queue allows one write at a time. While creating, editing, pausing/enabling, deleting, fulfilling, or canceling, queue controls and reload actions are disabled. Delete consumes its confirmation when the request starts. A failed write retains its draft for retry.
+
+Successful writes update the visible returned reward or remove the completed redemption immediately, and show a success receipt. If the following reload fails, the receipt stays visible beside the reload error. Reload failures do not mean the write failed. Older list responses cannot overwrite newer write results. Changing API or operator credentials invalidates pending UI responses and clears the old queue; it cannot undo an already-sent request.
+
+
+Reward global cooldowns use zero to disable the limit, or 60–604800 seconds (seven days). Both create and edit validate the upper bound before writing; correct the retained draft and retry if validation fails. This keeps the existing display minimum and follows the [Helix maximum](https://dev.twitch.tv/docs/api/reference#update-custom-reward).

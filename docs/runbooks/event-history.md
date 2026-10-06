@@ -31,16 +31,15 @@ Use this when you need to inspect recent persisted stream events after a restart
 - Full raw EventSub payloads
 - Long-term analytics or history beyond the retention window
 
-## Visibility warning
+## Access
 
-`GET /api/events/history` is a public read endpoint like the SSE stream and `/overlay/debug`.
-Anyone who can reach the API may see recent sanitized chat, user, and event metadata.
+`GET /api/events/history` requires the operator secret in a header. Overlay keys authorize the live stream and display settings only; they cannot authorize history. Empty credentials are permitted only in local exposure mode. Responses omit raw platform payloads and keep sanitized chat and event summaries for operator review. `/overlay/debug` uses the same overlay key as other live sources.
 
 ## Fast checks
 
 ```bash
-curl -fsS http://localhost:8080/api/events/history | jq .
-curl -fsS 'http://localhost:8080/api/events/history?limit=5' | jq .
+curl -fsS -H 'X-Overlay-Operator-Secret: <OPERATOR_SECRET>' http://localhost:8080/api/events/history | jq .
+curl -fsS -H 'X-Overlay-Operator-Secret: <OPERATOR_SECRET>' 'http://localhost:8080/api/events/history?limit=5' | jq .
 ```
 
 ## Dashboard
@@ -72,7 +71,7 @@ After restart, recheck:
 
 ```bash
 curl http://localhost:8080/readyz
-curl -fsS http://localhost:8080/api/events/history | jq .
+curl -fsS -H 'X-Overlay-Operator-Secret: <OPERATOR_SECRET>' http://localhost:8080/api/events/history | jq .
 ```
 
 ### JSONL fallback history
@@ -89,7 +88,7 @@ After restart, recheck:
 
 ```bash
 curl http://localhost:8080/readyz
-curl -fsS http://localhost:8080/api/events/history | jq .
+curl -fsS -H 'X-Overlay-Operator-Secret: <OPERATOR_SECRET>' http://localhost:8080/api/events/history | jq .
 ```
 
 ## Notes

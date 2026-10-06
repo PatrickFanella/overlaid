@@ -25,14 +25,16 @@ The parity roadmap adds FossaBot-style bot breadth without weakening the existin
 
 ## Current status
 
+The [October 6 acceptance map](../../qa/2026-10-06-roadmap-acceptance.md) reconciles every milestone with current code/tests and separates completed local contracts from pending live/production gates.
+
 Implemented and verified in committed slices:
 
 - Bot audit storage, runtime permissions, existing Twitch command audit, and `/dashboard/bot` audit/status view.
-- Timer CRUD, dashboard management, safe template rendering, and enabled timer runtime dispatch through ticker/alert events.
+- Timer CRUD, dashboard management, safe template rendering, enabled timer dispatch through ticker/alert events, and an audited Run once rehearsal action that preserves the schedule.
 - Safe custom response commands with role/cooldown checks, template variables, dashboard management, and preview rendering.
 - Guarded outbound Twitch chat replies for custom commands through `user:write:chat`, with per-command response mode `overlay`, `chat`, or `both`.
 - Operator-configured custom API variables using `{api:name}` with GET-only HTTPS fetching, caps, caching, and private-host blocking.
-- Counters and quotes with dashboard/API management, chat commands, and `{count:name}` / `{quote:random}` variables.
+- Counters and quotes with dashboard/API management, chat commands, `{count:name}` / `{quote:random}` variables, operator change audits, and session report/export coverage.
 - Channel-point rule enrichment with cooldown seconds and fulfillment notes.
 - Twitch reward inventory, reversible pause/disable lifecycle controls, guarded bounded reward fields, minimal reward creation/deletion, and unfulfilled redemption queue controls for fulfill/cancel actions.
 - Moderation foundation: blocked-term rules, dry-run matching, opt-in automatic enforcement, guarded manual Twitch delete/timeout/ban/unban actions with required scopes, and nuke-style dry-run planning over recent chat history.
@@ -42,6 +44,130 @@ Deliberately carried forward:
 - Arbitrary inline/custom API URLs supplied by chat or templates.
 - Twitch reward fields still intentionally deferred: skip-request-queue, image/background styling, reward image upload, and any automatic fulfillment behavior. Common guarded fields now live in the reward queue runbook.
 - Cloud-hosted uptime parity with FossaBot; see `docs/superpowers/plans/2026-06-16-fossabot-uptime-parity-options.md` before changing deployment architecture.
+
+---
+
+## October 5 overnight progress
+
+The timer workflow now includes Run once for saved timers, including paused timers. Manual execution publishes the same safe ticker or alert event as the scheduler, records a dashboard/operator audit row with event and session IDs, and leaves the scheduled cadence unchanged. The dashboard shows the last scheduled run and refreshes audit after rehearsal and timer configuration changes. Create, update, pause, enable, and delete actions now record success or failure audit rows with safe scheduling metadata and active session ID.
+
+Verification passed: `make verify`, `make smoke`, and all six `make smoke-browser` checks. Unit tests cover paused timers, missing timers, empty rendered responses, and audit-storage failure. Browser fixtures cover pending, success, audit refresh, and API failure without Twitch credentials.
+
+Local verification uses native API and Vite processes on loopback, with disposable file data under `/tmp`. Docker socket access is unavailable, but rootless Podman runs a disposable Postgres 17 database on loopback port 55439. Real Postgres checks passed for timer lookup, unchanged paused configuration, event history, manual audit, missing/empty timer errors, active-session report linkage, and configuration-change audit coverage without response text. `make smoke API_PORT=8081` passed with database, bot runtime, dashboard config, and session readiness checks healthy. Live Twitch/OBS execution remains unverified; readiness reports missing Twitch configuration and unreachable OBS.
+
+---
+
+## October 6 session audit progress
+
+Operator counter and quote create/update/delete operations now record successful and failed changes with the active session ID. Quote text and author content stay out of audit metadata. Session reports include bot actions filtered by session before applying the row limit, along with a total count. The dashboard and Markdown/JSON exports show the loaded rows and flag unavailable audit data.
+
+Verification passed: `make verify` (93 frontend tests and the Go suite), all nine `make smoke-browser` checks, `make smoke API_PORT=8081`, and the optional Postgres audit integration test. Native HTTP checks covered seven counter/quote actions, safe metadata, bounded counts, and an unchanged older report after newer activity in another session. The collaborative browser displayed all seven actions from that real database report. Live Twitch and OBS verification still needs those services and credentials.
+
+---
+
+## October 6 API-variable network checks
+
+Private-host blocking now applies at connection time as well as URL validation. DNS answers are validated together, then connections use approved numeric addresses. Redirects retain those checks, environment proxies are bypassed, and oversized or interrupted response bodies fail. Diagnostics omit request URLs and query values. Offline DNS/HTTP tests and a local TLS fixture cover the behavior without external API credentials.
+
+---
+
+## October 6 role-policy audit
+
+Milestone A2's privileged-role requirement is now enforced: broadcaster, operator, and system actors can run every configured bot role. The previous numeric ranking incorrectly denied broadcasters operator/system commands and operators system commands. Tests cover all 25 actor/required-role pairs, unknown-actor normalization, and actual custom-command execution for each role. Viewer/moderator denial remains covered for operator/system commands. HTTP operator authentication is separate from this bot command policy.
+
+Verification passed: bot/Twitch race tests, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, and `make smoke API_PORT=8081`.
+
+---
+
+## October 6 unavailable audit storage and template diagnostics
+
+Server initialization now supplies a nil audit recorder when bot storage is unavailable, avoiding a typed-nil store panic while publishing Twitch command diagnostics. Local tests drive `!alert`, `!clear`, `!brb`, and `!back` through command processing and event publication without Postgres. Another fixture verifies that an audit write failure retains command delivery and exposes the audit error through runtime diagnostics.
+
+Custom-command audit now retains the renderer's unknown-variable names. A command-to-audit test confirms that unknown placeholders render empty, diagnostics retain the active session ID, and injected token/raw EventSub fields stay out of audit data.
+
+Verification passed: focused HTTP race tests, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, Postgres cache/session-audit tests, and API smoke checks both with and without Postgres (`API_PORT=8081` and `API_PORT=8080`).
+
+---
+
+## October 6 scheduled timer and audit persistence contracts
+
+Scheduler tests now cover periodic polling, publication before cadence/audit writes, ticker/alert output, empty rendered responses, active-session/event audit linkage, and storage failures. Cancellation after a publication stops the rest of the loaded batch; already-canceled or unconfigured schedulers do no work. The previous loop could publish the remaining timers after cancellation.
+
+Postgres tests use private temporary schemas, leaving the running API's tables and worker untouched. They prove newest-first audit ordering with tied timestamps, safe metadata round trips, rejection before persistence, exact timer interval boundaries, paused/deleted timers, saved interval changes, and bounded due ordering. An end-to-end scheduler fixture publishes to the event bus and history, persists linked session audit, marks cadence, and dispatches the next run at the interval boundary.
+
+Verification passed: the complete backend race suite with optional Postgres tests enabled, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, and `make smoke API_PORT=8081`.
+
+---
+
+## October 6 now-playing command variables
+
+Custom commands now receive a concurrent snapshot of title/artist from the current media event pipeline. MPRIS metadata stays separate from decorated overlay copy and album text. Paused playback retains its track; stopped playback clears the snapshot. API restart starts empty until fresh media arrives. Local tests drive MPRIS-shaped events through the server into overlay and chat-response templates without a media player, Twitch, or database credentials. Snapshot tests cover concurrent reads/writes and metadata bounds.
+
+The dashboard preview now includes sample now-playing values, matches the backend's case-insensitive variable syntax, and caps Unicode output by characters. Browser coverage checks media placeholders and the 400-character cap.
+
+Verification passed: bot/HTTP/Twitch race tests, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, and `make smoke API_PORT=8081`. The collaborative browser displayed the mixed-case now-playing preview against the native dashboard, and the unsaved test draft was cleared.
+
+---
+
+## October 6 core audit evidence closeout
+
+Actual command execution now has a publication-to-audit outcome matrix covering accepted aliases, cooldowns, role denial, invalid arguments, and unsupported commands. Tests confirm exactly one diagnostic audit per attempt, delivered bus events, original/resolved command metadata, actor identity, active-session links, and exclusion of injected token/raw payload fields. Status and audit endpoints reject missing and incorrect operator credentials.
+
+Audit validation now rejects API-key and private-key names in camel case, underscore, and header forms, including nested arrays. Unit and real Postgres tests verify rejection before persistence while accepting public keys and ordinary metadata. Core schema, store methods, status counts, legacy bot-route navigation, and original implementation commits have been inspected; the corresponding checklist entries now reflect that evidence.
+
+Verification passed: bot/HTTP/Twitch race tests with Postgres integration tests enabled, `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, and `make smoke API_PORT=8081`. Native bot status reports configured storage and command/timer/audit counts.
+
+A2's command recording now uses a bounded FIFO queue with one worker that exits when idle. `Runtime.Record` snapshots audit data and returns without waiting for storage; each write gets a five-second deadline. Queue overflow records a readiness error and drops the new audit rather than delaying commands. Dashboard mutation receipts retain synchronous recording. Shutdown waits for HTTP requests and drains pending command audits within its ten-second budget. Tests hold an audit writer open while both diagnostic and action events reach the bus, exercise queue capacity/order/cancellation/snapshots/restart and bounded flush, and verify queued persistence and event foreign keys against isolated Postgres. Event history is appended before the command audit is queued. Verification passed: `make verify`, all fourteen browser smoke checks, bot/HTTP/Twitch race tests with Postgres enabled, and `make smoke API_PORT=8081`.
+
+## October 6 command name and CRUD verification
+
+The backend now enforces the command-name pattern already used by the dashboard: 1–32 ASCII letters/numbers/dashes/underscores, beginning with a letter or number after normalization. Leading punctuation and overlong names previously passed backend validation. Boundary tests cover these cases and accepted normalized names.
+
+Isolated Postgres coverage verifies create/edit/pause/delete, preserved IDs and creation timestamps, response mode/action/role/cooldown round trips, rejected names and OBS actions, unchanged records after rejected edits, and missing-ID results. Native API checks confirm HTTP 400 for malformed names and rejected edits, plus successful create/pause/delete; the fixture was removed. `make verify`, all fourteen browser smoke tests, bot race tests with Postgres enabled, and `make smoke API_PORT=8081` passed. C1 and the existing command-dashboard commit checklist now reflect the inspected implementation and this evidence.
+
+## October 6 custom command failure handling
+
+Empty custom-command renders now emit a warning diagnostic with template unknown-variable details, audit result `failed`, and reason `empty_response` in overlay, chat, and both modes. They emit no overlay action or outbound-chat metadata and leave cooldown available for a corrected response. Disabled commands audit as `denied` with reason `command_disabled`.
+
+Cooldown checks skip template dependencies when already active. A valid response reserves cooldown atomically after rendering, so two concurrent renders cannot both publish during one cooldown window. Tests reproduce the prior empty chat success and lost overlay diagnostics, cover immediate retry after correcting a response, concurrent renders, dependency suppression during cooldown, and actual custom command publication/audit outcomes with alias and active-session links. Verification passed: `make verify`, all fourteen browser smoke tests, Twitch/HTTP race tests, and `make smoke API_PORT=8081`.
+
+## October 6 failed timer attempts and scheduler fairness
+
+A scheduled timer whose response renders empty now writes a failed audit with reason `timer_response_empty`, unknown-variable details, and the active session ID. It publishes no overlay event and has no event foreign key. Its scheduled attempt advances cadence so it waits until the next interval, rather than remaining due every five-second poll.
+
+An isolated Postgres fixture puts ten empty timers ahead of a valid timer in the bounded due batch. The first poll records all ten failed attempts; the next poll delivers the valid timer, and failed timers become due again at their exact thirty-second boundary. Unit coverage verifies failed audit metadata and attempt ordering alongside successful ticker/alert publication. Native API verification created an enabled empty timer, observed its failed audit and advanced cadence without an event link, then deleted the fixture. `make verify`, all fourteen browser smoke tests, bot race tests with Postgres enabled, and `make smoke API_PORT=8081` passed.
+
+## October 6 timer API validation and CRUD verification
+
+Timer response templates that are valid JSON now reject secret-looking keys recursively, including arrays, escaped key names, and duplicate object members. Token-stream inspection retains duplicate keys that a decoded map would erase. Ordinary text templates remain valid; the action allowlist remains ticker/alert.
+
+Unit tests cover secret/public keys, ordinary prose and template variables, and interval boundaries 29/30/86400/86401. Isolated Postgres tests cover create, same-ID editing, enable, field and creation-timestamp preservation, rejected creates/edits without saved-row changes, delete, and missing lookup results. The scheduler fairness fixture now documents and uses the actual name ordering rather than an unrelated creation-time adjustment. Native API checks confirm three unsafe JSON edits return HTTP 400, preserve the saved timer, and record failed configuration audits with safe metadata; the fixture was deleted. `make verify`, all fourteen browser smoke tests, bot race tests with Postgres enabled, and `make smoke API_PORT=8081` passed.
+
+## October 6 community role and persistence contracts
+
+Community mutation permissions now run before storage availability checks. A viewer attempting a counter increment or quote mutation gets a permission denial even without Postgres, and the diagnostic audits as `denied` / `permission_denied` with its event/session links. Moderator/broadcaster attempts can reach storage, while viewers retain random-quote reads. Tests also verify rejected mutations leave configured counter/quote values intact.
+
+Isolated Postgres coverage verifies counter and quote CRUD, normalized fields, unchanged IDs/creation timestamps during edits, empty/deleted reads, and twenty concurrent increments preserving an exact total. Existing renderer/command-context tests and browser community editor checks cover the other milestone D requirements; the checklist now reflects those sources. Verification passed: `make verify`, all fourteen browser smoke tests, bot/Twitch/HTTP race tests with Postgres enabled, and `make smoke API_PORT=8081`.
+
+## October 6 reward cooldown ownership and reservation
+
+Reward cooldowns now belong to each EventSub client's channel-point processor rather than a process-wide title map. A mutex makes check/reservation atomic. Keys include broadcaster identity and Twitch reward ID, with normalized title fallback for notifications without an ID. The client keeps the same processor across reconnects; another client or broadcaster cannot consume its cooldown. Reward renames preserve cooldown for the same ID, and expired other entries are reclaimed on subsequent notifications.
+
+Offline tests cover sixty-four simultaneous redemptions producing one alert and sixty-three cooldown diagnostics, separate clients/channels/reward IDs, renames, fallback title normalization, exact expiry, expired-entry cleanup, and cooldown configuration changes. The single-notification mapping helpers remain isolated; production notification processing retains client-owned state. Verification passed: `make verify`, all fourteen browser smoke tests, Twitch/HTTP race tests, and `make smoke API_PORT=8081`. Stable reward-ID rule matching remains the next mapping gap.
+
+## October 6 stable reward-ID rule mapping
+
+Channel-point rules now accept an optional `rewardId`. Enabled ID rules match first and retain their behavior through title changes; their title is only a label. Rules without an ID retain exact case-insensitive title matching. ID rules cannot fall back to their labels, disabled rules are skipped, ID-only rules are supported, and normalization deduplicates IDs independently from title rules.
+
+The dashboard edits reward IDs and labels, preserves IDs through import/export and saved drafts, and applies the same precedence to selected reward and redemption fulfillment notes. Go tests cover matching/normalization, file round trips, renamed EventSub output and cooldown continuity. Frontend tests cover matching and ID-only imports. A browser workflow saves the ID rule and verifies both renamed reward and redemption notes.
+
+Verification passed: `make verify` (95 frontend tests and the Go suite), all fifteen browser smoke checks, interactions/Twitch/HTTP race tests, and `make smoke API_PORT=8081`. The native API saved and reloaded an ID rule from Postgres, the collaborative browser displayed its ID and label fields, and an API restart preserved it. Original interaction rules were restored after the fixture.
+
+## October 6 reward queue write ownership and receipts
+
+A small reward-operation hook now owns the write guard, pending state, receipts, errors, and API/credential response generation. All reward/redemption writes share one guard. Queue controls and reload buttons disable while writing; delete consumes confirmation at request start. Failed edits retain drafts. Successful create/edit/lifecycle/delete/fulfill/cancel operations update local records and keep their receipt if reloading fails.
+
+Reward and redemption reads use request generations. Writes invalidate older loads; reward selection changes discard old redemption results, and API/credential changes clear the old queue and ignore pending responses. Browser fixtures cover delayed create, disabled overlapping controls, late older loads, rejected-edit retry, lifecycle/delete receipts, and fulfill/cancel receipts with reload failures. Live Twitch changes remain unverified because credentials are unavailable.
 
 ---
 
@@ -88,15 +214,15 @@ Build the spine before adding feature breadth.
 - Create: `backend/internal/bot/store.go`
 - Test: `backend/internal/bot/store_test.go`
 
-- [ ] Add tables:
+- [x] Add tables:
   - `bot_audit_events(id, created_at, source, actor_id, actor_login, actor_display_name, actor_role, trigger, command, action, result, reason, event_id, stream_session_id, data jsonb)`
   - `bot_commands(id, name, enabled, response, action, role_required, cooldown_seconds, created_at, updated_at)`
   - `bot_timers(id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at)`
-- [ ] Implement `bot.Store` with `NewPostgres(databaseURL string)`, `Load()`, `RecordAudit(ctx, AuditEvent)`, `RecentAudit(ctx, limit)`, and `Close()`.
-- [ ] Add tests proving audit events are inserted newest-first and secret-looking keys are rejected from audit `data`.
-- [ ] Run `cd backend && go test ./internal/bot`.
-- [ ] Run `make verify`.
-- [ ] Commit: `feat: add bot audit storage`.
+- [x] Implement `bot.Store` with `NewPostgres(databaseURL string)`, `Load()`, `RecordAudit(ctx, AuditEvent)`, `RecentAudit(ctx, limit)`, and `Close()`.
+- [x] Add tests proving audit events are inserted newest-first and secret-looking keys are rejected from audit `data` (October 6: isolated Postgres round trip, bounded ordering, ties, and recursive rejection).
+- [x] Run `cd backend && go test ./internal/bot`.
+- [x] Run `make verify`.
+- [x] Commit: `feat: add bot audit storage` (`4a3dd6d`; October 6 storage-contract verification).
 
 ### Task A2: Bot runtime roles and audit model
 
@@ -104,13 +230,13 @@ Build the spine before adding feature breadth.
 - Create: `backend/internal/bot/runtime.go`
 - Test: `backend/internal/bot/runtime_test.go`
 
-- [ ] Define roles: `viewer`, `moderator`, `broadcaster`, `operator`, `system`.
-- [ ] Define sources: `chat`, `channel_point`, `dashboard`, `timer`, `webhook`.
-- [ ] Implement role comparison so broadcaster/operator/system can run everything, moderator can run moderator-safe commands, viewer can only run viewer-safe response commands.
-- [ ] Implement `Runtime.Record(ctx, AuditEvent)` wrapper that never blocks command execution if audit storage is unavailable.
-- [ ] Test allowed/denied role decisions and audit fallback behavior.
-- [ ] Run `cd backend && go test ./internal/bot`.
-- [ ] Commit: `feat: add bot runtime permissions`.
+- [x] Define roles: `viewer`, `moderator`, `broadcaster`, `operator`, `system`.
+- [x] Define sources: `chat`, `channel_point`, `dashboard`, `timer`, `webhook`.
+- [x] Implement role comparison so broadcaster/operator/system can run everything, moderator can run moderator-safe commands, viewer can only run viewer-safe response commands (October 6: full role matrix and custom-command execution tests).
+- [x] Implement `Runtime.Record(ctx, AuditEvent)` wrapper that never blocks command execution if audit storage is unavailable (October 6: bounded queue, blocked-writer delivery proof, overflow readiness, shutdown drain).
+- [x] Test allowed/denied role decisions and audit fallback behavior (role matrix, unavailable store, failed-write delivery tests).
+- [x] Run `cd backend && go test ./internal/bot`.
+- [x] Commit: `feat: add bot runtime permissions` (`d030b9e`; privileged-role correction `ab76809`).
 
 ### Task A3: Route existing Twitch commands through bot audit
 
@@ -120,12 +246,12 @@ Build the spine before adding feature breadth.
 - Modify: `backend/internal/http/server.go`
 - Test: existing Twitch tests plus new command audit tests.
 
-- [ ] Keep current behavior for `!alert`, `!clear`, `!brb`, and `!back`.
-- [ ] Emit bot audit events for allowed, denied, cooldown, and invalid command attempts.
-- [ ] Include active `sessionId` when a stream session is active.
-- [ ] Do not expose Twitch tokens or raw EventSub payloads in audit data.
-- [ ] Run `cd backend && go test ./internal/twitch ./internal/http ./internal/bot`.
-- [ ] Commit: `feat: audit twitch bot commands`.
+- [x] Keep current behavior for `!alert`, `!clear`, `!brb`, and `!back`.
+- [x] Emit bot audit events for allowed, denied, cooldown, and invalid command attempts.
+- [x] Include active `sessionId` when a stream session is active.
+- [x] Do not expose Twitch tokens or raw EventSub payloads in audit data.
+- [x] Run `cd backend && go test ./internal/twitch ./internal/http ./internal/bot`.
+- [x] Commit: `feat: audit twitch bot commands` (`60aa037`; October 6 execution-to-audit outcome matrix).
 
 ### Task A4: Bot status/audit API and dashboard visibility
 
@@ -137,12 +263,12 @@ Build the spine before adding feature breadth.
 - Modify: `web/src/App.tsx`
 - Test: backend HTTP tests and frontend route tests.
 
-- [ ] Add `GET /api/bot/status` with storage readiness, command count, timer count, and recent audit count.
-- [ ] Add operator-protected `GET /api/bot/audit?limit=50`.
-- [ ] Add `/dashboard/bot` route with a bot overview and recent audit panel.
-- [ ] Link Bot route from dashboard navigation/route guide.
-- [ ] Run `make verify` and `make smoke-browser`.
-- [ ] Commit: `feat: add bot dashboard audit view`.
+- [x] Add `GET /api/bot/status` with storage readiness, command count, timer count, and recent audit count.
+- [x] Add operator-protected `GET /api/bot/audit?limit=50`.
+- [x] Add `/dashboard/bot` route with a bot overview and recent audit panel (legacy alias now opens `/dashboard/chat`).
+- [x] Link Bot route from dashboard navigation/route guide.
+- [x] Run `make verify` and `make smoke-browser`.
+- [x] Commit: `feat: add bot dashboard audit view` (`2a82f8d`; current route and auth contracts verified).
 
 ---
 
@@ -156,11 +282,11 @@ Build the spine before adding feature breadth.
 - Extend: `web/src/lib/api.ts`
 - Test: `backend/internal/bot/store_test.go`, HTTP handler tests.
 
-- [ ] Implement list/create/update/delete for timers.
-- [ ] Validate timer interval minimum 30 seconds.
-- [ ] Validate timer response/action cannot contain secret-looking keys.
-- [ ] Record audit event when an operator changes a timer.
-- [ ] Commit: `feat: add bot timer api`.
+- [x] Implement list/create/update/delete for timers (October 6: isolated Postgres CRUD and rejected-write preservation).
+- [x] Validate timer interval minimum 30 seconds (29/30 and 86400/86401 boundary coverage).
+- [x] Validate timer response/action cannot contain secret-looking keys (October 6: recursive JSON-response key inspection, including duplicate/escaped keys; ticker/alert action allowlist).
+- [x] Record audit events for timer create/update/pause/enable/delete and failed configuration changes.
+- [x] Commit: `feat: add bot timer api` (`af32236`; October 6 response-key validation and CRUD verification).
 
 ### Task B2: Timer runtime execution
 
@@ -169,11 +295,11 @@ Build the spine before adding feature breadth.
 - Modify: `backend/internal/http/server.go`
 - Test: `backend/internal/bot/timers_test.go`
 
-- [ ] Add a scheduler that polls due enabled timers.
-- [ ] Publish timer output into existing event pipeline as safe overlay/ticker/alert events.
-- [ ] Record audit event for each timer execution.
-- [ ] Keep scheduler disabled when bot storage is unavailable.
-- [ ] Commit: `feat: run bot timers`.
+- [x] Add a scheduler that polls due enabled timers (October 6: polling and Postgres cadence tests).
+- [x] Publish timer output into existing event pipeline as safe overlay/ticker/alert events (October 6: real bus/history scheduler fixture).
+- [x] Record audit event for each timer execution (October 6: persisted event/session links and template diagnostics).
+- [x] Keep scheduler disabled when bot storage is unavailable (startup guard and scheduler dependency checks).
+- [x] Commit: `feat: run bot timers` (`80898df`; scheduler contracts and cancellation correction `481c3a0`).
 
 ### Task B3: Timer dashboard
 
@@ -182,10 +308,10 @@ Build the spine before adding feature breadth.
 - Modify: `web/src/routes/dashboard/Bot.tsx`
 - Test: `web/src/App.test.tsx`
 
-- [ ] Add timer list, enable/disable, interval, response/action editor.
-- [ ] Add a manual “Run once” operator action if backend supports it.
-- [ ] Show last run time and recent audit result.
-- [ ] Commit: `feat: manage bot timers`.
+- [x] Add timer list, enable/disable, and a saved-timer interval/response/action editor with cancellation and retry.
+- [x] Add a manual “Run once” operator action backed by `POST /api/bot/timers/{id}/run`.
+- [x] Show last scheduled run time and refresh the audit after manual execution.
+- [x] Commit: `feat: manage bot timers` (`af32236`; audited Run once and saved editor verified October 6).
 
 ---
 
@@ -198,11 +324,11 @@ Build the spine before adding feature breadth.
 - Extend: `backend/internal/http/bot_handlers.go`
 - Test: backend bot and HTTP tests.
 
-- [ ] Implement list/create/update/delete for response commands.
-- [ ] Enforce command names matching `^[a-z0-9][a-z0-9_-]{0,31}$`.
-- [ ] Support fields: `enabled`, `response`, `roleRequired`, `cooldownSeconds`.
-- [ ] Do not allow custom commands to trigger OBS actions in this milestone.
-- [ ] Commit: `feat: add custom command api`.
+- [x] Implement list/create/update/delete for response commands (October 6: isolated Postgres CRUD, identity/field preservation, missing IDs, and rejected-write checks).
+- [x] Enforce command names matching `^[a-z0-9][a-z0-9_-]{0,31}$` (October 6: backend boundary checks aligned with the dashboard).
+- [x] Support fields: `enabled`, `response`, `roleRequired`, `cooldownSeconds` (Postgres create/edit/pause round trip).
+- [x] Do not allow custom commands to trigger OBS actions in this milestone (only ticker/alert actions accepted; rejected OBS write verified).
+- [x] Commit: `feat: add custom command api` (`96f2158`; October 6 name-contract correction).
 
 ### Task C2: Template variables
 
@@ -210,10 +336,10 @@ Build the spine before adding feature breadth.
 - Create: `backend/internal/bot/templates.go`
 - Test: `backend/internal/bot/templates_test.go`
 
-- [ ] Implement safe variables: `{user}`, `{displayName}`, `{channel}`, `{args}`, `{command}`, `{nowPlaying.title}`, `{nowPlaying.artist}`.
-- [ ] Unknown variables render as empty strings and are recorded in audit data.
-- [ ] Limit rendered response length to 400 characters.
-- [ ] Commit: `feat: render bot command templates`.
+- [x] Implement safe variables: `{user}`, `{displayName}`, `{channel}`, `{args}`, `{command}`, `{nowPlaying.title}`, `{nowPlaying.artist}` (October 6: current media snapshot wired into command execution).
+- [x] Unknown variables render as empty strings and are recorded in audit data (October 6: command-to-audit test and session linkage).
+- [x] Limit rendered response length to 400 characters (backend rune cap and Unicode dashboard-preview coverage).
+- [x] Commit: `feat: render bot command templates` (`006e27b`; media context `636c395`).
 
 ### Task C3: Chat execution for custom response commands
 
@@ -222,11 +348,11 @@ Build the spine before adding feature breadth.
 - Modify: `backend/internal/twitch/commands.go`
 - Test: Twitch command tests.
 
-- [ ] Resolve custom command before reporting unknown command.
-- [ ] Enforce enabled flag, role, and cooldown.
-- [ ] Publish response as a safe overlay/ticker/chat diagnostic event first; outbound chat replies can be a later milestone.
-- [ ] Record audit event for success/denial/failure.
-- [ ] Commit: `feat: run safe custom chat commands`.
+- [x] Resolve custom command before reporting unknown command (alias/custom execution coverage).
+- [x] Enforce enabled flag, role, and cooldown (October 6: disabled/denied outcome matrix, response-mode cooldown checks, and concurrent render reservation).
+- [x] Publish response as a safe overlay/ticker/chat diagnostic event first; outbound chat replies can be a later milestone (overlay/chat/both delivery matrix; empty responses emit only a failed diagnostic).
+- [x] Record audit event for success/denial/failure (October 6: alias, session/event links, all response modes, disabled/role denial, cooldown, and empty-render diagnostics).
+- [x] Commit: `feat: run safe custom chat commands` (`96f2158`; October 6 empty-render/cooldown correction).
 
 ### Task C4: Command dashboard
 
@@ -235,38 +361,38 @@ Build the spine before adding feature breadth.
 - Modify: `web/src/routes/dashboard/Bot.tsx`
 - Test: frontend tests.
 
-- [ ] Add command list and editor.
-- [ ] Add test-render preview for template variables.
-- [ ] Show cooldown/role fields.
-- [ ] Commit: `feat: manage custom bot commands`.
+- [x] Add command list and saved-record editor (October 6: edit/cancel/retry with existing ID and pending controls).
+- [x] Add test-render preview for template variables.
+- [x] Show cooldown/role fields.
+- [x] Commit: `feat: manage custom bot commands` (`96f2158`; saved-editor coverage `09b6c83`).
 
 ---
 
 ## Milestone D: Counters and quotes
 
-- Add Postgres tables `bot_counters` and `bot_quotes`.
-- Add dashboard panels for counters and quotes.
-- Add commands: `!count`, `!addquote`, `!quote`, `!delquote` gated by role.
-- Add template variables `{count:name}` and `{quote:random}`.
-- Include counter/quote actions in audit/session reports.
+- [x] Add Postgres tables `bot_counters` and `bot_quotes` (migration inspected; isolated Postgres CRUD and concurrent increment proof).
+- [x] Add dashboard panels for counters and quotes (saved editor, independent state, retry, and receipt preservation verified by browser smoke).
+- [x] Add commands: `!count`, `!addquote`, `!quote`, `!delquote` gated by role (October 6: mutation gates precede unavailable storage, viewer quote reads remain allowed, denial audit/session coverage).
+- [x] Add template variables `{count:name}` and `{quote:random}` (renderer and command-context tests, repeated/case-normalized discovery, saved counter/quote values).
+- [x] Include counter/quote actions in audit/session reports (October 6: operator CRUD audit, session filtering before row limits, loaded/total counts, and JSON/Markdown exports).
 
 ---
 
 ## Milestone E: Channel points parity
 
-- Expand exact-title rules into richer reward mappings.
-- Add per-reward cooldowns and templates.
-- Reward queue shows fulfillment notes alongside selected rewards and matching redemptions.
-- Twitch reward management has minimal create/delete controls after scoped API research; advanced fields and safer disable/pause lifecycle remain follow-up.
+- [x] Expand exact-title rules into richer reward mappings (October 6: stable reward IDs, label-only titles, ID precedence, legacy fallback, editor/import/export and queue note matching).
+- [x] Add per-reward cooldowns and templates (October 6: client-owned atomic reservations, identity/channel isolation, expiry/configuration tests, and reward/user/input template fixtures).
+- [x] Reward queue shows fulfillment notes alongside selected rewards and matching redemptions (October 6: renamed ID-based reward and redemption browser workflow).
+- Twitch reward management supports guarded create/delete, pause/resume and enable/disable, prompt/input edits, and bounded cooldown/per-stream/user limits. Images, colors, and queue bypass remain deferred.
 
 ---
 
 ## Milestone F: Moderation
 
-- Add blocked-term rules and dry-run matching.
-- Add Twitch moderation API actions: delete message, timeout, ban only with explicit scopes.
-- Add dashboard moderation audit.
-- “Nuke” workflow has regex/plain matching, lookback window, dry-run preview, guarded delete/timeout execution, audit rows, optional temporary radiation/future-enforcement windows, and rollback that disables those windows.
+- [x] Add blocked-term rules and dry-run matching (October 6: real Postgres CRUD/edit/pause, case-sensitive username regex, rejected-write preservation, expiry and radiation rollback contracts).
+- [x] Add Twitch moderation API actions: delete message, timeout, ban only with explicit scopes (October 6: operator authorization, scope denial before dispatch, success/failure payload and audit matrix; unban covered too).
+- [x] Add dashboard moderation audit (October 6: configuration and manual action receipts, linked automatic rule outcomes, session report/export, and native rendered success/failure rows verified).
+- [x] “Nuke” workflow has regex/plain matching, lookback window, dry-run preview, guarded delete/timeout execution, audit rows, optional temporary radiation/future-enforcement windows, and rollback that disables those windows (October 6: setting boundaries before side effects, history planning contracts, scoped actions/audit, batch/cancellation fixtures, real Postgres windows, and browser execution/rollback receipts).
 
 ---
 
@@ -287,3 +413,115 @@ curl -fsS http://localhost:8080/readyz | jq .
 ```
 
 Do not push or deploy unless explicitly requested. Do not log or commit secrets.
+
+Verification for the reward operation slice passed: `make verify` (95 frontend tests and the Go suite), all seventeen `make smoke-browser` checks, and `make smoke API_PORT=8081`. Browser fixtures perform no live Twitch writes.
+
+
+### Overnight progress: advanced reward cooldown boundary
+
+The advanced reward sprint was already implemented; its historical step-by-step recipe remains below the current closeout in the sprint plan. This pass reconciles stale bot-ops and roadmap scope text with the shipped controls. It also closes a missing upper bound: create and update reject global cooldowns above 604800 seconds before Helix dispatch, and both dashboard drafts report the same validation without sending a write. Zero disables the limit; the existing 60-second display minimum remains deliberate.
+
+The [Twitch API reference](https://dev.twitch.tv/docs/api/reference#update-custom-reward) documents the seven-day maximum. Fixture transport coverage verifies that the exact maximum is sent with its enabled flag and decoded on both create and update, while the next second never reaches Helix. Browser workflow coverage verifies invalid create and edit drafts preserve the current write count and can be corrected. Live Twitch writes still require credentials.
+
+Validation: `make verify` (95 frontend tests and all Go checks), all 17 browser smoke workflows, and `make smoke API_PORT=8081` passed. Local readiness confirms Postgres and the bot runtime are healthy; Twitch authentication and OBS connectivity remain unavailable.
+
+
+### Overnight progress: automatic moderation audit ownership
+
+Automatic enforcement previously reused dashboard operator receipts, omitted the triggering chat event and matched rule ID, and waited for audit storage. It now records a chat/system outcome with `moderation_rule` trigger, event/session links, rule ID/name, and target/message/duration metadata. Flag, successful delete, and missing-scope timeout outcomes have workflow coverage. Manual moderation and nuke audit receipts retain their operator ownership.
+
+EventSub now publishes and appends the event before enforcement, so queued moderation audit references can resolve their event foreign key. A blocked-recorder test verifies chat is delivered and the EventSub callback returns before audit storage resumes; a history-checking recorder verifies persistence precedes the audit dispatch. No live moderation action is sent by these fixture tests.
+
+Validation: `make verify`, all 17 browser smoke workflows, HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Twitch and OBS readiness remain degraded for the known missing external setup.
+
+
+### Overnight progress: bounded nuke cancellation receipts
+
+Nuke batches now check request cancellation before planning and between actions. Attempted counts increase only for started actions; a canceled batch preserves its success/failure counts, matches, and any already-created radiation window, and marks the partial response `interrupted`. The dashboard shows the number not attempted alongside the execution receipt and keeps radiation rollback available. Cancellation does not undo accepted Twitch actions or remove an already-active window.
+
+Transport fixtures verify interruption both after an accepted action and during a failing request, no dispatch or rule creation for a pre-canceled context, and retention of the existing window. A separate 51-match fixture proves only 50 actions run, in order, and individual remote failures do not stop an uncanceled batch. Browser coverage shows the partial receipt, its unattempted count, and rollback even when audit refresh fails.
+
+Validation: `make verify`, all 17 browser smoke workflows, HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch execution remains unverified; fixtures sent no external moderation writes.
+
+
+### Overnight progress: manual moderation scope and receipt contracts
+
+The manual moderation endpoint now has a 16-case HTTP-to-Helix matrix for delete, timeout, ban, and unban: authorized success, remote failure, missing scope, and rejected operator authentication for each action. The fixture checks method/path, broadcaster/moderator/target IDs, authentication headers, trimmed reason, timeout duration, permanent-ban omission of duration, response receipts, and dashboard/operator/session audit ownership. Invalid targets, timeout bounds, and unsupported actions are rejected before dispatch.
+
+This exposed stale timeout metadata in non-timeout audit rows. Shared audit metadata now records zero duration for delete/ban/unban and keeps timeout duration for manual and automatic workflows. The [official scope reference](https://dev.twitch.tv/docs/authentication/scopes/) and [moderation API reference](https://dev.twitch.tv/docs/api/reference#ban-user) confirm the explicit scope and payload boundaries. No live Twitch write is required for these contracts.
+
+Validation: `make verify`, all 17 browser smoke workflows, HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. The pre-fix contract matrix reproduced incorrect non-timeout duration audit metadata; all cases passed after the correction.
+
+
+### Overnight progress: moderation configuration audit and persistence
+
+Rule create/update/delete now write synchronous operator configuration receipts, including paused/enabled edits and failed writes. Successful settings include rule ID/name, enabled/enforce, action, target, regex/case options, and server-owned source/expiry. Failed writes and deletion retain only the attempted rule ID; patterns, reasons, and rejected drafts are omitted. An HTTP workflow covers create, pause, rejected regex edits/creates, missing records, delete, and repeat delete, including session linkage and safe metadata.
+
+Real Postgres coverage verifies identity/creation-time preservation on edit, unchanged state after rejected regex writes, case-sensitive username matching, disabled rules, and missing IDs. Radiation edits preserve server-owned source/expiry; active windows match, rollback disables enabled/enforce while preserving identity/expiry, and expired enabled windows do not match. These tests use a disposable schema isolated from the running scheduler.
+
+Validation: `make verify`, all 17 browser smoke workflows, bot/HTTP race tests with isolated Postgres schemas, and `make smoke API_PORT=8081` passed. Native API create/pause/rejected-edit/delete produced four immediate safe receipts; the collaborative browser displayed their success/failure audit rows and the restored empty moderation list. The fixture rule was deleted.
+
+
+### Overnight progress: nuke validation before side effects
+
+The workflow now validates action, timeout duration, and radiation settings before planning, creating an enforced rule, or dispatching a Helix action. Zero timeout duration retains the 60-second default; nonzero duration accepts 1–1209600 seconds. Radiation accepts zero (off) or 1–120 minutes. Negative radiation previously fell through to immediate actions, and invalid timeout duration could leave an active radiation rule before failing. A pre-fix HTTP fixture reproduced both failures; corrected requests reject without rules or remote writes.
+
+Coverage also verifies the accepted timeout/radiation endpoints, normalized action, and expiry calculation. Nuke planning uses real in-memory history to prove case-sensitive/insensitive regex, plain matching, lookback exclusion/inclusion, alert exclusion, newest-first limits, invalid regex rejection, and no history mutation. Existing tests cover confirmation, restricted actions, 50-action batches, partial failures/cancellation, radiation persistence/expiry, and rollback; browser workflows cover plan invalidation, pending execution, retained receipts, and rollback after refresh failure.
+
+Validation: `make verify`, all 17 browser smoke workflows, bot/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. The rebuilt native API rejected all four invalid execution settings with 400 and left its moderation rules unchanged. Local moderation milestone contracts are verified; live Twitch enforcement still requires external credentials.
+
+
+### Overnight progress: custom command execution module
+
+The custom command executor now owns its configuration snapshots, role/template/delivery decisions, and cooldown state independently from alias and built-in dispatch. Public processor callers remain unchanged. Existing command and HTTP audit matrices continue to verify behavior, and a concurrent reload test proves immutable in-flight behavior and retained cooldowns when saved responses/modes change. Removing configured commands returns them to the unsupported-command path. Further community/built-in extraction is tracked in the architecture plan.
+
+Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS integration remains unverified.
+
+
+### Overnight progress: command dispatcher ownership closeout
+
+The processor now parses/resolves aliases and delegates to community, custom, and built-in executors. Community storage behavior and built-in action/cooldown decisions no longer belong to the dispatcher. Shared event constructors preserve diagnostic metadata, and all role decisions use the bot role policy. Public processor behavior, zero-value compatibility, community precedence, alias cooldowns, and isolation across command families are covered by workflow tests. The architecture plan records the final owners.
+
+Validation: `make verify`, all 17 browser smoke workflows, Twitch/HTTP race tests with the local Postgres fixture URL, and `make smoke API_PORT=8081` passed. Live Twitch/OBS behavior remains unavailable for the known external setup.
+
+
+### Overnight progress: self-hosted readiness probe
+
+Option A now has a bounded, read-only monitoring probe that interprets readiness JSON rather than relying on HTTP status. It supports full-report and explicitly selected checks, fails on missing/invalid checks, handles timeouts/interrupts, and includes completion/help/version modes. Build/Makefile, README, agent conventions, and uptime/recovery guidance identify its contract. The dedicated uptime plan retains off-host scheduler/alert delivery and live external-service checks as deployment work.
+
+Validation: `make verify`, all 17 browser smoke workflows, probe race tests, and `make smoke API_PORT=8081` passed. Native probes correctly rejected overall Twitch/OBS degradation while accepting required local Postgres/bot checks; missing named checks failed. Signal exits and Linux startup were verified, and macOS/Windows cross-builds passed.
+
+
+### Overnight progress: template dependency resolution
+
+The bot template module now resolves referenced media/community/API values through read-only adapters, and the custom-command executor supplies only chat context. Unused dependencies are skipped, repeated names are resolved once, API lookups stay bounded, dependency errors remain out of rendered text, and returned values are not interpreted as templates. Timer rendering retains its existing snapshot-only behavior.
+
+Verification passed: full `make verify`, 17 browser smoke workflows, Bot/Twitch/HTTP race tests including isolated Postgres contracts, and runtime smoke at port 8081. Live Twitch/OBS testing still requires the external setup.
+
+
+### Overnight progress: shared moderation pattern policy
+
+Saved rules and nuke previews now use the same literal/regex matcher. A reproduced defect in saved-rule matching is corrected: lowercasing regex input no longer defeats explicit case-sensitive groups. Rule normalization, target and expiry policy moved out of SQL storage; matching uses one expiry snapshot per batch.
+
+Full verification, 17 browser workflows, Bot/Twitch/HTTP race tests with isolated Postgres contracts, and runtime smoke passed. A disposable public-API rule confirmed the corrected matches and was removed. Live Twitch enforcement remains pending external credentials.
+
+
+### Overnight progress: frontend API transport consistency
+
+All dashboard operation families now use one transport for auth headers, JSON requests, error details, optional empty responses, and labelled parsing failures. Session/login receipts and OBS/recovery reads keep their public APIs; webhook credentials remain separate from operator credentials.
+
+Full verification passed with 111 frontend tests, all 17 browser workflows passed, and runtime smoke passed. Health and Sessions also loaded against disposable Postgres in the collaborative browser. External Twitch/OBS availability remains unchanged.
+
+
+### Overnight progress: complete audit payload validation
+
+Audit JSON validation now checks the complete input and every member before duplicate-key normalization. Reproduced gaps involving overwritten nested secret fields and trailing JSON/text are rejected. Audit type/normalization/payload policy moved out of SQL storage, and audit/timer JSON use the same key scanner.
+
+Full verification, 19 browser workflows, Bot/HTTP/Twitch race tests with isolated Postgres contracts, and rebuilt runtime smoke passed. Rejected audit writes leave no rows; safe duplicate members retain JSONB normalization.
+
+
+### Overnight progress: reward Unicode limits and roadmap acceptance
+
+Reward title and prompt validation now counts Unicode code points after trimming. The previous API byte limit rejected valid CJK/emoji text, while HTML maxlength limited astral characters by UTF-16 units. The dashboard now shows validation errors before dispatch, and create/edit boundary fixtures preserve valid Unicode text and reject over-limit writes without reaching Twitch.
+
+`make verify` passed with 113 frontend tests, all 22 browser workflows passed, the Postgres-enabled HTTP race suite passed, and rebuilt runtime smoke passed. The [acceptance map](../../qa/2026-10-06-roadmap-acceptance.md) links implementation evidence for every roadmap checkbox and records the external Twitch/OBS and production gates. The original user notes now describe current routes and styles.

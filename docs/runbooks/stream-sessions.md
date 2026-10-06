@@ -53,3 +53,18 @@ If a session is accidentally left open, starting a new one automatically closes 
 ## Review
 
 Recent sessions appear in `/dashboard/sessions` under **Rehearsal audit**. Click a recent/open session card to load its report. Reports show the selected session, start/end readiness snapshots, and recent events tagged with its `sessionId`. Use **Export Markdown** or **Export JSON** to save the report after a rehearsal.
+
+
+### Lifecycle receipts and report retry
+
+Ending a session keeps lifecycle controls pending through the report request. If the session ends successfully but its report cannot load, the receipt says the session ended and the report is unavailable. Retry from Recent sessions or Open latest report. A completed preflight with unavailable report evidence uses the same distinction. If a preflight step fails and cleanup ends its session, the current-session display clears while the original step failure stays visible.
+
+
+### Concurrent lifecycle requests
+
+Start and end are serialized by a Postgres transaction lock shared by API processes using the same session table. Concurrent starts still retain each requested session in history, close the prior active session, and leave one session active. Concurrent end calls end that session once; later calls report no active session. A canceled request waiting for the lock does not change session state. Lifecycle timestamps are captured after lock acquisition.
+
+
+### Report consistency during live writes
+
+Each session report reads its session summary, bounded events, and readiness snapshots from one Postgres snapshot. Events and end snapshots committed while that report is loading appear together in the next report. The total event count describes all events in that snapshot; the returned event list still respects the requested limit. Report reads share a five-second deadline and release their transaction on cancellation.

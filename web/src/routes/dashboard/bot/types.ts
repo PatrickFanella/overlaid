@@ -1,40 +1,28 @@
 import type {
-  BotAPIVariablesResponse,
   BotAuditResponse,
-  BotCommandsResponse,
-  BotCountersResponse,
-  BotModerationDryRunResponse,
-  BotModerationRulesResponse,
-  BotQuotesResponse,
   BotStatus,
-  BotTimersResponse,
 } from '../../../lib/api';
 
 export type BotPageState = {
   status: BotStatus | null;
   audit: BotAuditResponse | null;
-  commands: BotCommandsResponse | null;
-  counters: BotCountersResponse | null;
-  quotes: BotQuotesResponse | null;
-  apiVariables: BotAPIVariablesResponse | null;
-  moderation: BotModerationRulesResponse | null;
-  moderationDryRun: BotModerationDryRunResponse | null;
-  timers: BotTimersResponse | null;
   loading: boolean;
   error: string;
 };
 
 export type CommandDraft = {
+  id?: string;
   name: string;
   response: string;
   action: 'ticker' | 'alert';
   responseMode: 'overlay' | 'chat' | 'both';
-  roleRequired: 'viewer' | 'moderator' | 'broadcaster';
+  roleRequired: 'viewer' | 'moderator' | 'broadcaster' | 'operator' | 'system';
   cooldownSeconds: number;
   enabled: boolean;
 };
 
 export type TimerDraft = {
+  id?: string;
   name: string;
   intervalSeconds: number;
   response: string;
@@ -45,6 +33,7 @@ export type TimerDraft = {
 export type CounterDraft = { name: string; value: number };
 export type QuoteDraft = { text: string; author: string };
 export type APIVariableDraft = {
+  id?: string;
   name: string;
   enabled: boolean;
   url: string;
@@ -55,6 +44,9 @@ export type APIVariableDraft = {
 };
 
 export type ModerationDraft = {
+  id?: string;
+  exemptRole: string;
+  timeoutSeconds: number;
   name: string;
   enabled: boolean;
   enforce: boolean;
@@ -66,7 +58,7 @@ export type ModerationDraft = {
   reason: string;
 };
 
-export type ModerationTestDraft = { username: string; message: string };
+export type ModerationTestDraft = { username: string; message: string; role: string };
 
 export type ModerationActionDraft = {
   action: 'delete' | 'timeout' | 'ban' | 'unban';
@@ -94,7 +86,7 @@ export const defaultCommandDraft: CommandDraft = { name: '', response: '', actio
 export const defaultCounterDraft: CounterDraft = { name: '', value: 0 };
 export const defaultQuoteDraft: QuoteDraft = { text: '', author: '' };
 export const defaultAPIVariableDraft: APIVariableDraft = { name: '', enabled: true, url: '', responseSelector: '', fallback: '', cacheTtlSeconds: 60, timeoutMs: 1500 };
-export const defaultModerationDraft: ModerationDraft = { name: '', enabled: true, enforce: false, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
-export const defaultModerationTest: ModerationTestDraft = { username: '', message: '' };
+export const defaultModerationDraft: ModerationDraft = { exemptRole: 'moderator', timeoutSeconds: 60, name: '', enabled: true, enforce: false, pattern: '', matchTarget: 'message', caseSensitive: false, regex: false, action: 'flag', reason: '' };
+export const defaultModerationTest: ModerationTestDraft = { role: 'viewer', username: '', message: '' };
 export const defaultModerationAction: ModerationActionDraft = { action: 'timeout', targetUserId: '', targetUserLogin: '', messageId: '', durationSeconds: 60, reason: '' };
 export const defaultNukeDraft: NukeDraft = { pattern: '', regex: false, caseSensitive: false, lookbackMinutes: 30, limit: 100, action: 'delete', durationSeconds: 60, confirm: false, radiationMinutes: 0 };

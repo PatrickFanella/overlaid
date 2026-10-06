@@ -3,6 +3,7 @@ package bot
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -104,6 +105,7 @@ func RenderTemplate(template string, context TemplateContext) TemplateResult {
 	for name := range unknownSet {
 		unknown = append(unknown, name)
 	}
+	sort.Strings(unknown)
 	return TemplateResult{Text: capRunes(strings.TrimSpace(rendered), maxRenderedResponseRunes), UnknownVariables: unknown}
 }
 

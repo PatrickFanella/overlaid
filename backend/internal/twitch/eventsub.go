@@ -27,8 +27,6 @@ const (
 	connectionRetryDelay = 10 * time.Second
 )
 
-var channelPointCooldowns sync.Map
-
 type Token struct {
 	AccessToken string
 	UserID      string
@@ -145,18 +143,20 @@ func sanitizeDiagnosticMessage(message string) string {
 }
 
 type Client struct {
-	ClientID         string
-	WebSocketURL     string
-	SubscriptionURL  string
-	TokenProvider    TokenProvider
-	CommandProcessor *CommandProcessor
-	InteractionRules func() interactions.Rules
-	Publish          Publisher
-	Diagnostics      *DiagnosticsStore
-	HTTPClient       *http.Client
-	Dialer           *websocket.Dialer
-	Now              func() time.Time
-	SubscriptionPlan []SubscriptionSpec
+	channelPoints     channelPointProcessor
+	ClientID          string
+	WebSocketURL      string
+	SubscriptionURL   string
+	TokenProvider     TokenProvider
+	CommandProcessor  *CommandProcessor
+	IgnoreChatMessage func(string) bool
+	InteractionRules  func() interactions.Rules
+	Publish           Publisher
+	Diagnostics       *DiagnosticsStore
+	HTTPClient        *http.Client
+	Dialer            *websocket.Dialer
+	Now               func() time.Time
+	SubscriptionPlan  []SubscriptionSpec
 }
 
 type SubscriptionSpec struct {
@@ -360,7 +360,7 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 			if c.InteractionRules != nil {
 				rules = c.InteractionRules()
 			}
-			for _, event := range EventsForNotification(message, c.CommandProcessor, rules) {
+			for _, event := range c.eventsForNotification(message, rules) {
 				if c.Diagnostics != nil {
 					c.Diagnostics.MarkEvent()
 				}
@@ -467,14 +467,30 @@ func EventsForNotification(message EventSubMessage, processor *CommandProcessor,
 	return append(eventsOut, processor.Handle(command, user)...)
 }
 
+// EventsForChannelPointRedemption maps one isolated notification. EventSub clients
+// retain their own processor when cooldown state must span notifications.
 func EventsForChannelPointRedemption(message EventSubMessage, rules interactions.Rules) []events.Event {
+	return (&channelPointProcessor{}).events(message, rules)
+}
+
+func (c *Client) eventsForNotification(message EventSubMessage, rules interactions.Rules) []events.Event {
+	if message.Payload.Subscription.Type == "channel.chat.message" && c.IgnoreChatMessage != nil && c.IgnoreChatMessage(stringValue(message.Payload.Event, "message_id")) {
+		return nil
+	}
+	if message.Payload.Subscription.Type == "channel.channel_points_custom_reward_redemption.add" {
+		return c.channelPoints.events(message, rules)
+	}
+	return EventsForNotification(message, c.CommandProcessor, rules)
+}
+
+func (p *channelPointProcessor) events(message EventSubMessage, rules interactions.Rules) []events.Event {
 	event := message.Payload.Event
 	rewardTitle := stringValue(nestedMap(event, "reward"), "title")
 	user := firstNonEmpty(stringValue(event, "user_name"), stringValue(event, "user_login"), "Someone")
 	input := stringValue(event, "user_input")
 
-	if rule, ok := interactions.MatchChannelPointRule(rules, rewardTitle); ok {
-		if rule.CooldownSeconds > 0 && channelPointRuleCoolingDown(rule, rewardTitle, time.Now().UTC()) {
+	if rule, ok := interactions.MatchChannelPointReward(rules, stringValue(nestedMap(event, "reward"), "id"), rewardTitle); ok {
+		if rule.CooldownSeconds > 0 && p.coolingDown(rule, event) {
 			return []events.Event{events.NewCommand("twitch", "Channel point reward cooling down", "Matched reward is cooling down", events.SeverityWarning, map[string]any{
 				"action":          "cooldown",
 				"reward":          capRunes(firstNonEmpty(rewardTitle, "Unknown reward"), 180),
@@ -519,20 +535,6 @@ func EventsForChannelPointRedemption(message EventSubMessage, rules interactions
 		return nil
 	}
 	return []events.Event{alert}
-}
-
-func channelPointRuleCoolingDown(rule interactions.ChannelPointRule, rewardTitle string, now time.Time) bool {
-	key := strings.ToLower(strings.TrimSpace(rewardTitle))
-	if key == "" {
-		return false
-	}
-	if raw, ok := channelPointCooldowns.Load(key); ok {
-		if last, ok := raw.(time.Time); ok && now.Sub(last) < time.Duration(rule.CooldownSeconds)*time.Second {
-			return true
-		}
-	}
-	channelPointCooldowns.Store(key, now)
-	return false
 }
 
 func channelPointRuleData(rule interactions.ChannelPointRule, rewardTitle, user, input, eventsubType string) map[string]any {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -280,4 +281,92 @@ func TestTwitchRewardDeleteCallsHelix(t *testing.T) {
 
 func boolPtr(value bool) *bool {
 	return &value
+}
+
+// Exercise the Helix boundary through both writes: the maximum is accepted,
+// while the next second is rejected before a remote request can be sent.
+func TestTwitchRewardCooldownMaximum(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client-id"}, events.NewBus(4))
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:manage:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123"}
+	calls := 0
+	oldClient := twitchHTTPClient
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		var payload map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["global_cooldown_seconds"] != float64(604800) || payload["is_global_cooldown_enabled"] != true {
+			t.Fatalf("cooldown payload = %#v", payload)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"reward-1","is_global_cooldown_enabled":true,"global_cooldown_seconds":604800}]}`)), Header: make(http.Header)}, nil
+	})}
+	t.Cleanup(func() { twitchHTTPClient = oldClient })
+	for _, update := range []bool{false, true} {
+		for _, seconds := range []int{604800, 604801} {
+			before := calls
+			var reward *twitchReward
+			var err error
+			if update {
+				reward, err = server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{GlobalCooldownSeconds: &seconds})
+			} else {
+				reward, err = server.createTwitchReward(t.Context(), twitchRewardCreateRequest{Title: "Hydrate", Cost: 100, GlobalCooldownSeconds: seconds})
+			}
+			if seconds == 604800 {
+				if err != nil || reward == nil || reward.GlobalCooldownSeconds != seconds || calls != before+1 {
+					t.Fatalf("update=%t maximum: reward=%#v err=%v calls=%d", update, reward, err, calls)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "604800 or fewer") || calls != before {
+				t.Fatalf("update=%t oversized: err=%v calls=%d", update, err, calls)
+			}
+		}
+	}
+}
+
+func TestTwitchRewardUnicodeTextLimits(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigin: "*", TwitchClientID: "client"}, events.NewBus(4))
+	server.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"channel:manage:redemptions"}, ExpiresAt: time.Now().Add(time.Hour), UserID: "123", Login: "broadcaster"}
+	var payload map[string]any
+	calls := 0
+	oldClient := twitchHTTPClient
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"reward-1"}]}`)), Header: make(http.Header)}, nil
+	})}
+	t.Cleanup(func() { twitchHTTPClient = oldClient })
+	for _, character := range []string{"水", "🌊"} {
+		t.Run(character, func(t *testing.T) {
+			title, prompt := strings.Repeat(character, 45), strings.Repeat(character, 200)
+			before := calls
+			_, err := server.createTwitchReward(t.Context(), twitchRewardCreateRequest{Title: " " + title + " ", Prompt: " " + prompt + " ", Cost: 100})
+			if err != nil || calls != before+1 || payload["title"] != title || payload["prompt"] != prompt {
+				t.Fatalf("create boundary: calls=%d payload=%v err=%v", calls, payload, err)
+			}
+			before = calls
+			for _, request := range []twitchRewardCreateRequest{{Title: title + character, Cost: 100}, {Title: title, Prompt: prompt + character, Cost: 100}} {
+				if _, err := server.createTwitchReward(t.Context(), request); err == nil {
+					t.Fatal("accepted excessive Unicode text")
+				}
+			}
+			if calls != before {
+				t.Fatal("invalid create dispatched to Twitch")
+			}
+			paddedPrompt := " " + prompt + " "
+			_, err = server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{Prompt: &paddedPrompt})
+			if err != nil || calls != before+1 || payload["prompt"] != prompt {
+				t.Fatalf("update boundary: calls=%d payload=%v err=%v", calls, payload, err)
+			}
+			before = calls
+			longPrompt := prompt + character
+			if _, err := server.updateTwitchReward(t.Context(), "reward-1", twitchRewardUpdateRequest{Prompt: &longPrompt}); err == nil {
+				t.Fatal("accepted excessive Unicode prompt")
+			}
+			if calls != before {
+				t.Fatal("invalid update dispatched to Twitch")
+			}
+		})
+	}
 }

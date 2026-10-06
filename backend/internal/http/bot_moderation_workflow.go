@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -145,6 +144,21 @@ func (w *moderationWorkflow) executeNuke(ctx context.Context, request botNukeDry
 	if err != nil {
 		return botNukeExecuteResponse{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return botNukeExecuteResponse{}, err
+	}
+	// Validate the whole execution before creating an enforced rule or sending
+	// any action. Zero timeout duration retains the documented default.
+	action = strings.ToLower(strings.TrimSpace(action))
+	if action != "delete" && action != "timeout" {
+		return botNukeExecuteResponse{}, errors.New("nuke action must be delete or timeout")
+	}
+	if action == "timeout" && request.DurationSeconds != 0 && (request.DurationSeconds < 1 || request.DurationSeconds > 1209600) {
+		return botNukeExecuteResponse{}, errors.New("timeout duration must be between 1 and 1209600 seconds")
+	}
+	if err := w.validateNukeRadiationRequest(request); err != nil {
+		return botNukeExecuteResponse{}, err
+	}
 	matches, err := w.planNukeDryRun(request)
 	if err != nil {
 		return botNukeExecuteResponse{}, err
@@ -152,7 +166,7 @@ func (w *moderationWorkflow) executeNuke(ctx context.Context, request botNukeDry
 	if len(matches) > 50 {
 		matches = matches[:50]
 	}
-	response := botNukeExecuteResponse{Matches: matches, Attempted: len(matches), Action: action}
+	response := botNukeExecuteResponse{Matches: matches, Action: action}
 	if request.RadiationMinutes > 0 {
 		rule, err := w.createNukeRadiationRule(ctx, request, action)
 		if err != nil {
@@ -161,6 +175,11 @@ func (w *moderationWorkflow) executeNuke(ctx context.Context, request botNukeDry
 		response.RadiationRule = &rule
 	}
 	for _, match := range matches {
+		if ctx.Err() != nil {
+			response.Interrupted = true
+			break
+		}
+		response.Attempted++
 		mod := botModerationActionRequest{Action: action, TargetUserID: match.UserID, TargetUserLogin: match.User, MessageID: match.MessageID, DurationSeconds: request.DurationSeconds, Reason: "nuke:" + strings.TrimSpace(request.Pattern)}
 		if action == "timeout" && mod.DurationSeconds == 0 {
 			mod.DurationSeconds = 60
@@ -219,10 +238,21 @@ func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, even
 	if len(matches) == 0 {
 		return
 	}
-	match := matches[0]
-	request := botModerationActionRequest{Action: match.Action, TargetUserID: twitchEventString(event, "chatter_user_id"), TargetUserLogin: event.Title, MessageID: twitchMessageIDFromEvent(event), Reason: firstNonEmptyString(match.Reason, "moderation rule: "+match.RuleName)}
+	matches = bot.ApplyModerationExemptions(matches, moderationRoleForEvent(event))
+	var match bot.ModerationMatch
+	found := false
+	for _, candidate := range matches {
+		if !candidate.Skipped {
+			match, found = candidate, true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+	request := botModerationActionRequest{Action: match.Action, DurationSeconds: match.TimeoutSeconds, TargetUserID: twitchEventString(event, "chatter_user_id"), TargetUserLogin: event.Title, MessageID: twitchMessageIDFromEvent(event), Reason: firstNonEmptyString(match.Reason, "moderation rule: "+match.RuleName)}
 	if request.Action == "flag" {
-		w.recordModerationActionAudit(ctx, request, "allowed", "moderation_flag")
+		w.recordModerationEnforcementAudit(ctx, event, match, request, "allowed", "moderation_flag")
 		return
 	}
 	if request.Action == "timeout" && request.DurationSeconds == 0 {
@@ -230,10 +260,10 @@ func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, even
 	}
 	if _, err := s.executeTwitchModerationAction(ctx, request); err != nil {
 		log.Printf("moderation enforcement failed rule=%s action=%s: %v", match.RuleName, match.Action, err)
-		w.recordModerationActionAudit(ctx, request, "failed", err.Error())
+		w.recordModerationEnforcementAudit(ctx, event, match, request, "failed", err.Error())
 		return
 	}
-	w.recordModerationActionAudit(ctx, request, "allowed", "moderation_rule:"+match.RuleName)
+	w.recordModerationEnforcementAudit(ctx, event, match, request, "allowed", "moderation_rule:"+match.RuleName)
 }
 
 func (w *moderationWorkflow) planNukeDryRun(request botNukeDryRunRequest) ([]botNukeDryRunMatch, error) {
@@ -259,18 +289,9 @@ func (w *moderationWorkflow) planNukeDryRun(request botNukeDryRunRequest) ([]bot
 	if lookback <= 0 || lookback > 360 {
 		lookback = 30
 	}
-	var compiled *regexp.Regexp
-	if request.Regex {
-		compiledPattern := pattern
-		if !request.CaseSensitive {
-			compiledPattern = "(?i)" + compiledPattern
-		}
-		compiled, err = regexp.Compile(compiledPattern)
-		if err != nil {
-			return nil, err
-		}
-	} else if !request.CaseSensitive {
-		pattern = strings.ToLower(pattern)
+	matcher, err := bot.CompileModerationPattern(pattern, request.Regex, request.CaseSensitive)
+	if err != nil {
+		return nil, err
 	}
 	cutoff := time.Now().UTC().Add(-time.Duration(lookback) * time.Minute)
 	matches := []botNukeDryRunMatch{}
@@ -278,17 +299,7 @@ func (w *moderationWorkflow) planNukeDryRun(request botNukeDryRunRequest) ([]bot
 		if event.Type != events.EventTypeChatMessage || event.CreatedAt.Before(cutoff) {
 			continue
 		}
-		candidate := event.Message
-		if !request.CaseSensitive && !request.Regex {
-			candidate = strings.ToLower(candidate)
-		}
-		matched := false
-		if request.Regex {
-			matched = compiled.MatchString(candidate)
-		} else {
-			matched = strings.Contains(candidate, pattern)
-		}
-		if !matched {
+		if !matcher.Matches(event.Message) {
 			continue
 		}
 		matches = append(matches, botNukeDryRunMatch{EventID: event.ID, MessageID: twitchMessageIDFromEvent(event), UserID: twitchEventString(event, "chatter_user_id"), User: event.Title, Message: event.Message, CreatedAt: event.CreatedAt.Format(time.RFC3339)})
@@ -347,7 +358,7 @@ func (w *moderationWorkflow) recordNukeWorkflowAudit(ctx context.Context, action
 	if err != nil || s.botRuntime == nil {
 		return
 	}
-	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "nuke_workflow", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "nuke_workflow", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
 }
 
 func (w *moderationWorkflow) recordModerationActionAudit(ctx context.Context, request botModerationActionRequest, result, reason string) {
@@ -355,9 +366,37 @@ func (w *moderationWorkflow) recordModerationActionAudit(ctx context.Context, re
 	if err != nil || s.botRuntime == nil {
 		return
 	}
-	data := map[string]any{"targetUserId": strings.TrimSpace(request.TargetUserID), "targetUserLogin": strings.TrimSpace(request.TargetUserLogin), "messageId": strings.TrimSpace(request.MessageID), "durationSeconds": request.DurationSeconds}
+	data := moderationAuditData(request)
 	action := strings.ToLower(strings.TrimSpace(request.Action))
-	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "moderation_action", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
+	s.botRuntime.RecordOutcomeAndWait(ctx, bot.AuditOutcome{Source: bot.SourceDashboard, ActorRole: bot.RoleOperator, Trigger: "moderation_action", Command: action, Action: action, Result: bot.Result(result), Reason: reason, StreamSessionID: s.activeSessionID(), Data: data})
+}
+
+// Automatic enforcement belongs to the chat event and system actor. Queue its
+// receipt so audit storage cannot delay processing the next EventSub message.
+func (w *moderationWorkflow) recordModerationEnforcementAudit(ctx context.Context, event events.Event, match bot.ModerationMatch, request botModerationActionRequest, result, reason string) {
+	s, err := w.serverOrErr()
+	if err != nil || s.botRuntime == nil {
+		return
+	}
+	action := strings.ToLower(strings.TrimSpace(request.Action))
+	data := moderationAuditData(request)
+	data["ruleId"], data["ruleName"] = match.RuleID, match.RuleName
+	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
+		Source: bot.SourceChat, ActorRole: bot.RoleSystem, Trigger: "moderation_rule",
+		Command: match.RuleName, Action: action, Result: bot.Result(result), Reason: reason,
+		EventID: event.ID, StreamSessionID: s.activeSessionID(),
+		Data: data,
+	})
+}
+
+// Duration applies only to timeout. Other actions ignore a timeout value left
+// in the dashboard draft, so their receipts must not imply a timed ban.
+func moderationAuditData(request botModerationActionRequest) map[string]any {
+	duration := 0
+	if strings.EqualFold(strings.TrimSpace(request.Action), "timeout") {
+		duration = request.DurationSeconds
+	}
+	return map[string]any{"targetUserId": strings.TrimSpace(request.TargetUserID), "targetUserLogin": strings.TrimSpace(request.TargetUserLogin), "messageId": strings.TrimSpace(request.MessageID), "durationSeconds": duration}
 }
 
 func twitchEventString(event events.Event, key string) string {
@@ -387,4 +426,28 @@ func twitchMessageIDFromEvent(event events.Event) string {
 		}
 	}
 	return ""
+}
+
+func moderationRoleForEvent(event events.Event) bot.Role {
+	chatter := twitchEventString(event, "chatter_user_id")
+	if chatter != "" && chatter == twitchEventString(event, "broadcaster_user_id") {
+		return bot.RoleBroadcaster
+	}
+	if raw, ok := event.Data["twitchEvent"].(map[string]any); ok {
+		if badges, ok := raw["badges"].([]any); ok {
+			role := bot.RoleViewer
+			for _, value := range badges {
+				if badge, ok := value.(map[string]any); ok {
+					if badge["set_id"] == "broadcaster" {
+						return bot.RoleBroadcaster
+					}
+					if badge["set_id"] == "moderator" {
+						role = bot.RoleModerator
+					}
+				}
+			}
+			return role
+		}
+	}
+	return bot.RoleViewer
 }

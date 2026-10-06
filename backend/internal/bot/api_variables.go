@@ -3,13 +3,7 @@ package bot
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -36,19 +30,6 @@ type APIVariableResult struct {
 	Status     string `json:"status"`
 	HTTPStatus int    `json:"httpStatus,omitempty"`
 	Error      string `json:"error,omitempty"`
-}
-
-type apiVariableCacheEntry struct {
-	value     string
-	expiresAt time.Time
-}
-
-type APIVariableResolver struct {
-	store *Store
-}
-
-func NewAPIVariableResolver(store *Store) *APIVariableResolver {
-	return &APIVariableResolver{store: store}
 }
 
 type apiVariableScanner interface{ Scan(dest ...any) error }
@@ -82,7 +63,7 @@ func (s *Store) SaveAPIVariable(ctx context.Context, variable APIVariable) (APIV
 	if strings.TrimSpace(variable.ID) == "" {
 		return scanAPIVariable(s.db.QueryRowContext(ctx, `INSERT INTO bot_api_variables (name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms, last_status, last_error, last_checked_at, created_at, updated_at`, variable.Name, variable.Enabled, variable.URL, variable.ResponseSelector, variable.Fallback, variable.CacheTTLSeconds, variable.TimeoutMs))
 	}
-	return scanAPIVariable(s.db.QueryRowContext(ctx, `UPDATE bot_api_variables SET name=$2, enabled=$3, url=$4, response_selector=$5, fallback=$6, cache_ttl_seconds=$7, timeout_ms=$8, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms, last_status, last_error, last_checked_at, created_at, updated_at`, variable.ID, variable.Name, variable.Enabled, variable.URL, variable.ResponseSelector, variable.Fallback, variable.CacheTTLSeconds, variable.TimeoutMs))
+	return scanAPIVariable(s.db.QueryRowContext(ctx, `UPDATE bot_api_variables SET name=$2, enabled=$3, url=$4, response_selector=$5, fallback=$6, cache_ttl_seconds=$7, timeout_ms=$8, last_status='', last_error='', last_checked_at=NULL, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms, last_status, last_error, last_checked_at, created_at, updated_at`, variable.ID, variable.Name, variable.Enabled, variable.URL, variable.ResponseSelector, variable.Fallback, variable.CacheTTLSeconds, variable.TimeoutMs))
 }
 
 func (s *Store) DeleteAPIVariable(ctx context.Context, id string) error {
@@ -131,193 +112,20 @@ func NormalizeAPIVariable(variable APIVariable) (APIVariable, error) {
 	return variable, nil
 }
 
-func validateAPIVariableURL(raw string) error {
-	if raw == "" {
-		return errors.New("api variable url is required")
-	}
-	if len(raw) > 2048 {
-		return errors.New("api variable url must be 2048 characters or less")
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed == nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
-		return errors.New("api variable url must be https")
-	}
-	if parsed.User != nil || parsed.Fragment != "" {
-		return errors.New("api variable url must not include user info or fragment")
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if host == "localhost" || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") || host == "host.docker.internal" {
-		return errors.New("api variable host is not allowed")
-	}
-	if ip := net.ParseIP(host); ip != nil && !isPublicIP(ip) {
-		return errors.New("api variable host must be public")
-	}
-	return nil
-}
-
-func isPublicIP(ip net.IP) bool {
-	return ip != nil && ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !ip.IsLinkLocalMulticast() && !ip.IsUnspecified()
-}
-
-func (r *APIVariableResolver) ResolveAPIVariables(names []string) map[string]APIVariableResult {
-	if r == nil {
-		return map[string]APIVariableResult{}
-	}
-	return resolveAPIVariables(r.store, names)
-}
-
-func (s *Store) ResolveAPIVariables(names []string) map[string]APIVariableResult {
-	return resolveAPIVariables(s, names)
-}
-
-func resolveAPIVariables(store *Store, names []string) map[string]APIVariableResult {
-	out := map[string]APIVariableResult{}
-	unique := normalizeAPIVariableNames(names)
-	if len(unique) == 0 {
-		return out
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	for _, name := range unique {
-		out[name] = store.resolveAPIVariable(ctx, name)
-	}
-	return out
-}
-
-func normalizeAPIVariableNames(names []string) []string {
-	unique := []string{}
-	seen := map[string]struct{}{}
-	for _, name := range names {
-		name = strings.ToLower(strings.TrimSpace(name))
-		if name == "" {
-			continue
-		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
-		unique = append(unique, name)
-		if len(unique) >= 3 {
-			break
-		}
-	}
-	return unique
-}
-
-func (s *Store) resolveAPIVariable(ctx context.Context, name string) APIVariableResult {
-	if s == nil {
-		return APIVariableResult{Name: name, Status: "unavailable"}
-	}
-	if cached, ok := s.cachedAPIVariable(name); ok {
-		return APIVariableResult{Name: name, Value: cached, Status: "cache_hit"}
-	}
-	var variable APIVariable
-	row := s.db.QueryRowContext(ctx, `SELECT id, name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms, last_status, last_error, last_checked_at, created_at, updated_at FROM bot_api_variables WHERE name=$1`, name)
-	loaded, err := scanAPIVariable(row)
-	if err != nil {
-		return APIVariableResult{Name: name, Status: "missing"}
-	}
-	variable = loaded
-	if !variable.Enabled {
-		return APIVariableResult{Name: name, Value: variable.Fallback, Status: "disabled"}
-	}
-	value, status, code, err := fetchAPIVariable(ctx, variable)
-	if err != nil {
-		_ = s.updateAPIVariableStatus(context.Background(), variable.ID, status, sanitizeAPIError(err))
-		return APIVariableResult{Name: name, Value: variable.Fallback, Status: status, HTTPStatus: code, Error: sanitizeAPIError(err)}
-	}
-	s.cacheAPIVariable(name, value, time.Duration(variable.CacheTTLSeconds)*time.Second)
-	_ = s.updateAPIVariableStatus(context.Background(), variable.ID, status, "")
-	return APIVariableResult{Name: name, Value: value, Status: status, HTTPStatus: code}
-}
-
-func fetchAPIVariable(parent context.Context, variable APIVariable) (string, string, int, error) {
-	ctx, cancel := context.WithTimeout(parent, time.Duration(variable.TimeoutMs)*time.Millisecond)
-	defer cancel()
-	client := &http.Client{Timeout: time.Duration(variable.TimeoutMs) * time.Millisecond, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 2 {
-			return errors.New("too many redirects")
-		}
-		return validateAPIVariableURL(req.URL.String())
-	}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, variable.URL, nil)
-	if err != nil {
-		return "", "request_error", 0, err
-	}
-	req.Header.Set("Accept", "text/plain, application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", "request_error", 0, err
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 32*1024))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "http_error", resp.StatusCode, fmt.Errorf("upstream status %d", resp.StatusCode)
-	}
-	value, err := extractAPIResponseValue(resp.Header.Get("Content-Type"), data, variable.ResponseSelector)
-	if err != nil {
-		return "", "parse_error", resp.StatusCode, err
-	}
-	return capRunes(value, 200), "fetched", resp.StatusCode, nil
-}
-
-func extractAPIResponseValue(contentType string, data []byte, selector string) (string, error) {
-	contentType = strings.ToLower(contentType)
-	if strings.Contains(contentType, "json") {
-		var value any
-		if err := json.Unmarshal(data, &value); err != nil {
-			return "", err
-		}
-		if selector != "" {
-			for _, part := range strings.Split(selector, ".") {
-				object, ok := value.(map[string]any)
-				if !ok {
-					return "", errors.New("selector did not match object")
-				}
-				value = object[part]
-			}
-		}
-		switch typed := value.(type) {
-		case string:
-			return strings.TrimSpace(typed), nil
-		case float64, bool:
-			return fmt.Sprintf("%v", typed), nil
-		default:
-			return "", errors.New("json response is not scalar")
-		}
-	}
-	if strings.Contains(contentType, "text/plain") || contentType == "" {
-		return strings.TrimSpace(string(data)), nil
-	}
-	return "", errors.New("unsupported content type")
-}
-
-func (s *Store) cachedAPIVariable(name string) (string, bool) {
-	s.apiCacheMu.Lock()
-	defer s.apiCacheMu.Unlock()
-	entry, ok := s.apiCache[name]
-	if !ok || time.Now().After(entry.expiresAt) {
-		return "", false
-	}
-	return entry.value, true
-}
-func (s *Store) cacheAPIVariable(name, value string, ttl time.Duration) {
-	s.apiCacheMu.Lock()
-	defer s.apiCacheMu.Unlock()
-	if s.apiCache == nil {
-		s.apiCache = make(map[string]apiVariableCacheEntry)
-	}
-	s.apiCache[name] = apiVariableCacheEntry{value: value, expiresAt: time.Now().Add(ttl)}
-}
-func (s *Store) updateAPIVariableStatus(ctx context.Context, id, status, detail string) error {
+// Diagnostics keep the configuration revision unchanged. A fetch from an older
+// revision cannot overwrite diagnostics after an operator edits the variable.
+func (s *Store) updateAPIVariableStatus(ctx context.Context, variable APIVariable, status, detail string) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	_, err := s.db.ExecContext(ctx, `UPDATE bot_api_variables SET last_status=$2, last_error=$3, last_checked_at=now(), updated_at=now() WHERE id=$1`, id, status, capRunes(detail, 180))
+	_, err := s.db.ExecContext(ctx, `UPDATE bot_api_variables SET last_status=$2, last_error=$3, last_checked_at=now() WHERE id=$1 AND updated_at=$4`, variable.ID, status, capRunes(detail, 180), variable.UpdatedAt)
 	return err
 }
-func sanitizeAPIError(err error) string {
-	if err == nil {
-		return ""
+
+// Lookup and diagnostics are storage adapters; render policy belongs to the resolver.
+func (s *Store) lookupAPIVariable(ctx context.Context, name string) (APIVariable, error) {
+	variable, err := scanAPIVariable(s.db.QueryRowContext(ctx, `SELECT id, name, enabled, url, response_selector, fallback, cache_ttl_seconds, timeout_ms, last_status, last_error, last_checked_at, created_at, updated_at FROM bot_api_variables WHERE name=$1`, name))
+	if errors.Is(err, sql.ErrNoRows) {
+		return APIVariable{}, errAPIVariableMissing
 	}
-	return capRunes(strings.TrimSpace(err.Error()), 180)
+	return variable, err
 }

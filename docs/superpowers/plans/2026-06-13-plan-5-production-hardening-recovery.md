@@ -738,3 +738,29 @@ Expected: `main` is synced to `origin/main` and working tree is clean.
 - Spec coverage: tasks cover readiness diagnostics, state/token recovery tests, expanded smoke, recovery docs, final deploy verification, and plan completion.
 - Placeholder scan: no `TBD`, `TODO`, or unspecified implementation placeholders remain.
 - Type consistency: readiness JSON consistently uses `status`, `checks`, `name`, `status`, and `hint`; retained-state and token recovery semantics match existing startup behavior.
+
+
+## October 6 OBS cancellation contract
+
+OBS operations now close their WebSocket when the request context is canceled during Hello, Identify, or response reads. Handshake and request cancellation callbacks have separate lifetimes, so the handshake cleanup does not close a successfully returned connection. Existing deadlines remain in place. Errors support `errors.Is(..., context.Canceled)`; an Identify failure still preserves the established reachable-but-not-authenticated readiness distinction and Hello metadata.
+
+A local WebSocket regression failed before the change at all three blocked read stages. It now verifies prompt return after explicit cancellation without waiting for the default ten-second deadline. Existing request/auth/status fixtures and HTTP readiness tests cover successful handoff and error classification. OBS/HTTP race tests, `make verify` (113 frontend tests), all 19 browser workflows, and runtime smoke at port 8081 passed. Live OBS testing remains pending its external connection.
+
+
+## October 6 concurrent session persistence
+
+A failing isolated Postgres fixture reproduced eight simultaneous starts leaving eight active sessions. Start and end now acquire the same transaction advisory lock derived from the session table identity, so separate stores/processes serialize lifecycle writes. Starting a new session retains the existing documented rollover behavior. Timestamps are captured after the lock, avoiding transaction-start times from earlier waits and preserving recent-session ordering. End commits before reading its receipt.
+
+Integration contracts verify eight successful starts with one active session, retained history, recent ordering, nonnegative durations, eight end calls with exactly one accepted end, and deadline cancellation while another transaction holds the lock. Fixtures create and remove their own schema, including an insert-delay trigger used only to reproduce overlap. `make verify` passed with 113 frontend tests, all 21 browser workflows passed, Session/Bot/HTTP race tests with disposable Postgres passed, and rebuilt API runtime smoke passed at port 8081.
+
+
+## October 6 coherent session report evidence
+
+Session reports now use a read-only repeatable-read transaction for the session summary, event list, and readiness snapshots, with one five-second deadline. Private query readers support both ordinary reads and the report transaction. The event list remains bounded independently of the total count. A canceled/failed read rolls back, and session lookups preserve query errors instead of turning them into missing-row responses.
+
+A controlled isolated Postgres fixture gates event projection after the summary read, then commits a new event, end snapshot, and ended session. Before the fix the report returned a count of one with two events and the later end snapshot. The corrected report contains the original state throughout; its next bounded read contains the new committed evidence. The same gate verifies deadline cancellation. Validation: `make verify`, all 21 browser workflows, Sessions/HTTP race tests with Postgres fixtures, and rebuilt runtime smoke at port 8081 passed.
+
+
+## October 6 local process recovery drill
+
+The native API was stopped and restarted against the disposable Postgres and retained-state files. A real stopped-process probe failure preceded a successful recovery probe. BRB/goals/ticker SSE replay and the open-session report matched exactly across the restart; a new event retained the active session tag, and ending the rehearsal produced both readiness phases with zero dropped deliveries. Fixtures were cleared and no session remained active. [Recorded evidence](../../qa/2026-10-06-local-recovery-drill.md) distinguishes these completed local gates from pending live OBS/Twitch and deployed outage recovery.

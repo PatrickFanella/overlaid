@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   defaultPanelLayouts,
+  mergePanelLayoutSubset,
   movePanelLayoutItem,
   togglePanelLayoutItem,
   visiblePanelLayoutItems,
@@ -41,12 +42,11 @@ export function CustomizablePanelLayout({
   const visibleItems = visiblePanelLayoutItems(orderedItems);
 
   function update(next: PanelLayoutItem[]) {
-    const nextById = new Map(next.map((item) => [item.id, item]));
-    onChange(items.map((item) => nextById.get(item.id) ?? item));
+    onChange(mergePanelLayoutSubset(items, next));
   }
 
   function resetLayout() {
-    onChange(defaultPanelLayouts[page].map((item) => ({ ...item })));
+    update(defaultPanelLayouts[page].filter((item) => panelMap.has(item.id)));
   }
 
   return (

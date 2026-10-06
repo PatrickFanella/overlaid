@@ -35,6 +35,7 @@ type ChatAliasRule struct {
 }
 
 type ChannelPointRule struct {
+	RewardID        string `json:"rewardId,omitempty"`
 	RewardTitle     string `json:"rewardTitle"`
 	Action          string `json:"action"`
 	Title           string `json:"title,omitempty"`
@@ -230,16 +231,26 @@ func AliasMap(rules Rules) map[string]string {
 }
 
 func MatchChannelPointRule(rules Rules, rewardTitle string) (ChannelPointRule, bool) {
-	needle := canonicalTitle(rewardTitle)
-	if needle == "" {
-		return ChannelPointRule{}, false
-	}
-	for _, rule := range Normalize(rules).ChannelPointRules {
-		if !rule.Enabled {
-			continue
+	return MatchChannelPointReward(rules, "", rewardTitle)
+}
+
+// ID rules take precedence. Their titles are labels, never alternate matches.
+func MatchChannelPointReward(rules Rules, rewardID, rewardTitle string) (ChannelPointRule, bool) {
+	normalized := Normalize(rules).ChannelPointRules
+	rewardID = strings.TrimSpace(rewardID)
+	if rewardID != "" {
+		for _, rule := range normalized {
+			if rule.Enabled && rule.RewardID == rewardID {
+				return rule, true
+			}
 		}
-		if canonicalTitle(rule.RewardTitle) == needle {
-			return rule, true
+	}
+	needle := canonicalTitle(rewardTitle)
+	if needle != "" {
+		for _, rule := range normalized {
+			if rule.Enabled && rule.RewardID == "" && canonicalTitle(rule.RewardTitle) == needle {
+				return rule, true
+			}
 		}
 	}
 	return ChannelPointRule{}, false
@@ -295,7 +306,10 @@ func normalizeChannelPointRules(rules []ChannelPointRule) []ChannelPointRule {
 		if !ok {
 			continue
 		}
-		key := canonicalTitle(normalized.RewardTitle)
+		key := "title:" + canonicalTitle(normalized.RewardTitle)
+		if normalized.RewardID != "" {
+			key = "id:" + normalized.RewardID
+		}
 		if _, exists := seen[key]; exists {
 			continue
 		}
@@ -310,11 +324,13 @@ func normalizeChannelPointRules(rules []ChannelPointRule) []ChannelPointRule {
 
 func normalizeChannelPointRule(rule ChannelPointRule) (ChannelPointRule, bool) {
 	rewardTitle := capRunes(strings.TrimSpace(rule.RewardTitle), maxRewardRunes)
+	rewardID := strings.TrimSpace(rule.RewardID)
 	action := strings.ToLower(strings.TrimSpace(rule.Action))
-	if rewardTitle == "" || !isAllowedChannelPointAction(action) {
+	if (rewardTitle == "" && rewardID == "") || len(rewardID) > 128 || !isAllowedChannelPointAction(action) {
 		return ChannelPointRule{}, false
 	}
 	return ChannelPointRule{
+		RewardID:        rewardID,
 		RewardTitle:     rewardTitle,
 		Action:          action,
 		Title:           capRunes(strings.TrimSpace(rule.Title), maxTitleRunes),

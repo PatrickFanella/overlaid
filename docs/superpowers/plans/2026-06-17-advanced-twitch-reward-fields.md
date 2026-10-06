@@ -75,6 +75,10 @@ Twitch documented bounds used by this sprint:
 
 ---
 
+## Historical implementation recipe
+
+The unchecked steps below are the original implementation recipe, including pre-implementation failure expectations. They are not an outstanding-work checklist. The implemented closeout and current verification evidence appear at the end of this document.
+
 ## Task 1: Backend request/response contracts and tests
 
 **Files:**
@@ -787,3 +791,8 @@ Expected: clean working tree after commits; latest commits include backend, fron
 - Docs now distinguish supported guarded fields from intentionally deferred high-risk fields.
 - Verification passed: focused Go reward tests, frontend format/test, backend/frontend/docs slice reviews, `git diff --check`, `make verify`, `make smoke`, and `make smoke-browser`.
 - Local smoke note: `/readyz` remained degraded for local EventSub/OBS reachability/auth in this environment, but the smoke targets passed and reward-management routes rendered.
+
+
+### 2026-10-06 contract reconciliation
+
+Create/update payload and decoding contracts remain covered by `twitch_rewards_test.go`; current browser workflows cover edit retry, lifecycle writes, deletion, duplicate submission prevention, stale reads, and receipts after failed reloads. The backend and both dashboard drafts now also reject cooldowns above 604800 seconds. Transport fixtures accept exactly 604800 and prove 604801 does not dispatch. Scope text in bot-ops and the parent roadmap now reflects shipped advanced fields and reversible lifecycle controls. Live Twitch execution remains unverified without credentials.

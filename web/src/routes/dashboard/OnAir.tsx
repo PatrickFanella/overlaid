@@ -28,7 +28,7 @@ function OnAir() {
   const { sessionLog, runAction, isRunning } = useOperatorActions();
   const profile = getActiveAutomationProfile(config);
   const { actions, warnings } = selectQuickActionsForProfile(config);
-  const history = useRecentEvents(status.apiBaseUrl, status.checkedAt);
+  const history = useRecentEvents(status.apiBaseUrl, status.checkedAt, 24, status.operatorSecret);
 
   return (
     <>
@@ -64,12 +64,12 @@ function OnAir() {
 }
 
 // Reloads alongside the top bar's Recheck button.
-export function useRecentEvents(apiBaseUrl: string, refreshKey: string, limit = 24) {
+export function useRecentEvents(apiBaseUrl: string, refreshKey: string, limit = 24, operatorSecret?: string) {
   const [state, setState] = useState<{ data: EventHistoryResponse | null; loading: boolean; error: string }>({ data: null, loading: true, error: '' });
 
   useEffect(() => {
     let cancelled = false;
-    fetchEventHistory(limit, apiBaseUrl)
+    fetchEventHistory(limit, apiBaseUrl, operatorSecret)
       .then((data) => {
         if (!cancelled) setState({ data, loading: false, error: '' });
       })
@@ -79,7 +79,7 @@ export function useRecentEvents(apiBaseUrl: string, refreshKey: string, limit = 
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl, refreshKey, limit]);
+  }, [apiBaseUrl, refreshKey, limit, operatorSecret]);
 
   return state;
 }

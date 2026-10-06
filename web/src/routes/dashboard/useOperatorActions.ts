@@ -14,6 +14,7 @@ export function useOperatorActions() {
   const [sessionLog, setSessionLog] = useState<SessionLogEntry[]>(() => loadSessionLog());
   const sessionLogRef = useRef(sessionLog);
   const [runningAction, setRunningAction] = useState<string | null>(null);
+  const actionPending = useRef(false);
 
   function recordLog(label: string, status: SessionLogEntry['status'], message: string) {
     const next = prependSessionLogEntry(sessionLogRef.current, createSessionLogEntry(label, status, message));
@@ -23,10 +24,12 @@ export function useOperatorActions() {
   }
 
   function runAction(label: string, action: () => Promise<string | void>) {
+    if (actionPending.current) return;
+    actionPending.current = true;
     const startedAt = Date.now();
     setRunningAction(label);
     recordLog(label, 'running', 'Action started.');
-    void action()
+    void Promise.resolve().then(action)
       .then((message) => {
         recordLog(label, 'success', `${message || 'Action completed.'} (${formatDuration(Date.now() - startedAt)})`);
       })
@@ -35,7 +38,8 @@ export function useOperatorActions() {
         recordLog(label, 'error', `${detail} (${formatDuration(Date.now() - startedAt)})`);
       })
       .finally(() => {
-        setRunningAction((current) => (current === label ? null : current));
+        actionPending.current = false;
+        setRunningAction(null);
       });
   }
 

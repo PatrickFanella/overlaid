@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -28,13 +29,14 @@ type Server struct {
 	history                   eventHistoryStore
 	historyLoadError          string
 	historyWritable           bool
-	dashboardConfig           *dashboardconfig.Store
+	dashboardConfig           dashboardConfigStore
 	dashboardConfigLoadError  string
 	sessions                  *sessions.Store
 	sessionsLoadError         string
 	botStore                  *bot.Store
 	botLoadError              string
 	botRuntime                *bot.Runtime
+	nowPlaying                bot.NowPlayingState
 	obs                       obsws.Client
 	state                     *state.Store
 	stateLoadError            string
@@ -43,9 +45,15 @@ type Server struct {
 	interactionsLoadError     string
 	twitch                    *twitchAuthStore
 	twitchTokenLoadError      string
+	twitchSentMessages        twitch.SentMessages
 	twitchCommandProcessor    *twitch.CommandProcessor
 	twitchEventSubDiagnostics *twitch.DiagnosticsStore
 	mux                       *http.ServeMux
+}
+
+type dashboardConfigStore interface {
+	Get(context.Context) (dashboardconfig.Document, bool, error)
+	Replace(context.Context, json.RawMessage) (dashboardconfig.Document, error)
 }
 
 type eventHistoryStore interface {
@@ -75,13 +83,16 @@ func NewServer(cfg config.Config, bus *events.Bus) *Server {
 	server.sessions, server.sessionsLoadError = newSessionStore(cfg)
 	server.refreshActiveSession(context.Background())
 	server.botStore, server.botLoadError = newBotStore(cfg)
-	server.botRuntime = bot.NewRuntime(server.botStore)
+	server.botRuntime = bot.NewRuntime(nil)
+	if server.botStore != nil {
+		server.botRuntime = bot.NewRuntime(server.botStore)
+	}
 	server.interactions, server.interactionsLoadError = newInteractionStore(cfg)
 	rules := interactions.Rules{}
 	if server.interactions != nil {
 		rules = server.interactions.Rules()
 	}
-	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(rules), Custom: server.customTwitchCommands(context.Background()), Channel: cfg.TwitchChannel, Community: botCommunityAdapter{store: server.botStore}, APIVariables: server.botStore})
+	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(rules), Custom: server.customTwitchCommands(context.Background()), Channel: cfg.TwitchChannel, Community: botCommunityAdapter{store: server.botStore}, APIVariables: bot.NewAPIVariableResolver(server.botStore), NowPlaying: server.nowPlaying.Snapshot})
 	if err := server.twitch.loadPersistedToken(); err != nil {
 		server.twitchTokenLoadError = err.Error()
 		log.Printf("failed to load twitch token: %v", err)
@@ -160,7 +171,7 @@ func (s *Server) refreshActiveSession(ctx context.Context) {
 	s.setActiveSessionID(session.ID)
 }
 
-func newDashboardConfigStore(cfg config.Config) (*dashboardconfig.Store, string) {
+func newDashboardConfigStore(cfg config.Config) (dashboardConfigStore, string) {
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		return nil, ""
 	}
@@ -300,7 +311,8 @@ func (s *Server) StartBackground(ctx context.Context) {
 				Scopes:      append([]string(nil), token.Scope...),
 			}, true
 		},
-		CommandProcessor: s.twitchCommandProcessor,
+		CommandProcessor:  s.twitchCommandProcessor,
+		IgnoreChatMessage: s.twitchSentMessages.Contains,
 		InteractionRules: func() interactions.Rules {
 			if s.interactions == nil || s.interactionsLoadErrorValue() != "" {
 				return interactions.Rules{}
@@ -335,4 +347,9 @@ func mprisSessionBusAvailable() bool {
 	}
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+// FlushBotAudit drains accepted command audits during orderly shutdown.
+func (s *Server) FlushBotAudit(ctx context.Context) error {
+	return s.botRuntime.Flush(ctx)
 }

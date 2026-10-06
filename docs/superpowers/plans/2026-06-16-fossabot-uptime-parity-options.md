@@ -23,3 +23,12 @@
 ## Recommendation
 
 Start with Option A unless a real production requirement demands Option B or C. It improves uptime confidence without weakening over-laid's local OBS/operator safety model.
+
+
+## October 6 Option A readiness probe
+
+Implemented a standard-library `over-laid-probe` tool in `backend/cmd/probe`, built by `make build` and usable through `make probe`. Full mode fails for HTTP-200 degraded reports; selected mode requires every named check to exist and be healthy, permitting local bot monitoring before Twitch/OBS setup. The probe bounds request time and response size, rejects redirects/malformed reports, omits raw hints/bodies, handles interrupts, and provides version/help and bash/zsh/fish completions. [The monitoring runbook](../../runbooks/uptime-monitoring.md) documents external probe placement and notification/recovery policy while keeping Compose liveness independent.
+
+Verification passed: `make verify`, all 17 browser smoke workflows, probe race tests, and `make smoke API_PORT=8081`. Native Linux checks verified help/version/completions, full-report degradation, selected-check success, missing-check failure, SIGINT/SIGTERM exit 130, and version startup median 4.0 ms/max 4.4 ms. macOS arm64 and Windows amd64 cross-builds passed; native runtime checks on those platforms remain unverified.
+
+Still required at deployment: choose the off-host probe machine and production endpoint, install its scheduler/monitor, configure the existing ntfy/notification destination, rehearse an actual host outage and recovery, and verify live Twitch/OBS checks. No scheduler or external alert destination has been configured during this local work.

@@ -12,6 +12,7 @@ type Config struct {
 	AllowedOrigin          string
 	ExposureMode           string
 	OperatorSecret         string
+	OverlayToken           string
 	WebhookSecret          string
 	OverlayStateFile       string
 	EventHistoryFile       string
@@ -40,6 +41,7 @@ func Load() Config {
 		AllowedOrigin:          env("CORS_ALLOWED_ORIGIN", "*"),
 		ExposureMode:           env("EXPOSURE_MODE", "local"),
 		OperatorSecret:         env("OPERATOR_SECRET", ""),
+		OverlayToken:           env("OVERLAY_TOKEN", ""),
 		WebhookSecret:          env("WEBHOOK_SECRET", ""),
 		OverlayStateFile:       env("OVERLAY_STATE_FILE", "/data/overlay-state.json"),
 		EventHistoryFile:       env("EVENT_HISTORY_FILE", "/data/event-history.jsonl"),

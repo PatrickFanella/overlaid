@@ -27,7 +27,7 @@ export function getDefaultApiBaseUrl(origin?: string) {
 }
 
 export function getOverlayStreamUrl(explicitBaseUrl?: string) {
-  return new URL('/api/events/stream', getOverlayApiBaseUrl(explicitBaseUrl)).toString();
+  return getOverlayEndpointUrl('/api/events/stream', explicitBaseUrl);
 }
 
 export function connectOverlayStream(explicitBaseUrl: string | undefined, handlers: OverlayStreamHandlers) {
@@ -78,4 +78,11 @@ function getQueryApiBaseUrl() {
   }
 
   return new URLSearchParams(window.location.search).get('apiBaseUrl') || '';
+}
+
+export function getOverlayEndpointUrl(path: string, explicitBaseUrl?: string) {
+  const url = new URL(path, getOverlayApiBaseUrl(explicitBaseUrl));
+  const key = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('key');
+  if (key) url.searchParams.set('key', key);
+  return url.toString();
 }

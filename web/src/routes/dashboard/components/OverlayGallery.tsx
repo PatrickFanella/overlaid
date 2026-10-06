@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { buildOverlaySourceUrl, overlayRoutes, type OverlayRoute } from '../../../lib/overlayRoutes';
+import { fetchOverlayToken } from '../../../lib/api';
+import { useDeskStatus } from '../deskStatus';
 import { Panel, Tag } from '../ui';
 
 type OverlayGalleryProps = {
@@ -8,15 +10,40 @@ type OverlayGalleryProps = {
 };
 
 export function OverlayGallery({ apiBaseUrl, onCopy }: OverlayGalleryProps) {
+  const { operatorSecret } = useDeskStatus();
+  const [key, setKey] = useState('');
+  const [keyError, setKeyError] = useState(false);
+  const [keyLoading, setKeyLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    setKey('');
+    setKeyError(false);
+    setKeyLoading(true);
+    void fetchOverlayToken(apiBaseUrl, operatorSecret)
+      .then((result) => {
+        if (!cancelled) {
+          setKey(result.key);
+          setKeyLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setKeyError(true);
+          setKeyLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [apiBaseUrl, operatorSecret]);
   return (
     <Panel
       kicker="Overlay source URLs"
       title="Browser sources"
       description="Each preview plays sample events locally (?demo=1). Copy the URL into an OBS Browser Source at the listed size."
     >
+      {keyError ? <p role="alert">Overlay token unavailable. Check the operator secret before copying source URLs.</p> : null}
       <ul className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
         {overlayRoutes.map((route) => {
-          const url = buildOverlaySourceUrl(route.path, apiBaseUrl);
+          const url = buildOverlaySourceUrl(route.path, apiBaseUrl, key);
 
           return (
             <li key={route.path} className="desk-panel overflow-hidden">
@@ -29,7 +56,7 @@ export function OverlayGallery({ apiBaseUrl, onCopy }: OverlayGalleryProps) {
                 <p className="desk-row__text">{route.description}</p>
                 <code className="desk-url">{url}</code>
                 <div className="flex flex-wrap gap-2">
-                  <button className="desk-btn desk-btn--small desk-btn--primary" type="button" onClick={() => onCopy(route.title, url)}>
+                  <button className="desk-btn desk-btn--small desk-btn--primary" type="button" disabled={keyError || keyLoading} onClick={() => onCopy(route.title, url)}>
                     Copy URL
                   </button>
                   <a className="desk-btn desk-btn--small" href={`${route.path}?demo=1`} target="_blank" rel="noreferrer">

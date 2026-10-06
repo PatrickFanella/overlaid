@@ -45,18 +45,20 @@ export function normalizeImportedTwitchInteractionRules(value: unknown): TwitchI
       (entry): entry is ChannelPointRule =>
         typeof entry === 'object' &&
         entry !== null &&
-        typeof entry.rewardTitle === 'string' &&
+        (typeof entry.rewardTitle === 'string' || typeof entry.rewardId === 'string') &&
+        (entry.rewardId === undefined || (typeof entry.rewardId === 'string' && entry.rewardId.trim().length <= 128)) &&
         typeof entry.action === 'string' &&
         typeof entry.enabled === 'boolean',
     )
     .map((entry) => {
       const rule: ChannelPointRule = {
-        rewardTitle: entry.rewardTitle,
+        rewardTitle: typeof entry.rewardTitle === 'string' ? entry.rewardTitle : '',
         action: rewardActions.includes(entry.action as (typeof rewardActions)[number]) ? (entry.action as ChannelPointRule['action']) : 'ignore',
         title: typeof entry.title === 'string' ? entry.title : undefined,
         message: typeof entry.message === 'string' ? entry.message : undefined,
         enabled: entry.enabled,
       };
+      if (typeof entry.rewardId === 'string' && entry.rewardId.trim()) { rule.rewardId = entry.rewardId.trim(); }
       if (typeof entry.cooldownSeconds === 'number') {
         rule.cooldownSeconds = Math.max(0, Math.min(86400, entry.cooldownSeconds));
       }
@@ -85,9 +87,11 @@ function normalizeRewardTitle(value: string) {
   return value.trim().toLowerCase();
 }
 
-export function findMatchingChannelPointRule(rules: ChannelPointRule[], rewardTitle: string) {
-  const normalizedRewardTitle = normalizeRewardTitle(rewardTitle);
-  if (!normalizedRewardTitle) return undefined;
-
-  return rules.find((rule) => rule.enabled && normalizeRewardTitle(rule.rewardTitle) === normalizedRewardTitle);
+export function findMatchingChannelPointRule(rules: ChannelPointRule[], rewardTitle: string, rewardId?: string) {
+  const id = rewardId?.trim();
+  const byId = id ? rules.find((rule) => rule.enabled && rule.rewardId?.trim() === id) : undefined;
+  if (byId) return byId;
+  const title = normalizeRewardTitle(rewardTitle);
+  if (!title) return undefined;
+  return rules.find((rule) => rule.enabled && !rule.rewardId?.trim() && normalizeRewardTitle(rule.rewardTitle) === title);
 }
