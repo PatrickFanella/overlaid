@@ -116,6 +116,8 @@ API variables are safer than FossaBot-style inline custom API URLs:
 - Operators define named variables in `/dashboard/chat`; chat cannot provide URLs.
 - Variables are GET-only and HTTPS-only.
 - Local/private hosts, user-info URLs, fragments, unsafe names, long responses, and slow responses are rejected or capped.
+- Each connection resolves DNS once, rejects any non-public answer, and connects to a validated numeric address. Shared/benchmark/reserved IPv4 ranges and IPv6 translation/tunnel ranges are also blocked. Environment HTTP proxies are ignored; API variables require a direct connection.
+- At most one HTTPS redirect is followed, with the same URL and connection checks. Responses over 32 KiB or interrupted reads fail; rendered variable values are capped at 200 characters. Request diagnostics omit the URL and query values.
 - Cache TTL is 15-3600 seconds; timeout is 250-3000ms; at most three unique API variables resolve per template render.
 - Supported responses are `text/plain` or scalar/selected `application/json` values via a simple dot selector such as `data.value`.
 - Headers, request bodies, POST/PUT/DELETE, scripts, jq, HTML scraping, and arbitrary chat-provided URLs are intentionally not supported.

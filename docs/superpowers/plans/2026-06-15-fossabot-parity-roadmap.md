@@ -63,6 +63,12 @@ Verification passed: `make verify` (93 frontend tests and the Go suite), all nin
 
 ---
 
+## October 6 API-variable network checks
+
+Private-host blocking now applies at connection time as well as URL validation. DNS answers are validated together, then connections use approved numeric addresses. Redirects retain those checks, environment proxies are bypassed, and oversized or interrupted response bodies fail. Diagnostics omit request URLs and query values. Offline DNS/HTTP tests and a local TLS fixture cover the behavior without external API credentials.
+
+---
+
 ## File structure
 
 ### Backend domain

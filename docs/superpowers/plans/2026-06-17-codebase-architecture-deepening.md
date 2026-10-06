@@ -263,6 +263,12 @@ Editor verification exposed a cache defect: cached HTTP values bypassed current 
 
 Verification passed: `make verify` (93 frontend tests and the Go suite), all twelve `make smoke-browser` checks, `make smoke API_PORT=8081`, and the optional Postgres cache/session-audit tests. Cache tests cover disabled/deleted variables, configuration changes, late old responses, expired values, and recreated names without external HTTP calls. The collaborative browser confirmed private-host rejection with a retained draft, a successful edit preserving the same ID and settings, and fixture deletion.
 
+## October 6 API-variable network checks
+
+API-variable HTTP connections now validate every DNS answer and dial the approved numeric address, preventing a hostname from selecting a private destination after URL validation. Mixed public/private answers, shared and reserved IPv4 ranges, and IPv6 translation/tunnel ranges are rejected. Connections bypass environment proxies and reapply the checks after the single permitted redirect. Oversized or interrupted responses fail explicitly, and request diagnostics omit URLs and query values.
+
+Offline tests cover DNS rejection, pinned-address retries, cancellation, redirects, body limits, and safe errors. A local TLS fixture verifies the complete HTTP path and confirms that an environment proxy receives no request. Verification passed: race testing, `make verify` (93 frontend tests and the Go suite), all fourteen `make smoke-browser` checks, optional Postgres cache/session-audit tests, and `make smoke API_PORT=8081`. Storage/cache ownership still belongs to `Store`; this closes a concrete network gap before the resolver extraction.
+
 ## October 6 moderation operation state
 
 `bot/useBotModeration.ts` now owns moderation-rule loading and writes, test-message drafts/results, manual action state, and nuke planning/execution/rollback. The workspace coordinates panel layout and status/audit; each bot operation owns its requests and drafts. `Bot.tsx` is now 110 lines. Pending moderation operations disable overlapping moderation/nuke controls, and responses after navigation or API/credential changes are ignored.
