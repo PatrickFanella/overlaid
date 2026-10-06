@@ -275,6 +275,12 @@ Offline tests cover DNS rejection, pinned-address retries, cancellation, redirec
 
 Offline resolver tests exercise fetch/cache/expiry, edits and recreated records, disabled/deleted variables, fallback retries, diagnostic-write failures, normalized render limits, and concurrent renders. Verification passed: `make verify` (93 frontend tests and the Go suite), all fourteen browser smoke checks, the Postgres cache/session-audit tests, and `make smoke API_PORT=8081`. Bot and Twitch race tests pass. Broader HTTP race testing exposed existing unsynchronized response-buffer reads in SSE replay tests; fixing those tests is the next verification slice.
 
+## October 6 SSE verification synchronization
+
+SSE tests now receive immutable snapshots from the handler's flush operation instead of polling a response buffer while it is being written. A shared fixture cancels and joins the handler during cleanup, including failed assertions. Retained BRB replay, persisted goal replay, cleared state, and live alert delivery now wait for the corresponding flush. The alert test confirms delivery before cancellation, removing its previous event/cancellation race.
+
+Verification passed: the complete backend `go test -race ./... -count=1` suite, `make verify` (93 frontend tests and the Go suite), and all fourteen `make smoke-browser` checks. This resolves the HTTP test races discovered during the resolver extraction.
+
 ## October 6 moderation operation state
 
 `bot/useBotModeration.ts` now owns moderation-rule loading and writes, test-message drafts/results, manual action state, and nuke planning/execution/rollback. The workspace coordinates panel layout and status/audit; each bot operation owns its requests and drafts. `Bot.tsx` is now 110 lines. Pending moderation operations disable overlapping moderation/nuke controls, and responses after navigation or API/credential changes are ignored.
