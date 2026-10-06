@@ -26,7 +26,7 @@ docker compose up --build
 - `EVENT_HISTORY_FILE` / `EVENT_HISTORY_LIMIT` — persisted recent event history path and count limit. Defaults to `/data/event-history.jsonl` and `250` in Docker.
 - `DATABASE_URL` — Postgres connection string. When set, event history is stored in Postgres `stream_events`; when unset, the API uses the JSONL file fallback.
 - Shared dashboard config is stored in Postgres through operator-protected `/api/dashboard/config` when `DATABASE_URL` is set. The browser still keeps a local config cache; secrets remain session-only.
-- Stream/rehearsal sessions are stored in Postgres through operator-protected `/api/stream/session*` endpoints when `DATABASE_URL` is set. Active sessions tag new event-history rows with `sessionId`; `/api/stream/session/{id}` returns a review report with tagged events and readiness snapshots.
+- Stream/rehearsal sessions are stored in Postgres through operator-protected `/api/stream/session*` endpoints when `DATABASE_URL` is set. Active sessions tag new event-history rows with `sessionId`; `/api/stream/session/{id}` returns a review report with tagged events, readiness snapshots, and session-specific bot audit rows. Reports and exports show loaded versus total bot actions and flag unavailable audit storage.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
 - `VITE_API_BASE_URL` — optional build-time API base URL for local Vite builds. If unset, overlays derive the API URL from the browser host on port `8080`.
 - `OBS_WEBSOCKET_URL` — OBS WebSocket v5 endpoint. Docker defaults to `ws://host.docker.internal:4455` to reach OBS on the host desktop; native API runs can use `ws://localhost:4455`.

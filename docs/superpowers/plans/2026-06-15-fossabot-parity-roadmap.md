@@ -32,7 +32,7 @@ Implemented and verified in committed slices:
 - Safe custom response commands with role/cooldown checks, template variables, dashboard management, and preview rendering.
 - Guarded outbound Twitch chat replies for custom commands through `user:write:chat`, with per-command response mode `overlay`, `chat`, or `both`.
 - Operator-configured custom API variables using `{api:name}` with GET-only HTTPS fetching, caps, caching, and private-host blocking.
-- Counters and quotes with dashboard/API management, chat commands, and `{count:name}` / `{quote:random}` variables.
+- Counters and quotes with dashboard/API management, chat commands, `{count:name}` / `{quote:random}` variables, operator change audits, and session report/export coverage.
 - Channel-point rule enrichment with cooldown seconds and fulfillment notes.
 - Twitch reward inventory, reversible pause/disable lifecycle controls, guarded bounded reward fields, minimal reward creation/deletion, and unfulfilled redemption queue controls for fulfill/cancel actions.
 - Moderation foundation: blocked-term rules, dry-run matching, opt-in automatic enforcement, guarded manual Twitch delete/timeout/ban/unban actions with required scopes, and nuke-style dry-run planning over recent chat history.
@@ -52,6 +52,14 @@ The timer workflow now includes Run once for saved timers, including paused time
 Verification passed: `make verify`, `make smoke`, and all six `make smoke-browser` checks. Unit tests cover paused timers, missing timers, empty rendered responses, and audit-storage failure. Browser fixtures cover pending, success, audit refresh, and API failure without Twitch credentials.
 
 Local verification uses native API and Vite processes on loopback, with disposable file data under `/tmp`. Docker socket access is unavailable, but rootless Podman runs a disposable Postgres 17 database on loopback port 55439. Real Postgres checks passed for timer lookup, unchanged paused configuration, event history, manual audit, missing/empty timer errors, active-session report linkage, and configuration-change audit coverage without response text. `make smoke API_PORT=8081` passed with database, bot runtime, dashboard config, and session readiness checks healthy. Live Twitch/OBS execution remains unverified; readiness reports missing Twitch configuration and unreachable OBS.
+
+---
+
+## October 6 session audit progress
+
+Operator counter and quote create/update/delete operations now record successful and failed changes with the active session ID. Quote text and author content stay out of audit metadata. Session reports include bot actions filtered by session before applying the row limit, along with a total count. The dashboard and Markdown/JSON exports show the loaded rows and flag unavailable audit data.
+
+Verification passed: `make verify` (93 frontend tests and the Go suite), all nine `make smoke-browser` checks, `make smoke API_PORT=8081`, and the optional Postgres audit integration test. Native HTTP checks covered seven counter/quote actions, safe metadata, bounded counts, and an unchanged older report after newer activity in another session. The collaborative browser displayed all seven actions from that real database report. Live Twitch and OBS verification still needs those services and credentials.
 
 ---
 
@@ -258,7 +266,7 @@ Build the spine before adding feature breadth.
 - Add dashboard panels for counters and quotes.
 - Add commands: `!count`, `!addquote`, `!quote`, `!delquote` gated by role.
 - Add template variables `{count:name}` and `{quote:random}`.
-- Include counter/quote actions in audit/session reports.
+- [x] Include counter/quote actions in audit/session reports (October 6: operator CRUD audit, session filtering before row limits, loaded/total counts, and JSON/Markdown exports).
 
 ---
 

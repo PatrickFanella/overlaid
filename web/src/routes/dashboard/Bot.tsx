@@ -114,8 +114,8 @@ export function BotWorkspace() {
   }
 
   async function refreshCommunity() {
-    const [status, counters, quotes, apiVariables] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotAPIVariables(apiBaseUrl, operatorSecret)]);
-    setState((current) => ({ ...current, status, counters, quotes, apiVariables }));
+    const [status, counters, quotes, apiVariables, audit] = await Promise.all([fetchBotStatus(apiBaseUrl, operatorSecret), fetchBotCounters(apiBaseUrl, operatorSecret), fetchBotQuotes(apiBaseUrl, operatorSecret), fetchBotAPIVariables(apiBaseUrl, operatorSecret), fetchBotAudit(25, apiBaseUrl, operatorSecret)]);
+    setState((current) => ({ ...current, status, counters, quotes, apiVariables, audit }));
   }
 
   async function refreshModeration() {

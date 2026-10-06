@@ -165,12 +165,52 @@ func (s *Store) RecentAudit(ctx context.Context, limit int) ([]AuditEvent, error
 	items := []AuditEvent{}
 	for rows.Next() {
 		var item AuditEvent
-		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.Source, &item.ActorID, &item.ActorLogin, &item.ActorDisplayName, &item.ActorRole, &item.Trigger, &item.Command, &item.Action, &item.Result, &item.Reason, &item.EventID, &item.StreamSessionID, &item.Data); err != nil {
+		if err := rows.Scan(auditDestinations(&item)...); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func auditDestinations(item *AuditEvent) []any {
+	return []any{&item.ID, &item.CreatedAt, &item.Source, &item.ActorID, &item.ActorLogin, &item.ActorDisplayName, &item.ActorRole, &item.Trigger, &item.Command, &item.Action, &item.Result, &item.Reason, &item.EventID, &item.StreamSessionID, &item.Data}
+}
+
+// AuditForSession filters before limiting so older sessions cannot lose their
+// audit rows merely because newer sessions generated more global activity.
+func (s *Store) AuditForSession(ctx context.Context, sessionID string, limit int) ([]AuditEvent, int, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil, 0, errors.New("session id is required")
+	}
+	if limit <= 0 || limit > 250 {
+		limit = 50
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `
+        SELECT id, created_at, source, actor_id, actor_login, actor_display_name, actor_role,
+            trigger, command, action, result, reason, COALESCE(event_id, ''), COALESCE(stream_session_id, ''), COALESCE(data, '{}'::jsonb), count(*) OVER ()
+        FROM bot_audit_events
+        WHERE stream_session_id = $1
+        ORDER BY created_at DESC, id DESC
+        LIMIT $2
+    `, sessionID, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	items := []AuditEvent{}
+	total := 0
+	for rows.Next() {
+		var item AuditEvent
+		if err := rows.Scan(append(auditDestinations(&item), &total)...); err != nil {
+			return nil, 0, err
+		}
+		items = append(items, item)
+	}
+	return items, total, rows.Err()
 }
 
 func (s *Store) Counts(ctx context.Context) (commandCount, timerCount, auditCount int, err error) {

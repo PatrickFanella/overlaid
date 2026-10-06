@@ -170,3 +170,40 @@ func TestRecordBotTimerChangesUsesSafeMetadataAndSession(t *testing.T) {
 		t.Fatalf("unexpected failure audit: %#v", event)
 	}
 }
+
+func TestRecordBotCommunityChangesUsesSafeMetadata(t *testing.T) {
+	recorder := &recordingBotAuditStore{}
+	server := &Server{botRuntime: bot.NewRuntime(recorder), history: activeHistoryStub{sessionID: "session-1"}}
+	for _, operation := range []string{"create", "update", "delete"} {
+		server.recordBotCounterChange(context.Background(), bot.Counter{ID: "counter-1", Name: "hype", Value: 3}, operation, bot.ResultAllowed)
+		server.recordBotQuoteChange(context.Background(), bot.Quote{ID: "quote-1", Text: "PRIVATE_QUOTE", Author: "PRIVATE_AUTHOR"}, operation, bot.ResultAllowed)
+	}
+	server.recordBotCounterChange(context.Background(), bot.Counter{ID: "missing"}, "update", bot.ResultFailed)
+	server.recordBotQuoteChange(context.Background(), bot.Quote{ID: "missing"}, "delete", bot.ResultFailed)
+	if len(recorder.events) != 8 {
+		t.Fatalf("unexpected audit count: %d", len(recorder.events))
+	}
+	for _, event := range recorder.events {
+		if event.Source != "dashboard" || event.ActorRole != "operator" || event.StreamSessionID != "session-1" {
+			t.Fatalf("unexpected identity/session: %#v", event)
+		}
+		if strings.Contains(string(event.Data), "PRIVATE_") {
+			t.Fatalf("free-form quote content leaked: %s", event.Data)
+		}
+	}
+	if event := recorder.events[0]; event.Action != "counter_create" || event.Command != "hype" || !strings.Contains(string(event.Data), `"value":3`) {
+		t.Fatalf("unexpected counter create: %#v", event)
+	}
+	if event := recorder.events[1]; event.Action != "quote_create" || string(event.Data) != `{"quoteId":"quote-1"}` {
+		t.Fatalf("unexpected quote create: %#v", event)
+	}
+	if event := recorder.events[4]; event.Action != "counter_delete" || string(event.Data) != `{"counterId":"counter-1"}` {
+		t.Fatalf("unexpected counter delete: %#v", event)
+	}
+	if event := recorder.events[6]; event.Result != "failed" || event.Reason != "counter_configuration_failed" {
+		t.Fatalf("unexpected failed counter audit: %#v", event)
+	}
+	if event := recorder.events[7]; event.Result != "failed" || event.Reason != "quote_configuration_failed" {
+		t.Fatalf("unexpected failed quote audit: %#v", event)
+	}
+}

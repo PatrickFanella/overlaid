@@ -1,4 +1,4 @@
-import { renderToString } from 'react-dom/server';
+import { renderToString, renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { loadBotWorkspace } from './routes/dashboard/bot/loadBotWorkspace';
@@ -40,8 +40,9 @@ import { ReadinessPanel } from './routes/dashboard/components/ReadinessPanel';
 import { TwitchInteractionsManager } from './routes/dashboard/components/TwitchInteractionsManager';
 import { RecoveryConsolePanel } from './routes/dashboard/components/RecoveryConsolePanel';
 import { SessionLogPanel } from './routes/dashboard/components/SessionLogPanel';
+import { SessionBotAuditPanel } from './routes/dashboard/components/SessionBotAuditPanel';
 import { validateQuickActionsAgainstOBS } from './lib/obsValidation';
-import { formatSessionReportMarkdown, sessionReportFilename } from './lib/sessionReports';
+import { formatSessionReportMarkdown, formatSessionReportSummary, sessionReportFilename } from './lib/sessionReports';
 
 describe('App routing', () => {
   it('renders the home page with overlay routes', () => {
@@ -1048,11 +1049,28 @@ describe('quick action sequence utilities', () => {
       session: { id: 'abcdef123456', title: 'Preflight rehearsal', kind: 'rehearsal', startedAt: '2026-06-15T00:00:00Z', eventCount: 1 },
       events: [{ id: 'e1', type: 'alert', source: 'test', title: 'Sample alert', message: '', severity: 'success', createdAt: '2026-06-15T00:01:00Z' }],
       snapshots: [{ id: 's1', sessionId: 'abcdef123456', phase: 'start', status: 'ok', checks: [], capturedAt: '2026-06-15T00:00:00Z' }],
+      botAudit: { total: 2, events: [{ id: 'audit-1', streamSessionId: 'abcdef123456', createdAt: '2026-06-15T00:01:00Z', source: 'dashboard', actorRole: 'operator', action: 'counter_create', result: 'allowed', reason: 'counter_configuration_changed' }] },
     };
 
     expect(formatSessionReportMarkdown(report)).toContain('# Preflight rehearsal');
     expect(formatSessionReportMarkdown(report)).toContain('## Events');
+    expect(formatSessionReportMarkdown(report)).toContain('## Bot actions');
+    expect(formatSessionReportMarkdown(report)).toContain('counter_create');
+    expect(formatSessionReportMarkdown(report)).toContain('1 of 2 bot actions exported.');
+    expect(formatSessionReportSummary(report)).toContain('1 of 2 bot actions loaded.');
     expect(sessionReportFilename(report, 'md')).toBe('preflight-rehearsal-abcdef12.md');
+  });
+
+  it('shows incomplete or unavailable session bot audit without claiming an empty audit', () => {
+    const partial = { total: 3, events: [{ id: 'audit-1', createdAt: '2026-06-15T00:01:00Z', source: 'dashboard', action: 'quote_delete', result: 'allowed' }] };
+    const html = renderToStaticMarkup(<SessionBotAuditPanel audit={partial} />);
+    expect(html).toContain('1 of 3 bot actions loaded.');
+    expect(html).toContain('Only the newest 1 of 3 bot actions are loaded.');
+    expect(html).toContain('quote_delete');
+    const failed = renderToString(<SessionBotAuditPanel audit={{ events: [], total: 0, loadError: 'session bot audit unavailable' }} />);
+    expect(failed).toContain('Bot audit unavailable');
+    expect(failed).not.toContain('No bot actions recorded');
+    expect(renderToString(<SessionBotAuditPanel audit={undefined} />)).toContain('Bot audit not included by this server.');
   });
 
   it('resolves atomic quick actions in sequence order', () => {

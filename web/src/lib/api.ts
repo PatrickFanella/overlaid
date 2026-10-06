@@ -253,10 +253,17 @@ export type StreamSessionReadinessSnapshot = {
   capturedAt: string;
 };
 
+export type SessionBotAudit = {
+  events: BotAuditEvent[];
+  total: number;
+  loadError?: string;
+};
+
 export type StreamSessionReport = {
   session: StreamSession;
   events: EventHistoryItem[];
   snapshots: StreamSessionReadinessSnapshot[];
+  botAudit?: SessionBotAudit;
 };
 
 export type EventHistoryResponse = {

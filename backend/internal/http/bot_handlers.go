@@ -213,8 +213,13 @@ func (s *Server) botCounterSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
+	operation := "create"
+	if strings.TrimSpace(request.ID) != "" {
+		operation = "update"
+	}
 	counter, err := s.botStore.SaveCounter(r.Context(), bot.Counter{ID: request.ID, Name: request.Name, Value: request.Value})
 	if err != nil {
+		s.recordBotCounterChange(r.Context(), bot.Counter{ID: request.ID}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -222,6 +227,7 @@ func (s *Server) botCounterSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotCounterChange(r.Context(), counter, operation, bot.ResultAllowed)
 	writeJSON(w, counter)
 }
 
@@ -231,6 +237,7 @@ func (s *Server) botCounterDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.botStore.DeleteCounter(r.Context(), r.PathValue("id")); err != nil {
+		s.recordBotCounterChange(r.Context(), bot.Counter{ID: r.PathValue("id")}, "delete", bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -238,6 +245,7 @@ func (s *Server) botCounterDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotCounterChange(r.Context(), bot.Counter{ID: r.PathValue("id")}, "delete", bot.ResultAllowed)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -393,8 +401,13 @@ func (s *Server) botQuoteSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
+	operation := "create"
+	if strings.TrimSpace(request.ID) != "" {
+		operation = "update"
+	}
 	quote, err := s.botStore.SaveQuote(r.Context(), bot.Quote{ID: request.ID, Text: request.Text, Author: request.Author})
 	if err != nil {
+		s.recordBotQuoteChange(r.Context(), bot.Quote{ID: request.ID}, operation, bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -402,6 +415,7 @@ func (s *Server) botQuoteSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotQuoteChange(r.Context(), quote, operation, bot.ResultAllowed)
 	writeJSON(w, quote)
 }
 
@@ -411,6 +425,7 @@ func (s *Server) botQuoteDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.botStore.DeleteQuote(r.Context(), r.PathValue("id")); err != nil {
+		s.recordBotQuoteChange(r.Context(), bot.Quote{ID: r.PathValue("id")}, "delete", bot.ResultFailed)
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -418,6 +433,7 @@ func (s *Server) botQuoteDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	s.recordBotQuoteChange(r.Context(), bot.Quote{ID: r.PathValue("id")}, "delete", bot.ResultAllowed)
 	w.WriteHeader(http.StatusNoContent)
 }
 

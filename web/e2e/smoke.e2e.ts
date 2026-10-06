@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 test.describe('operator browser smoke', () => {
   test('loads the desk shell and critical routes', async ({ page }) => {
@@ -229,6 +230,48 @@ test.describe('operator browser smoke', () => {
     await page.goto('/dashboard/settings');
     await expect(page.getByText('Configure deliberately')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Load from OBS' })).toBeVisible();
+  });
+
+  test('reviews and exports session bot actions with bounded and unavailable audit diagnostics', async ({ page }) => {
+    let unavailable = false;
+    const session = { id: 'session-report-1', title: 'Community audit rehearsal', kind: 'rehearsal', startedAt: '2026-10-06T05:00:00Z', endedAt: '2026-10-06T05:01:00Z', eventCount: 0 };
+    const audit = { total: 3, events: [{ id: 'audit-1', streamSessionId: session.id, createdAt: '2026-10-06T05:00:30Z', source: 'dashboard', actorRole: 'operator', action: 'quote_create', result: 'allowed', reason: 'quote_configuration_changed' }] };
+    await page.route('**/api/stream/session**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/session-report-1')) {
+        await route.fulfill({ json: { session, events: [], snapshots: [], botAudit: unavailable ? { events: [], total: 0, loadError: 'session bot audit unavailable' } : audit } });
+      } else {
+        await route.fulfill({ json: { recent: [session] } });
+      }
+    });
+    await page.goto('/dashboard/sessions');
+    await page.getByRole('button', { name: 'Open latest report' }).click();
+    const panel = page.getByRole('region', { name: 'Session bot actions' });
+    // A named section without an explicit role is exposed as a region.
+    await expect(panel.getByText('quote_create', { exact: true })).toBeVisible();
+    await expect(panel.getByText('1 of 3 bot actions loaded.')).toBeVisible();
+    await expect(panel.getByText('Only the newest 1 of 3 bot actions are loaded. Exports include these loaded rows.')).toBeVisible();
+
+    const jsonDownload = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export JSON', exact: true }).click();
+    const jsonFile = await (await jsonDownload).path();
+    expect(jsonFile).not.toBeNull();
+    const exported = JSON.parse(await readFile(jsonFile!, 'utf8'));
+    expect(exported.botAudit).toEqual(audit);
+    const markdownDownload = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export Markdown', exact: true }).click();
+    const markdownFile = await (await markdownDownload).path();
+    expect(markdownFile).not.toBeNull();
+    const markdown = await readFile(markdownFile!, 'utf8');
+    expect(markdown).toContain('## Bot actions');
+    expect(markdown).toContain('quote_create');
+    expect(markdown).toContain('1 of 3 bot actions exported.');
+
+    unavailable = true;
+    await page.getByRole('button', { name: 'Open latest report' }).click();
+    await expect(panel.getByText('Bot audit unavailable: session bot audit unavailable')).toBeVisible();
+    await expect(panel.getByText('No bot actions recorded for this session.')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Export JSON', exact: true })).toBeEnabled();
   });
 
   test('previews every overlay in demo mode', async ({ page }) => {

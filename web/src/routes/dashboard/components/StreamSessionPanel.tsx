@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { endStreamSession, fetchStreamSessionReport, startStreamSession, type StreamSession, type StreamSessionReport, type StreamSessionResponse } from '../../../lib/api';
 import { createRehearsalSteps } from '../../../lib/rehearsal';
 import { formatSessionReportMarkdown, formatSessionReportSummary, sessionReportFilename } from '../../../lib/sessionReports';
+import { SessionBotAuditPanel } from './SessionBotAuditPanel';
 import { EventHistoryPanel } from './EventHistoryPanel';
 import { Empty, Notice, Panel, SubPanel, Tag } from '../ui';
 
@@ -253,6 +254,7 @@ export function StreamSessionPanel({ apiBaseUrl, operatorSecret, status, loading
             </div>
           </SubPanel>
           {report.snapshots.length > 0 ? <ReadinessSnapshotGrid snapshots={report.snapshots} /> : null}
+          <SessionBotAuditPanel audit={report.botAudit} />
           <EventHistoryPanel events={report.events} title="Session events" />
         </div>
       ) : null}

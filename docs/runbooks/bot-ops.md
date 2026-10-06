@@ -199,6 +199,18 @@ Nuke planning and guarded execution are available from `/dashboard/chat`:
 - Roll back a radiation window from `/dashboard/chat` or `POST /api/bot/moderation/nuke/radiation/rollback` with `ruleId` and `confirm: true`; rollback disables enforcement and writes a bot audit row.
 - It does not ban users or undo already-deleted chat messages. Timeout rollback is limited to disabling the future-enforcement window; manual unban/untimeout remains available through the guarded moderation action controls.
 
+## Session bot audit review
+
+Dashboard counter and quote create, update, and delete actions record success or failure in bot audit. Records use source `dashboard`, role `operator`, and the active stream session ID. Counter records include the saved name and value; quote records include only the record ID, without quote text or author content.
+
+1. Start a rehearsal session, then create, update, and delete a verification counter and quote.
+2. Check the `counter_create`, `counter_update`, `counter_delete`, `quote_create`, `quote_update`, and `quote_delete` rows in Bot audit.
+3. End the rehearsal and open its report in `/dashboard/sessions`.
+4. Check Session bot actions and its loaded/total count. Reports query that session before applying the row limit, so newer activity from another session cannot displace its rows.
+5. Export JSON and Markdown. Exports contain the loaded rows and their count; a bounded report is not a full audit archive. An unavailable audit warning means the report could not load audit data, not that no actions occurred.
+
+The optional Postgres audit integration test needs a disposable database. It creates and removes its own ended-session fixtures. From `backend`, run `OVERLAID_TEST_DATABASE_URL='<disposable-postgres-url>' go test ./internal/bot -run TestAuditForSessionPostgres -count=1`. The normal suite skips this test when the variable is unset.
+
 ## Command audit check
 
 1. Start a rehearsal session from `/dashboard` or `/dashboard/sessions` if you want session tagging.

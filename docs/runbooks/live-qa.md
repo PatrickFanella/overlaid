@@ -85,7 +85,7 @@ Run at least one recovery action off-stream:
 After rehearsal or live stream:
 
 - [ ] End any active stream session.
-- [ ] Open the latest session report.
+- [ ] Open the latest session report. Check Session bot actions against the actions performed during that session, including loaded/total counts and any audit-unavailable warning.
 - [ ] Export Markdown/JSON if the pass found issues or confirms release readiness.
 - [ ] Record recurring failures in the relevant runbook or issue tracker.
 - [ ] Back up Postgres and `api-data` if the session created important operational history.

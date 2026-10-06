@@ -138,3 +138,32 @@ func (s *Server) recordBotTimerChange(ctx context.Context, timer bot.Timer, oper
 		StreamSessionID: s.activeSessionID(), Data: data,
 	})
 }
+
+func (s *Server) recordBotCommunityChange(ctx context.Context, kind, operation, name string, result bot.Result, data map[string]any) {
+	if s == nil || s.botRuntime == nil {
+		return
+	}
+	reason := kind + "_configuration_changed"
+	if result == bot.ResultFailed {
+		reason = kind + "_configuration_failed"
+	}
+	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
+		Source: bot.SourceDashboard, ActorRole: bot.RoleOperator,
+		Trigger: kind + "_configuration", Command: name,
+		Action: kind + "_" + operation, Result: result, Reason: reason,
+		StreamSessionID: s.activeSessionID(), Data: data,
+	})
+}
+
+func (s *Server) recordBotCounterChange(ctx context.Context, counter bot.Counter, operation string, result bot.Result) {
+	data := map[string]any{"counterId": counter.ID}
+	if result == bot.ResultAllowed && operation != "delete" {
+		data["value"] = counter.Value
+	}
+	s.recordBotCommunityChange(ctx, "counter", operation, counter.Name, result, data)
+}
+
+func (s *Server) recordBotQuoteChange(ctx context.Context, quote bot.Quote, operation string, result bot.Result) {
+	// Quote text and authors are free-form content. Keep only the record ID.
+	s.recordBotCommunityChange(ctx, "quote", operation, "", result, map[string]any{"quoteId": quote.ID})
+}

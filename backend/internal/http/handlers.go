@@ -358,7 +358,12 @@ func (s *Server) streamSessionReport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "stream session report unavailable", http.StatusNotFound)
 		return
 	}
-	writeJSON(w, report)
+	var auditReader botSessionAuditReader
+	if s.botStore != nil {
+		auditReader = s.botStore
+	}
+	audit := loadSessionBotAudit(r.Context(), auditReader, report.Session.ID, limit)
+	writeJSON(w, streamSessionReportResponse{Report: report, BotAudit: audit})
 }
 
 func (s *Server) streamSessionEnd(w http.ResponseWriter, r *http.Request) {
