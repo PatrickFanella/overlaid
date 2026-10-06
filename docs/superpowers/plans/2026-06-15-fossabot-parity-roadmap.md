@@ -51,7 +51,7 @@ The timer workflow now includes Run once for saved timers, including paused time
 
 Verification passed: `make verify`, `make smoke`, and all six `make smoke-browser` checks. Unit tests cover paused timers, missing timers, empty rendered responses, and audit-storage failure. Browser fixtures cover pending, success, audit refresh, and API failure without Twitch credentials.
 
-Local limits: Docker socket access is unavailable. Native API and Vite processes run on loopback, with disposable data under `/tmp`. Readiness reports missing Twitch configuration and unreachable OBS. Real Postgres and live Twitch/OBS execution have not been verified in this environment.
+Local verification uses native API and Vite processes on loopback, with disposable file data under `/tmp`. Docker socket access is unavailable, but rootless Podman runs a disposable Postgres 17 database on loopback port 55439. Real Postgres checks passed for timer lookup, unchanged paused configuration, event history, manual audit, missing/empty timer errors, and active-session report linkage. `make smoke API_PORT=8081` passed with database, bot runtime, dashboard config, and session readiness checks healthy. Live Twitch/OBS execution remains unverified; readiness reports missing Twitch configuration and unreachable OBS.
 
 ---
 

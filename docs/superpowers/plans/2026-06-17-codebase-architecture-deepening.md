@@ -218,3 +218,11 @@ Each slice must finish with focused checks, `make verify` when appropriate, and 
 - More aggressive extraction of `Bot.tsx` panels and other frontend route Modules.
 - Further API client deepening beyond bot/Twitch interaction and reward families.
 - Any broader workflow-module refactors not required to lock the slice-6 contract.
+
+## October 6 bot panel extraction
+
+Moved commands, community tools, API variables, moderation/nuke, and timer rendering from `Bot.tsx` into separate components under `web/src/routes/dashboard/bot/`. Audit/status was already separate. Panel props, safety guards, layout configuration, and API handlers retain their existing behavior. `Bot.tsx` is now 427 lines rather than 1,099.
+
+Verification passed: `make verify` and all six `make smoke-browser` checks, including timer pending/success/failure behavior. Runtime smoke also passed against the disposable Postgres API at port 8081.
+
+This is the first part of the bot dashboard split. Request state, drafts, and refresh handlers still belong to the workspace; separating those by operation remains follow-up work.
