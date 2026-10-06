@@ -1,5 +1,8 @@
 # Roadmap acceptance map, October 6, 2026
 
+Scope: the June 15 FossaBot/Twitch roadmap only. This record does not complete the October 5 multi-platform program; its Phase 0 work is tracked in [the separate implementation plan](../superpowers/plans/2026-10-06-multiplatform-phase-0.md).
+
+
 Initial source audited: `f094155`; Unicode reward validation was verified in `a723719`. The profile browser acceptance addendum is committed with the current update. This record distinguishes local implementation/contract acceptance from real-service and production acceptance. It does not mark the overnight goal or live deployment complete.
 
 ## FossaBot parity requirements
