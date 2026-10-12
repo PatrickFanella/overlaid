@@ -1407,13 +1407,19 @@ func TestPublishEventPublishesBeforeHistoryAppendFailure(t *testing.T) {
 	if err := os.Mkdir(historyDir, 0o700); err != nil {
 		t.Fatalf("mkdir history dir: %v", err)
 	}
-	if err := os.Chmod(historyDir, 0o500); err != nil {
-		t.Fatalf("chmod history dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(historyDir, 0o700) })
-
 	historyFile := filepath.Join(historyDir, "event-history.jsonl")
 	server := NewServer(config.Config{AllowedOrigin: "*", EventHistoryFile: historyFile}, events.NewBus(4))
+	// Load the empty store first, then obstruct its directory. Unlike chmod,
+	// a regular-file parent rejects writes even when CI runs as root.
+	if !server.historyWritable {
+		t.Fatal("expected empty history store to be writable before obstruction")
+	}
+	if err := os.Remove(historyDir); err != nil {
+		t.Fatalf("remove empty history directory: %v", err)
+	}
+	if err := os.WriteFile(historyDir, []byte("blocked history parent"), 0o600); err != nil {
+		t.Fatalf("obstruct history directory: %v", err)
+	}
 	client := server.bus.Subscribe()
 	defer server.bus.Unsubscribe(client.ID)
 

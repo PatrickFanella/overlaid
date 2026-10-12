@@ -2,12 +2,24 @@ name: template-check
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Verify template baseline
-        run: make verify
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install declared pnpm version
+        run: npm install --global pnpm@10.33.0
+      - name: Verify application
+        run: |
+          make verify
+          git diff --exit-code
