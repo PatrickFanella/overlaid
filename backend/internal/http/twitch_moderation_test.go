@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -245,7 +246,7 @@ func newModerationRuleTestStore(t *testing.T) *bot.Store {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	store := &bot.Store{}
-	setUnexportedField(t, store, "db", db)
+	setUnexportedField(t, store, "db", tenantdb.Legacy(db))
 	return store
 }
 

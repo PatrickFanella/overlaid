@@ -1,3 +1,4 @@
+import { loadAccountContext, tenantStorageKey } from './accountContext';
 import { defaultPanelLayouts, normalizePanelLayouts, type PanelLayouts } from './dashboardLayout';
 
 export type SetupChecklistItem = {
@@ -408,7 +409,7 @@ export function normalizeDashboardConfig(parsed: Partial<DashboardConfig>): Dash
 
 export function loadDashboardConfig(): DashboardConfig {
   if (typeof window === 'undefined') return normalizeDashboardConfig({});
-  const raw = window.localStorage.getItem(CONFIG_KEY);
+  const raw = window.localStorage.getItem(tenantStorageKey(CONFIG_KEY));
   if (!raw) return normalizeDashboardConfig({});
 
   try {
@@ -421,18 +422,19 @@ export function loadDashboardConfig(): DashboardConfig {
 
 export function saveDashboardConfig(config: DashboardConfig) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  window.localStorage.setItem(tenantStorageKey(CONFIG_KEY), JSON.stringify(config));
 }
 
 export function loadOperatorSecret() {
   if (typeof window === 'undefined') return '';
-  return window.sessionStorage.getItem(OPERATOR_SECRET_KEY) || '';
+  if (loadAccountContext().deploymentMode === 'hosted') return '';
+  return window.sessionStorage.getItem(tenantStorageKey(OPERATOR_SECRET_KEY)) || window.sessionStorage.getItem(OPERATOR_SECRET_KEY) || '';
 }
 
 export function saveOperatorSecret(secret: string) {
   if (typeof window === 'undefined') return;
-  if (secret.trim()) window.sessionStorage.setItem(OPERATOR_SECRET_KEY, secret);
-  else window.sessionStorage.removeItem(OPERATOR_SECRET_KEY);
+  if (secret.trim()) window.sessionStorage.setItem(tenantStorageKey(OPERATOR_SECRET_KEY), secret);
+  else window.sessionStorage.removeItem(tenantStorageKey(OPERATOR_SECRET_KEY));
 }
 
 export function createQuickAction(kind: QuickAction['kind'], label = 'New action'): QuickAction {

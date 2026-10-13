@@ -19,11 +19,12 @@ type customCommandExecutor struct {
 	now      func() time.Time
 	channel  string
 	renderer bot.TemplateRenderer
+	allow    func(string) error
 }
 
 func newCustomCommandExecutor(config CommandProcessorConfig, now func() time.Time) *customCommandExecutor {
 	return &customCommandExecutor{commands: customCommandMap(config.Custom), lastRun: make(map[string]time.Time), now: now,
-		channel: strings.TrimSpace(config.Channel), renderer: bot.TemplateRenderer{Community: config.Community, APIVariables: config.APIVariables, NowPlaying: config.NowPlaying}}
+		channel: strings.TrimSpace(config.Channel), allow: config.AllowCustom, renderer: bot.TemplateRenderer{Community: config.Community, APIVariables: config.APIVariables, NowPlaying: config.NowPlaying}}
 }
 
 // Replace configuration without resetting successful command cooldowns.
@@ -51,6 +52,11 @@ func (e *customCommandExecutor) handle(original, resolved ChatCommand, aliased b
 }
 
 func (e *customCommandExecutor) execute(original ChatCommand, resolved ChatCommand, aliased bool, custom CustomCommand, user ChatCommandUser) []events.Event {
+	if e.allow != nil {
+		if err := e.allow(custom.Name); err != nil {
+			return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command exceeds current plan", map[string]any{"custom": true, "action": custom.Action, "planLimited": true})}
+		}
+	}
 	if !custom.Enabled {
 		return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command disabled", map[string]any{"custom": true, "action": custom.Action})}
 	}

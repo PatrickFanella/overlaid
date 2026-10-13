@@ -37,6 +37,7 @@ test: ## Run backend and frontend tests
 build: build-probe ## Build backend binaries and frontend assets
 	mkdir -p bin
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/over-laid-api ./cmd/app
+	cd backend && go build -o ../bin/overlaid-admin ./cmd/admin
 	pnpm --dir web run build
 
 build-probe: ## Build the readiness monitoring probe
@@ -133,12 +134,8 @@ smoke-alert: ## Send a test alert to the running API
 db-shell: ## Open psql inside the Postgres container
 	docker compose exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
-db-migrate: ## Apply SQL migrations to the Compose Postgres database
-	@for file in migrations/*.sql; do \
-		test -f "$$file" || continue; \
-		echo "Applying $$file"; \
-		docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$file"; \
-	done
+db-migrate: ## Apply pending SQL migrations using administrator credentials
+	bash scripts/db-migrate.sh
 
 db-tables: ## List tables in the Compose Postgres database
 	docker compose exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "\\dt"'

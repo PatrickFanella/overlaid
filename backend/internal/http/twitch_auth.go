@@ -43,6 +43,7 @@ type twitchAuthStore struct {
 }
 
 type twitchTokenInfo struct {
+	ValidatedAt  time.Time
 	AccessToken  string
 	RefreshToken string
 	Scope        []string
@@ -61,6 +62,7 @@ type twitchTokenResponse struct {
 }
 
 type twitchTokenDisk struct {
+	ValidatedAt  time.Time `json:"validated_at,omitempty"`
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	Scope        []string  `json:"scope"`
@@ -86,8 +88,9 @@ type twitchStatusResponse struct {
 }
 
 type twitchValidateResponse struct {
-	Login  string `json:"login"`
-	UserID string `json:"user_id"`
+	ClientID string `json:"client_id"`
+	Login    string `json:"login"`
+	UserID   string `json:"user_id"`
 }
 
 type twitchValidatedToken struct {
@@ -437,6 +440,9 @@ func missingScopes(required, granted []string) []string {
 }
 
 func (s *Server) ensureTwitchToken(ctx context.Context) (*twitchTokenInfo, bool) {
+	if s.credentialStore != nil {
+		return s.ensureVaultTwitchToken(ctx)
+	}
 	token, ok := s.twitch.snapshot()
 	if !ok {
 		return nil, false
@@ -641,6 +647,9 @@ func (s *Server) validateTwitchAccessToken(ctx context.Context, accessToken stri
 	if err := json.NewDecoder(resp.Body).Decode(&validated); err != nil {
 		return twitchValidatedToken{}, err
 	}
+	if s.tenantID != "" && validated.ClientID != s.config.TwitchClientID {
+		return twitchValidatedToken{}, errors.New("token client binding rejected")
+	}
 	if strings.TrimSpace(validated.Login) == "" {
 		return twitchValidatedToken{}, errors.New("validated twitch token did not include login")
 	}
@@ -652,6 +661,7 @@ func (s *Server) validateTwitchAccessToken(ctx context.Context, accessToken stri
 
 func twitchTokenInfoFromResponse(validated twitchValidatedToken, response twitchTokenResponse) *twitchTokenInfo {
 	return &twitchTokenInfo{
+		ValidatedAt:  time.Now(),
 		AccessToken:  response.AccessToken,
 		RefreshToken: response.RefreshToken,
 		Scope:        append([]string(nil), response.Scope...),

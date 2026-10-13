@@ -445,21 +445,21 @@ describe('overlay event utilities', () => {
     await fetchTwitchInteractions(undefined, 'operator-secret');
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://example.test/api/twitch/interactions', {
-      method: 'GET',
+      method: 'GET', credentials: 'include',
       headers: {
         Accept: 'application/json',
         'X-Overlay-Operator-Secret': 'operator-secret',
       },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://example.test/api/twitch/interactions', {
-      method: 'GET',
+      method: 'GET', credentials: 'include',
       headers: {
         Accept: 'application/json',
         'X-Overlay-Operator-Secret': 'operator-secret',
       },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(3, 'http://localhost:8080/api/twitch/interactions', {
-      method: 'GET',
+      method: 'GET', credentials: 'include',
       headers: {
         Accept: 'application/json',
         'X-Overlay-Operator-Secret': 'operator-secret',
@@ -500,7 +500,7 @@ describe('overlay event utilities', () => {
     vi.stubGlobal('fetch', fetchMock);
     await expect(runBotTimer('timer/id', 'http://example.test', 'operator-secret')).resolves.toEqual({ eventId: 'event-1' });
     expect(fetchMock).toHaveBeenCalledWith('http://example.test/api/bot/timers/timer%2Fid/run', {
-      method: 'POST',
+      method: 'POST', credentials: 'include',
       headers: { Accept: 'application/json', 'X-Overlay-Operator-Secret': 'operator-secret' },
     });
   });
@@ -528,14 +528,14 @@ describe('overlay event utilities', () => {
     );
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://example.test/api/bot/status', {
-      method: 'GET',
+      method: 'GET', credentials: 'include',
       headers: {
         Accept: 'application/json',
         'X-Overlay-Operator-Secret': 'operator-secret',
       },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://example.test/api/bot/commands', {
-      method: 'POST',
+      method: 'POST', credentials: 'include',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -552,7 +552,7 @@ describe('overlay event utilities', () => {
       }),
     });
     expect(fetchMock).toHaveBeenNthCalledWith(3, 'http://example.test/api/twitch/rewards/reward-1', {
-      method: 'DELETE',
+      method: 'DELETE', credentials: 'include',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',

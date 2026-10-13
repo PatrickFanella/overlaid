@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"strings"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 )
 
 type Store struct {
-	db           *sql.DB
+	db           *tenantdb.DB
 	apiVariables *APIVariableResolver
 }
 
@@ -21,7 +22,7 @@ func NewPostgres(databaseURL string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := &Store{db: db}
+	store := &Store{db: tenantdb.Legacy(db)}
 	store.apiVariables = newAPIVariableResolver(store, fetchAPIVariable, time.Now)
 	if err := store.Load(); err != nil {
 		_ = db.Close()
@@ -35,6 +36,9 @@ func (s *Store) Load() error {
 	defer cancel()
 	if err := s.db.PingContext(ctx); err != nil {
 		return err
+	}
+	if s.db.IsScoped() {
+		return nil
 	}
 	_, err := s.db.ExecContext(ctx, createTablesSQL)
 	return err
@@ -67,7 +71,7 @@ func (s *Store) RecentAudit(ctx context.Context, limit int) ([]AuditEvent, error
 		SELECT id, created_at, source, actor_id, actor_login, actor_display_name, actor_role,
 			trigger, command, action, result, reason, COALESCE(event_id, ''), COALESCE(stream_session_id, ''), COALESCE(data, '{}'::jsonb)
 		FROM bot_audit_events
-		ORDER BY created_at DESC, id DESC
+		WHERE /*tenant:bot_audit_events*/ ORDER BY created_at DESC, id DESC
 		LIMIT $1
 	`, limit)
 	if err != nil {
@@ -105,7 +109,7 @@ func (s *Store) AuditForSession(ctx context.Context, sessionID string, limit int
         SELECT id, created_at, source, actor_id, actor_login, actor_display_name, actor_role,
             trigger, command, action, result, reason, COALESCE(event_id, ''), COALESCE(stream_session_id, ''), COALESCE(data, '{}'::jsonb), count(*) OVER ()
         FROM bot_audit_events
-        WHERE stream_session_id = $1
+        WHERE /*tenant:bot_audit_events*/ AND stream_session_id = $1
         ORDER BY created_at DESC, id DESC
         LIMIT $2
     `, sessionID, limit)
@@ -130,9 +134,9 @@ func (s *Store) Counts(ctx context.Context) (commandCount, timerCount, auditCoun
 	defer cancel()
 	err = s.db.QueryRowContext(ctx, `
 		SELECT
-			(SELECT count(*) FROM bot_commands),
-			(SELECT count(*) FROM bot_timers),
-			(SELECT count(*) FROM bot_audit_events)
+			(SELECT count(*) FROM bot_commands WHERE /*tenant:bot_commands*/),
+			(SELECT count(*) FROM bot_timers WHERE /*tenant:bot_timers*/),
+			(SELECT count(*) FROM bot_audit_events WHERE /*tenant:bot_audit_events*/)
 	`).Scan(&commandCount, &timerCount, &auditCount)
 	return commandCount, timerCount, auditCount, err
 }
@@ -140,7 +144,7 @@ func (s *Store) Counts(ctx context.Context) (commandCount, timerCount, auditCoun
 func (s *Store) ListCounters(ctx context.Context) ([]Counter, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, value, created_at, updated_at FROM bot_counters ORDER BY name ASC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, value, created_at, updated_at FROM bot_counters WHERE /*tenant:bot_counters*/ ORDER BY name ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +170,7 @@ func (s *Store) SaveCounter(ctx context.Context, counter Counter) (Counter, erro
 	if strings.TrimSpace(counter.ID) == "" {
 		return scanCounter(s.db.QueryRowContext(ctx, `INSERT INTO bot_counters (name, value) VALUES ($1,$2) RETURNING id, name, value, created_at, updated_at`, counter.Name, counter.Value))
 	}
-	return scanCounter(s.db.QueryRowContext(ctx, `UPDATE bot_counters SET name=$2, value=$3, updated_at=now() WHERE id=$1 RETURNING id, name, value, created_at, updated_at`, counter.ID, counter.Name, counter.Value))
+	return scanCounter(s.db.QueryRowContext(ctx, `UPDATE bot_counters SET name=$2, value=$3, updated_at=now() WHERE /*tenant:bot_counters*/ AND id=$1 RETURNING id, name, value, created_at, updated_at`, counter.ID, counter.Name, counter.Value))
 }
 
 func (s *Store) IncrementCounter(ctx context.Context, name string, delta int) (Counter, error) {
@@ -184,7 +188,7 @@ func (s *Store) IncrementCounter(ctx context.Context, name string, delta int) (C
 	defer cancel()
 	return scanCounter(s.db.QueryRowContext(ctx, `
 		INSERT INTO bot_counters (name, value) VALUES ($1,$2)
-		ON CONFLICT (name) DO UPDATE SET value = bot_counters.value + EXCLUDED.value, updated_at = now()
+		ON CONFLICT (/*tenant-conflict*/name) DO UPDATE SET value = bot_counters.value + EXCLUDED.value, updated_at = now()
 		RETURNING id, name, value, created_at, updated_at
 	`, name, delta))
 }
@@ -196,7 +200,7 @@ func (s *Store) CounterValue(ctx context.Context, name string) (Counter, bool, e
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	counter, err := scanCounter(s.db.QueryRowContext(ctx, `SELECT id, name, value, created_at, updated_at FROM bot_counters WHERE name = $1`, name))
+	counter, err := scanCounter(s.db.QueryRowContext(ctx, `SELECT id, name, value, created_at, updated_at FROM bot_counters WHERE /*tenant:bot_counters*/ AND name = $1`, name))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Counter{}, false, nil
 	}
@@ -210,7 +214,7 @@ func (s *Store) DeleteCounter(ctx context.Context, id string) error {
 func (s *Store) ListQuotes(ctx context.Context) ([]Quote, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `SELECT id, text, author, created_at, updated_at FROM bot_quotes ORDER BY created_at DESC, id DESC LIMIT 250`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, text, author, created_at, updated_at FROM bot_quotes WHERE /*tenant:bot_quotes*/ ORDER BY created_at DESC, id DESC LIMIT 250`)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +233,7 @@ func (s *Store) ListQuotes(ctx context.Context) ([]Quote, error) {
 func (s *Store) ListModerationRules(ctx context.Context) ([]ModerationRule, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds FROM bot_moderation_rules ORDER BY name ASC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds FROM bot_moderation_rules WHERE /*tenant:bot_moderation_rules*/ ORDER BY name ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +259,7 @@ func (s *Store) SaveModerationRule(ctx context.Context, rule ModerationRule) (Mo
 	if strings.TrimSpace(rule.ID) == "" {
 		return scanModerationRule(s.db.QueryRowContext(ctx, `INSERT INTO bot_moderation_rules (name, enabled, enforce, pattern, match_target, case_sensitive, regex, action, reason, source, expires_at, exempt_role, timeout_seconds) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds`, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt, rule.ExemptRole, rule.TimeoutSeconds))
 	}
-	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET name=$2, enabled=$3, enforce=$4, pattern=$5, match_target=$6, case_sensitive=$7, regex=$8, action=$9, reason=$10, source=CASE WHEN $11 = 'manual' THEN source ELSE $11 END, expires_at=COALESCE($12, expires_at), exempt_role=$13, timeout_seconds=$14, updated_at=now() WHERE id=$1 RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds`, rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt, rule.ExemptRole, rule.TimeoutSeconds))
+	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET name=$2, enabled=$3, enforce=$4, pattern=$5, match_target=$6, case_sensitive=$7, regex=$8, action=$9, reason=$10, source=CASE WHEN $11 = 'manual' THEN source ELSE $11 END, expires_at=COALESCE($12, expires_at), exempt_role=$13, timeout_seconds=$14, updated_at=now() WHERE /*tenant:bot_moderation_rules*/ AND id=$1 RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds`, rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt, rule.ExemptRole, rule.TimeoutSeconds))
 }
 
 func (s *Store) DisableNukeRadiationRule(ctx context.Context, id string) (ModerationRule, error) {
@@ -265,7 +269,7 @@ func (s *Store) DisableNukeRadiationRule(ctx context.Context, id string) (Modera
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET enabled=false, enforce=false, updated_at=now() WHERE id=$1 AND source='nuke_radiation' RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds`, id))
+	return scanModerationRule(s.db.QueryRowContext(ctx, `UPDATE bot_moderation_rules SET enabled=false, enforce=false, updated_at=now() WHERE /*tenant:bot_moderation_rules*/ AND id=$1 AND source='nuke_radiation' RETURNING id, name, enabled, COALESCE(enforce, false), pattern, match_target, case_sensitive, regex, action, reason, COALESCE(source, ''), expires_at, created_at, updated_at, exempt_role, timeout_seconds`, id))
 }
 
 func (s *Store) DeleteModerationRule(ctx context.Context, id string) error {
@@ -290,13 +294,13 @@ func (s *Store) SaveQuote(ctx context.Context, quote Quote) (Quote, error) {
 	if strings.TrimSpace(quote.ID) == "" {
 		return scanQuote(s.db.QueryRowContext(ctx, `INSERT INTO bot_quotes (text, author) VALUES ($1,$2) RETURNING id, text, author, created_at, updated_at`, quote.Text, quote.Author))
 	}
-	return scanQuote(s.db.QueryRowContext(ctx, `UPDATE bot_quotes SET text=$2, author=$3, updated_at=now() WHERE id=$1 RETURNING id, text, author, created_at, updated_at`, quote.ID, quote.Text, quote.Author))
+	return scanQuote(s.db.QueryRowContext(ctx, `UPDATE bot_quotes SET text=$2, author=$3, updated_at=now() WHERE /*tenant:bot_quotes*/ AND id=$1 RETURNING id, text, author, created_at, updated_at`, quote.ID, quote.Text, quote.Author))
 }
 
 func (s *Store) RandomQuote(ctx context.Context) (Quote, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	quote, err := scanQuote(s.db.QueryRowContext(ctx, `SELECT id, text, author, created_at, updated_at FROM bot_quotes ORDER BY random() LIMIT 1`))
+	quote, err := scanQuote(s.db.QueryRowContext(ctx, `SELECT id, text, author, created_at, updated_at FROM bot_quotes WHERE /*tenant:bot_quotes*/ ORDER BY random() LIMIT 1`))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Quote{}, false, nil
 	}
@@ -313,7 +317,7 @@ func (s *Store) ListTimers(ctx context.Context) ([]Timer, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
 		FROM bot_timers
-		ORDER BY name ASC
+		WHERE /*tenant:bot_timers*/ ORDER BY name ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -336,7 +340,7 @@ func (s *Store) ListCommands(ctx context.Context) ([]Command, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, enabled, response, action, COALESCE(response_mode, 'overlay'), role_required, cooldown_seconds, created_at, updated_at
 		FROM bot_commands
-		ORDER BY name ASC
+		WHERE /*tenant:bot_commands*/ ORDER BY name ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -375,7 +379,7 @@ func (s *Store) SetCommandEnabled(ctx context.Context, id string, enabled bool) 
 	defer cancel()
 	row := s.db.QueryRowContext(ctx, `
 		UPDATE bot_commands SET enabled = $2, updated_at = now()
-		WHERE id = $1
+		WHERE /*tenant:bot_commands*/ AND id = $1
 		RETURNING id, name, enabled, response, action, COALESCE(response_mode, 'overlay'), role_required, cooldown_seconds, created_at, updated_at
 	`, id, enabled)
 	return scanCommand(row)
@@ -388,7 +392,7 @@ func (s *Store) DeleteCommand(ctx context.Context, id string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	result, err := s.db.ExecContext(ctx, `DELETE FROM bot_commands WHERE id = $1`, id)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM bot_commands WHERE /*tenant:bot_commands*/ AND id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -420,7 +424,7 @@ func (s *Store) GetTimer(ctx context.Context, id string) (Timer, error) {
 	defer cancel()
 	return scanTimer(s.db.QueryRowContext(ctx, `
 		SELECT id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
-		FROM bot_timers WHERE id = $1
+		FROM bot_timers WHERE /*tenant:bot_timers*/ AND id = $1
 	`, id))
 }
 
@@ -433,7 +437,7 @@ func (s *Store) SetTimerEnabled(ctx context.Context, id string, enabled bool) (T
 	defer cancel()
 	row := s.db.QueryRowContext(ctx, `
 		UPDATE bot_timers SET enabled = $2, updated_at = now()
-		WHERE id = $1
+		WHERE /*tenant:bot_timers*/ AND id = $1
 		RETURNING id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
 	`, id, enabled)
 	return scanTimer(row)
@@ -448,7 +452,7 @@ func (s *Store) DueTimers(ctx context.Context, now time.Time, limit int) ([]Time
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
 		FROM bot_timers
-		WHERE enabled = true
+		WHERE /*tenant:bot_timers*/ AND enabled = true
 		  AND (last_run_at IS NULL OR last_run_at + (interval_seconds * interval '1 second') <= $1)
 		ORDER BY COALESCE(last_run_at, 'epoch'::timestamptz) ASC, name ASC
 		LIMIT $2
@@ -475,7 +479,7 @@ func (s *Store) MarkTimerRun(ctx context.Context, id string, at time.Time) error
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	result, err := s.db.ExecContext(ctx, `UPDATE bot_timers SET last_run_at = $2, updated_at = now() WHERE id = $1`, id, at.UTC())
+	result, err := s.db.ExecContext(ctx, `UPDATE bot_timers SET last_run_at = $2, updated_at = now() WHERE /*tenant:bot_timers*/ AND id = $1`, id, at.UTC())
 	if err != nil {
 		return err
 	}
@@ -492,7 +496,7 @@ func (s *Store) DeleteTimer(ctx context.Context, id string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	result, err := s.db.ExecContext(ctx, `DELETE FROM bot_timers WHERE id = $1`, id)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM bot_timers WHERE /*tenant:bot_timers*/ AND id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -524,7 +528,7 @@ func (s *Store) updateCommand(ctx context.Context, command Command) (Command, er
 	row := s.db.QueryRowContext(ctx, `
 		UPDATE bot_commands
 		SET name = $2, enabled = $3, response = $4, action = $5, response_mode = $6, role_required = $7, cooldown_seconds = $8, updated_at = now()
-		WHERE id = $1
+		WHERE /*tenant:bot_commands*/ AND id = $1
 		RETURNING id, name, enabled, response, action, COALESCE(response_mode, 'overlay'), role_required, cooldown_seconds, created_at, updated_at
 	`, strings.TrimSpace(command.ID), command.Name, command.Enabled, command.Response, command.Action, command.ResponseMode, command.RoleRequired, command.CooldownSeconds)
 	return scanCommand(row)
@@ -534,7 +538,7 @@ func (s *Store) updateTimer(ctx context.Context, timer Timer) (Timer, error) {
 	row := s.db.QueryRowContext(ctx, `
 		UPDATE bot_timers
 		SET name = $2, enabled = $3, interval_seconds = $4, response = $5, action = $6, updated_at = now()
-		WHERE id = $1
+		WHERE /*tenant:bot_timers*/ AND id = $1
 		RETURNING id, name, enabled, interval_seconds, response, action, created_at, updated_at, last_run_at
 	`, strings.TrimSpace(timer.ID), timer.Name, timer.Enabled, timer.IntervalSeconds, timer.Response, timer.Action)
 	return scanTimer(row)
@@ -607,7 +611,7 @@ func (s *Store) deleteByID(ctx context.Context, table, id, emptyMessage string) 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	result, err := s.db.ExecContext(ctx, `DELETE FROM `+table+` WHERE id = $1`, id)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM `+table+` WHERE /*tenant:`+table+`*/ AND id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -746,3 +750,15 @@ CREATE TABLE IF NOT EXISTS bot_api_variables (
 
 CREATE INDEX IF NOT EXISTS bot_api_variables_enabled_idx ON bot_api_variables (enabled);
 `
+
+func NewTenant(db *tenantdb.DB) (*Store, error) {
+	if db == nil || !db.IsScoped() {
+		return nil, errors.New("tenant context required")
+	}
+	store := &Store{db: db}
+	store.apiVariables = newAPIVariableResolver(store, fetchAPIVariable, time.Now)
+	if err := store.Load(); err != nil {
+		return nil, err
+	}
+	return store, nil
+}

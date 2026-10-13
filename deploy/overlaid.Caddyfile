@@ -1,0 +1,16 @@
+http://overlaid.subcult.tv {
+    @plain header X-Forwarded-Proto http
+    redir @plain https://overlaid.subcult.tv{uri} 308
+    request_body {
+        max_size 1MB
+    }
+    header {
+        X-Robots-Tag "noindex, nofollow, noarchive"
+        -Server
+    }
+    reverse_proxy 10.0.0.56:3083 {
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-For {client_ip}
+        header_up X-Real-IP {client_ip}
+    }
+}

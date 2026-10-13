@@ -2,6 +2,11 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 test.describe('operator browser smoke', () => {
+  test.beforeEach(async ({ page }) => {
+    // This suite covers the legacy operator flow; account workflows have their own suite.
+    await page.route('**/api/account', route => route.fulfill({status:404,body:'legacy fixture'}));
+    await page.route('**/api/dashboard/config', route => route.fulfill({status:503,body:'local cache fixture'}));
+  });
   test('holds session controls until the ended report returns and preserves a failed report receipt', async ({ page }) => {
     await page.addInitScript(() => sessionStorage.setItem('overlaid.operatorSecret.session.v1', 'operator-fixture'));
     const current = { id: 'pending-report', title: 'Fixture session', kind: 'rehearsal', startedAt: '2026-10-06T00:00:00Z', eventCount: 0 };

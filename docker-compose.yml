@@ -1,15 +1,19 @@
 services:
   postgres:
-    image: postgres:17
+    image: docker.io/library/postgres:17
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app}
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      OVERLAID_DATABASE_PASSWORD: ${OVERLAID_DATABASE_PASSWORD:-change-me-runtime}
     ports:
       - "${POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./migrations:/migrations:ro
+      - ./scripts/postgres-init.sh:/docker-entrypoint-initdb.d/00-migrations.sh:ro
+      - ./scripts/postgres-runtime.sh:/docker-entrypoint-initdb.d/zz-runtime.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-app} -d $${POSTGRES_DB:-app}"]
       interval: 10s
@@ -27,6 +31,11 @@ services:
     environment:
       API_ADDR: ${API_ADDR:-:8080}
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-*}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-selfhost}
+      PRODUCT_NAME: ${PRODUCT_NAME:-overlaid}
+      SUPPORT_CONTACT: ${SUPPORT_CONTACT:-}
+      VAULT_ACTIVE_KEY: ${VAULT_ACTIVE_KEY:-}
+      VAULT_KEYS: ${VAULT_KEYS:-}
       EXPOSURE_MODE: ${EXPOSURE_MODE:-local}
       OPERATOR_SECRET: ${OPERATOR_SECRET:-}
       OVERLAY_TOKEN: ${OVERLAY_TOKEN:-}
@@ -34,7 +43,7 @@ services:
       OVERLAY_STATE_FILE: ${OVERLAY_STATE_FILE:-/data/overlay-state.json}
       EVENT_HISTORY_FILE: ${EVENT_HISTORY_FILE:-/data/event-history.jsonl}
       EVENT_HISTORY_LIMIT: ${EVENT_HISTORY_LIMIT:-250}
-      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable}
+      DATABASE_URL: ${DATABASE_URL:-postgres://overlaid_app:${OVERLAID_DATABASE_PASSWORD:-change-me-runtime}@postgres:5432/${POSTGRES_DB:-app}?sslmode=disable}
       OBS_WEBSOCKET_URL: ${OBS_WEBSOCKET_URL:-ws://host.docker.internal:4455}
       OBS_WEBSOCKET_PASSWORD: ${OBS_WEBSOCKET_PASSWORD:-}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:5173}
@@ -68,7 +77,10 @@ services:
       start_period: 10s
 
   web:
-    build: ./web
+    build:
+      context: ./web
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-5173}:80"

@@ -1,0 +1,17 @@
+groups:
+  - name: overlaid
+    rules:
+      - alert: OverlaidRoleNotReady
+        expr: overlaid_role_ready{job="overlaid-readiness"} == 0
+        for: 2m
+        labels: {severity: warning, project: overlaid}
+        annotations:
+          summary: "Overlaid {{ $labels.role }} is not ready"
+          description: "Check the JSON readiness report and NUC service logs."
+      - alert: OverlaidProbeUnavailable
+        expr: up{job="overlaid-readiness"} == 0
+        for: 2m
+        labels: {severity: warning, project: overlaid}
+        annotations:
+          summary: "Overlaid readiness exporter is unavailable"
+          description: "Dozor cannot scrape NUC readiness on port 3085."

@@ -32,7 +32,7 @@ describe('API operation transport', () => {
     await expect(load()).resolves.toEqual(value);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(base + path, {
-      method: 'GET',
+      method: 'GET', credentials: 'include',
       headers: protectedRead ? { Accept: 'application/json', 'X-Overlay-Operator-Secret': 'operator-fixture' } : { Accept: 'application/json' },
     });
   });
@@ -62,9 +62,9 @@ describe('API operation transport', () => {
     await clearOverlays(base, operator);
     await sendWebhook('source/id', { title: 'Fixture', message: 'Only a mock', severity: 'info' }, base, ' webhook-fixture ');
     expect(json).not.toHaveBeenCalled();
-    expect(fetchMock.mock.calls[1]).toEqual([base + '/api/events/clear', { method: 'POST', headers: { Accept: 'application/json', 'X-Overlay-Operator-Secret': 'operator-fixture' } }]);
+    expect(fetchMock.mock.calls[1]).toEqual([base + '/api/events/clear', { method: 'POST', credentials: 'include', headers: { Accept: 'application/json', 'X-Overlay-Operator-Secret': 'operator-fixture' } }]);
     expect(fetchMock.mock.calls[2]).toEqual([base + '/api/integrations/webhook/source%2Fid', {
-      method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Overlay-Webhook-Secret': 'webhook-fixture' },
+      method: 'POST', credentials: 'include', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Overlay-Webhook-Secret': 'webhook-fixture' },
       body: JSON.stringify({ title: 'Fixture', message: 'Only a mock', severity: 'info' }),
     }]);
   });

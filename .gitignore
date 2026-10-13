@@ -1,5 +1,6 @@
 # Secrets and local configuration
 .env
+app.env
 .env.*
 !.env.example
 *.pem

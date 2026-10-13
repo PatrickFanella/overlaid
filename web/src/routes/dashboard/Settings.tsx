@@ -9,6 +9,7 @@ import {
   normalizeDashboardConfig,
   type QuickAction,
 } from '../../lib/dashboardConfig';
+import { useAccount } from './accountSession';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { validateQuickActionsAgainstOBS, type OBSValidationIssue } from '../../lib/obsValidation';
 import { DashboardShell } from './DashboardShell';
@@ -26,6 +27,7 @@ export function DashboardSettingsPage() {
 }
 
 function Settings() {
+  const { account } = useAccount();
   const apiBaseUrl = getOverlayApiBaseUrl();
   const [operatorSecret, setOperatorSecret] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
@@ -259,7 +261,7 @@ function Settings() {
         actions={<Tag>API {apiBaseUrl}</Tag>}
       />
 
-      <Panel kicker="Operator access" title="Operator secret" description="Used for protected dashboard actions. Stored for this browser session only, and this is the only page that edits it.">
+      {account.deploymentMode === 'selfhost' && <Panel kicker="Operator access" title="Operator secret" description="Used for protected dashboard actions. Stored for this browser session only, and this is the only page that edits it.">
         <div className="grid gap-4 lg:grid-cols-2">
           <SubPanel>
             <Field label="Secret header" hint={operatorSecret ? 'Operator secret loaded.' : 'No operator secret stored.'}>
@@ -272,7 +274,7 @@ function Settings() {
             </Field>
           </SubPanel>
         </div>
-      </Panel>
+      </Panel>}
 
       <CustomizablePanelLayout
         page="config"

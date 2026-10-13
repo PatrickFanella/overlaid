@@ -23,16 +23,16 @@
 
 ## Current state — October 13, 2026
 
-Assessed main: `55327be92482`. The single-channel Twitch/OBS application passes `make verify` (116 frontend tests), all 26 Chromium fixture workflows, and exact-head hosted CI. These checks do not establish live Twitch/OBS behavior or production readiness. Persistence integration tests were skipped in this assessment because no disposable database URL was configured; prior fresh-database and restore evidence remains dated October 6.
+Phase 0 is merged through [PR #44](https://git.subcult.tv/subculture-collective/overlaid/pulls/44) at `a64ac84`; #38 and its milestone are closed. The owner accepted six ADRs under #10–12. Phase 1 implementation now follows those decisions in [the bounded plan](2026-10-13-phase-1-tenancy.md).
 
-- [Development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4): Backlog, Ready, In progress, Review, External acceptance, Done.
-- [Roadmap issue #34](https://git.subcult.tv/subculture-collective/overlaid/issues/34): phase and acceptance tracking.
-- Phase 0 implementation issues #3–9 are complete. The owner accepted the six ADRs under #10–12 and closed those issues; the accepted statuses are recorded in the files.
-- [#38](https://git.subcult.tv/subculture-collective/overlaid/issues/38) adds the observed webhook credential gap to Phase 0: the closeout change denies missing/nonmatching credentials outside local exposure, before payload validation and all side effects.
-- [Single-channel release qualification](https://git.subcult.tv/subculture-collective/overlaid/milestone/154) tracks real Twitch (#39), real OBS (#40), disposable-Postgres CI/race evidence (#41), and a first self-host release with target-host recovery/monitoring proof (#42). This is separate from future hosted-service operations in #21.
-- Phase 1 has not started. Phases 2–11 remain planned; their tracking issues #24–33 are scope holders, not implementation evidence.
+- [Development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4) tracks implementation review separately from external acceptance.
+- Phase 1 adds scoped PostgreSQL stores with forced RLS, Twitch account sessions, roles and change audits, encrypted token custody, hashed credentials, plan limits, retention, export/deletion and public policy/status routes.
+- Local verification includes fresh-schema tenant migration, two-tenant REST/SSE/timer tests, login/CSRF/session revocation, quota races/downgrades, vault rotation/restart, legacy import and an independent custom-dump restore. The full browser suite passes 29 fixtures. Hosted CI and homelab release receipts remain separate checks.
+- Homelab placement is NUC for app/data, Dozor for monitoring and Almaz for ingress, using the working hostname `overlaid.subcult.tv`. Deployment files and recovery procedures are in [the runbook](../../runbooks/homelab-phase-1.md); #21 remains open until real operational acceptance is recorded.
+- [Single-channel release qualification](https://git.subcult.tv/subculture-collective/overlaid/milestone/154) retains real Twitch (#39), real OBS (#40), disposable-Postgres hosted CI evidence (#41) and first self-host recovery/monitoring acceptance (#42). Long-lead registrations remain #23 and do not block the Phase 1 implementation exit.
+- Phases 2–11 remain planned; #24–33 describe future scope.
 
-The Phase 0 closeout implements #38 and records owner architecture acceptance. After merge verification, the next work is the Phase 1 implementation plan; #41 and operator-led qualification remain independent release gates. The [dated assessment](../../qa/2026-10-13-development-state.md) records evidence and limits.
+The [dated assessment](../../qa/2026-10-13-development-state.md) remains the baseline audit. Source implementation, reviewed merge, hosted CI, homelab rollout and live provider acceptance are distinct evidence.
 
 ## Original baseline — October 5, 2026
 
@@ -81,7 +81,7 @@ Sizes are relative (S, M, L, XL), not calendar estimates. Each phase ends with `
 
 ### Phase 0: Hardening and decisions (S)
 
-Fix what is unsafe before anything goes public, and write the decisions down. Code criteria #3–9 and owner architecture acceptance #10–12 are complete. The closeout implements #38; milestone closure awaits its reviewed merge.
+Fix what is unsafe before anything goes public, and write the decisions down. Code criteria #3–9 and owner architecture acceptance #10–12 are complete. PR #44 merged the #38 closeout; the Phase 0 milestone is closed.
 
 - [x] #3: overlay key for the event stream; operator headers for history; sanitized history responses.
 - [x] #4: ignore successful outbound reply IDs before command parsing and moderation.
@@ -92,15 +92,15 @@ Fix what is unsafe before anything goes public, and write the decisions down. Co
 - [x] #9: runbooks match outbound chat and reward workflows.
 - [x] #10–12: draft six ADRs for tenancy, adapters, engine, variables, jobs and self-host mode.
 - [x] #10–12: owner acceptance recorded in the ADRs and closed issues.
-- [x] #38: closeout implementation denies webhook ingestion when LAN/public mode has missing credentials; reviewed merge remains the tracker closure gate.
+- [x] #38: closeout implementation denies webhook ingestion when LAN/public mode has missing credentials; merged in PR #44; issue and milestone closed.
 
 **Exit:** protected reads and webhook ingestion fail closed in LAN/public modes when credentials are missing or wrong; public diagnostics contain no private chat/payload data; the six ADRs are accepted. Local loopback development retains its explicit empty-credential exception. Live-service and release acceptance remain in the separate single-channel qualification milestone.
 
 ### Phase 1: Tenancy and accounts (L)
 
-- Accounts with login through Twitch, Kick, Google, or Discord OAuth. Sessions with secure cookies. This replaces `OPERATOR_SECRET` for the hosted service; self-host keeps it as an option.
+- Accounts start with Twitch login. Kick, Google and Discord follow in their adapter phases. Sessions with secure cookies. This replaces `OPERATOR_SECRET` for the hosted service; self-host keeps it as an option.
 - Tenants, memberships, and roles: owner, manager (Nightbot's model), editor, moderator (read and moderate only). An audit log entry for every change, with actor and diff.
-- `tenant_id` on every table, enforced in the store layer. Consider Postgres row-level security as a second line of defence.
+- `tenant_id` on every table, enforced in the store layer. Forced Postgres row-level security supplies a second boundary alongside explicit store predicates.
 - Token vault: encrypted refresh tokens per tenant connection, with scopes held, granted-at, and revocation handling in one place.
 - Per-tenant overlay tokens; rotate from the desk.
 - Data lifecycle: retention settings per tenant, chat-log expiry job, tenant export, tenant deletion, viewer deletion requests. Privacy policy and terms pages.
@@ -274,4 +274,4 @@ These have long lead times and gate later phases.
 
 ## Next step
 
-Merge and verify the Phase 0 webhook closeout, then implement the Phase 1 plan against the accepted ADRs. Establish the disposable-Postgres CI gate in #41. Run operator-led Twitch/OBS qualification through #39–40 and track first self-host release proof in #42. The bounded Phase 1 implementation plan must use two-tenant isolation and preserved self-host bootstrap as its first decisive acceptance criteria. Long-lead registrations remain #23.
+Review and merge the Phase 1 implementation, verify its hosted disposable-Postgres CI gate under #41, and complete the homelab operations receipts under #21. Run operator-led Twitch/OBS qualification through #39–40 and track first self-host release proof in #42. The bounded Phase 1 implementation plan must use two-tenant isolation and preserved self-host bootstrap as its first decisive acceptance criteria. Long-lead registrations remain #23.
