@@ -25,6 +25,8 @@ The parity roadmap adds FossaBot-style bot breadth without weakening the existin
 
 ## Current status
 
+October 13 reconciliation: this June implementation scope is complete at the local contract level. `make verify` passes with 116 frontend tests, all 26 Chromium fixture workflows pass, and exact-head hosted CI is green at main `55327be`. Fresh persistence tests were skipped in this assessment; October 6 database/restore evidence remains historical. Live Twitch (#39), real OBS (#40), disposable-Postgres CI (#41), and first self-host release (#42) remain in the [single-channel qualification milestone](https://git.subcult.tv/subculture-collective/overlaid/milestone/154). These gates are separate from the [October multi-platform program](2026-10-05-multiplatform-parity-roadmap.md), whose Phase 1 has not started.
+
 The [October 6 acceptance map](../../qa/2026-10-06-roadmap-acceptance.md) reconciles every milestone with current code/tests and separates completed local contracts from pending live/production gates.
 
 Implemented and verified in committed slices:

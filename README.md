@@ -2,6 +2,8 @@
 
 Overlay MVP for OBS + homelab alerts.
 
+Development status, October 13, 2026: the single-channel Twitch/OBS application includes bot commands, moderation, reward management, sessions and recovery tooling. Local checks and fixture browser workflows pass; live Twitch/OBS and first self-host release qualification remain open. The hosted multi-platform service is planned, with six Proposed ADRs awaiting review before Phase 1. Follow the [roadmap](docs/superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md), [development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4), and [dated evidence](docs/qa/2026-10-13-development-state.md).
+
 Created from `subculture-collective/project-template`.
 
 ## Quick start
