@@ -28,4 +28,4 @@ PY
 )
 export OVERLAID_TEST_DATABASE_URL="postgres://postgres:$fixture_password@$fixture_endpoint/overlaid_ci?sslmode=disable"
 make verify
-(cd backend && go test -race ./...)
+(cd backend && go test -race -count=1 ./...)
