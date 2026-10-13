@@ -1,0 +1,13 @@
+# Merge these entries into the existing route/inhibit lists; do not replace the
+# homelab's receivers or other products' routing.
+route:
+  receiver: ntfy
+  matchers: ['project="overlaid"']
+  group_by: [alertname, instance, role]
+  group_wait: 30s
+  group_interval: 30s
+  repeat_interval: 1h
+inhibit_rule:
+  source_matchers: ['alertname="ServiceDown"', 'project="overlaid"']
+  target_matchers: ['alertname="OverlaidProbeUnavailable"', 'project="overlaid"']
+  equal: [project, instance]

@@ -23,12 +23,12 @@
 
 ## Current state — October 13, 2026
 
-Phase 0 is merged through [PR #44](https://git.subcult.tv/subculture-collective/overlaid/pulls/44) at `a64ac84`; #38 and its milestone are closed. The owner accepted six ADRs under #10–12. Phase 1 implementation now follows those decisions in [the bounded plan](2026-10-13-phase-1-tenancy.md).
+Phase 0 is merged through [PR #44](https://git.subcult.tv/subculture-collective/overlaid/pulls/44) at `a64ac84`; #38 and its milestone are closed. The owner accepted six ADRs under #10–12. Phase 1 implementation merged in PR #45 at `6de594f` and follows those decisions in [the bounded plan](2026-10-13-phase-1-tenancy.md).
 
 - [Development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4) tracks implementation review separately from external acceptance.
 - Phase 1 adds scoped PostgreSQL stores with forced RLS, Twitch account sessions, roles and change audits, encrypted token custody, hashed credentials, plan limits, retention, export/deletion and public policy/status routes.
-- Local verification includes fresh-schema tenant migration, two-tenant REST/SSE/timer tests, login/CSRF/session revocation, quota races/downgrades, vault rotation/restart, legacy import and an independent custom-dump restore. The full browser suite passes 29 fixtures. Hosted CI and homelab release receipts remain separate checks.
-- Homelab placement is NUC for app/data, Dozor for monitoring and Almaz for ingress, using the working hostname `overlaid.subcult.tv`. Deployment files and recovery procedures are in [the runbook](../../runbooks/homelab-phase-1.md); #21 remains open until real operational acceptance is recorded.
+- Local verification includes fresh-schema tenant migration, two-tenant REST/SSE/timer tests, login/CSRF/session revocation, quota races/downgrades, vault rotation/restart, legacy import and an independent custom-dump restore. The full browser suite passes 29 fixtures. Exact-head PR and merged-main hosted PostgreSQL/race checks passed. [Homelab acceptance](../../qa/2026-10-13-phase-1-homelab.md) records operational receipts separately from the named release.
+- Homelab placement is NUC for app/data, Dozor for monitoring and Almaz for ingress, using the working hostname `overlaid.subcult.tv`. Deployment, public policy/status routes, real alert publication and a target-host restore are verified under #21; recovery procedures are in [the runbook](../../runbooks/homelab-phase-1.md).
 - [Single-channel release qualification](https://git.subcult.tv/subculture-collective/overlaid/milestone/154) retains real Twitch (#39), real OBS (#40), disposable-Postgres hosted CI evidence (#41) and first self-host recovery/monitoring acceptance (#42). Long-lead registrations remain #23 and do not block the Phase 1 implementation exit.
 - Phases 2–11 remain planned; #24–33 describe future scope.
 
@@ -274,4 +274,4 @@ These have long lead times and gate later phases.
 
 ## Next step
 
-Review and merge the Phase 1 implementation, verify its hosted disposable-Postgres CI gate under #41, and complete the homelab operations receipts under #21. Run operator-led Twitch/OBS qualification through #39–40 and track first self-host release proof in #42. The bounded Phase 1 implementation plan must use two-tenant isolation and preserved self-host bootstrap as its first decisive acceptance criteria. Long-lead registrations remain #23.
+Phase 1 implementation and hosted PostgreSQL/race checks are merged; close its operations tracking with the homelab receipts under #21. Run operator-led Twitch/OBS qualification through #39–40 and track first self-host release proof in #42. The bounded Phase 1 implementation plan must use two-tenant isolation and preserved self-host bootstrap as its first decisive acceptance criteria. Long-lead registrations remain #23.
