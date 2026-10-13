@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — 2026-10-06. Completes the self-host decision required by #10 and the Phase 0 program.
+Accepted — 2026-10-13. The repository owner confirmed acceptance of this decision under [issue #10](https://git.subcult.tv/subculture-collective/overlaid/issues/10); the issue is closed. Acceptance defines the implementation contract and does not claim the feature is implemented.
 
 ## Context
 

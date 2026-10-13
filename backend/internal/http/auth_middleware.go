@@ -35,7 +35,7 @@ func (s *Server) authorizeOperator(r *http.Request) bool {
 func (s *Server) authorizeWebhook(r *http.Request) bool {
 	secret := strings.TrimSpace(s.config.WebhookSecret)
 	if secret == "" {
-		return true
+		return s.localExposure()
 	}
 
 	provided := strings.TrimSpace(r.Header.Get("X-Overlay-Webhook-Secret"))

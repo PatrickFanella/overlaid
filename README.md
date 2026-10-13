@@ -2,7 +2,7 @@
 
 Overlay MVP for OBS + homelab alerts.
 
-Development status, October 13, 2026: the single-channel Twitch/OBS application includes bot commands, moderation, reward management, sessions and recovery tooling. Local checks and fixture browser workflows pass; live Twitch/OBS and first self-host release qualification remain open. The hosted multi-platform service is planned, with six Proposed ADRs awaiting review before Phase 1. Follow the [roadmap](docs/superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md), [development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4), and [dated evidence](docs/qa/2026-10-13-development-state.md).
+Development status, October 13, 2026: the single-channel Twitch/OBS application includes bot commands, moderation, reward management, sessions and recovery tooling. Local checks and fixture browser workflows pass; live Twitch/OBS and first self-host release qualification remain open. The hosted multi-platform service is planned, with six accepted ADRs defining the Phase 1 implementation contract. Follow the [roadmap](docs/superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md), [development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4), and [dated evidence](docs/qa/2026-10-13-development-state.md).
 
 Created from `subculture-collective/project-template`.
 
@@ -23,10 +23,10 @@ Set `OVERLAID_TEST_DATABASE_URL` to a disposable Postgres database to include pe
 - `API_ADDR` / `API_PORT` — backend listen address and host port.
 - `POSTGRES_PORT` — host Postgres port. Defaults to `55432` to avoid clashing with a local Postgres on `5432`.
 - `CORS_ALLOWED_ORIGIN` — browser origin allowed to call the API.
-- `EXPOSURE_MODE` — `local`, `lan`, or `public`. Non-local modes make `/readyz` degrade when `OPERATOR_SECRET`, `OVERLAY_TOKEN`, or `WEBHOOK_SECRET` is empty. Protected reads reject missing credentials in non-local modes.
+- `EXPOSURE_MODE` — `local`, `lan`, or `public`. Non-local modes make `/readyz` degrade when `OPERATOR_SECRET`, `OVERLAY_TOKEN`, or `WEBHOOK_SECRET` is empty. Protected reads and webhook ingestion reject missing credentials in non-local modes.
 - `OVERLAY_TOKEN` — separate read-only credential for `/api/events/stream` and `/api/overlay/display`, accepted as `?key=`. The Overlays page copies keyed OBS source URLs after operator authentication. Treat these URLs as credentials; demo previews need no key.
 - `OPERATOR_SECRET` — shared secret for dashboard/operator routes, including event history. Optional only in local mode. Send as `X-Overlay-Operator-Secret` or `Authorization: Bearer <secret>`.
-- `WEBHOOK_SECRET` — optional shared secret for `POST /api/integrations/webhook/{source}`. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
+- `WEBHOOK_SECRET` — shared secret for `POST /api/integrations/webhook/{source}`, optional only in local exposure mode. LAN/public modes return 401 if the secret is empty or the request credential is missing/wrong, before retaining or publishing the event. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
 - `OVERLAY_STATE_FILE` — retained overlay state snapshot path. Defaults to `/data/overlay-state.json` in Docker.
 - `EVENT_HISTORY_FILE` / `EVENT_HISTORY_LIMIT` — persisted recent event history path and count limit. Defaults to `/data/event-history.jsonl` and `250` in Docker.
 - `DATABASE_URL` — Postgres connection string. When set, event history is stored in Postgres `stream_events`; when unset, the API uses the JSONL file fallback.
@@ -325,4 +325,4 @@ GPL-3.0-only. See `LICENSE`.
 
 Overlay display limits are read from the shared dashboard configuration through `GET /api/overlay/display?key=<OVERLAY_TOKEN>`. Save shared settings, then reload the OBS source; overlays also refetch after SSE reconnect. Missing storage or failed fetches use built-in defaults, and demo mode stays offline. This endpoint returns only the display block. Event history requires operator headers and omits raw Twitch payloads; stored audit evidence remains intact.
 
-The October multi-platform program starts with [Phase 0](docs/superpowers/plans/2026-10-06-multiplatform-phase-0.md) and [proposed architecture decisions](docs/adr/README.md). The June roadmap acceptance record covers the earlier Twitch-only work.
+The October multi-platform program starts with [Phase 0](docs/superpowers/plans/2026-10-06-multiplatform-phase-0.md) and [accepted architecture decisions](docs/adr/README.md). The June roadmap acceptance record covers the earlier Twitch-only work.

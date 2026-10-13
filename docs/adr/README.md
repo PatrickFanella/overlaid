@@ -28,11 +28,11 @@ What trade-offs follow from this choice?
 
 - [0001: Generic base template](0001-generic-base-template.md)
 - [0002: PostgreSQL product storage](0002-postgres-product-storage.md)
-- [0003: Tenant and account model](0003-tenant-account-model.md) — Proposed, #10
-- [0004: Platform adapter boundary](0004-platform-adapter-boundary.md) — Proposed, #11
-- [0005: Automation engine](0005-automation-engine.md) — Proposed, #12
-- [0006: Variable language and evaluation sandbox](0006-variable-language-sandbox.md) — Proposed, #12
-- [0007: PostgreSQL jobs and fan-out](0007-postgres-jobs-fanout.md) — Proposed, #11
-- [0008: Supported self-host mode](0008-supported-self-host-mode.md) — Proposed, #10
+- [0003: Tenant and account model](0003-tenant-account-model.md) — Accepted 2026-10-13, #10
+- [0004: Platform adapter boundary](0004-platform-adapter-boundary.md) — Accepted 2026-10-13, #11
+- [0005: Automation engine](0005-automation-engine.md) — Accepted 2026-10-13, #12
+- [0006: Variable language and evaluation sandbox](0006-variable-language-sandbox.md) — Accepted 2026-10-13, #12
+- [0007: PostgreSQL jobs and fan-out](0007-postgres-jobs-fanout.md) — Accepted 2026-10-13, #11
+- [0008: Supported self-host mode](0008-supported-self-host-mode.md) — Accepted 2026-10-13, #10
 
-The six Phase 0 proposals are ready for review together. Acceptance must be recorded by a human reviewer; their presence does not mean Phase 1 architecture is accepted or implemented.
+The repository owner accepted all six Phase 0 decisions under issues #10–12 on October 13, 2026. Phase 1 must implement and verify these contracts; architecture acceptance alone does not establish implementation or runtime readiness.
