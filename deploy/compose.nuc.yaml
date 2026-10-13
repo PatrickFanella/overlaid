@@ -67,3 +67,9 @@ services:
 volumes:
   postgres-data:
   api-data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${OVERLAID_DATABASE_SUBNET:-10.252.83.0/28}
