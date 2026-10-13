@@ -2,6 +2,8 @@
 
 This directory is the current project knowledge base.
 
+Current development: [multi-platform roadmap](superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md), [October 13 evidence](qa/2026-10-13-development-state.md), and [Gitea development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4). The existing single-channel application and its release qualification are tracked separately from the planned hosted multi-tenant service.
+
 ## Sections
 
 - `adr/` — architecture decision records
