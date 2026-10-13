@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — 2026-10-06. Addresses #10. Human review must accept this decision before Phase 1 tenancy implementation.
+Accepted — 2026-10-13. The repository owner confirmed acceptance of this decision under [issue #10](https://git.subcult.tv/subculture-collective/overlaid/issues/10); the issue is closed. Acceptance defines the implementation contract and does not claim the feature is implemented.
 
 ## Context
 

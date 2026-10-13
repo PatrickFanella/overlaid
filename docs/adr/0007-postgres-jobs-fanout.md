@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — 2026-10-06. Addresses #11. Selection requires implementation validation; no dependency is installed by this draft.
+Accepted — 2026-10-13. The repository owner confirmed acceptance of this decision under [issue #11](https://git.subcult.tv/subculture-collective/overlaid/issues/11); the issue is closed. Acceptance defines the implementation contract and does not claim the feature is implemented.
 
 ## Context
 

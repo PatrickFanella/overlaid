@@ -27,12 +27,12 @@ Assessed main: `55327be92482`. The single-channel Twitch/OBS application passes 
 
 - [Development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4): Backlog, Ready, In progress, Review, External acceptance, Done.
 - [Roadmap issue #34](https://git.subcult.tv/subculture-collective/overlaid/issues/34): phase and acceptance tracking.
-- Phase 0 implementation issues #3–9 are complete. Six ADR drafts remain Proposed under #10–12; acceptance is still required before Phase 1.
-- [#38](https://git.subcult.tv/subculture-collective/overlaid/issues/38) adds the observed webhook credential gap to Phase 0: an empty `WEBHOOK_SECRET` currently permits ingestion even in LAN/public modes. Readiness warns but does not deny the request.
+- Phase 0 implementation issues #3–9 are complete. The owner accepted the six ADRs under #10–12 and closed those issues; the accepted statuses are recorded in the files.
+- [#38](https://git.subcult.tv/subculture-collective/overlaid/issues/38) adds the observed webhook credential gap to Phase 0: the closeout change denies missing/nonmatching credentials outside local exposure, before payload validation and all side effects.
 - [Single-channel release qualification](https://git.subcult.tv/subculture-collective/overlaid/milestone/154) tracks real Twitch (#39), real OBS (#40), disposable-Postgres CI/race evidence (#41), and a first self-host release with target-host recovery/monitoring proof (#42). This is separate from future hosted-service operations in #21.
 - Phase 1 has not started. Phases 2–11 remain planned; their tracking issues #24–33 are scope holders, not implementation evidence.
 
-The next implementation work is #38 and #41. Architecture review and operator-led qualification can proceed alongside them. The [dated assessment](../../qa/2026-10-13-development-state.md) records evidence and limits.
+The Phase 0 closeout implements #38 and records owner architecture acceptance. After merge verification, the next work is the Phase 1 implementation plan; #41 and operator-led qualification remain independent release gates. The [dated assessment](../../qa/2026-10-13-development-state.md) records evidence and limits.
 
 ## Original baseline — October 5, 2026
 
@@ -44,7 +44,7 @@ At that baseline, it lacked the following for this goal, in order of how much it
 2. **No platform layer.** Twitch types run through every package.
 3. **No engine.** Commands, timers, rewards, and quick actions are separate, hard-coded paths.
 4. **A thin variable language** (eight `{…}` variables).
-5. **Exposure and echo guards:** the event stream/history access and outbound reply echo protection still needed implementation. These were completed in Phase 0; webhook denial with missing nonlocal credentials remains #38.
+5. **Exposure and echo guards:** the event stream/history access and outbound reply echo protection still needed implementation. These were completed in Phase 0; the webhook closeout supplies missing nonlocal credential denial under #38.
 
 Building chat features on top of that would mean rebuilding each of them per tenant and per platform later. The phases are ordered to pay that cost once.
 
@@ -81,7 +81,7 @@ Sizes are relative (S, M, L, XL), not calendar estimates. Each phase ends with `
 
 ### Phase 0: Hardening and decisions (S)
 
-Fix what is unsafe before anything goes public, and write the decisions down. Code criteria #3–9 are complete; ADR acceptance #10–12 and the additional webhook fix #38 remain open.
+Fix what is unsafe before anything goes public, and write the decisions down. Code criteria #3–9 and owner architecture acceptance #10–12 are complete. The closeout implements #38; milestone closure awaits its reviewed merge.
 
 - [x] #3: overlay key for the event stream; operator headers for history; sanitized history responses.
 - [x] #4: ignore successful outbound reply IDs before command parsing and moderation.
@@ -91,8 +91,8 @@ Fix what is unsafe before anything goes public, and write the decisions down. Co
 - [x] #8: current `{nowplaying.title}` and `{nowplaying.artist}` metadata, with empty/stopped handling.
 - [x] #9: runbooks match outbound chat and reward workflows.
 - [x] #10–12: draft six ADRs for tenancy, adapters, engine, variables, jobs and self-host mode.
-- [ ] #10–12: human review records acceptance or revisions in the ADRs.
-- [ ] #38: deny webhook ingestion when LAN/public mode has missing credentials.
+- [x] #10–12: owner acceptance recorded in the ADRs and closed issues.
+- [x] #38: closeout implementation denies webhook ingestion when LAN/public mode has missing credentials; reviewed merge remains the tracker closure gate.
 
 **Exit:** protected reads and webhook ingestion fail closed in LAN/public modes when credentials are missing or wrong; public diagnostics contain no private chat/payload data; the six ADRs are accepted. Local loopback development retains its explicit empty-credential exception. Live-service and release acceptance remain in the separate single-channel qualification milestone.
 
@@ -274,4 +274,4 @@ These have long lead times and gate later phases.
 
 ## Next step
 
-Complete #38, establish the disposable-Postgres CI gate in #41, and review the six Proposed ADRs under #10–12. Run operator-led Twitch/OBS qualification through #39–40 and track first self-host release proof in #42. After architecture acceptance, write the bounded Phase 1 implementation plan; use two-tenant isolation and preserved self-host bootstrap as its first decisive acceptance criteria. Long-lead registrations remain #23.
+Merge and verify the Phase 0 webhook closeout, then implement the Phase 1 plan against the accepted ADRs. Establish the disposable-Postgres CI gate in #41. Run operator-led Twitch/OBS qualification through #39–40 and track first self-host release proof in #42. The bounded Phase 1 implementation plan must use two-tenant isolation and preserved self-host bootstrap as its first decisive acceptance criteria. Long-lead registrations remain #23.
