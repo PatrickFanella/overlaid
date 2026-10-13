@@ -305,6 +305,8 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 		return fmt.Errorf("dial eventsub websocket: %w", err)
 	}
 	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
 
 	message, err := readEventSubMessage(conn)
 	if err != nil {
@@ -364,6 +366,14 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 				if c.Diagnostics != nil {
 					c.Diagnostics.MarkEvent()
 				}
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				if event.Data == nil {
+					event.Data = map[string]any{}
+				}
+				event.Data["viewerId"] = firstNonEmpty(stringValue(message.Payload.Event, "chatter_user_id"), stringValue(message.Payload.Event, "user_id"))
+				event.Data["viewerLogin"] = firstNonEmpty(stringValue(message.Payload.Event, "chatter_user_login"), stringValue(message.Payload.Event, "user_login"))
 				c.Publish(event)
 			}
 		case "revocation":
@@ -578,7 +588,13 @@ func mapChatMessage(message EventSubMessage) (events.Event, bool) {
 	if strings.TrimSpace(text) == "" {
 		return events.Event{}, false
 	}
-	return overlayEvent(events.EventTypeChatMessage, "twitch", user, text, events.SeverityInfo, message), true
+	mapped := overlayEvent(events.EventTypeChatMessage, "twitch", user, text, events.SeverityInfo, message)
+	if mapped.Data == nil {
+		mapped.Data = map[string]any{}
+	}
+	mapped.Data["viewerId"] = stringValue(event, "chatter_user_id")
+	mapped.Data["viewerLogin"] = stringValue(event, "chatter_user_login")
+	return mapped, true
 }
 
 func mapChatNotification(message EventSubMessage) (events.Event, bool) {

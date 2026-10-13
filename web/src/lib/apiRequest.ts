@@ -1,4 +1,5 @@
 import { getOverlayApiBaseUrl } from './eventStream';
+import { accountHeaders } from './accountContext';
 
 type CredentialOptions = {
   operatorSecret?: string;
@@ -26,6 +27,7 @@ export async function requestJSON<T>(path: string, options: RequestJSONOptions &
 
   const response = await fetch(new URL(path, getOverlayApiBaseUrl(options.explicitBaseUrl)).toString(), {
     method: options.method,
+    credentials: 'include',
     headers,
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
   });
@@ -47,7 +49,7 @@ export async function requestJSON<T>(path: string, options: RequestJSONOptions &
 }
 
 function operatorHeaders(operatorSecret?: string) {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', ...accountHeaders() };
   if (operatorSecret?.trim()) {
     headers['X-Overlay-Operator-Secret'] = operatorSecret.trim();
   }

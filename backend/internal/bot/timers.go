@@ -57,6 +57,15 @@ func (s TimerScheduler) runOnce(ctx context.Context, now time.Time) {
 		if ctx.Err() != nil {
 			return
 		}
+		if gate, ok := s.Store.(interface {
+			AllowItem(context.Context, string, string) error
+		}); ok {
+			if err := gate.AllowItem(ctx, "timers", timer.ID); err != nil {
+				_ = s.Store.MarkTimerRun(ctx, timer.ID, now)
+				_, _ = s.Store.RecordAudit(ctx, AuditEventFromOutcome(AuditOutcome{Source: SourceTimer, ActorRole: RoleSystem, Trigger: timer.Name, Command: timer.Name, Action: timer.Action, Result: ResultDenied, Reason: "plan_limited"}))
+				continue
+			}
+		}
 		event, render := TimerEvent(timer, s.Channel)
 		if strings.TrimSpace(event.Message) != "" {
 			s.Publish(event)

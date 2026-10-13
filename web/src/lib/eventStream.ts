@@ -31,7 +31,7 @@ export function getOverlayStreamUrl(explicitBaseUrl?: string) {
 }
 
 export function connectOverlayStream(explicitBaseUrl: string | undefined, handlers: OverlayStreamHandlers) {
-  const source = new EventSource(getOverlayStreamUrl(explicitBaseUrl));
+  const source = new EventSource(getOverlayStreamUrl(explicitBaseUrl), { withCredentials: true });
 
   source.addEventListener('open', () => {
     handlers.onStatusChange?.('live');

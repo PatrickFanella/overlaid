@@ -1,0 +1,69 @@
+name: overlaid
+services:
+  postgres:
+    image: docker.io/library/postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: overlaid_admin
+      POSTGRES_DB: overlaid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      OVERLAID_DATABASE_PASSWORD: ${OVERLAID_DATABASE_PASSWORD:?}
+    ports: ["127.0.0.1:55438:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations:/migrations:ro
+      - ./scripts/postgres-init.sh:/docker-entrypoint-initdb.d/00-migrations.sh:ro
+      - ./scripts/postgres-runtime.sh:/docker-entrypoint-initdb.d/zz-runtime.sh:ro
+    mem_limit: 1g
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U overlaid_admin -d overlaid"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+  api:
+    image: ${API_IMAGE:?}
+    restart: unless-stopped
+    network_mode: host
+    env_file: [app.env]
+    environment:
+      API_ADDR: 127.0.0.1:3084
+      DATABASE_URL: postgres://overlaid_app:${OVERLAID_DATABASE_PASSWORD:?}@127.0.0.1:55438/overlaid?sslmode=disable
+      DEPLOYMENT_MODE: selfhost
+      EXPOSURE_MODE: public
+      PUBLIC_WEB_URL: https://overlaid.subcult.tv
+      CORS_ALLOWED_ORIGIN: https://overlaid.subcult.tv
+      OBS_WEBSOCKET_URL: ""
+      TWITCH_EVENTSUB_ENABLED: "false"
+      MPRIS_ENABLED: "false"
+    volumes: ["api-data:/data"]
+    mem_limit: 512m
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+    depends_on: {postgres: {condition: service_healthy}}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3084/healthz | grep -q ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  web:
+    image: ${WEB_IMAGE:?}
+    restart: unless-stopped
+    network_mode: host
+    volumes: ["./nginx.nuc.conf:/etc/nginx/conf.d/default.conf:ro"]
+    mem_limit: 128m
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+  readiness:
+    image: docker.io/library/python:3.12-alpine
+    restart: unless-stopped
+    network_mode: host
+    command: [python3, /app/readiness-exporter.py]
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes: ["./scripts/readiness-exporter.py:/app/readiness-exporter.py:ro"]
+    mem_limit: 64m
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+volumes:
+  postgres-data:
+  api-data:

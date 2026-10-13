@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 const defaultID = "default"
 
 type Store struct {
-	db *sql.DB
+	db *tenantdb.DB
 }
 
 type Document struct {
@@ -27,7 +28,7 @@ func NewPostgres(databaseURL string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := &Store{db: db}
+	store := &Store{db: tenantdb.Legacy(db)}
 	if err := store.Load(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -41,6 +42,9 @@ func (s *Store) Load() error {
 	if err := s.db.PingContext(ctx); err != nil {
 		return err
 	}
+	if s.db.IsScoped() {
+		return nil
+	}
 	_, err := s.db.ExecContext(ctx, createTableSQL)
 	return err
 }
@@ -49,7 +53,7 @@ func (s *Store) Get(ctx context.Context) (Document, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var doc Document
-	err := s.db.QueryRowContext(ctx, `SELECT config, updated_at FROM dashboard_configs WHERE id = $1`, defaultID).Scan(&doc.Config, &doc.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT config, updated_at FROM dashboard_configs WHERE /*tenant:dashboard_configs*/ AND id = $1`, defaultID).Scan(&doc.Config, &doc.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Document{}, false, nil
@@ -69,7 +73,7 @@ func (s *Store) Replace(ctx context.Context, config json.RawMessage) (Document, 
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO dashboard_configs (id, config, updated_at)
 		VALUES ($1, $2, now())
-		ON CONFLICT (id) DO UPDATE SET config = EXCLUDED.config, updated_at = now()
+		ON CONFLICT (/*tenant-conflict*/id) DO UPDATE SET config = EXCLUDED.config, updated_at = now()
 		RETURNING config, updated_at
 	`, defaultID, config).Scan(&doc.Config, &doc.UpdatedAt)
 	return doc, err
@@ -141,3 +145,14 @@ CREATE TABLE IF NOT EXISTS dashboard_configs (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 `
+
+func NewTenant(db *tenantdb.DB) (*Store, error) {
+	if db == nil || !db.IsScoped() {
+		return nil, errors.New("tenant context required")
+	}
+	store := &Store{db: db}
+	if err := store.Load(); err != nil {
+		return nil, err
+	}
+	return store, nil
+}

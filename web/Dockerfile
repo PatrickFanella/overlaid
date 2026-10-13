@@ -3,6 +3,7 @@ WORKDIR /src
 COPY package.json pnpm-lock.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY . ./
+ARG VITE_API_BASE_URL
 RUN pnpm run build
 
 FROM docker.io/library/nginx:1.29-alpine

@@ -1,0 +1,9 @@
+[Unit]
+Description=Overlaid private database and vault-key backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/bin/bash /srv/apps/projects/overlaid/current/scripts/postgres-backup.sh

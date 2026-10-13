@@ -8,6 +8,11 @@ import (
 )
 
 type Config struct {
+	DeploymentMode         string
+	VaultKeys              string
+	VaultActiveKey         string
+	ProductName            string
+	SupportContact         string
 	Addr                   string
 	AllowedOrigin          string
 	ExposureMode           string
@@ -37,6 +42,11 @@ type Config struct {
 
 func Load() Config {
 	return Config{
+		DeploymentMode:         env("DEPLOYMENT_MODE", "selfhost"),
+		VaultKeys:              env("VAULT_KEYS", ""),
+		VaultActiveKey:         env("VAULT_ACTIVE_KEY", "v1"),
+		ProductName:            env("PRODUCT_NAME", "overlaid"),
+		SupportContact:         env("SUPPORT_CONTACT", ""),
 		Addr:                   env("API_ADDR", ":8080"),
 		AllowedOrigin:          env("CORS_ALLOWED_ORIGIN", "*"),
 		ExposureMode:           env("EXPOSURE_MODE", "local"),

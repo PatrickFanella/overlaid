@@ -9,21 +9,23 @@ import (
 	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
-	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	httpapi "git.subcult.tv/PatrickFanella/over-laid/internal/http"
 )
 
 func main() {
 	cfg := config.Load()
-	bus := events.NewBus(32)
-	server := httpapi.NewServer(cfg, bus)
+	server, err := httpapi.NewApplication(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer server.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	server.StartBackground(ctx)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           server.Handler(),
+		Handler:           server,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      0, // SSE streams stay open; per-request handlers validate body sizes.

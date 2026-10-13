@@ -28,6 +28,13 @@ Use narrower commands only when an issue explicitly asks for a smaller check.
 
 Optional Postgres integration checks use `OVERLAID_TEST_DATABASE_URL` pointing to a disposable database. Fixtures must work without preloaded application tables, create/drop owned schemas, and initialize the shared `pgcrypto` extension in `public` through the serialized test helper.
 
+## Tenant conventions
+
+- Managed PostgreSQL uses immutable `tenantdb.DB` scopes, explicit predicates and forced RLS. Runtime roles must not own application tables or bypass RLS. Migrations use separate administrator credentials.
+- Account cookies and CSRF authorize hosted requests; global operator headers only authorize the self-host bootstrap tenant. Never forward an operator secret in overlay URLs.
+- Provider tokens use the versioned AES-GCM keyring; overlay/webhook credentials are hashed. Preserve legacy files for rollback after one-time import.
+- The CI PostgreSQL fixture script runs `make verify` and the full Go race suite. Keep test schemas and roles disposable and independent.
+
 ## Operations conventions
 
 - Overlay SSE and display settings use `OVERLAY_TOKEN` through `?key=`. History and dashboard token retrieval use operator headers; never put the operator secret in overlay URLs. Empty credentials are allowed only in local exposure mode; protected reads fail closed in LAN/public modes.

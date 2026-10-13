@@ -2,9 +2,23 @@
 
 Overlay MVP for OBS + homelab alerts.
 
-Development status, October 13, 2026: the single-channel Twitch/OBS application includes bot commands, moderation, reward management, sessions and recovery tooling. Local checks and fixture browser workflows pass; live Twitch/OBS and first self-host release qualification remain open. The hosted multi-platform service is planned, with six accepted ADRs defining the Phase 1 implementation contract. Follow the [roadmap](docs/superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md), [development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4), and [dated evidence](docs/qa/2026-10-13-development-state.md).
+Development status, October 13, 2026: the single-channel Twitch/OBS application includes bot commands, moderation, reward management, sessions and recovery tooling. Local checks and fixture browser workflows pass; live Twitch/OBS and first self-host release qualification remain open. Phase 0 is merged. Phase 1 adds PostgreSQL tenant isolation, accounts, roles, encrypted connection custody, plan limits and data lifecycle controls; its release and provider acceptance evidence is tracked separately from implementation. Follow the [roadmap](docs/superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md), [development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4), and [dated evidence](docs/qa/2026-10-13-development-state.md).
 
 Created from `subculture-collective/project-template`.
+
+## Accounts and tenancy
+
+`DEPLOYMENT_MODE=selfhost` keeps operator-header access to one unlimited bootstrap workspace. `DEPLOYMENT_MODE=hosted` requires PostgreSQL, an encryption keyring and account sessions; a global operator secret cannot authorize hosted requests. Twitch account sign-in is separate from connecting a streaming channel. Other sign-in providers remain in their later platform phases.
+
+For a new Compose installation, copy `.env.example`, set separate administrator and runtime database passwords, then start the stack. PostgreSQL initialization applies the SQL migrations and creates the non-owner `overlaid_app` role. `DATABASE_URL` must use that runtime role. Existing installations must follow the [tenant migration and recovery runbook](docs/runbooks/tenancy-and-recovery.md): stop old writers, verify a private backup/restore, apply pending migrations with administrator credentials, then start the new application. The old global binary must never use the migrated shared database.
+
+Set `VAULT_ACTIVE_KEY=v1` and `VAULT_KEYS=v1:<32-byte-base64-key>` before connecting Twitch, and always in hosted mode. Generate the key privately with `openssl rand -base64 32`. Keep old versions while rotating; connection reads re-encrypt under the active version. Backups need the corresponding keyring. Tokens are encrypted in PostgreSQL; legacy self-host files are imported once and retained for rollback. New overlay and webhook credentials are hashed and rotated from `/dashboard/account`; their raw values are shown once. Rotation stops active streams and invalidates old URLs.
+
+Account sessions use HTTP-only cookies, expire after 24 hours and support sign-out and revocation. Browser changes require the CSRF header and configured origin. Use HTTPS for every LAN/public account installation. `/dashboard/account` manages workspace selection, membership, ownership transfer, credentials, retention, exports and deletion. `/privacy`, `/terms` and `/status` are public routes. Hosted owner, manager, editor and moderator rights are enforced by the API as well as the interface.
+
+The free, paid and unlimited plan rows control commands, timers, API variables, hourly outbound calls, stored events and future media capacity. Operators change assignments with `bin/overlaid-admin --tenant <UUID> --plan <free|paid|unlimited>` using a private `OVERLAID_ADMIN_DATABASE_URL`; the transaction records an audit receipt. Changes take effect without deployment, preserve configuration on downgrade, and block execution above caps. Billing and media uploads remain later work. Self-host stays unlimited, with a hard 250000-event safety bound and provider limits.
+
+`make verify` remains required. `bash scripts/ci-postgres.sh` owns a fresh disposable PostgreSQL container, runs that command and the full Go race suite, then removes only its fixture. The hosted CI workflow uses this path; a local pass is separate from hosted check status. See the [Phase 1 implementation plan](docs/superpowers/plans/2026-10-13-phase-1-tenancy.md) and [homelab deployment runbook](docs/runbooks/homelab-phase-1.md).
 
 ## Quick start
 
@@ -29,7 +43,7 @@ Set `OVERLAID_TEST_DATABASE_URL` to a disposable Postgres database to include pe
 - `WEBHOOK_SECRET` — shared secret for `POST /api/integrations/webhook/{source}`, optional only in local exposure mode. LAN/public modes return 401 if the secret is empty or the request credential is missing/wrong, before retaining or publishing the event. Send as `X-Overlay-Webhook-Secret` or `Authorization: Bearer <secret>`.
 - `OVERLAY_STATE_FILE` — retained overlay state snapshot path. Defaults to `/data/overlay-state.json` in Docker.
 - `EVENT_HISTORY_FILE` / `EVENT_HISTORY_LIMIT` — persisted recent event history path and count limit. Defaults to `/data/event-history.jsonl` and `250` in Docker.
-- `DATABASE_URL` — Postgres connection string. When set, event history is stored in Postgres `stream_events`; when unset, the API uses the JSONL file fallback.
+- `DATABASE_URL` — Postgres connection string. Must use a non-owner role after the tenant migration. All product stores use scoped PostgreSQL transactions. Only self-host mode without PostgreSQL uses the legacy JSONL fallback.
 - Shared dashboard config is stored in Postgres through operator-protected `/api/dashboard/config` when `DATABASE_URL` is set. The browser still keeps a local config cache; secrets remain session-only.
 - Stream/rehearsal sessions are stored in Postgres through operator-protected `/api/stream/session*` endpoints when `DATABASE_URL` is set. Active sessions tag new event-history rows with `sessionId`; `/api/stream/session/{id}` returns a review report with tagged events, readiness snapshots, and session-specific bot audit rows. Reports and exports show loaded versus total bot actions and flag unavailable audit storage.
 - `PUBLIC_WEB_URL` — public base URL for future links and redirects.
@@ -53,8 +67,8 @@ Twitch auth routes:
 
 Make sure the Twitch app callback URL matches `TWITCH_REDIRECT_URL`.
 
-If you run the API in Docker, the Twitch token persists in the `api-data` volume at `/data/twitch-token.json`, retained overlay state persists at `/data/overlay-state.json`, and recent event history persists in Postgres when `DATABASE_URL` is set. If `DATABASE_URL` is unset, recent event history falls back to `/data/event-history.jsonl`.
-Twitch interaction rules also persist on `api-data` at `/data/twitch-interactions.json`.
+If you run the API in Docker, managed connections, retained overlay state, interaction rules and event history persist in scoped PostgreSQL tables when `DATABASE_URL` is set. The `api-data` volume retains legacy files for one-time import and rollback. If `DATABASE_URL` is unset, recent event history falls back to `/data/event-history.jsonl`.
+Self-host mode without PostgreSQL keeps Twitch interaction rules at `/data/twitch-interactions.json`.
 
 OAuth callback test flow:
 
@@ -79,7 +93,7 @@ If you added `moderator:read:followers` after an earlier login, re-run `/api/aut
 
 ### Twitch interactions
 
-The dashboard `Config` manager includes Twitch interaction rules for backend-side chat aliases and channel point rewards. The API reads and writes them from `/data/twitch-interactions.json` via `TWITCH_INTERACTIONS_FILE`.
+The dashboard `Config` manager includes Twitch interaction rules for backend-side chat aliases and channel point rewards. Managed PostgreSQL installations read and write scoped rule rows; the legacy file fallback uses `/data/twitch-interactions.json` via `TWITCH_INTERACTIONS_FILE`.
 
 - Missing `/data/twitch-interactions.json` is normal on first boot.
 - A malformed or unreadable rules file degrades `/readyz` at `twitch_interactions` and disables custom rules until the file is repaired or valid rules are saved again.
@@ -115,9 +129,9 @@ For OBS automation sequences, follow `docs/runbooks/obs-automation-sequences.md`
 For moderator or broadcaster Twitch chat controls, use `docs/runbooks/twitch-chat-commands.md`.
 For post-build route checks and styling changes, use `docs/runbooks/visual-qa.md`. For overlay sizes, parameters, and brand rules, use `docs/runbooks/overlays.md`.
 
-`/healthz` stays the cheap liveness check used by Compose healthchecks. `curl http://localhost:8080/readyz` is the operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, retained state, event history, or Twitch interaction rules need attention.
+`/healthz` stays the cheap liveness check used by Compose healthchecks. Managed PostgreSQL `/readyz` reports process, tenant storage and retention-worker readiness. The legacy `curl http://localhost:8080/readyz` operator diagnostics endpoint and may return `status: degraded` when OBS, Twitch, EventSub, retained state, event history, or Twitch interaction rules need attention.
 
-`make build` also builds `bin/over-laid-probe`, a read-only readiness monitor. `make probe` fails when the JSON report is degraded even if HTTP returns 200. Select explicit requirements with `make probe API_PORT=8081 PROBE_CHECKS=process,postgres,bot_runtime` when monitoring local bot storage before Twitch/OBS setup. Missing checks fail rather than silently passing. See [uptime monitoring](docs/runbooks/uptime-monitoring.md) for exit codes, external probes, and alerting policy.
+`make build` also builds `bin/over-laid-probe`, a read-only readiness monitor. `make probe` fails when the JSON report is degraded even if HTTP returns 200. For a managed installation use `PROBE_CHECKS=process,tenant_storage,retention_worker`. For a legacy installation, select explicit requirements with `make probe API_PORT=8081 PROBE_CHECKS=process,postgres,bot_runtime` when monitoring local bot storage before Twitch/OBS setup. Missing checks fail rather than silently passing. See [uptime monitoring](docs/runbooks/uptime-monitoring.md) for exit codes, external probes, and alerting policy.
 
 ### OBS browser source
 

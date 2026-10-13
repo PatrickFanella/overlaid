@@ -94,8 +94,20 @@ func (r *APIVariableResolver) resolveAPIVariable(ctx context.Context, name strin
 	if !variable.Enabled {
 		return APIVariableResult{Name: name, Value: variable.Fallback, Status: "disabled"}
 	}
+	if gate, ok := r.repository.(interface {
+		AllowItem(context.Context, string, string) error
+	}); ok {
+		if err := gate.AllowItem(ctx, "apiVariables", variable.ID); err != nil {
+			return APIVariableResult{Name: name, Value: variable.Fallback, Status: "plan_limited", Error: err.Error()}
+		}
+	}
 	if cached, ok := r.cachedAPIVariable(variable); ok {
 		return APIVariableResult{Name: name, Value: cached, Status: "cache_hit"}
+	}
+	if gate, ok := r.repository.(interface{ ReserveHTTP(context.Context) error }); ok {
+		if err := gate.ReserveHTTP(ctx); err != nil {
+			return APIVariableResult{Name: name, Value: variable.Fallback, Status: "plan_limited", Error: err.Error()}
+		}
 	}
 	value, status, code, err := r.fetch(ctx, variable)
 	if err != nil {

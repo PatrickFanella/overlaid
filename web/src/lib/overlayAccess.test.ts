@@ -23,6 +23,6 @@ it('rejects token retrieval on 401 while using the operator header', async () =>
   vi.stubGlobal('fetch', fetchMock);
   await expect(fetchOverlayToken('https://api.example', 'operator-fixture')).rejects.toThrow('401');
   expect(fetchMock).toHaveBeenCalledWith('https://api.example/api/dashboard/overlay-token', {
-    method: 'GET', headers: { Accept: 'application/json', 'X-Overlay-Operator-Secret': 'operator-fixture' },
+    method: 'GET', credentials: 'include', headers: { Accept: 'application/json', 'X-Overlay-Operator-Secret': 'operator-fixture' },
   });
 });

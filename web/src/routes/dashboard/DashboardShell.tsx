@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { fetchTwitchLoginURL } from '../../lib/api';
 import { dashboardRouteGroups, dashboardRoutes, getDashboardRoute, resolveDashboardPath } from '../../lib/dashboardRoutes';
 import { DeskStatusProvider, eventSubLamp, obsLamp, onAirState, readinessLamp, twitchLamp, useDeskStatus } from './deskStatus';
 import { Lamp } from './ui';
+import { AccountProvider, loginURL, useAccount } from './accountSession';
 
 type DashboardShellProps = {
   activePath: string;
@@ -11,21 +12,32 @@ type DashboardShellProps = {
 
 export function DashboardShell({ activePath, children }: DashboardShellProps) {
   return (
-    <DeskStatusProvider>
+    <AccountProvider><AccountGate activePath={activePath}><DeskStatusProvider>
       <DeskFrame activePath={resolveDashboardPath(activePath)}>{children}</DeskFrame>
-    </DeskStatusProvider>
+    </DeskStatusProvider></AccountGate></AccountProvider>
   );
+}
+
+function AccountGate({ activePath, children }: { activePath: string; children: ReactNode }) {
+  const { account, loading } = useAccount();
+  const client = useSyncExternalStore(() => () => {}, () => true, () => false);
+  if (loading && client) return <div className="desk"><main className="desk-page"><p role="status">Loading account…</p></main></div>;
+  if (account.deploymentMode === 'hosted' && activePath !== '/dashboard/account' && (!account.authenticated || !account.activeTenantId)) {
+    return <div className="desk"><main className="desk-page"><h1 className="desk-title">Your workspace</h1><p>{account.authenticated ? 'Select or create a workspace to open the operator desk.' : 'Sign in to open your workspaces.'}</p><a className="desk-btn" href={account.authenticated ? '/dashboard/account' : loginURL()}>{account.authenticated ? 'Manage workspaces' : 'Sign in with Twitch'}</a><p><a href="/privacy">Privacy policy</a> · <a href="/terms">Terms of service</a></p></main></div>;
+  }
+  return children;
 }
 
 function DeskFrame({ activePath, children }: DashboardShellProps) {
   const activeRoute = getDashboardRoute(activePath) ?? dashboardRoutes[0];
+  const title = activePath === '/dashboard/account' ? 'Account and workspace' : activeRoute.navLabel;
 
   useLegacyPathRewrite(activePath);
   useRouteShortcuts();
 
   useEffect(() => {
-    document.title = `${activeRoute.navLabel} · over-laid`;
-  }, [activeRoute.navLabel]);
+    document.title = `${title} · over-laid`;
+  }, [title]);
 
   return (
     <div className="desk">
@@ -49,6 +61,9 @@ function DeskFrame({ activePath, children }: DashboardShellProps) {
         ))}
 
         <div className="desk-nav__foot">
+          <a className="desk-nav__link" href="/dashboard/account">Account and workspace</a>
+          <a className="desk-nav__link" href="/privacy">Privacy</a>
+          <a className="desk-nav__link" href="/terms">Terms</a>
           <a className="desk-nav__link" href="/">
             All routes
           </a>
@@ -68,6 +83,7 @@ function DeskFrame({ activePath, children }: DashboardShellProps) {
 
 function TopBar() {
   const status = useDeskStatus();
+  const { account } = useAccount();
   const [loginState, setLoginState] = useState('');
   const state = onAirState(status.session);
   const twitch = twitchLamp(status.twitch);
@@ -94,7 +110,7 @@ function TopBar() {
         <Lamp label="Twitch" tone={twitch.tone} value={twitch.value} busy={status.loading} />
         <Lamp label="EventSub" tone={eventSub.tone} value={eventSub.value} busy={status.loading} />
         <Lamp label="Ready" tone={readiness.tone} value={readiness.value} busy={status.loading} />
-        <Lamp label="Operator" tone={status.operatorSecret ? 'ok' : 'bad'} value={status.operatorSecret ? 'secret loaded' : 'secret missing'} />
+        <Lamp label={account.deploymentMode === 'hosted' ? 'Account' : 'Operator'} tone={account.deploymentMode === 'hosted' ? 'ok' : status.operatorSecret ? 'ok' : 'bad'} value={account.deploymentMode === 'hosted' ? account.tenants.find((item) => item.id === account.activeTenantId)?.name || 'signed in' : status.operatorSecret ? 'secret loaded' : 'secret missing'} />
       </div>
 
       <div className="desk-top__actions">

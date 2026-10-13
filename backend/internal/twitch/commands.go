@@ -52,6 +52,7 @@ type CommandProcessorConfig struct {
 	Community    CommunityStore
 	APIVariables APIVariableStore
 	NowPlaying   func() bot.NowPlayingMetadata
+	AllowCustom  func(string) error
 }
 
 type CommandProcessor struct {

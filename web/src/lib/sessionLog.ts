@@ -1,3 +1,4 @@
+import { tenantStorageKey } from './accountContext';
 export type SessionLogEntry = {
   id: string;
   label: string;
@@ -14,7 +15,7 @@ export function loadSessionLog(): SessionLogEntry[] {
     return [];
   }
 
-  const raw = window.sessionStorage.getItem(SESSION_LOG_KEY);
+  const raw = window.sessionStorage.getItem(tenantStorageKey(SESSION_LOG_KEY));
   if (!raw) {
     return [];
   }
@@ -32,7 +33,7 @@ export function saveSessionLog(entries: SessionLogEntry[]) {
     return;
   }
 
-  window.sessionStorage.setItem(SESSION_LOG_KEY, JSON.stringify(entries.slice(0, MAX_ENTRIES)));
+  window.sessionStorage.setItem(tenantStorageKey(SESSION_LOG_KEY), JSON.stringify(entries.slice(0, MAX_ENTRIES)));
 }
 
 export function clearSessionLog() {
@@ -40,7 +41,7 @@ export function clearSessionLog() {
     return;
   }
 
-  window.sessionStorage.removeItem(SESSION_LOG_KEY);
+  window.sessionStorage.removeItem(tenantStorageKey(SESSION_LOG_KEY));
 }
 
 export function createSessionLogEntry(label: string, status: SessionLogEntry['status'], message: string): SessionLogEntry {

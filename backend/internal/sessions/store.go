@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"strings"
 	"time"
 
@@ -37,7 +39,7 @@ type ReadinessSnapshot struct {
 }
 
 type Store struct {
-	db *sql.DB
+	db *tenantdb.DB
 }
 
 func NewPostgres(databaseURL string) (*Store, error) {
@@ -45,7 +47,7 @@ func NewPostgres(databaseURL string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := &Store{db: db}
+	store := &Store{db: tenantdb.Legacy(db)}
 	if err := store.Load(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -59,6 +61,9 @@ func (s *Store) Load() error {
 	if err := s.db.PingContext(ctx); err != nil {
 		return err
 	}
+	if s.db.IsScoped() {
+		return nil
+	}
 	_, err := s.db.ExecContext(ctx, createTableSQL)
 	return err
 }
@@ -66,7 +71,7 @@ func (s *Store) Load() error {
 func (s *Store) Current(ctx context.Context) (Session, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, sessionSelectSQL+` WHERE ended_at IS NULL GROUP BY stream_sessions.id ORDER BY started_at DESC LIMIT 1`)
+	rows, err := s.db.QueryContext(ctx, sessionSelectSQL+` AND ended_at IS NULL GROUP BY stream_sessions.id ORDER BY started_at DESC LIMIT 1`)
 	if err != nil {
 		return Session{}, false, err
 	}
@@ -126,7 +131,7 @@ func (s *Store) Start(ctx context.Context, title, kind, notes string) (Session, 
 	if err := tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&startedAt); err != nil {
 		return Session{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE stream_sessions SET ended_at = $1 WHERE ended_at IS NULL`, startedAt); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE stream_sessions SET ended_at = $1 WHERE /*tenant:stream_sessions*/ AND ended_at IS NULL`, startedAt); err != nil {
 		return Session{}, err
 	}
 	var id string
@@ -153,8 +158,8 @@ func (s *Store) End(ctx context.Context) (Session, bool, error) {
 	}
 	var id string
 	err = tx.QueryRowContext(ctx, `
-		UPDATE stream_sessions SET ended_at = clock_timestamp() WHERE id = (
-			SELECT id FROM stream_sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1
+		UPDATE stream_sessions SET ended_at = clock_timestamp() WHERE /*tenant:stream_sessions*/ AND id = (
+			SELECT id FROM stream_sessions WHERE /*tenant:stream_sessions*/ AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1
 		) RETURNING id
 	`).Scan(&id)
 	if err != nil {
@@ -179,11 +184,11 @@ func (s *Store) ByID(ctx context.Context, id string) (Session, error) {
 // Both the pool and report transactions use these readers. Reports supply a
 // repeatable-read transaction so summary, events, and snapshots agree.
 type reportQueryer interface {
-	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryContext(context.Context, string, ...any) (tenantdb.Rows, error)
 }
 
 func sessionByID(ctx context.Context, db reportQueryer, id string) (Session, error) {
-	rows, err := db.QueryContext(ctx, sessionSelectSQL+` WHERE stream_sessions.id = $1 GROUP BY stream_sessions.id`, id)
+	rows, err := db.QueryContext(ctx, sessionSelectSQL+` AND stream_sessions.id = $1 GROUP BY stream_sessions.id`, id)
 	if err != nil {
 		return Session{}, err
 	}
@@ -219,7 +224,7 @@ func (s *Store) Report(ctx context.Context, id string, limit int) (Report, error
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id, type, source, title, message, severity, data, created_at
 		FROM stream_events
-		WHERE session_id = $1
+		WHERE /*tenant:stream_events*/ AND session_id = $1
 		ORDER BY created_at DESC, inserted_at DESC
 		LIMIT $2
 	`, id, limit)
@@ -291,7 +296,7 @@ func readinessSnapshots(ctx context.Context, db reportQueryer, sessionID string)
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, session_id, phase, status, checks, captured_at
 		FROM stream_session_readiness_snapshots
-		WHERE session_id = $1
+		WHERE /*tenant:stream_session_readiness_snapshots*/ AND session_id = $1
 		ORDER BY captured_at ASC
 	`, sessionID)
 	if err != nil {
@@ -348,12 +353,13 @@ func scanEvent(row rowScanner) (events.Event, error) {
 
 // Table identity scopes the transaction lock to this database/schema. All
 // lifecycle writers share it, including separate API processes.
-const lifecycleLockSQL = `SELECT pg_advisory_xact_lock('stream_sessions'::regclass::oid::bigint)`
+const lifecycleLockSQL = `SELECT pg_advisory_xact_lock(/*tenant-session-lock*/)`
 
 const sessionSelectSQL = `
 SELECT stream_sessions.id, stream_sessions.title, stream_sessions.kind, stream_sessions.notes, stream_sessions.started_at, stream_sessions.ended_at, COUNT(stream_events.id)::int AS event_count
 FROM stream_sessions
-LEFT JOIN stream_events ON stream_events.session_id = stream_sessions.id
+LEFT JOIN stream_events ON stream_events.session_id = stream_sessions.id AND /*tenant:stream_events*/
+WHERE /*tenant:stream_sessions*/
 `
 
 const createTableSQL = `
@@ -383,3 +389,14 @@ CREATE TABLE IF NOT EXISTS stream_session_readiness_snapshots (
 
 CREATE INDEX IF NOT EXISTS stream_session_readiness_snapshots_session_idx ON stream_session_readiness_snapshots (session_id, captured_at ASC);
 `
+
+func NewTenant(db *tenantdb.DB) (*Store, error) {
+	if db == nil || !db.IsScoped() {
+		return nil, errors.New("tenant context required")
+	}
+	store := &Store{db: db}
+	if err := store.Load(); err != nil {
+		return nil, err
+	}
+	return store, nil
+}

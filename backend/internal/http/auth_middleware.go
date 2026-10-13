@@ -17,6 +17,9 @@ func (s *Server) requireOperator(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) authorizeOperator(r *http.Request) bool {
+	if trust, ok := r.Context().Value(tenantTrustKey{}).(tenantTrust); ok && trust.operator {
+		return true
+	}
 	secret := strings.TrimSpace(s.config.OperatorSecret)
 	if secret == "" {
 		return s.localExposure()
@@ -33,6 +36,9 @@ func (s *Server) authorizeOperator(r *http.Request) bool {
 }
 
 func (s *Server) authorizeWebhook(r *http.Request) bool {
+	if trust, ok := r.Context().Value(tenantTrustKey{}).(tenantTrust); ok && trust.webhook {
+		return true
+	}
 	secret := strings.TrimSpace(s.config.WebhookSecret)
 	if secret == "" {
 		return s.localExposure()
@@ -63,6 +69,10 @@ func (s *Server) localExposure() bool {
 
 func (s *Server) requireOverlay(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if trust, ok := r.Context().Value(tenantTrustKey{}).(tenantTrust); ok && trust.overlay {
+			next(w, r)
+			return
+		}
 		secret := strings.TrimSpace(s.config.OverlayToken)
 		provided := r.URL.Query().Get("key")
 		authorized := secret == "" && s.localExposure()

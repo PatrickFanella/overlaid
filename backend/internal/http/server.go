@@ -20,10 +20,16 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/sessions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/state"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/tenancy"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 )
 
 type Server struct {
+	tenantID                  string
+	tenantContext             context.Context
+	credentialStore           *tenancy.Store
+	vaultKeys                 tenancy.Keyring
 	config                    config.Config
 	bus                       *events.Bus
 	history                   eventHistoryStore
@@ -70,29 +76,44 @@ type activeSessionHistoryStore interface {
 	ActiveSessionID() string
 }
 
-func NewServer(cfg config.Config, bus *events.Bus) *Server {
-	eventHistory, historyLoadError, historyWritable := newEventHistoryStore(cfg)
+func NewServer(cfg config.Config, bus *events.Bus) *Server { return newServer(cfg, bus, nil) }
+
+func newServer(cfg config.Config, bus *events.Bus, scope *tenantdb.DB) *Server {
+	eventHistory, historyLoadError, historyWritable := newEventHistoryStore(cfg, scope)
 	store := state.New(cfg.OverlayStateFile)
 	stateLoadError := ""
+	if scope != nil {
+		if scoped, err := state.NewTenant(scope); err == nil {
+			store = scoped
+		} else {
+			store = state.New("")
+			stateLoadError = err.Error()
+		}
+	}
 	if err := store.Load(); err != nil {
 		stateLoadError = err.Error()
 		log.Printf("failed to load overlay state: %v", err)
 	}
 	server := &Server{config: cfg, bus: bus, history: eventHistory, historyLoadError: historyLoadError, historyWritable: historyWritable, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, stateLoadError: stateLoadError, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
-	server.dashboardConfig, server.dashboardConfigLoadError = newDashboardConfigStore(cfg)
-	server.sessions, server.sessionsLoadError = newSessionStore(cfg)
+	server.dashboardConfig, server.dashboardConfigLoadError = newDashboardConfigStore(cfg, scope)
+	server.sessions, server.sessionsLoadError = newSessionStore(cfg, scope)
 	server.refreshActiveSession(context.Background())
-	server.botStore, server.botLoadError = newBotStore(cfg)
+	server.botStore, server.botLoadError = newBotStore(cfg, scope)
 	server.botRuntime = bot.NewRuntime(nil)
 	if server.botStore != nil {
 		server.botRuntime = bot.NewRuntime(server.botStore)
 	}
-	server.interactions, server.interactionsLoadError = newInteractionStore(cfg)
+	server.interactions, server.interactionsLoadError = newInteractionStore(cfg, scope)
 	rules := interactions.Rules{}
 	if server.interactions != nil {
 		rules = server.interactions.Rules()
 	}
-	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(rules), Custom: server.customTwitchCommands(context.Background()), Channel: cfg.TwitchChannel, Community: botCommunityAdapter{store: server.botStore}, APIVariables: bot.NewAPIVariableResolver(server.botStore), NowPlaying: server.nowPlaying.Snapshot})
+	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(rules), Custom: server.customTwitchCommands(context.Background()), Channel: cfg.TwitchChannel, Community: botCommunityAdapter{store: server.botStore}, APIVariables: bot.NewAPIVariableResolver(server.botStore), NowPlaying: server.nowPlaying.Snapshot, AllowCustom: func(name string) error {
+		if server.botStore == nil {
+			return nil
+		}
+		return server.botStore.AllowItem(context.Background(), "commands", name)
+	}})
 	if err := server.twitch.loadPersistedToken(); err != nil {
 		server.twitchTokenLoadError = err.Error()
 		log.Printf("failed to load twitch token: %v", err)
@@ -124,7 +145,15 @@ func (s *Server) customTwitchCommands(ctx context.Context) []twitch.CustomComman
 	return out
 }
 
-func newBotStore(cfg config.Config) (*bot.Store, string) {
+func newBotStore(cfg config.Config, scope *tenantdb.DB) (*bot.Store, string) {
+	if scope != nil {
+		store, err := bot.NewTenant(scope)
+		if err != nil {
+			return nil, err.Error()
+		}
+		return store, ""
+	}
+
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		return nil, ""
 	}
@@ -138,7 +167,15 @@ func newBotStore(cfg config.Config) (*bot.Store, string) {
 	return store, ""
 }
 
-func newSessionStore(cfg config.Config) (*sessions.Store, string) {
+func newSessionStore(cfg config.Config, scope *tenantdb.DB) (*sessions.Store, string) {
+	if scope != nil {
+		store, err := sessions.NewTenant(scope)
+		if err != nil {
+			return nil, err.Error()
+		}
+		return store, ""
+	}
+
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		return nil, ""
 	}
@@ -171,7 +208,15 @@ func (s *Server) refreshActiveSession(ctx context.Context) {
 	s.setActiveSessionID(session.ID)
 }
 
-func newDashboardConfigStore(cfg config.Config) (dashboardConfigStore, string) {
+func newDashboardConfigStore(cfg config.Config, scope *tenantdb.DB) (dashboardConfigStore, string) {
+	if scope != nil {
+		store, err := dashboardconfig.NewTenant(scope)
+		if err != nil {
+			return nil, err.Error()
+		}
+		return store, ""
+	}
+
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		return nil, ""
 	}
@@ -185,7 +230,15 @@ func newDashboardConfigStore(cfg config.Config) (dashboardConfigStore, string) {
 	return store, ""
 }
 
-func newEventHistoryStore(cfg config.Config) (eventHistoryStore, string, bool) {
+func newEventHistoryStore(cfg config.Config, scope *tenantdb.DB) (eventHistoryStore, string, bool) {
+	if scope != nil {
+		store, err := history.NewTenant(scope)
+		if err != nil {
+			return nil, err.Error(), false
+		}
+		return store, "", true
+	}
+
 	historyLoadError := ""
 	historyWritable := true
 	if strings.TrimSpace(cfg.DatabaseURL) != "" {
@@ -210,7 +263,15 @@ func newEventHistoryStore(cfg config.Config) (eventHistoryStore, string, bool) {
 	return eventHistory, historyLoadError, historyWritable
 }
 
-func newInteractionStore(cfg config.Config) (*interactions.Store, string) {
+func newInteractionStore(cfg config.Config, scope *tenantdb.DB) (*interactions.Store, string) {
+	if scope != nil {
+		store, err := interactions.NewTenant(scope)
+		if err != nil {
+			return nil, err.Error()
+		}
+		return store, ""
+	}
+
 	if strings.TrimSpace(cfg.DatabaseURL) != "" {
 		store, err := retryStartupStore("postgres twitch interactions", func() (*interactions.Store, error) {
 			return interactions.NewPostgres(cfg.DatabaseURL)
@@ -325,8 +386,46 @@ func (s *Server) StartBackground(ctx context.Context) {
 
 	go func() {
 		log.Printf("Twitch EventSub background worker enabled")
-		client.Run(ctx)
+		if s.credentialStore == nil {
+			client.Run(ctx)
+			return
+		}
+		for ctx.Err() == nil {
+			s.runVaultEventSubSession(ctx, &client)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
+		}
+
 	}()
+}
+
+// A failed periodic validation closes the active socket. Retry the worker
+// afterward so transient provider outages can recover without a deployment.
+func (s *Server) runVaultEventSubSession(ctx context.Context, client *twitch.Client) {
+	eventCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-eventCtx.Done():
+				return
+			case <-ticker.C:
+				validationCtx, stop := context.WithTimeout(eventCtx, 10*time.Second)
+				_, valid := s.ensureVaultTwitchToken(validationCtx)
+				stop()
+				if !valid {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	client.Run(eventCtx)
 }
 
 func mprisSessionBusAvailable() bool {

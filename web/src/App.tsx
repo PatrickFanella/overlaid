@@ -1,4 +1,6 @@
 import type { ReactElement } from 'react';
+import { DashboardAccountPage } from './routes/dashboard/Account';
+import { LegalPage, PublicStatusPage } from './routes/Legal';
 import { HomePage } from './routes/Home';
 import { OverlayAlertsPage } from './routes/OverlayAlerts';
 import { OverlayBRBPage } from './routes/OverlayBRB';
@@ -23,6 +25,10 @@ type AppProps = {
 
 const pages: Record<string, () => ReactElement> = {
   '/': () => <HomePage />,
+  '/dashboard/account': () => <DashboardAccountPage />,
+  '/privacy': () => <LegalPage kind="privacy" />,
+  '/terms': () => <LegalPage kind="terms" />,
+  '/status': () => <PublicStatusPage />,
   '/dashboard': () => <DashboardOnAirPage />,
   '/dashboard/scenes': () => <DashboardScenesPage />,
   '/dashboard/chat': () => <DashboardChatPage />,

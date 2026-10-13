@@ -21,6 +21,13 @@ func RunTimerOnce(ctx context.Context, store TimerReader, runtime *Runtime, id, 
 	if err != nil {
 		return events.Event{}, err
 	}
+	if gate, ok := store.(interface {
+		AllowItem(context.Context, string, string) error
+	}); ok {
+		if err := gate.AllowItem(ctx, "timers", timer.ID); err != nil {
+			return events.Event{}, err
+		}
+	}
 	event, render := TimerEvent(timer, channel)
 	outcome := AuditOutcome{
 		Source: SourceDashboard, ActorRole: RoleOperator,

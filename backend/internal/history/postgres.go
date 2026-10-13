@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"strings"
 	"sync"
 	"time"
@@ -13,7 +15,7 @@ import (
 )
 
 type PostgresStore struct {
-	db              *sql.DB
+	db              *tenantdb.DB
 	limit           int
 	mu              sync.RWMutex
 	activeSessionID string
@@ -27,7 +29,7 @@ func NewPostgres(databaseURL string, limit int) (*PostgresStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := &PostgresStore{db: db, limit: limit}
+	store := &PostgresStore{db: tenantdb.Legacy(db), limit: limit}
 	if err := store.Load(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -40,6 +42,9 @@ func (s *PostgresStore) Load() error {
 	defer cancel()
 	if err := s.db.PingContext(ctx); err != nil {
 		return err
+	}
+	if s.db.IsScoped() {
+		return nil
 	}
 	_, err := s.db.ExecContext(ctx, createStreamEventsTableSQL)
 	return err
@@ -93,7 +98,7 @@ func (s *PostgresStore) List(limit int) []events.Event {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, type, source, title, message, severity, data, created_at
 		FROM stream_events
-		ORDER BY created_at DESC, inserted_at DESC
+		WHERE /*tenant:stream_events*/ ORDER BY created_at DESC, inserted_at DESC
 		LIMIT $1
 	`, limit)
 	if err != nil {
@@ -143,3 +148,14 @@ CREATE INDEX IF NOT EXISTS stream_events_type_idx ON stream_events (type);
 CREATE INDEX IF NOT EXISTS stream_events_source_idx ON stream_events (source);
 CREATE INDEX IF NOT EXISTS stream_events_session_id_idx ON stream_events (session_id);
 `
+
+func NewTenant(db *tenantdb.DB) (*PostgresStore, error) {
+	if db == nil || !db.IsScoped() {
+		return nil, errors.New("tenant context required")
+	}
+	store := &PostgresStore{db: db, limit: defaultLimit}
+	if err := store.Load(); err != nil {
+		return nil, err
+	}
+	return store, nil
+}

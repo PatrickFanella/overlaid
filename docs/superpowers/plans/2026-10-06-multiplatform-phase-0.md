@@ -6,7 +6,7 @@ Scope: October 5 parity roadmap, Gitea issues #3–7, #9–12. Existing June wor
 
 The original implementation scope merged in PR #35. Issues #3–9 are complete, including the now-playing resolver tracked separately by #8. The repository owner accepted all six ADRs under #10–12 and closed those issues. The accepted statuses are now recorded in the files and ADR index.
 
-The development assessment adds [#38](https://git.subcult.tv/subculture-collective/overlaid/issues/38), fail-closed webhook credentials in LAN/public modes, to Phase 0. The closeout change enforces that boundary and adds route-level tests for credential transports, exposure normalization, rejection before payload parsing, and absence of rejected-event state/history/publication. Phase 0 can close after this change merges and its exact-head verification passes. Phase 1 implementation remains separate.
+The development assessment adds [#38](https://git.subcult.tv/subculture-collective/overlaid/issues/38), fail-closed webhook credentials in LAN/public modes, to Phase 0. The closeout change enforces that boundary and adds route-level tests for credential transports, exposure normalization, rejection before payload parsing, and absence of rejected-event state/history/publication. PR #44 merged this closeout at `a64ac84`; #38 and the Phase 0 milestone are closed. Phase 1 implementation is tracked separately.
 
 Real Twitch/OBS, fresh persistence CI evidence, and first self-host release qualification are tracked separately in [milestone 154](https://git.subcult.tv/subculture-collective/overlaid/milestone/154), issues #39–42. See the [updated roadmap](2026-10-05-multiplatform-parity-roadmap.md) and [development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4).
 

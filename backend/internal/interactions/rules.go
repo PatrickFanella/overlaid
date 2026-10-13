@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +54,7 @@ type Rules struct {
 type Store struct {
 	mu    sync.RWMutex
 	path  string
-	db    *sql.DB
+	db    *tenantdb.DB
 	rules Rules
 }
 
@@ -66,7 +67,7 @@ func NewPostgres(databaseURL string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := &Store{db: db, rules: emptyRules()}
+	store := &Store{db: tenantdb.Legacy(db), rules: emptyRules()}
 	if err := store.Load(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -162,12 +163,14 @@ func (s *Store) loadPostgres() error {
 	if err := s.db.PingContext(ctx); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, createInteractionRulesTableSQL); err != nil {
-		return err
-	}
+	if !s.db.IsScoped() {
+		if _, err := s.db.ExecContext(ctx, createInteractionRulesTableSQL); err != nil {
+			return err
+		}
 
+	}
 	var payload []byte
-	err := s.db.QueryRowContext(ctx, `SELECT rules FROM twitch_interaction_rules WHERE id = $1`, "default").Scan(&payload)
+	err := s.db.QueryRowContext(ctx, `SELECT rules FROM twitch_interaction_rules WHERE /*tenant:twitch_interaction_rules*/ AND id = $1`, "default").Scan(&payload)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			s.mu.Lock()
@@ -198,7 +201,7 @@ func (s *Store) writePostgres(rules Rules) error {
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO twitch_interaction_rules (id, rules, updated_at)
 		VALUES ($1, $2, now())
-		ON CONFLICT (id) DO UPDATE SET rules = EXCLUDED.rules, updated_at = now()
+		ON CONFLICT (/*tenant-conflict*/id) DO UPDATE SET rules = EXCLUDED.rules, updated_at = now()
 	`, "default", payload)
 	return err
 }
@@ -463,4 +466,15 @@ func isAllowedChannelPointAction(action string) bool {
 	default:
 		return false
 	}
+}
+
+func NewTenant(db *tenantdb.DB) (*Store, error) {
+	if db == nil || !db.IsScoped() {
+		return nil, errors.New("tenant context required")
+	}
+	store := &Store{db: db, rules: emptyRules()}
+	if err := store.Load(); err != nil {
+		return nil, err
+	}
+	return store, nil
 }
