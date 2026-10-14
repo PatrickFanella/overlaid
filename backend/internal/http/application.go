@@ -16,6 +16,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenancy"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
+	"github.com/riverqueue/river"
 )
 
 const bootstrapAccount = "00000000-0000-4000-8000-000000000002"
@@ -34,25 +35,37 @@ type tenantRuntime struct {
 	cancel context.CancelFunc
 }
 type Application struct {
-	config          config.Config
-	store           *tenancy.Store
-	keys            tenancy.Keyring
-	legacy          *Server
-	origin          string
-	secure          bool
-	mu              sync.Mutex
-	runtimes        map[string]tenantRuntime
-	overlayKeys     map[string]string
-	deleting        map[string]bool
-	ctx             context.Context
-	cancel          context.CancelFunc
-	sweepError      bool
-	sweepRan        bool
-	sweepAt         time.Time
-	sessionRequests map[string]map[string]context.CancelFunc
+	chatControl       *chatController
+	chatWorker        *river.Client[*sql.Tx]
+	chatWorkerStarted bool
+	config            config.Config
+	store             *tenancy.Store
+	keys              tenancy.Keyring
+	legacy            *Server
+	origin            string
+	secure            bool
+	mu                sync.Mutex
+	runtimes          map[string]tenantRuntime
+	overlayKeys       map[string]string
+	deleting          map[string]bool
+	ctx               context.Context
+	cancel            context.CancelFunc
+	sweepError        bool
+	sweepRan          bool
+	sweepAt           time.Time
+	sessionRequests   map[string]map[string]context.CancelFunc
 }
 
 func NewApplication(cfg config.Config) (*Application, error) {
+	if cfg.TwitchChatDispatchMode == "" {
+		cfg.TwitchChatDispatchMode = "legacy"
+	}
+	if cfg.TwitchChatDispatchMode != "legacy" && cfg.TwitchChatDispatchMode != "retained" {
+		return nil, errors.New("TWITCH_CHAT_DISPATCH_MODE must be legacy or retained")
+	}
+	if cfg.TwitchChatDispatchMode == "retained" && (cfg.DatabaseURL == "" || cfg.WorkerDatabaseURL == "") {
+		return nil, errors.New("retained chat requires product and separate worker databases")
+	}
 	if cfg.DeploymentMode != "selfhost" && cfg.DeploymentMode != "hosted" {
 		return nil, errors.New("DEPLOYMENT_MODE must be selfhost or hosted")
 	}
@@ -95,10 +108,37 @@ func NewApplication(cfg config.Config) (*Application, error) {
 			return nil, err
 		}
 	}
+	if err = a.initChatDispatch(); err != nil {
+		a.Close()
+		return nil, err
+	}
 	return a, nil
 }
 func (a *Application) Close() error {
 	a.cancel()
+	var result error
+	if a.chatControl != nil {
+		a.chatControl.live.Store(false)
+	}
+	if a.chatWorkerStarted {
+		ctx, stop := context.WithTimeout(context.Background(), 35*time.Second)
+		result = errors.Join(result, a.chatWorker.Stop(ctx))
+		stop()
+	}
+	if a.chatControl != nil {
+		if a.chatControl.lease != nil {
+			ctx, stop := context.WithTimeout(context.Background(), time.Second)
+			_, _ = a.chatControl.lease.ExecContext(ctx, `SELECT pg_advisory_unlock(`+chatControllerKey+`)`)
+			stop()
+			result = errors.Join(result, a.chatControl.lease.Close())
+		}
+		result = errors.Join(result, a.chatControl.pool.Close())
+	}
+	if a.store != nil {
+		ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+		result = errors.Join(result, a.FlushBotAudit(ctx))
+		stop()
+	}
 	a.mu.Lock()
 	for _, r := range a.runtimes {
 		r.cancel()
@@ -106,7 +146,7 @@ func (a *Application) Close() error {
 	a.runtimes = map[string]tenantRuntime{}
 	a.mu.Unlock()
 	if a.store != nil {
-		return a.store.Close()
+		return errors.Join(result, a.store.Close())
 	}
 	return nil
 }
@@ -175,6 +215,9 @@ func (a *Application) FlushBotAudit(ctx context.Context) error {
 func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.ctx.Err() != nil {
+		return nil, errors.New("application background unavailable")
+	}
 	if a.deleting[id] {
 		return nil, errors.New("tenant is being deleted")
 	}
@@ -218,6 +261,7 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	s.vaultKeys = a.keys
 	child, cancel := context.WithCancel(a.ctx)
 	s.tenantContext = child
+	s.chatReady = a.chatReady
 	a.runtimes[id] = tenantRuntime{server: s, cancel: cancel}
 	s.StartBackground(child)
 	return s, nil
@@ -483,7 +527,16 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 	if failed || storage != "ok" || access != "ok" {
 		status = "degraded"
 	}
-	writeJSON(w, map[string]any{"status": status, "checks": []map[string]string{{"name": "process", "status": "ok"}, {"name": "tenant_storage", "status": storage}, {"name": "retention_worker", "status": worker}, {"name": "access_policy", "status": access}}, "productName": a.config.ProductName, "deploymentMode": a.config.DeploymentMode, "activeRuntimes": count})
+	checks := []map[string]string{{"name": "process", "status": "ok"}, {"name": "tenant_storage", "status": storage}, {"name": "retention_worker", "status": worker}, {"name": "access_policy", "status": access}}
+	if a.chatControl != nil {
+		chat := "ok"
+		if !a.chatReady() {
+			chat = "degraded"
+			status = "degraded"
+		}
+		checks = append(checks, map[string]string{"name": "chat_dispatch", "status": chat})
+	}
+	writeJSON(w, map[string]any{"status": status, "checks": checks, "productName": a.config.ProductName, "deploymentMode": a.config.DeploymentMode, "activeRuntimes": count})
 }
 func controlError(w http.ResponseWriter, err error) {
 	if errors.Is(err, tenancy.ErrDenied) || errors.Is(err, sql.ErrNoRows) {

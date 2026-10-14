@@ -20,6 +20,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/mpris"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/newsroom"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/platformingest"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/sessions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/state"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenancy"
@@ -28,6 +29,10 @@ import (
 )
 
 type Server struct {
+	platformIngest            *platformingest.Store
+	chatReady                 func() bool
+	retainedChatGate          chan struct{}
+	chatSendGate              chan struct{}
 	newsroomTwitchClient      *twitch.Client
 	fileCommands              *bot.FileCommands
 	botCommandsLoadError      string
@@ -110,6 +115,12 @@ func newServer(cfg config.Config, bus *events.Bus, scope *tenantdb.DB) *Server {
 		log.Printf("failed to load overlay state: %v", err)
 	}
 	server := &Server{config: cfg, bus: bus, history: eventHistory, historyLoadError: historyLoadError, historyWritable: historyWritable, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, stateLoadError: stateLoadError, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
+	server.retainedChatGate = make(chan struct{}, 1)
+	server.chatSendGate = make(chan struct{}, 1)
+	if scope != nil {
+		server.platformIngest, _ = platformingest.New(scope)
+		server.tenantID = scope.TenantID()
+	}
 	server.newsroomJobs = make(chan newsroomJob, 100)
 	server.newsroomChat = make(chan events.Event, 100)
 	server.newsroomQueued = map[string]bool{}
@@ -436,6 +447,9 @@ func (s *Server) StartBackground(ctx context.Context) {
 		},
 		Publish:     s.publishEventSubEvent,
 		Diagnostics: s.twitchEventSubDiagnostics,
+	}
+	if s.config.TwitchChatDispatchMode == "retained" {
+		client.ChatIngest = s.ingestRetainedChat
 	}
 
 	s.newsroomTwitchClient = &client

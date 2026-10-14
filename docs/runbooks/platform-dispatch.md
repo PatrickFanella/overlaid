@@ -1,6 +1,6 @@
 # Fenced chat dispatch worker
 
-Issue [#56](https://git.subcult.tv/subculture-collective/overlaid/issues/56) adds the `platformdispatch` consumer boundary. It does not register a live Twitch effect handler or start a worker from the API. The current dispatcher remains active until the separate consumer compatibility migration.
+Issue [#56](https://git.subcult.tv/subculture-collective/overlaid/issues/56) adds the `platformdispatch` consumer boundary. [Retained Twitch integration under #58](retained-twitch-chat.md) registers the existing dispatcher as an explicit opt-in handler. Legacy remains the default.
 
 `NewClient` accepts a dedicated River service pool, an immutable product database and a handler. The service role must not own tables or bypass RLS, must belong to the chat worker policy and must have no product-table privileges. Database, schema and server identity must match the product pool. It leases only `overlaid_chat_dispatch` jobs on `ingest_followup`, using polling, four workers and a 30-second handler timeout. The caller owns client shutdown and both pools. The service role cannot directly read events, native payloads, connection credentials or receipts.
 
@@ -22,7 +22,7 @@ Apply `0008_platform_dispatch.sql` through the administrator migration path befo
 
 This migration does not create or change a production login password. The future live worker integration must supply an isolated non-owner login inheriting only `overlaid_worker`, plus the normal validated product pool. Do not give the River pool `overlaid_runtime` membership or product grants. Disposable tests create and remove their own login roles.
 
-Rollback uses the previous application revision with the additive receipt table and role retained. Do not delete receipts to force retry. The current API starts no new consumer, so this unit does not require a production worker shutdown or transport switch.
+Rollback of the boundary retains the additive receipt table and role. Do not delete receipts to force retry. Installations opting into retained mode must also follow the integration runbook's controller shutdown and mode-guard procedure before changing consumers.
 
 ## Verification
 

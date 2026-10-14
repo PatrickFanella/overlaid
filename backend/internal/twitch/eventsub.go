@@ -143,6 +143,7 @@ func sanitizeDiagnosticMessage(message string) string {
 }
 
 type Client struct {
+	ChatIngest          func(context.Context, EventSubMessage, Token) error
 	LifecycleWanted     func() bool
 	Lifecycle           func(context.Context, EventSubMessage, Token) error
 	lifecycleMu         sync.Mutex
@@ -389,6 +390,15 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 				}
 				if err := c.Lifecycle(ctx, message, token); err != nil {
 					return fmt.Errorf("persist Twitch lifecycle: %w", err)
+				}
+				continue
+			}
+			if message.Payload.Subscription.Type == "channel.chat.message" && c.ChatIngest != nil {
+				if err := c.ChatIngest(ctx, message, token); err != nil {
+					return errors.New("retained chat ingestion failed")
+				}
+				if c.Diagnostics != nil {
+					c.Diagnostics.MarkEvent()
 				}
 				continue
 			}

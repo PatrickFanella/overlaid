@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -538,25 +539,41 @@ func (s *Server) brbStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) publishEventSubEvent(event events.Event) {
+	ctx := context.Background()
+	if s.tenantContext != nil {
+		ctx = s.tenantContext
+	}
+	if err := s.publishEventSubContext(ctx, event, false); err != nil {
+		log.Printf("eventsub publication incomplete: %v", err)
+	}
+}
+
+func (s *Server) publishEventSubContext(ctx context.Context, event events.Event, synchronousNewsroom bool) error {
 	if event.Type == events.EventTypeChatMessage && s.twitchSentMessages.Contains(twitchMessageIDFromEvent(event)) {
-		return
+		return nil
 	}
 	switch event.Type {
 	case events.EventTypeClear:
 		if err := s.state.Clear(); err != nil {
 			log.Printf("failed to clear retained state for eventsub clear: %v", err)
-			return
+			return err
 		}
 	case events.EventTypeBRB:
 		if err := s.state.Set("brb", eventWithRetainedStateKey(event, "brb")); err != nil {
 			log.Printf("failed to persist retained state for eventsub brb: %v", err)
-			return
+			return err
 		}
 	}
-	s.publishEvent(event)
+	publicationErr := s.publishEventContext(ctx, event)
+	if publicationErr != nil && synchronousNewsroom {
+		return publicationErr
+	}
 	// Persist the chat event before queuing moderation audit foreign keys.
-	s.enforceModerationForEvent(context.Background(), event)
+	s.enforceModerationForEvent(ctx, event)
 	if event.Type == events.EventTypeCommand && boolData(event.Data, "newsroomRequest") {
+		if synchronousNewsroom {
+			return s.completeNewsroomRequest(ctx, event)
+		}
 		select {
 		case s.newsroomChat <- event:
 		default:
@@ -567,20 +584,32 @@ func (s *Server) publishEventSubEvent(event events.Event) {
 			s.recordBotAuditForEvent(context.Background(), event)
 		}
 	}
+	return publicationErr
 }
 
 func (s *Server) publishEvent(event events.Event) {
+	if err := s.publishEventContext(context.Background(), event); err != nil {
+		log.Printf("event publication incomplete: %v", err)
+	}
+}
+
+func (s *Server) publishEventContext(ctx context.Context, event events.Event) error {
 	s.nowPlaying.Observe(event)
-	s.sendOutboundChatForEvent(context.Background(), event)
+	var result error
+	if response, ok := outboundChatResponseFromEvent(event); ok {
+		_, result = s.sendTwitchChatMessage(ctx, response.Message)
+	}
 	if s.bus != nil {
 		s.bus.Publish(event)
 	}
 	if s.history != nil && s.historyWritable {
 		if err := s.history.Append(event); err != nil {
 			log.Printf("failed to append event history: %v", err)
+			result = errors.Join(result, err)
 		}
 	}
-	s.recordBotAuditForEvent(context.Background(), event)
+	s.recordBotAuditForEvent(ctx, event)
+	return result
 }
 
 func (s *Server) eventHistory(w http.ResponseWriter, r *http.Request) {

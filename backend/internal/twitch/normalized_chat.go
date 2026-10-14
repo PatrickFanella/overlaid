@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
 )
 
@@ -37,6 +39,51 @@ func normalizedChat(message EventSubMessage) platform.ChatMessage {
 		}
 	}
 	return chat
+}
+
+// NormalizeChatIngest uses the native chat message ID across subscription
+// deliveries. Transport metadata IDs remain in restricted retained payloads.
+func NormalizeChatIngest(connection platform.Connection, message EventSubMessage, received time.Time) (platform.ChatEvent, error) {
+	event, err := NormalizeChatNotification(connection, message, received)
+	if err != nil {
+		return platform.ChatEvent{}, err
+	}
+	return platform.NewChatEvent(connection, "chat:"+event.Chat.MessageID, event.OccurredAt, event.ReceivedAt, event.Chat)
+}
+
+// EventsForNormalizedChat bridges typed input into the one existing command
+// processor. Only known chat fields are reconstructed; raw extensions stay out.
+func EventsForNormalizedChat(event platform.ChatEvent, processor *CommandProcessor, rules interactions.Rules) []events.Event {
+	chat := event.Chat
+	badges := []any{}
+	seen := map[string]bool{}
+	for _, badge := range chat.Badges {
+		badges = append(badges, map[string]any{"set_id": badge.ID, "version": badge.Version})
+		seen[badge.ID] = true
+	}
+	for _, role := range chat.Actor.Roles {
+		switch role {
+		case "broadcaster", "moderator", "subscriber", "vip":
+			if !seen[role] {
+				badges = append(badges, map[string]any{"set_id": role})
+			}
+		}
+	}
+	data := map[string]any{"message_id": chat.MessageID, "chatter_user_id": chat.Actor.ID, "chatter_user_login": chat.Actor.Login, "chatter_user_name": chat.Actor.DisplayName,
+		"broadcaster_user_id": chat.Channel.ID, "broadcaster_user_login": chat.Channel.Login, "broadcaster_user_name": chat.Channel.DisplayName, "message": map[string]any{"text": chat.Text}, "badges": badges, "color": chat.Color, "chatter_color": chat.Color}
+	if chat.ReplyToID != "" {
+		data["reply"] = map[string]any{"parent_message_id": chat.ReplyToID}
+	}
+	message := EventSubMessage{Metadata: EventSubMetadata{MessageID: event.ID, MessageType: "notification", MessageTimestamp: event.OccurredAt}, Payload: EventSubPayload{Subscription: EventSubSubscription{Type: "channel.chat.message", Version: "1"}, Event: data}}
+	result := EventsForNotification(message, processor, rules)
+	for i := range result {
+		if result[i].Data == nil {
+			result[i].Data = map[string]any{}
+		}
+		result[i].Data["viewerId"] = chat.Actor.ID
+		result[i].Data["viewerLogin"] = chat.Actor.Login
+	}
+	return result
 }
 
 // NormalizeChatNotification is the strict ingest boundary for the forthcoming
