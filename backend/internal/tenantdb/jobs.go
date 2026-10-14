@@ -3,6 +3,7 @@ package tenantdb
 import (
 	"context"
 	"errors"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
 	"regexp"
 	"time"
 
@@ -11,15 +12,6 @@ import (
 )
 
 var eventIDPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
-
-type chatDispatchArgs struct {
-	TenantID     string `json:"tenant_id"`
-	ConnectionID string `json:"connection_id"`
-	EventID      string `json:"event_id"`
-	Deadline     int64  `json:"deadline"`
-}
-
-func (chatDispatchArgs) Kind() string { return "overlaid_chat_dispatch" }
 
 // EnqueueChatDispatch bridges the private transaction to River without giving
 // callers a pool, a raw transaction or control over tenant/queue/job arguments.
@@ -40,7 +32,7 @@ func (t *Tx) EnqueueChatDispatch(ctx context.Context, connectionID, eventID stri
 	if err != nil {
 		return 0, err
 	}
-	result, err := client.InsertTx(ctx, t.raw, chatDispatchArgs{TenantID: t.db.tenant, ConnectionID: connectionID, EventID: eventID, Deadline: occurred.UTC().Add(2 * time.Minute).Unix()}, &river.InsertOpts{Queue: "ingest_followup", MaxAttempts: 3})
+	result, err := client.InsertTx(ctx, t.raw, platform.ChatDispatchArgs{TenantID: t.db.tenant, ConnectionID: connectionID, EventID: eventID, Deadline: occurred.UTC().Add(2 * time.Minute).Unix()}, &river.InsertOpts{Queue: "ingest_followup", MaxAttempts: 3})
 	if err != nil {
 		return 0, err
 	}
