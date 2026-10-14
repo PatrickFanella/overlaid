@@ -28,6 +28,8 @@ Use narrower commands only when an issue explicitly asks for a smaller check.
 
 Optional Postgres integration checks use `OVERLAID_TEST_DATABASE_URL` pointing to a disposable database. Fixtures must work without preloaded application tables, create/drop owned schemas, and initialize the shared `pgcrypto` extension in `public` through the serialized test helper.
 
+The River compatibility spike is an isolated module in `backend/spikes/river`. `make verify` vets and tests it; `scripts/ci-postgres.sh` also runs its uncached race tests against the disposable database. Keep spike dependencies and fixture-only migrations out of the application module and production migrations until the durable-ingestion implementation is reviewed.
+
 ## Newsroom conventions
 
 - Newsroom is rebuilt in Go and Vite at `/dashboard/newsroom`; use the existing account, tenant, and Twitch EventSub boundaries. Keep dashboard `desk-*` and OBS `sc-*` styling separate.
