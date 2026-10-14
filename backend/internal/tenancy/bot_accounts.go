@@ -172,6 +172,9 @@ func (s *Store) BindBotAccount(ctx context.Context, tenant, actor, channelUserID
 	if err = botAudit(ctx, tx, tenant, actor, "bot_account.bind"); err != nil {
 		return err
 	}
+	if err = revokeSharedBinding(ctx, tx); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
