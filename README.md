@@ -36,6 +36,8 @@ docker compose up --build
 
 Set `OVERLAID_TEST_DATABASE_URL` to a disposable Postgres database to include persistence integration tests in `make verify` or the backend race suite. They work without preloaded application tables, create/drop their own schemas, and retain the shared `pgcrypto` extension in `public`. Without that variable, persistence integration tests are skipped.
 
+The isolated [River compatibility spike](backend/spikes/river/README.md) is included in `make verify` and the disposable PostgreSQL CI path. It proves transactional enqueueing with the current database driver and tenant isolation; it does not install a production queue or start workers.
+
 ## Overlay MVP
 
 ### Environment
