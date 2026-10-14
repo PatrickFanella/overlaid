@@ -468,13 +468,8 @@ func EventsForNotification(message EventSubMessage, processor *CommandProcessor,
 	}
 
 	text := stringValue(nestedMap(message.Payload.Event, "message"), "text")
-	command, ok := ParseChatCommand(text)
-	if !ok {
-		return eventsOut
-	}
-
 	user := chatCommandUserFromEvent(message.Payload.Event)
-	return append(eventsOut, processor.Handle(command, user)...)
+	return append(eventsOut, processor.HandleMessage(text, user)...)
 }
 
 // EventsForChannelPointRedemption maps one isolated notification. EventSub clients
@@ -685,6 +680,7 @@ func overlayEvent(eventType events.EventType, source, title, text string, severi
 
 func chatCommandUserFromEvent(event map[string]any) ChatCommandUser {
 	user := ChatCommandUser{
+		ID: stringValue(event, "chatter_user_id"), MessageID: stringValue(event, "message_id"), IsSubscriber: hasBadge(event, "subscriber"), IsVIP: hasBadge(event, "vip"),
 		Name:  firstNonEmpty(stringValue(event, "chatter_user_name"), stringValue(event, "chatter_user_login"), stringValue(event, "user_name"), stringValue(event, "user_login")),
 		Login: firstNonEmpty(stringValue(event, "chatter_user_login"), stringValue(event, "user_login")),
 	}

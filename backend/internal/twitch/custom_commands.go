@@ -66,6 +66,12 @@ func (e *customCommandExecutor) execute(original ChatCommand, resolved ChatComma
 	if e.namedCooldownActive(custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
 		return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
 	}
+	if bot.IsNewsroomAction(custom.Action) {
+		if e.onNamedCooldown(custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
+			return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
+		}
+		return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command queued", map[string]any{"custom": true, "action": custom.Action, "newsroomRequest": true, "newsroomArgs": truncateCommandText(original.Args, 8000)})}
+	}
 	template := e.renderer.Render(custom.Response, bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: e.channel, Args: original.Args, Command: resolved.Name})
 	mode := normalizeResponseMode(custom.ResponseMode)
 	if strings.TrimSpace(template.Text) == "" {

@@ -409,6 +409,7 @@ func readyzCheckIndex(checks []readyzCheck, name string) int {
 }
 
 func assertReadyzCheckSet(t *testing.T, checks []readyzCheck, expected map[string]string) {
+	expected["newsroom"] = "ok"
 	t.Helper()
 	if len(checks) != len(expected) {
 		t.Fatalf("expected %d checks, got %d: %#v", len(expected), len(checks), checks)

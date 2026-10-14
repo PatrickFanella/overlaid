@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
 )
 
 type botStatusResponse struct {
+	CommandStorage string `json:"commandStorage,omitempty"`
 	Available      bool   `json:"available"`
 	LoadError      string `json:"loadError,omitempty"`
 	LastAuditError string `json:"lastAuditError,omitempty"`
@@ -172,7 +174,17 @@ type botTimerEnabledRequest struct {
 }
 
 func (s *Server) botStatus(w http.ResponseWriter, r *http.Request) {
-	status := botStatusResponse{Available: s.botStore != nil, LoadError: s.botLoadError}
+	status := botStatusResponse{Available: s.commandsRegistry() != nil, LoadError: s.botLoadError, CommandStorage: "postgres"}
+	if s.botStore == nil {
+		status.CommandStorage = "file-commands"
+		if s.config.BotCommandsFile == "" {
+			status.CommandStorage = "memory-commands"
+		}
+		status.LoadError = s.botCommandsLoadError
+	}
+	if s.botCommandsLoadError != "" {
+		status.LoadError = s.botCommandsLoadError
+	}
 	if s.botRuntime != nil {
 		status.LastAuditError = s.botRuntime.LastAuditError()
 	}
@@ -190,6 +202,11 @@ func (s *Server) botStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		if quotes, err := s.botStore.ListQuotes(r.Context()); err == nil {
 			status.QuoteCount = len(quotes)
+		}
+	}
+	if s.botStore == nil && s.fileCommands != nil {
+		if commands, err := s.fileCommands.ListCommands(r.Context()); err == nil {
+			status.CommandCount = len(commands)
 		}
 	}
 	writeJSON(w, status)
@@ -532,20 +549,20 @@ func (s *Server) botTimers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) botCommands(w http.ResponseWriter, r *http.Request) {
-	if s.botStore == nil {
-		writeJSON(w, botCommandsResponse{Commands: []bot.Command{}, LoadError: s.botLoadError})
+	if s.commandsRegistry() == nil {
+		writeJSON(w, botCommandsResponse{Commands: []bot.Command{}, LoadError: s.botCommandsLoadError})
 		return
 	}
-	commands, err := s.botStore.ListCommands(r.Context())
+	commands, err := s.commandsRegistry().ListCommands(r.Context())
 	if err != nil {
 		http.Error(w, "bot commands unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	writeJSON(w, botCommandsResponse{Commands: commands})
+	writeJSON(w, botCommandsResponse{Commands: commands, LoadError: s.botCommandsLoadError})
 }
 
 func (s *Server) botCommandSave(w http.ResponseWriter, r *http.Request) {
-	if s.botStore == nil {
+	if s.commandsRegistry() == nil {
 		http.Error(w, "bot commands unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -553,7 +570,16 @@ func (s *Server) botCommandSave(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	command, err := s.botStore.SaveCommand(r.Context(), bot.Command{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Response: request.Response, Action: request.Action, ResponseMode: request.ResponseMode, RoleRequired: request.RoleRequired, CooldownSeconds: request.CooldownSeconds})
+	s.commandConfigMu.Lock()
+	defer s.commandConfigMu.Unlock()
+	if s.interactions != nil {
+		name := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(request.Name), "!"))
+		if _, exists := interactions.AliasMap(s.interactions.Rules())[name]; exists {
+			http.Error(w, "bot command conflicts with chat alias: "+name, http.StatusConflict)
+			return
+		}
+	}
+	command, err := s.commandsRegistry().SaveCommand(r.Context(), bot.Command{ID: request.ID, Name: request.Name, Enabled: request.Enabled, Response: request.Response, Action: request.Action, ResponseMode: request.ResponseMode, RoleRequired: request.RoleRequired, CooldownSeconds: request.CooldownSeconds})
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
@@ -567,7 +593,7 @@ func (s *Server) botCommandSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) botCommandSetEnabled(w http.ResponseWriter, r *http.Request) {
-	if s.botStore == nil {
+	if s.commandsRegistry() == nil {
 		http.Error(w, "bot commands unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -575,7 +601,7 @@ func (s *Server) botCommandSetEnabled(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	command, err := s.botStore.SetCommandEnabled(r.Context(), r.PathValue("id"), request.Enabled)
+	command, err := s.commandsRegistry().SetCommandEnabled(r.Context(), r.PathValue("id"), request.Enabled)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
@@ -589,11 +615,11 @@ func (s *Server) botCommandSetEnabled(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) botCommandDelete(w http.ResponseWriter, r *http.Request) {
-	if s.botStore == nil {
+	if s.commandsRegistry() == nil {
 		http.Error(w, "bot commands unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if err := s.botStore.DeleteCommand(r.Context(), r.PathValue("id")); err != nil {
+	if err := s.commandsRegistry().DeleteCommand(r.Context(), r.PathValue("id")); err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound

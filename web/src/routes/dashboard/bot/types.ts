@@ -14,9 +14,9 @@ export type CommandDraft = {
   id?: string;
   name: string;
   response: string;
-  action: 'ticker' | 'alert';
+  action: 'ticker' | 'alert' | 'newsroom_submit' | 'newsroom_capture' | 'newsroom_current' | 'newsroom_question' | 'newsroom_raffle';
   responseMode: 'overlay' | 'chat' | 'both';
-  roleRequired: 'viewer' | 'moderator' | 'broadcaster' | 'operator' | 'system';
+  roleRequired: 'viewer' | 'supporter' | 'moderator' | 'broadcaster' | 'operator' | 'system';
   cooldownSeconds: number;
   enabled: boolean;
 };

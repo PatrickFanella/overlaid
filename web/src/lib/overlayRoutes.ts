@@ -10,6 +10,7 @@ export type OverlayRoute = {
 };
 
 export const overlayRoutes: OverlayRoute[] = [
+  { path: '/overlay/newsroom', title: 'Newsroom card', description: 'Current reaction link or audience question', defaultScene: 'main', size: { width: 1200, height: 300 } },
   { path: '/overlay/alerts', title: 'Alert feed', description: 'Follows, subs, bits, and homelab alerts on a purple card', defaultScene: 'main', size: { width: 1000, height: 720 } },
   { path: '/overlay/chat', title: 'Twitch chat', description: 'Chat column that fills from the bottom', defaultScene: 'main', size: { width: 600, height: 900 } },
   { path: '/overlay/goals', title: 'Goal rail', description: 'Primary goal with up to three secondary meters', defaultScene: 'main', size: { width: 780, height: 640 } },

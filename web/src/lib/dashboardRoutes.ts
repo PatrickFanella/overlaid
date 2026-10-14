@@ -21,6 +21,7 @@ export const dashboardRouteGroups: { label: string; intent: DashboardRouteGroup 
 ];
 
 export const dashboardRoutes: DashboardRoute[] = [
+
   {
     path: '/dashboard',
     navLabel: 'On air',
@@ -29,6 +30,9 @@ export const dashboardRoutes: DashboardRoute[] = [
     landmarkText: 'Run configured actions',
     intent: 'show',
     shortcut: '1',
+  },
+  {
+    path: '/dashboard/newsroom', navLabel: 'Newsroom', title: 'Newsroom', description: 'Reaction deck, moderator triage, shelves, show notes, and media enrichment.', landmarkText: 'Moderator queue', intent: 'show', shortcut: '8',
   },
   {
     path: '/dashboard/scenes',

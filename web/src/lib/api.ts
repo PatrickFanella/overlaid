@@ -29,6 +29,7 @@ export type TwitchStatus = {
 };
 
 export type BotStatus = {
+ commandStorage?: string;
   available: boolean;
   loadError?: string;
   lastAuditError?: string;
@@ -124,9 +125,9 @@ export type BotCommandPayload = {
   name: string;
   enabled: boolean;
   response: string;
-  action: 'ticker' | 'alert';
+  action: 'ticker' | 'alert' | 'newsroom_submit' | 'newsroom_capture' | 'newsroom_current' | 'newsroom_question' | 'newsroom_raffle';
   responseMode: 'overlay' | 'chat' | 'both';
-  roleRequired: 'viewer' | 'moderator' | 'broadcaster' | 'operator' | 'system';
+  roleRequired: 'viewer' | 'supporter' | 'moderator' | 'broadcaster' | 'operator' | 'system';
   cooldownSeconds: number;
 };
 

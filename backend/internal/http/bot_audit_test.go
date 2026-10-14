@@ -259,7 +259,7 @@ func TestBotStatusAndAuditRequireOperator(t *testing.T) {
 	}
 }
 
-func TestBotStatusReportsUnavailableWithoutDatabase(t *testing.T) {
+func TestBotStatusReportsCommandsWithoutDatabase(t *testing.T) {
 	server := NewServer(configForBotTest("secret"), events.NewBus(4))
 	req := httptest.NewRequest(http.MethodGet, "/api/bot/status", nil)
 	req.Header.Set("X-Overlay-Operator-Secret", "secret")
@@ -270,8 +270,8 @@ func TestBotStatusReportsUnavailableWithoutDatabase(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `"available":false`) {
-		t.Fatalf("expected unavailable bot status, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), `"available":true`) || !strings.Contains(rec.Body.String(), `"commandCount":4`) || !strings.Contains(rec.Body.String(), `"commandStorage":"memory-commands"`) {
+		t.Fatalf("expected shared in-memory command registry, got %s", rec.Body.String())
 	}
 }
 

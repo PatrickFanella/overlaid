@@ -6,6 +6,12 @@ Development status, October 13, 2026: the single-channel Twitch/OBS application 
 
 Created from `subculture-collective/project-template`.
 
+## Newsroom
+
+`/dashboard/newsroom` rebuilds [Newsroom](https://github.com/PatrickFanella/newsroom) into the operator desk: moderator triage, a reaction deck and running order, show segments, shelves and revocable sharing, session show notes, named shows with recording links and chapter exports, paginated queue search, moderator review claims, revisioned story bundles with retained show snapshots, enrichment input evidence, Twitch chat capture, audience questions and raffles, media extraction, optional Claude analysis, Brave related coverage, and confirmed Discord notes delivery. `/overlay/newsroom?demo=1` previews the broadcast card; use the existing overlay credential for a live OBS source. The included `extension/` supports direct browser quick-add with a separate revocable token. Newsroom chat actions are editable entries in Chat → Bot commands, using the shared dispatcher, roles, cooldowns, and pause controls. Self-host installs without PostgreSQL retain this registry in `BOT_COMMANDS_FILE`.
+
+Apply `0004_newsroom.sql` before starting this version on a managed database. Provider keys are write-only and encrypted per workspace; self-host installations can also use provider environment variables. Chat capture and automatic AI analysis start disabled. See [Newsroom setup and recovery](docs/runbooks/newsroom.md) and [upstream provenance](docs/vendor/newsroom/PROVENANCE.md). Local verification does not establish live Twitch, AI, Discord, or OBS acceptance.
+
 ## Accounts and tenancy
 
 `DEPLOYMENT_MODE=selfhost` keeps operator-header access to one unlimited bootstrap workspace. `DEPLOYMENT_MODE=hosted` requires PostgreSQL, an encryption keyring and account sessions; a global operator secret cannot authorize hosted requests. Twitch account sign-in is separate from connecting a streaming channel. Other sign-in providers remain in their later platform phases.

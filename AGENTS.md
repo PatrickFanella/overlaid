@@ -28,6 +28,18 @@ Use narrower commands only when an issue explicitly asks for a smaller check.
 
 Optional Postgres integration checks use `OVERLAID_TEST_DATABASE_URL` pointing to a disposable database. Fixtures must work without preloaded application tables, create/drop owned schemas, and initialize the shared `pgcrypto` extension in `public` through the serialized test helper.
 
+## Newsroom conventions
+
+- Newsroom is rebuilt in Go and Vite at `/dashboard/newsroom`; use the existing account, tenant, and Twitch EventSub boundaries. Keep dashboard `desk-*` and OBS `sc-*` styling separate.
+- Newsroom Twitch actions belong to the general bot command registry and dispatcher. Do not add a separate parser or command settings to the Newsroom document. Legacy settings import once; preserve existing commands and the import marker.
+- Retained Newsroom commands use exact revisions and atomic persistence. Moderator members may triage links/questions and edit card notes, while deck, provider, sharing, and raffle controls require configure permission.
+- Newsroom show boundaries, review claims, and editorial revisions use the same retained tenant document. Show mutations and forced claim release require the owner. Preserve literal cursor search, read-only exports, review-token fencing, and revision checks that ignore provider changes.
+- Story bundles use configure permission, independent bundle revisions, and normalized supporting URLs without fetching them. Preserve separate start/play snapshots, retained conflict drafts, detached lead history, and viewer lifecycle deletion. Input evidence must distinguish observed backend retrieval from supplied-text AI and remain attached to its original summary.
+- Enrichment claims and play-note snapshots live in the retained tenant document. Preserve completion fencing, approval-only automatic AI, detached history, and per-chunk Discord receipts. File mode has one writer.
+- Provider credentials are write-only and vault-encrypted. Add/share capabilities retain hashes, have narrow route scope, and must remain independently revocable. Never reuse an operator secret in an extension, share link, or OBS URL.
+- Submitted pages are untrusted data. Preserve bounded public-address fetches, per-hop checks, explicit AI opt-in, plan-call reservations, and visible provider failures. Do not send real Twitch/Discord messages during fixtures.
+- Keep the upstream MIT notice and pinned provenance in `docs/vendor/newsroom/`. Update `docs/runbooks/newsroom.md` when provider or persistence contracts change.
+
 ## Tenant conventions
 
 - Managed PostgreSQL uses immutable `tenantdb.DB` scopes, explicit predicates and forced RLS. Runtime roles must not own application tables or bypass RLS. Migrations use separate administrator credentials.
