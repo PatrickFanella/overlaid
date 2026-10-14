@@ -41,6 +41,8 @@ type Config struct {
 	TwitchInteractionsFile string
 	TwitchScopes           []string
 	TwitchEventSub         bool
+	TwitchChatDispatchMode string
+	WorkerDatabaseURL      string
 	MPRISEnabled           bool
 	MPRISPlayer            string
 	MPRISPlayerPriority    []string
@@ -82,6 +84,8 @@ func Load() Config {
 		TwitchInteractionsFile: env("TWITCH_INTERACTIONS_FILE", "/data/twitch-interactions.json"),
 		TwitchScopes:           envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers", "moderator:manage:chat_messages", "moderator:manage:banned_users"}),
 		TwitchEventSub:         envBool("TWITCH_EVENTSUB_ENABLED", true),
+		TwitchChatDispatchMode: env("TWITCH_CHAT_DISPATCH_MODE", "legacy"),
+		WorkerDatabaseURL:      env("PLATFORM_WORKER_DATABASE_URL", ""),
 		MPRISEnabled:           envBool("MPRIS_ENABLED", false),
 		MPRISPlayer:            env("MPRIS_PLAYER", ""),
 		MPRISPlayerPriority:    envSplit("MPRIS_PLAYER_PRIORITY", []string{"Feishin", "mpv", "cliamp", "ferrosonic", "playerctld", "vivaldi"}),

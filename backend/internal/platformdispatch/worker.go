@@ -48,7 +48,7 @@ func NewClient(ctx context.Context, service *sql.DB, product *tenantdb.DB, handl
 	err = service.QueryRowContext(ctx, `SELECT
  EXISTS(SELECT 1 FROM pg_roles r WHERE r.rolname IN (current_user,session_user) AND (r.rolsuper OR r.rolbypassrls OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind IN ('r','p') AND c.relowner=r.oid))),
  has_table_privilege(current_user,'river_job','SELECT') AND has_table_privilege(current_user,'river_job','UPDATE') AND EXISTS(SELECT 1 FROM pg_policy p,unnest(p.polroles) role_id WHERE p.polrelid='river_job'::regclass AND p.polname='worker_dispatch' AND pg_has_role(current_user,role_id,'MEMBER')),
- EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind IN ('r','p') AND c.relname NOT IN ('river_job','river_queue','river_notification','river_migration') AND has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))`).Scan(&unsafe, &permitted, &private)
+ EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind IN ('r','p') AND c.relname NOT IN ('river_job','river_queue','river_notification','river_migration','river_leader') AND has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))`).Scan(&unsafe, &permitted, &private)
 	if err != nil || unsafe || !permitted || private {
 		return nil, errors.New("separate non-owner chat worker role required")
 	}

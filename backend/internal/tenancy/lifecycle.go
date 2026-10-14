@@ -89,6 +89,9 @@ func (s *Store) Expire(ctx context.Context) error {
 			_, err = tx.ExecContext(ctx, `DELETE FROM tenant_usage WHERE /*tenant:tenant_usage*/ AND window_start<now()-interval '2 days'`)
 		}
 		if err == nil {
+			_, err = tx.ExecContext(ctx, `DELETE FROM twitch_sent_messages WHERE /*tenant:twitch_sent_messages*/ AND expires_at<=now()`)
+		}
+		if err == nil {
 			_, err = tx.ExecContext(ctx, `DELETE FROM tenant_change_audit WHERE tenant_id=$1 AND created_at<now()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1)`, id)
 		}
 		if err != nil {

@@ -61,6 +61,8 @@ services:
       TWITCH_TOKEN_FILE: ${TWITCH_TOKEN_FILE:-/data/twitch-token.json}
       TWITCH_INTERACTIONS_FILE: ${TWITCH_INTERACTIONS_FILE:-/data/twitch-interactions.json}
       TWITCH_EVENTSUB_ENABLED: ${TWITCH_EVENTSUB_ENABLED:-true}
+      TWITCH_CHAT_DISPATCH_MODE: ${TWITCH_CHAT_DISPATCH_MODE:-legacy}
+      PLATFORM_WORKER_DATABASE_URL: ${PLATFORM_WORKER_DATABASE_URL:-}
       TWITCH_SCOPES: ${TWITCH_SCOPES:-user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers moderator:manage:chat_messages moderator:manage:banned_users}
       MPRIS_ENABLED: ${MPRIS_ENABLED:-false}
       MPRIS_PLAYER: ${MPRIS_PLAYER:-}

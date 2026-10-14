@@ -602,7 +602,7 @@ func (s *Server) executeNewsroomRequest(ctx context.Context, event events.Event)
 		return errors.New("unsupported newsroom action")
 	}
 }
-func (s *Server) completeNewsroomRequest(ctx context.Context, event events.Event) {
+func (s *Server) completeNewsroomRequest(ctx context.Context, event events.Event) error {
 	err := s.executeNewsroomRequest(ctx, event)
 	event.Data = cloneEventData(event.Data)
 	event.Message = "Command accepted"
@@ -613,6 +613,7 @@ func (s *Server) completeNewsroomRequest(ctx context.Context, event events.Event
 	}
 	event.Data["newsroomRequest"] = false
 	s.recordBotAuditForEvent(ctx, event)
+	return err
 }
 func (s *Server) runNewsroomChat(ctx context.Context) {
 	for {

@@ -81,14 +81,14 @@ func Open(databaseURL, tenantID string) (*DB, error) {
 		return nil, errors.New("tenant runtime requires a non-owner PostgreSQL role without RLS bypass")
 	}
 	var migrated bool
-	err = raw.QueryRowContext(ctx, `SELECT count(*)=23 AND bool_and(relrowsecurity AND relforcerowsecurity)
+	err = raw.QueryRowContext(ctx, `SELECT count(*)=24 AND bool_and(relrowsecurity AND relforcerowsecurity)
 		FROM pg_class WHERE oid IN (
 		'app_metadata'::regclass,'stream_events'::regclass,'twitch_interaction_rules'::regclass,
 		'dashboard_configs'::regclass,'stream_sessions'::regclass,'stream_session_readiness_snapshots'::regclass,
 		'bot_audit_events'::regclass,'bot_commands'::regclass,'bot_timers'::regclass,'bot_counters'::regclass,
 		'bot_quotes'::regclass,'bot_moderation_rules'::regclass,'bot_api_variables'::regclass,
 'platform_connections'::regclass,'tenant_credentials'::regclass,'tenant_imports'::regclass,'tenant_usage'::regclass,'overlay_state'::regclass,'newsroom_documents'::regclass,
-'normalized_chat_events'::regclass,'platform_event_payloads'::regclass,'river_job'::regclass,'platform_dispatch_receipts'::regclass)`).Scan(&migrated)
+'normalized_chat_events'::regclass,'platform_event_payloads'::regclass,'river_job'::regclass,'platform_dispatch_receipts'::regclass,'twitch_sent_messages'::regclass)`).Scan(&migrated)
 	if err == nil && migrated {
 		err = raw.QueryRowContext(ctx, `SELECT position('episode:' in pg_get_functiondef('resolve_newsroom_capability(text,text)'::regprocedure))>0`).Scan(&migrated)
 	}

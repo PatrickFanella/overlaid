@@ -148,6 +148,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(workerMigration); err != nil {
 		t.Fatal(err)
 	}
+	rawEcho, err := os.ReadFile(filepath.Join(root, "0009_twitch_echo.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.ReplaceAll(strings.ReplaceAll(string(rawEcho), "overlaid_runtime", role), "overlaid_worker", worker)); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = owner.Exec(`ALTER ROLE ` + worker + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}

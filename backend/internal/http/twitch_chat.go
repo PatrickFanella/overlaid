@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 )
@@ -64,6 +65,13 @@ func sanitizeOutboundChatMessage(message string) string {
 }
 
 func (s *Server) sendTwitchChatMessage(ctx context.Context, message string) (string, error) {
+	if s.chatSendGate != nil {
+		release, err := acquireGate(ctx, s.chatSendGate)
+		if err != nil {
+			return "", err
+		}
+		defer release()
+	}
 	message = sanitizeOutboundChatMessage(message)
 	if message == "" {
 		return "", errors.New("chat message is required")
@@ -122,5 +130,12 @@ func (s *Server) sendTwitchChatMessage(ctx context.Context, message string) (str
 		return item.MessageID, fmt.Errorf("twitch chat dropped message: %s %s", item.DropReason.Code, item.DropReason.Message)
 	}
 	s.twitchSentMessages.Remember(item.MessageID)
+	if s.platformIngest != nil {
+		rememberCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer stop()
+		if err := s.platformIngest.RememberSentMessage(rememberCtx, item.MessageID); err != nil {
+			return item.MessageID, errors.New("sent chat identity persistence failed")
+		}
+	}
 	return item.MessageID, nil
 }
