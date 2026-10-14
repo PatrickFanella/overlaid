@@ -88,6 +88,9 @@ func Open(databaseURL, tenantID string) (*DB, error) {
 		'bot_audit_events'::regclass,'bot_commands'::regclass,'bot_timers'::regclass,'bot_counters'::regclass,
 		'bot_quotes'::regclass,'bot_moderation_rules'::regclass,'bot_api_variables'::regclass,
 'platform_connections'::regclass,'tenant_credentials'::regclass,'tenant_imports'::regclass,'tenant_usage'::regclass,'overlay_state'::regclass,'newsroom_documents'::regclass)`).Scan(&migrated)
+	if err == nil && migrated {
+		err = raw.QueryRowContext(ctx, `SELECT position('episode:' in pg_get_functiondef('resolve_newsroom_capability(text,text)'::regprocedure))>0`).Scan(&migrated)
+	}
 	if err != nil || !migrated {
 		_ = raw.Close()
 		return nil, errors.New("tenant schema migration and forced RLS required")

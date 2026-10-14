@@ -17,6 +17,7 @@ type Processing struct {
 	Lease *Lease `json:"lease,omitempty"`
 }
 type PlayNote struct {
+	Summary       string          `json:"summary,omitempty"`
 	Bundle        *BundleSnapshot `json:"bundle,omitempty"`
 	BroadcastID   string          `json:"broadcastId,omitempty"`
 	OffsetSeconds int64           `json:"offsetSeconds"`
@@ -210,7 +211,10 @@ func (d *Document) applyWorkflow(c Command) (bool, error) {
 					item.Title = next.Title
 				}
 				state := "complete"
-				if next.Error != "" || next.AIStatus == "failed" || item.Processing.AI && next.AIStatus != "complete" {
+				if next.AIStatus == "skipped" {
+					state = "skipped"
+				}
+				if next.AIStatus != "skipped" && (next.Error != "" || next.AIStatus == "failed" || item.Processing.AI && next.AIStatus != "complete") {
 					state = "failed"
 				}
 				item.Processing = &Processing{State: state, AI: item.Processing.AI}

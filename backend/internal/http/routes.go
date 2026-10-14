@@ -3,6 +3,15 @@ package httpapi
 import "net/http"
 
 func (s *Server) routes() {
+	s.mux.HandleFunc("GET /api/newsroom/activity", s.requireOperator(s.newsroomActivity))
+	s.mux.HandleFunc("GET /api/newsroom/broadcasts", s.requireOperator(s.newsroomBroadcasts))
+	s.mux.HandleFunc("GET /api/newsroom/usage", s.requireOperator(s.newsroomUsage))
+	s.mux.HandleFunc("GET /api/newsroom/broadcasts/{id}/discord", s.requireOperator(s.newsroomShowDiscord))
+	s.mux.HandleFunc("POST /api/newsroom/broadcasts/{id}/discord", s.requireOperator(s.newsroomShowDiscord))
+	s.mux.HandleFunc("POST /api/newsroom/broadcasts/{id}/episode", s.requireOperator(s.newsroomEpisodePublish))
+	s.mux.HandleFunc("GET /api/newsroom/episode", s.newsroomEpisode)
+	s.mux.HandleFunc("GET /api/newsroom/automation", s.requireOperator(s.newsroomAutomation))
+	s.mux.HandleFunc("POST /api/newsroom/automation", s.requireOperator(s.newsroomAutomation))
 	s.mux.HandleFunc("POST /api/newsroom/briefing", s.requireOperator(s.newsroomBriefing))
 	s.mux.HandleFunc("POST /api/newsroom/token", s.requireOperator(s.newsroomToken))
 	s.mux.HandleFunc("GET /api/newsroom/shared", s.newsroomShared)

@@ -28,6 +28,7 @@ import (
 )
 
 type Server struct {
+	newsroomTwitchClient      *twitch.Client
 	fileCommands              *bot.FileCommands
 	botCommandsLoadError      string
 	commandConfigMu           sync.Mutex
@@ -404,6 +405,14 @@ func (s *Server) StartBackground(ctx context.Context) {
 	}
 
 	client := twitch.Client{
+		Lifecycle: s.newsroomTwitchLifecycle,
+		LifecycleWanted: func() bool {
+			if s.newsroom == nil {
+				return false
+			}
+			d, err := s.newsroom.Get(ctx)
+			return err == nil && d.Automation.Enabled
+		},
 		ClientID: s.config.TwitchClientID,
 		TokenProvider: func(ctx context.Context) (twitch.Token, bool) {
 			token, ok := s.ensureTwitchToken(ctx)
@@ -429,6 +438,7 @@ func (s *Server) StartBackground(ctx context.Context) {
 		Diagnostics: s.twitchEventSubDiagnostics,
 	}
 
+	s.newsroomTwitchClient = &client
 	go func() {
 		log.Printf("Twitch EventSub background worker enabled")
 		if s.credentialStore == nil {

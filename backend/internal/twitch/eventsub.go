@@ -143,20 +143,26 @@ func sanitizeDiagnosticMessage(message string) string {
 }
 
 type Client struct {
-	channelPoints     channelPointProcessor
-	ClientID          string
-	WebSocketURL      string
-	SubscriptionURL   string
-	TokenProvider     TokenProvider
-	CommandProcessor  *CommandProcessor
-	IgnoreChatMessage func(string) bool
-	InteractionRules  func() interactions.Rules
-	Publish           Publisher
-	Diagnostics       *DiagnosticsStore
-	HTTPClient        *http.Client
-	Dialer            *websocket.Dialer
-	Now               func() time.Time
-	SubscriptionPlan  []SubscriptionSpec
+	LifecycleWanted     func() bool
+	Lifecycle           func(context.Context, EventSubMessage, Token) error
+	lifecycleMu         sync.Mutex
+	lifecycleSession    string
+	lifecycleToken      Token
+	lifecycleRegistered bool
+	channelPoints       channelPointProcessor
+	ClientID            string
+	WebSocketURL        string
+	SubscriptionURL     string
+	TokenProvider       TokenProvider
+	CommandProcessor    *CommandProcessor
+	IgnoreChatMessage   func(string) bool
+	InteractionRules    func() interactions.Rules
+	Publish             Publisher
+	Diagnostics         *DiagnosticsStore
+	HTTPClient          *http.Client
+	Dialer              *websocket.Dialer
+	Now                 func() time.Time
+	SubscriptionPlan    []SubscriptionSpec
 }
 
 type SubscriptionSpec struct {
@@ -339,6 +345,25 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 	} else if c.Diagnostics != nil {
 		c.Diagnostics.MarkConnected(0, 0)
 	}
+	c.lifecycleMu.Lock()
+	lifecycleSession := message.Payload.Session.ID
+	c.lifecycleSession = lifecycleSession
+	c.lifecycleToken = token
+	c.lifecycleRegistered = !createSubscriptions && c.lifecycleRegistered
+	c.lifecycleMu.Unlock()
+	defer func() {
+		c.lifecycleMu.Lock()
+		if c.lifecycleSession == lifecycleSession {
+			c.lifecycleSession = ""
+			c.lifecycleRegistered = false
+		}
+		c.lifecycleMu.Unlock()
+	}()
+	if c.LifecycleWanted != nil && c.LifecycleWanted() {
+		if err := c.EnsureLifecycle(ctx, false); err != nil {
+			return err
+		}
+	}
 	log.Printf("Twitch EventSub connected session=%s subscriptions=%d", message.Payload.Session.ID, created)
 
 	for ctx.Err() == nil {
@@ -358,6 +383,15 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 			}
 			return c.runSessionWithGrace(ctx, token, url)
 		case "notification":
+			if c.Lifecycle != nil && (message.Payload.Subscription.Type == "stream.online" || message.Payload.Subscription.Type == "stream.offline") {
+				if stringValue(message.Payload.Event, "broadcaster_user_id") != token.UserID {
+					continue
+				}
+				if err := c.Lifecycle(ctx, message, token); err != nil {
+					return fmt.Errorf("persist Twitch lifecycle: %w", err)
+				}
+				continue
+			}
 			rules := interactions.Rules{}
 			if c.InteractionRules != nil {
 				rules = c.InteractionRules()

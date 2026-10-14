@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/newsroom"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 )
 
@@ -231,5 +233,55 @@ func TestNewsroomNewPRPermissionBoundaries(t *testing.T) {
 	s.Handler().ServeHTTP(w, r)
 	if w.Code != 400 {
 		t.Fatal("invalid search accepted", w.Code)
+	}
+}
+
+func TestNewsroomCatchupOwnerAndPublicProjectionBoundaries(t *testing.T) {
+	s := NewServer(config.Config{}, events.NewBus(4))
+	s.newsroom, _ = newsroom.NewFile(filepath.Join(t.TempDir(), "desk.json"))
+	ctx := context.Background()
+	d, err := s.newsroom.Internal(ctx, newsroom.Command{Action: "shelf-import", Name: "Private template", ImportItems: []newsroom.ShelfLink{{URL: "https://example.org/fixture"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.newsroom.Internal(ctx, newsroom.Command{Action: "shelf-preparation", ID: d.Shelves[0].ID, Curate: true, Template: true, PrepPrompts: "PRIVATE PREP"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.newsroom.NewToken(ctx, "add", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quick := httptest.NewRequest("GET", "/api/newsroom/quick-add", nil)
+	quick.Header.Set("X-Newsroom-Add-Token", token)
+	quickResult := httptest.NewRecorder()
+	s.Handler().ServeHTTP(quickResult, quick)
+	if quickResult.Code != 200 || strings.Contains(quickResult.Body.String(), "PRIVATE PREP") {
+		t.Fatal("private prep leaked to quick-add", quickResult.Code, quickResult.Body.String())
+	}
+	limit := int64(9000)
+	s.newsroom.Internal(ctx, newsroom.Command{Action: "usage-settings", Owner: true, UsagePolicy: &newsroom.UsagePolicy{AllowanceMicros: &limit, WarningPercent: 80}})
+	r := httptest.NewRequest("GET", "/api/newsroom", nil)
+	r = r.WithContext(context.WithValue(ctx, tenantTrustKey{}, tenantTrust{operator: true, role: "moderator", actor: "mod"}))
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	if w.Code != 200 || strings.Contains(w.Body.String(), "9000") {
+		t.Fatal("moderator usage leak", w.Code, w.Body.String())
+	}
+	for _, path := range []string{"/api/newsroom/usage", "/api/newsroom/automation", "/api/newsroom/broadcasts/any/discord", "/api/newsroom/broadcasts/any/episode"} {
+		if routeAllowed("editor", "GET", path) || routeAllowed("moderator", "GET", path) {
+			t.Fatal("non-owner route", path)
+		}
+	}
+	for _, path := range []string{"/api/newsroom/activity", "/api/newsroom/broadcasts"} {
+		if !routeAllowed("moderator", "GET", path) {
+			t.Fatal("moderator history unavailable")
+		}
+	}
+	r = httptest.NewRequest("GET", "/api/newsroom/episode?token=missing", nil)
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	if w.Code != 404 {
+		t.Fatal("public capability route not scoped", w.Code)
 	}
 }

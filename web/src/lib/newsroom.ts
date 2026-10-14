@@ -20,11 +20,18 @@ export type NewsroomItem = {
 export type NewsroomSettings = {
   allowDuplicates: boolean; autoEnrich: boolean; ignoredUsers: string[]; preferredSources: string[];
 };
+export type NewsroomSegment={id:string;name:string;targetMinutes?:number};
+export type NewsroomShelf={id:string;name:string;template?:boolean;prepPrompts?:string;segments?:NewsroomSegment[];ungroupedPosition?:number};
+export type NewsroomUsagePolicy={allowanceMicros:number|null;pauseAi:boolean;pauseSearch:boolean;warningPercent:number};
 export type NewsroomDocument = {
+ ungroupedPosition?:number;
+ usagePolicy?:NewsroomUsagePolicy;
+ automation?:{enabled:boolean;lastError:string};
+ publications?:Record<string,{publishedAt:string}>;
   bundles?:NewsroomBundle[];
-  history?: {bundle?:NewsroomBundleSnapshot;broadcastId?:string;offsetSeconds?:number;id:string;itemId:string;title:string;url:string;notes:string;sessionId:string;at:string;cancelled:boolean}[];
-  revision: number; items: NewsroomItem[]; shelves: { id: string; name: string }[]; order: string[];
-  segments: { id: string; name: string }[]; questions: { id: string; text: string; askedBy: string; status: string }[]; currentQuestion: string; raffle: { open: boolean; command: string; entries: { login: string }[]; winner: string };
+  history?: {summary?:string;bundle?:NewsroomBundleSnapshot;broadcastId?:string;offsetSeconds?:number;id:string;itemId:string;title:string;url:string;notes:string;sessionId:string;at:string;cancelled:boolean}[];
+  revision: number; items: NewsroomItem[]; shelves: NewsroomShelf[]; order: string[];
+  segments: NewsroomSegment[]; questions: { id: string; text: string; askedBy: string; status: string }[]; currentQuestion: string; raffle: { open: boolean; command: string; entries: { login: string }[]; winner: string };
   quickLinks: {id:string;name:string;url:string}[]; briefing?:{summary:string;updatedAt:string};
   roster: {actorId:string;name:string;status:'green'|'yellow'|'red';note:string;setAt:string}[];
   broadcasts?: NewsroomBroadcast[];
@@ -41,7 +48,7 @@ export function newsroomRequest<T>(path: string, method: 'GET' | 'POST' | 'PUT',
 export function orderedNewsroomItems(doc: NewsroomDocument) {
   const byId = new Map(doc.items.map((item) => [item.id, item]));
   const ordered = doc.order.flatMap((id) => { const item = byId.get(id); return item?.status === 'approved' ? [item] : []; });
-  return [...doc.segments.flatMap((segment) => ordered.filter((item) => item.segmentId === segment.id)), ...ordered.filter((item) => !doc.segments.some((s) => s.id === item.segmentId))];
+  const ungrouped=ordered.filter(item=>!doc.segments.some(segment=>segment.id===item.segmentId));const groups=doc.segments.map(segment=>ordered.filter(item=>item.segmentId===segment.id));groups.splice(doc.ungroupedPosition??groups.length,0,ungrouped);return groups.flat();
 }
 export function showNotes(doc: NewsroomDocument, sessionId = '') {
   const played = (doc.history ?? doc.items.filter(item => item.status === 'played').map(item => ({...item,at:item.playedAt ?? '',cancelled:false}))).filter(item => !item.cancelled && (!sessionId || item.sessionId === sessionId)).sort((a,b) => a.at.localeCompare(b.at));
@@ -58,13 +65,13 @@ export function demoNewsroom(): NewsroomDocument {
 
 export function shelfExport(doc: NewsroomDocument, id: string) {
  const items = doc.items.filter(item => item.shelfId === id).map(item => ({title:item.title,url:item.url,segmentId:item.segmentId ?? ''}));
- return {name:doc.shelves.find(shelf => shelf.id === id)?.name ?? '',items,segments:doc.segments.filter(segment => items.some(item => item.segmentId === segment.id))};
+ const shelf=doc.shelves.find(row=>row.id===id);return {name:shelf?.name??'',items,segments:shelf?.segments??doc.segments.filter(segment=>items.some(item=>item.segmentId===segment.id))};
 }
 export function visibleNewsroomRoster(roster: NewsroomDocument['roster'], now = Date.now()) {
  return roster.filter(row => now - Date.parse(row.setAt) <= 96 * 3600000).map(row => now - Date.parse(row.setAt) > 12 * 3600000 ? {...row,status:'red' as const,note: row.note ? `${row.note} · status expired` : 'Status expired'} : row);
 }
 
-export type NewsroomBroadcast = {id:string;title:string;startedAt:string;endedAt?:string;vodUrl:string;vodOffsetSeconds:number;sessionId?:string;rundown:{id:string;title:string;url:string;kind:string;segmentId:string;bundle?:NewsroomBundleSnapshot}[];segments:{id:string;name:string}[]};
+export type NewsroomBroadcast = {revision?:number;automatic?:boolean;carryShelfId?:string;id:string;title:string;startedAt:string;endedAt?:string;vodUrl:string;vodOffsetSeconds:number;sessionId?:string;rundown:{id:string;title:string;url:string;kind:string;segmentId:string;notes?:string;bundle?:NewsroomBundleSnapshot}[];segments:NewsroomSegment[]};
 export type NewsroomQueuePage = {revision:number;items:NewsroomItem[];total:number;totals:Record<string,number>;nextCursor:string};
 export function newsroomRecordingLink(show:NewsroomBroadcast,offset:number) {
  if (!show.vodUrl) return '';

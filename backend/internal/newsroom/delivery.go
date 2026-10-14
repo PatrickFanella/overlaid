@@ -55,7 +55,9 @@ func (e Enricher) postChunk(ctx context.Context, endpoint, text string) error {
 	if client == nil {
 		client = PublicClient(nil)
 	}
-	response, err := client.Do(req)
+	safeClient := *client
+	safeClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	response, err := safeClient.Do(req)
 	if err != nil {
 		return ErrDeliveryUncertain
 	}

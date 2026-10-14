@@ -117,6 +117,11 @@ func TestTenantDeskAndCredentialIsolation(t *testing.T) {
 	applyWorkflowTest(t, a, Command{Action: "bundle-create", ID: personalID, Curate: true})
 	applyWorkflowTest(t, a, Command{Action: "broadcast-start", Title: "Viewer lifecycle show", Owner: true})
 	applyWorkflowTest(t, a, Command{Action: "play", ID: personalID})
+	d, _ = a.Get(context.Background())
+	personalShow := d.Broadcasts[len(d.Broadcasts)-1].ID
+	d = applyWorkflowTest(t, a, Command{Action: "broadcast-end", ID: personalShow, Owner: true})
+	preview, _ := d.EpisodePreview(personalShow, "Viewer episode", true, true)
+	applyWorkflowTest(t, a, Command{Action: "episode-publish", ID: personalShow, Owner: true, PublicTitle: "Viewer episode", IncludeSummary: true, IncludeNotes: true, Fingerprint: preview.Fingerprint, PublicTokenHash: HashToken(strings.Repeat("v", 43))})
 	applyWorkflowTest(t, a, Command{Action: "delete", ID: personalID})
 	if err = control.DeleteViewer(context.Background(), "00000000-0000-4000-8000-000000000002", tenantdb.BootstrapID, "viewer-42", "viewer"); err != nil {
 		t.Fatal(err)
@@ -125,7 +130,7 @@ func TestTenantDeskAndCredentialIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(after.Items) != 1 || len(after.Questions) != 0 || after.CurrentID != "" || len(after.Order) != 0 || len(after.History) != 0 || len(after.Bundles) != 0 || len(after.Broadcasts) != 1 || len(after.Broadcasts[0].Rundown) != 0 {
+	if len(after.Items) != 1 || len(after.Questions) != 0 || after.CurrentID != "" || len(after.Order) != 0 || len(after.History) != 0 || len(after.Bundles) != 0 || len(after.Publications) != 0 || len(after.ShowExports) != 0 || len(after.Activity) != 0 || len(after.Broadcasts) != 1 || len(after.Broadcasts[0].Rundown) != 0 {
 		t.Fatal("viewer deletion left personal/derived state", after)
 	}
 }
@@ -330,5 +335,63 @@ func TestTenantReviewBroadcastAndSearchContracts(t *testing.T) {
 	}
 	if _, err = otherDoc.BroadcastExport(show.ID, "markdown"); !errors.Is(err, ErrNotFound) {
 		t.Fatal("cross-tenant show export succeeded", err)
+	}
+}
+
+func TestTenantCatchupUsagePublicationAndCopies(t *testing.T) {
+	f := testpostgres.NewTenantFixture(t, "")
+	db, err := tenantdb.Open(f.RuntimeURL, tenantdb.BootstrapID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	a, _ := NewTenant(db)
+	b, _ := NewTenant(db)
+	ctx := context.Background()
+	limit := int64(5000)
+	applyWorkflowTest(t, a, Command{Action: "usage-settings", Owner: true, UsagePolicy: &UsagePolicy{AllowanceMicros: &limit, WarningPercent: 80}})
+	results := make(chan error, 2)
+	for _, s := range []*Store{a, b} {
+		go func(s *Store) { results <- s.AdmitPaid(ctx, "search", 1) }(s)
+	}
+	winners := 0
+	for n := 0; n < 2; n++ {
+		if <-results == nil {
+			winners++
+		}
+	}
+	if winners != 1 {
+		t.Fatal("PG allowance overspent", winners)
+	}
+	d := applyWorkflowTest(t, a, Command{Action: "shelf-import", Name: "Template", ImportSegments: []Segment{{ID: "source", Name: "Empty", TargetMinutes: intPointer(30)}}, ImportItems: []ShelfLink{{URL: "https://example.org/template"}}})
+	shelf := d.Shelves[0].ID
+	applyWorkflowTest(t, a, Command{Action: "shelf-preparation", ID: shelf, Curate: true, Template: true, PrepPrompts: "Private prompts"})
+	d = applyWorkflowTest(t, b, Command{Action: "shelf-copy", ID: shelf, Curate: true, Name: "Independent"})
+	if d.Shelves[1].Segments[0].ID == d.Shelves[0].Segments[0].ID {
+		t.Fatal("template copy reused IDs")
+	}
+	d = applyWorkflowTest(t, a, Command{Action: "submit", URL: "https://example.org/public", Title: "Public source"})
+	id := d.Items[len(d.Items)-1].ID
+	applyWorkflowTest(t, a, Command{Action: "approve", ID: id})
+	d = applyWorkflowTest(t, a, Command{Action: "broadcast-start", Owner: true, Title: "Public show"})
+	show := d.Broadcasts[0].ID
+	applyWorkflowTest(t, a, Command{Action: "focus", ID: id})
+	applyWorkflowTest(t, a, Command{Action: "play", ID: id})
+	d = applyWorkflowTest(t, a, Command{Action: "broadcast-end", Owner: true, ID: show})
+	preview, _ := d.EpisodePreview(show, "Public title", false, false)
+	hash := HashToken(strings.Repeat("p", 43))
+	applyWorkflowTest(t, a, Command{Action: "episode-publish", Owner: true, ID: show, PublicTitle: "Public title", Fingerprint: preview.Fingerprint, PublicTokenHash: hash})
+	var tenant string
+	if err = db.QueryRowContext(ctx, `SELECT resolve_newsroom_capability($1,'episode')`, hash).Scan(&tenant); err != nil || tenant != tenantdb.BootstrapID {
+		t.Fatal("narrow episode lookup failed", tenant, err)
+	}
+	other, _ := db.Scoped("00000000-0000-4000-8000-000000000002")
+	var count int
+	if err = other.QueryRowContext(ctx, `SELECT count(*) FROM newsroom_documents WHERE token_hash=$1`, hash).Scan(&count); err != nil || count != 0 {
+		t.Fatal("episode token bypassed RLS", err, count)
+	}
+	applyWorkflowTest(t, b, Command{Action: "episode-revoke", ID: show, Owner: true})
+	if err = db.QueryRowContext(ctx, `SELECT resolve_newsroom_capability($1,'episode')`, hash).Scan(&tenant); err == nil {
+		t.Fatal("revoked token resolves")
 	}
 }

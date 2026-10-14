@@ -1,3 +1,4 @@
+import { NewsroomEpisodePage } from './routes/NewsroomEpisode';
 import type { ReactElement } from 'react';
 import { NewsroomSharedPage } from './routes/NewsroomShared';
 import { OverlayNewsroomPage } from './routes/OverlayNewsroom';
@@ -27,6 +28,7 @@ type AppProps = {
 };
 
 const pages: Record<string, () => ReactElement> = {
+  '/newsroom/episode': () => <NewsroomEpisodePage />,
   '/newsroom/shared': () => <NewsroomSharedPage />,
   '/': () => <HomePage />,
   '/dashboard/account': () => <DashboardAccountPage />,

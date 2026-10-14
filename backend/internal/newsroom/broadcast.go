@@ -13,6 +13,9 @@ import (
 const MaxVODOffset int64 = 604800
 
 type RundownItem struct {
+	Notes       string          `json:"notes"`
+	Warning     string          `json:"warning"`
+	Enrichment  *Enrichment     `json:"enrichment,omitempty"`
 	Bundle      *BundleSnapshot `json:"bundle,omitempty"`
 	ViewerID    string          `json:"viewerId,omitempty"`
 	SubmittedBy string          `json:"submittedBy,omitempty"`
@@ -23,15 +26,20 @@ type RundownItem struct {
 	SegmentID   string          `json:"segmentId"`
 }
 type Broadcast struct {
-	ID               string        `json:"id"`
-	Title            string        `json:"title"`
-	StartedAt        time.Time     `json:"startedAt"`
-	EndedAt          *time.Time    `json:"endedAt,omitempty"`
-	VODURL           string        `json:"vodUrl"`
-	VODOffsetSeconds int64         `json:"vodOffsetSeconds"`
-	SessionID        string        `json:"sessionId,omitempty"`
-	Rundown          []RundownItem `json:"rundown"`
-	Segments         []Segment     `json:"segments"`
+	UngroupedPosition int           `json:"ungroupedPosition"`
+	Revision          int64         `json:"revision"`
+	Automatic         bool          `json:"automatic"`
+	TwitchStreamID    string        `json:"twitchStreamId,omitempty"`
+	CarryShelfID      string        `json:"carryShelfId,omitempty"`
+	ID                string        `json:"id"`
+	Title             string        `json:"title"`
+	StartedAt         time.Time     `json:"startedAt"`
+	EndedAt           *time.Time    `json:"endedAt,omitempty"`
+	VODURL            string        `json:"vodUrl"`
+	VODOffsetSeconds  int64         `json:"vodOffsetSeconds"`
+	SessionID         string        `json:"sessionId,omitempty"`
+	Rundown           []RundownItem `json:"rundown"`
+	Segments          []Segment     `json:"segments"`
 }
 
 var videoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
@@ -100,18 +108,26 @@ func (d *Document) applyBroadcast(c Command) (bool, error) {
 			for _, id := range d.Order {
 				item, ok := byID[id]
 				if ok && item.SegmentID == segment {
-					show.Rundown = append(show.Rundown, RundownItem{Bundle: d.BundleSnapshotFor(item), ViewerID: item.ViewerID, SubmittedBy: item.SubmittedBy, ID: item.ID, Title: item.Title, URL: item.URL, Kind: item.Kind, SegmentID: item.SegmentID})
+					show.Rundown = append(show.Rundown, RundownItem{Notes: item.Notes, Warning: item.Warning, Enrichment: item.Enrichment, Bundle: d.BundleSnapshotFor(item), ViewerID: item.ViewerID, SubmittedBy: item.SubmittedBy, ID: item.ID, Title: item.Title, URL: item.URL, Kind: item.Kind, SegmentID: item.SegmentID})
 					delete(byID, id)
 				}
 			}
 		}
-		for _, segment := range d.Segments {
+		position := len(d.Segments)
+		if d.UngroupedPosition != nil {
+			position = *d.UngroupedPosition
+		}
+		show.UngroupedPosition = position
+		for index, segment := range d.Segments {
+			if index == position {
+				appendItems("")
+			}
 			appendItems(segment.ID)
 		}
 		appendItems("")
 		for _, id := range d.Order {
 			if item, ok := byID[id]; ok {
-				show.Rundown = append(show.Rundown, RundownItem{Bundle: d.BundleSnapshotFor(item), ViewerID: item.ViewerID, SubmittedBy: item.SubmittedBy, ID: item.ID, Title: item.Title, URL: item.URL, Kind: item.Kind, SegmentID: item.SegmentID})
+				show.Rundown = append(show.Rundown, RundownItem{Notes: item.Notes, Warning: item.Warning, Enrichment: item.Enrichment, Bundle: d.BundleSnapshotFor(item), ViewerID: item.ViewerID, SubmittedBy: item.SubmittedBy, ID: item.ID, Title: item.Title, URL: item.URL, Kind: item.Kind, SegmentID: item.SegmentID})
 			}
 		}
 		d.Broadcasts = append(d.Broadcasts, show)
@@ -126,6 +142,8 @@ func (d *Document) applyBroadcast(c Command) (bool, error) {
 			if show.EndedAt == nil {
 				now := time.Now().UTC()
 				show.EndedAt = &now
+				show.Automatic = false
+				show.Revision++
 			}
 			return true, nil
 		}
@@ -137,6 +155,7 @@ func (d *Document) applyBroadcast(c Command) (bool, error) {
 		if err != nil {
 			return true, err
 		}
+		show.Revision++
 		show.Title = title
 		show.VODURL = vod
 		show.VODOffsetSeconds = c.VODOffsetSeconds

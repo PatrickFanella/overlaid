@@ -54,13 +54,18 @@ type Settings struct {
 }
 
 type Shelf struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	Template          bool      `json:"template"`
+	PrepPrompts       string    `json:"prepPrompts"`
+	Segments          []Segment `json:"segments"`
+	UngroupedPosition int       `json:"ungroupedPosition"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
 }
 
 type Segment struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	TargetMinutes *int   `json:"targetMinutes,omitempty"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
 }
 type Question struct {
 	ID            string    `json:"id"`
@@ -104,33 +109,64 @@ type Briefing struct {
 }
 
 type Document struct {
-	Bundles         []StoryBundle       `json:"bundles"`
-	Broadcasts      []Broadcast         `json:"broadcasts"`
-	QuickLinks      []QuickLink         `json:"quickLinks"`
-	Briefing        *Briefing           `json:"briefing,omitempty"`
-	History         []PlayNote          `json:"history"`
-	DeliveryLease   *Lease              `json:"deliveryLease,omitempty"`
-	Revision        int64               `json:"revision"`
-	Items           []Item              `json:"items"`
-	Shelves         []Shelf             `json:"shelves"`
-	Order           []string            `json:"order"`
-	CurrentID       string              `json:"currentId"`
-	Settings        Settings            `json:"settings"`
-	Segments        []Segment           `json:"segments"`
-	Questions       []Question          `json:"questions"`
-	CurrentQuestion string              `json:"currentQuestion"`
-	Raffle          Raffle              `json:"raffle"`
-	Deliveries      map[string]Delivery `json:"deliveries"`
-	Roster          []ModeratorStatus   `json:"roster"`
+	UngroupedPosition *int                          `json:"ungroupedPosition,omitempty"`
+	UsagePolicy       UsagePolicy                   `json:"usagePolicy"`
+	Usage             map[string]UsageTotals        `json:"usage"`
+	Activity          []ModeratorActivity           `json:"activity"`
+	ShowExports       []ShowExport                  `json:"showExports"`
+	Publications      map[string]EpisodePublication `json:"publications"`
+	Automation        Automation                    `json:"automation"`
+	Bundles           []StoryBundle                 `json:"bundles"`
+	Broadcasts        []Broadcast                   `json:"broadcasts"`
+	QuickLinks        []QuickLink                   `json:"quickLinks"`
+	Briefing          *Briefing                     `json:"briefing,omitempty"`
+	History           []PlayNote                    `json:"history"`
+	DeliveryLease     *Lease                        `json:"deliveryLease,omitempty"`
+	Revision          int64                         `json:"revision"`
+	Items             []Item                        `json:"items"`
+	Shelves           []Shelf                       `json:"shelves"`
+	Order             []string                      `json:"order"`
+	CurrentID         string                        `json:"currentId"`
+	Settings          Settings                      `json:"settings"`
+	Segments          []Segment                     `json:"segments"`
+	Questions         []Question                    `json:"questions"`
+	CurrentQuestion   string                        `json:"currentQuestion"`
+	Raffle            Raffle                        `json:"raffle"`
+	Deliveries        map[string]Delivery           `json:"deliveries"`
+	Roster            []ModeratorStatus             `json:"roster"`
 }
 
 type ShelfLink struct {
+	Notes     string `json:"notes,omitempty"`
 	URL       string `json:"url"`
 	Title     string `json:"title"`
 	SegmentID string `json:"segmentId"`
 }
 
 type Command struct {
+	ExpectedStatus            string         `json:"expectedStatus,omitempty"`
+	Template                  bool           `json:"template,omitempty"`
+	PrepPrompts               string         `json:"prepPrompts,omitempty"`
+	TargetMinutes             *int           `json:"targetMinutes"`
+	UngroupedPosition         int            `json:"ungroupedPosition"`
+	UsagePolicy               *UsagePolicy   `json:"usagePolicy,omitempty"`
+	Operation                 string         `json:"-"`
+	Count                     int64          `json:"-"`
+	ShowRevision              *int64         `json:"showRevision,omitempty"`
+	StartedAt                 *time.Time     `json:"startedAt,omitempty"`
+	EndedAt                   *time.Time     `json:"endedAt,omitempty"`
+	ClearEnd                  bool           `json:"clearEnd,omitempty"`
+	Enabled                   bool           `json:"enabled,omitempty"`
+	TwitchStreamID            string         `json:"-"`
+	EventAt                   time.Time      `json:"-"`
+	EventID                   string         `json:"-"`
+	Fingerprint               string         `json:"fingerprint,omitempty"`
+	IncludeSummary            bool           `json:"includeSummary,omitempty"`
+	IncludeNotes              bool           `json:"includeNotes,omitempty"`
+	PublicTitle               string         `json:"publicTitle,omitempty"`
+	Export                    *ShowExport    `json:"-"`
+	ChunkIndex                int            `json:"-"`
+	PublicTokenHash           string         `json:"-"`
 	Curate                    bool           `json:"-"`
 	BundleRevision            *int64         `json:"bundleRevision,omitempty"`
 	Sources                   []BundleSource `json:"sources,omitempty"`
@@ -237,7 +273,13 @@ func NormalizeURL(raw string) (string, string, error) {
 	return u.String(), kind, nil
 }
 
-func (d *Document) Apply(c Command) error {
+func (d *Document) Apply(c Command) (err error) {
+	before := d.activityItem(c.ID)
+	defer func() {
+		if err == nil {
+			d.recordActivity(c, before)
+		}
+	}()
 	d.EnsureHistory()
 	if c.Action == "play" {
 		for _, item := range d.Items {
@@ -251,6 +293,14 @@ func (d *Document) Apply(c Command) error {
 	}
 	if utf8.RuneCountInString(c.Title) > 300 || len(c.Notes) > 8000 || len(c.Warning) > 500 || len(c.SubmittedBy) > 100 || len(c.Name) > 100 {
 		return fmt.Errorf("%w: text exceeds its limit", ErrInvalid)
+	}
+	for _, apply := range []func(Command) (bool, error){d.applyPreparation, d.applyUsage, d.applyShowExtras} {
+		if handled, err := apply(c); handled {
+			if err == nil {
+				d.Revision++
+			}
+			return err
+		}
 	}
 	if handled, err := d.applyBundle(c); handled {
 		if err == nil {
@@ -282,6 +332,9 @@ func (d *Document) Apply(c Command) error {
 			index = i
 			break
 		}
+	}
+	if index >= 0 && c.ExpectedStatus != "" && d.Items[index].Status != c.ExpectedStatus {
+		return ErrConflict
 	}
 	if index >= 0 && isEditorialAction(c.Action) {
 		if err := d.Items[index].checkEditorial(c); err != nil {
@@ -364,35 +417,21 @@ func (d *Document) Apply(c Command) error {
 		}
 		d.Roster = out
 	case "shelf-import":
-		if len(c.ImportItems) == 0 {
-			for _, raw := range c.URLs {
-				c.ImportItems = append(c.ImportItems, ShelfLink{URL: raw})
+		items := []Item{}
+		for _, link := range c.ImportItems {
+			items = append(items, Item{URL: link.URL, Title: link.Title, Notes: link.Notes, TitleOverride: link.Title != "", SegmentID: link.SegmentID})
+		}
+		if len(items) == 0 {
+			for _, url := range c.URLs {
+				items = append(items, Item{URL: url})
 			}
 		}
-		if len(c.ImportItems) == 0 || len(c.ImportItems) > 200 || len(c.ImportSegments) > 50 || len(c.ImportSegments)+len(d.Segments) > 50 {
+		if len(items) == 0 || len(items) > 200 {
 			return ErrInvalid
 		}
-		if err := d.Apply(Command{Action: "create-shelf", Name: c.Name, Revision: d.Revision}); err != nil {
+		_, err := d.copyPreparation(c.Name, "", c.ImportSegments, items, 0)
+		if err != nil {
 			return err
-		}
-		shelf := d.Shelves[len(d.Shelves)-1].ID
-		segments := map[string]string{}
-		for _, segment := range c.ImportSegments {
-			if segment.ID == "" || segments[segment.ID] != "" {
-				return ErrInvalid
-			}
-			if err := d.Apply(Command{Action: "create-segment", Name: segment.Name, Revision: d.Revision}); err != nil {
-				return err
-			}
-			segments[segment.ID] = d.Segments[len(d.Segments)-1].ID
-		}
-		for _, link := range c.ImportItems {
-			if link.SegmentID != "" && segments[link.SegmentID] == "" {
-				return ErrInvalid
-			}
-			if err := d.Apply(Command{Action: "quick-add", URL: link.URL, Title: link.Title, ShelfID: shelf, SegmentID: segments[link.SegmentID], Revision: d.Revision}); err != nil {
-				return err
-			}
 		}
 	case "shelf-order":
 		if len(c.Order) != len(d.Shelves) {
@@ -490,8 +529,10 @@ func (d *Document) Apply(c Command) error {
 		d.Segments = out
 		for i := range d.Items {
 			if d.Items[i].SegmentID == c.ID {
+				before := d.Items[i]
 				d.Items[i].SegmentID = ""
 				d.Items[i].EditorialRevision++
+				d.recordActivity(Command{Action: "segment", ID: before.ID, ActorID: c.ActorID}, &before)
 			}
 		}
 	case "segment-order":
@@ -515,9 +556,11 @@ func (d *Document) Apply(c Command) error {
 	case "clear-pending":
 		for i := range d.Items {
 			if d.Items[i].Status == "pending" {
+				before := d.Items[i]
 				d.Items[i].Status = "rejected"
 				d.Items[i].EditorialRevision++
 				d.Items[i].ReviewClaim = nil
+				d.recordActivity(Command{Action: "reject", ID: before.ID, ActorID: c.ActorID}, &before)
 			}
 		}
 	case "question-submit":
@@ -752,7 +795,13 @@ func (d *Document) Apply(c Command) error {
 		case "segment":
 			if c.SegmentID != "" {
 				found := false
-				for _, seg := range d.Segments {
+				available := append([]Segment{}, d.Segments...)
+				for _, shelf := range d.Shelves {
+					if shelf.ID == item.ShelfID {
+						available = append(available, d.ShelfSegments(shelf)...)
+					}
+				}
+				for _, seg := range available {
 					if seg.ID == c.SegmentID {
 						found = true
 					}
@@ -795,7 +844,13 @@ func (d *Document) Apply(c Command) error {
 			}
 			if c.SegmentID != "" {
 				found := false
-				for _, seg := range d.Segments {
+				available := append([]Segment{}, d.Segments...)
+				for _, shelf := range d.Shelves {
+					if shelf.ID == item.ShelfID {
+						available = append(available, d.ShelfSegments(shelf)...)
+					}
+				}
+				for _, seg := range available {
 					if seg.ID == c.SegmentID {
 						found = true
 					}
@@ -809,7 +864,36 @@ func (d *Document) Apply(c Command) error {
 			item.ApprovedBy = c.ActorID
 			item.ApprovedAt = &now
 			item.Status = "approved"
-			if d.Settings.AutoEnrich && (item.Enrichment == nil || item.Enrichment.Summary == "") && (item.Processing == nil || item.Processing.State != "failed") {
+			if item.ShelfID != "" && item.SegmentID != "" {
+				found := false
+				for _, seg := range d.Segments {
+					if seg.ID == item.SegmentID {
+						found = true
+					}
+				}
+				if !found {
+					for _, shelf := range d.Shelves {
+						if shelf.ID == item.ShelfID {
+							for _, seg := range d.ShelfSegments(shelf) {
+								if seg.ID == item.SegmentID {
+									if len(d.Segments) >= 50 {
+										return ErrConflict
+									}
+									seg.ID = newID()
+									d.Segments = append(d.Segments, seg)
+									item.SegmentID = seg.ID
+									found = true
+									break
+								}
+							}
+						}
+					}
+				}
+				if !found {
+					item.SegmentID = ""
+				}
+			}
+			if d.Settings.AutoEnrich && (item.Enrichment == nil || item.Enrichment.Summary == "") && (item.Processing == nil || item.Processing.State != "failed" && item.Processing.State != "skipped") {
 				item.Processing = &Processing{State: "queued", AI: true}
 			}
 			item.ShelfID = ""
@@ -831,6 +915,26 @@ func (d *Document) Apply(c Command) error {
 			removeOrder(item.ID)
 			item.Status = "shelved"
 			item.ShelfID = c.ShelfID
+			for si := range d.Shelves {
+				if d.Shelves[si].ID == c.ShelfID {
+					segments := d.ShelfSegments(d.Shelves[si])
+					found := false
+					for _, seg := range segments {
+						if seg.ID == item.SegmentID {
+							found = true
+						}
+					}
+					if !found {
+						for _, seg := range d.Segments {
+							if seg.ID == item.SegmentID {
+								segments = append(segments, seg)
+							}
+						}
+					}
+					d.Shelves[si].Segments = segments
+				}
+			}
+
 		case "focus":
 			if item.Status != "approved" {
 				return ErrConflict
@@ -852,6 +956,9 @@ func (d *Document) Apply(c Command) error {
 			now := time.Now().UTC()
 			note := noteFor(*item, c.SessionID, now)
 			note.Bundle = d.BundleSnapshotFor(*item)
+			if item.Enrichment != nil {
+				note.Summary = item.Enrichment.Summary
+			}
 			if show := d.ActiveBroadcast(); show != nil {
 				note.BroadcastID = show.ID
 				note.OffsetSeconds = int64(now.Sub(show.StartedAt) / time.Second)

@@ -35,7 +35,8 @@ func pruneNewsroom(ctx context.Context, tx *tenantdb.Tx, viewerID, login string,
 	}
 	changed := false
 	removed := map[string]bool{}
-	for _, key := range []string{"items", "questions", "history", "bundles"} {
+	affectedShows := map[string]bool{}
+	for _, key := range []string{"items", "questions", "history", "bundles", "activity"} {
 		var rows []map[string]json.RawMessage
 		if err = json.Unmarshal(doc[key], &rows); err != nil && len(doc[key]) > 0 {
 			return err
@@ -44,10 +45,10 @@ func pruneNewsroom(ctx context.Context, tx *tenantdb.Tx, viewerID, login string,
 		for _, row := range rows {
 			drop := matches(row)
 			status := str(row, "status")
-			if cutoff != nil && (status == "played" || status == "rejected" || status == "answered" || key == "history" || key == "bundles" && str(row, "leadId") == "") {
+			if cutoff != nil && (status == "played" || status == "rejected" || status == "answered" || key == "history" || key == "activity" || key == "bundles" && str(row, "leadId") == "") {
 				var at time.Time
 				date := row["createdAt"]
-				if key == "history" {
+				if key == "history" || key == "activity" {
 					date = row["at"]
 				}
 				if json.Unmarshal(date, &at) == nil && at.Before(*cutoff) {
@@ -58,6 +59,7 @@ func pruneNewsroom(ctx context.Context, tx *tenantdb.Tx, viewerID, login string,
 				changed = true
 				removed[str(row, "id")] = true
 				if key == "history" && viewerID != "" {
+					affectedShows[str(row, "broadcastId")] = true
 					removed[str(row, "itemId")] = true
 				}
 			} else {
@@ -99,6 +101,7 @@ func pruneNewsroom(ctx context.Context, tx *tenantdb.Tx, viewerID, login string,
 		var ended time.Time
 		if cutoff != nil && json.Unmarshal(show["endedAt"], &ended) == nil && ended.Before(*cutoff) {
 			changed = true
+			affectedShows[str(show, "id")] = true
 			continue
 		}
 		if viewerID != "" {
@@ -109,6 +112,7 @@ func pruneNewsroom(ctx context.Context, tx *tenantdb.Tx, viewerID, login string,
 			kept := []map[string]json.RawMessage{}
 			for _, row := range rundown {
 				if matches(row) || removed[str(row, "id")] {
+					affectedShows[str(show, "id")] = true
 					changed = true
 				} else {
 					kept = append(kept, row)
@@ -119,6 +123,25 @@ func pruneNewsroom(ctx context.Context, tx *tenantdb.Tx, viewerID, login string,
 		keptShows = append(keptShows, show)
 	}
 	doc["broadcasts"], _ = json.Marshal(keptShows)
+	var exports []map[string]json.RawMessage
+	_ = json.Unmarshal(doc["showExports"], &exports)
+	keptExports := []map[string]json.RawMessage{}
+	for _, job := range exports {
+		if !affectedShows[str(job, "showId")] {
+			keptExports = append(keptExports, job)
+		}
+	}
+	doc["showExports"], _ = json.Marshal(keptExports)
+	var publications map[string]json.RawMessage
+	_ = json.Unmarshal(doc["publications"], &publications)
+	for show := range affectedShows {
+		delete(publications, show)
+		if _, err = tx.ExecContext(ctx, `UPDATE newsroom_documents SET token_hash=NULL WHERE /*tenant:newsroom_documents*/ AND id=$1`, "episode:"+show); err != nil {
+			return err
+		}
+	}
+	doc["publications"], _ = json.Marshal(publications)
+
 	if !changed {
 		return nil
 	}
