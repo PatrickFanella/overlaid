@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "platform_dispatch_receipts"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -122,6 +122,9 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 		query := `SELECT to_jsonb(row) FROM (SELECT * FROM ` + table + ` WHERE /*tenant:` + table + `*/ LIMIT 250001) row`
 		if table == "newsroom_documents" {
 			query = `SELECT jsonb_build_object('document',document,'updatedAt',updated_at) FROM newsroom_documents WHERE /*tenant:newsroom_documents*/ AND id='default'`
+		}
+		if table == "platform_dispatch_receipts" {
+			query = `SELECT jsonb_build_object('eventId',event_id,'connectionId',connection_id,'state',state,'code',code,'startedAt',started_at,'finishedAt',finished_at) FROM platform_dispatch_receipts WHERE /*tenant:platform_dispatch_receipts*/ LIMIT 250001`
 		}
 		rows, err := tx.QueryContext(ctx, query)
 		if err != nil {

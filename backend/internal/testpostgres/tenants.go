@@ -18,6 +18,7 @@ import (
 type TenantFixture struct {
 	Admin      *sql.DB
 	RuntimeURL string
+	WorkerURL  string
 	Schema     string
 	Migrate    func()
 }
@@ -50,6 +51,7 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	schema := "tenant_test_" + suffix
 	role := "tenant_runtime_" + suffix
 	lookup := "tenant_lookup_" + suffix
+	worker := "tenant_worker_" + suffix
 	password := hex.EncodeToString(nonce[:]) + "-fixture"
 	if _, err = admin.Exec(`CREATE SCHEMA ` + schema + `; CREATE ROLE ` + role + ` LOGIN PASSWORD '` + password + `' NOSUPERUSER NOBYPASSRLS;`); err != nil {
 		admin.Close()
@@ -64,6 +66,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 			t.Error(err)
 		} else if exists {
 			if _, err = admin.Exec(`DROP OWNED BY ` + lookup + `; DROP ROLE ` + lookup); err != nil {
+				t.Error(err)
+			}
+		}
+		if err := admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)`, worker).Scan(&exists); err != nil {
+			t.Error(err)
+		} else if exists {
+			if _, err := admin.Exec(`DROP OWNED BY ` + worker + `; DROP ROLE ` + worker); err != nil {
 				t.Error(err)
 			}
 		}
@@ -131,6 +140,19 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 			t.Fatal(err)
 		}
 	}
+	rawWorker, err := os.ReadFile(filepath.Join(root, "0008_platform_dispatch.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workerMigration := strings.ReplaceAll(strings.ReplaceAll(string(rawWorker), "overlaid_runtime", role), "overlaid_worker", worker)
+	if _, err = owner.Exec(workerMigration); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(`ALTER ROLE ` + worker + ` LOGIN PASSWORD '` + password + `'`); err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(worker, password)
+	workerURL := u.String()
 	u.User = url.UserPassword(role, password)
-	return TenantFixture{Admin: owner, RuntimeURL: u.String(), Schema: schema, Migrate: migrate}
+	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, Schema: schema, Migrate: migrate}
 }

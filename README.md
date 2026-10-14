@@ -38,7 +38,7 @@ Set `OVERLAID_TEST_DATABASE_URL` to a disposable Postgres database to include pe
 
 The isolated [River compatibility spike](backend/spikes/river/README.md) is included in `make verify` and the disposable PostgreSQL CI path. It proves transactional enqueueing with the current database driver and tenant isolation; it does not install a production queue or start workers.
 
-The [retained platform ingestion store](docs/runbooks/platform-ingest.md) persists normalized chat, restricted native payloads and a River dispatch job atomically. Apply administrator migrations before starting the updated managed API. This storage unit leaves the existing Twitch command path active; worker execution and adapter migration remain later work.
+The [retained platform ingestion store](docs/runbooks/platform-ingest.md) persists normalized chat, restricted native payloads and a River dispatch job atomically. Apply administrator migrations before starting the updated managed API. The [fenced worker boundary](docs/runbooks/platform-dispatch.md) supplies service-role leasing and tenant-scoped execution receipts. Live worker registration and adapter migration remain later work; the existing Twitch command path stays active.
 
 ## Overlay MVP
 

@@ -32,6 +32,8 @@ The River compatibility spike is an isolated module in `backend/spikes/river`. `
 
 Retained platform chat uses `platformingest` and the narrow `tenantdb.Tx.EnqueueChatDispatch` bridge. Preserve atomic event/native-payload/job persistence, active connection binding, canonical envelope IDs, bounded admission, forced RLS and cascading lifecycle deletion. River workers and the Twitch consumer migration are separate work; never enable a second command dispatcher alongside the existing path. Pinned River SQL provenance and MPL notice live in `docs/vendor/river/`.
 
+`platformdispatch` leases chat jobs through a separate non-owner service role and reads events through immutable product scopes. Preserve the durable pre-handler fence, claim-token completion checks, redacted receipt allowlists and no automatic replay after a handler starts. Application startup still uses the existing Twitch dispatcher; live worker registration requires the separate consumer compatibility migration.
+
 ## Newsroom conventions
 
 - Newsroom is rebuilt in Go and Vite at `/dashboard/newsroom`; use the existing account, tenant, and Twitch EventSub boundaries. Keep dashboard `desk-*` and OBS `sc-*` styling separate.
