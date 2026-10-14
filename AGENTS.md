@@ -34,6 +34,8 @@ Retained platform chat uses `platformingest` and the narrow `tenantdb.Tx.Enqueue
 
 `platformdispatch` leases chat jobs through a separate non-owner service role and reads events through immutable product scopes. Preserve the durable pre-handler fence, claim-token completion checks, redacted receipt allowlists and no automatic replay after a handler starts. `TWITCH_CHAT_DISPATCH_MODE=retained` opts managed installations into the shared-registry consumer; legacy remains the default. Preserve the database controller lease, retained-mode guard, stable native chat IDs, bounded durable echo markers, synchronous Newsroom execution and cancellation-aware publication. Never fall back to legacy execution after retained ingestion fails.
 
+Tenant-owned bot accounts use separate vault ciphertext and explicit broadcaster bindings. Preserve owner checks, composite tenant references, tenant-first refresh/revocation locks, reauthorization clearing bindings, metadata-only exports and the eight-account safety bound. The store foundation grants no send permission; trusted execution must recheck capabilities and bot role. Service-owned identity and OAuth onboarding remain separate work.
+
 ## Newsroom conventions
 
 - Newsroom is rebuilt in Go and Vite at `/dashboard/newsroom`; use the existing account, tenant, and Twitch EventSub boundaries. Keep dashboard `desk-*` and OBS `sc-*` styling separate.

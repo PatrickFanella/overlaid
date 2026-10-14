@@ -91,11 +91,7 @@ func (s *Store) SaveConnection(ctx context.Context, k Keyring, tenant, actor, pr
 	if provider != "twitch" || userID == "" || login == "" || len(raw) > 32768 || !json.Valid(raw) {
 		return errors.New("invalid connection")
 	}
-	db, err := s.Product.Scoped(tenant)
-	if err != nil {
-		return err
-	}
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := s.botTx(ctx, tenant, "", false)
 	if err != nil {
 		return err
 	}
@@ -109,7 +105,7 @@ func (s *Store) SaveConnection(ctx context.Context, k Keyring, tenant, actor, pr
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO platform_connections(provider,provider_user_id,login,ciphertext,key_version,scopes) VALUES($1,$2,$3,$4,$5,$6)
-	 ON CONFLICT(tenant_id,provider) DO UPDATE SET provider_user_id=excluded.provider_user_id,login=excluded.login,ciphertext=excluded.ciphertext,key_version=excluded.key_version,scopes=excluded.scopes,granted_at=now(),revoked_at=NULL`, provider, userID, login, sealed, k.Active, scopeJSON)
+	 ON CONFLICT(tenant_id,provider) DO UPDATE SET provider_user_id=excluded.provider_user_id,login=excluded.login,ciphertext=excluded.ciphertext,key_version=excluded.key_version,scopes=excluded.scopes,granted_at=now(),revoked_at=NULL,bot_account_id=NULL`, provider, userID, login, sealed, k.Active, scopeJSON)
 	if err != nil {
 		return err
 	}
@@ -123,11 +119,7 @@ func (s *Store) SaveConnection(ctx context.Context, k Keyring, tenant, actor, pr
 // ResolveConnection serializes refresh with the row lock across API processes.
 // It never publishes plaintext tokens; the callback owns validation/refresh.
 func (s *Store) ResolveConnection(ctx context.Context, k Keyring, tenant, provider string, refresh func(json.RawMessage) (json.RawMessage, error)) (json.RawMessage, error) {
-	db, err := s.Product.Scoped(tenant)
-	if err != nil {
-		return nil, err
-	}
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := s.botTx(ctx, tenant, "", false)
 	if err != nil {
 		return nil, err
 	}
@@ -161,16 +153,12 @@ func (s *Store) ResolveConnection(ctx context.Context, k Keyring, tenant, provid
 	return updated, nil
 }
 func (s *Store) RevokeConnection(ctx context.Context, tenant, actor, provider string) error {
-	db, err := s.Product.Scoped(tenant)
-	if err != nil {
-		return err
-	}
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := s.botTx(ctx, tenant, "", false)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `UPDATE platform_connections SET ciphertext=NULL,key_version=NULL,scopes='[]',revoked_at=now() WHERE /*tenant:platform_connections*/ AND provider=$1`, provider); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE platform_connections SET ciphertext=NULL,key_version=NULL,scopes='[]',revoked_at=now(),bot_account_id=NULL WHERE /*tenant:platform_connections*/ AND provider=$1`, provider); err != nil {
 		return err
 	}
 	diff, _ := json.Marshal(map[string]string{"provider": provider})
