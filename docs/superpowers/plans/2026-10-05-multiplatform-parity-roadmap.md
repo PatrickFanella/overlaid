@@ -111,6 +111,8 @@ Fix what is unsafe before anything goes public, and write the decisions down. Co
 
 ### Phase 2: Platform layer and the bot account on Twitch (L)
 
+Implementation units and verification are recorded in [the Phase 2 plan](2026-10-14-phase-2-platform-layer.md). The first bounded unit is [#50](https://git.subcult.tv/subculture-collective/overlaid/issues/50), covering chat and capability contracts. Durable ingestion and the shared bot transport remain subsequent units.
+
 - Adapter interface, normalized events, capability matrix, idempotent ingest.
 - Move Twitch from a user-token WebSocket to an **app token + conduit** with WebSocket shards owned by workers. Subscribe per tenant at onboarding.
 - **Bot account:** one shared bot (OAuth once with `user:read:chat user:write:chat user:bot`). Onboarding asks the broadcaster for `channel:bot` plus the scopes for enabled features, then asks them to mod the bot and checks that they did.

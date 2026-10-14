@@ -1,0 +1,15 @@
+# Phase 2: platform layer and Twitch bot account
+
+Tracking: [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). Contract: ADR 0004. Start from main `dc13188`, after Newsroom PR #49.
+
+The existing Twitch user-token WebSocket remains the active transport during migration. Each unit must preserve current commands, moderation, Newsroom lifecycle handling and overlay projection until its replacement has executable compatibility evidence.
+
+1. **Chat and capability contracts — #50.** Add the adapter interface, explicit delivery outcomes, a versioned capability registry and a typed chat envelope. Identity uses tenant, connection, platform, kind and native delivery identity; receipt time never changes it. Twitch chat mapping consumes the typed payload while retaining existing display and moderation fields. Verify redelivery identity, tenant separation, invalid inputs, capability intersections and existing Twitch tests, then `make verify`.
+2. **Transactional ingest.** Create a bounded implementation issue before work. Add forced-RLS event and dispatch-outbox storage, with unique tenant/connection/idempotency keys and atomic scheduling. Include restricted raw-payload retention and viewer deletion. Test concurrent duplicate delivery, rollback and two-tenant isolation using the disposable PostgreSQL harness. Stable identity from unit 1 alone does not suppress duplicate commands.
+3. **Twitch adapter migration.** Create an issue for the normalized-event consumer and legacy projection bridge. Preserve current command/moderation semantics, echo suppression and Newsroom lifecycle fencing. Expand typed event kinds with representative native fixtures before enabling subscriptions.
+4. **Bot identity and onboarding.** Plan vault-backed `bot_account` persistence, service bot OAuth, tenant grants and moderator checks. Keep existing broadcaster authorization recoverable. Real bot account naming and grants require operator input; use synthetic credentials in tests.
+5. **Outbound queue.** Add account/channel pacing, moderation priority, retry-after handling and uncertain receipts. Persist action identity and make ambiguous provider delivery explicit. Verify a 1,000-channel simulation without sending provider messages.
+6. **Conduit workers and subscriptions.** Add app-authorized conduit reconciliation and worker-owned WebSocket shards after durable ingestion and bot identity are ready. Prove shard recovery and tenant subscription isolation before replacing the current transport.
+7. **Desk onboarding and acceptance.** Connect platform, request feature grants, inspect bot role and explicitly test messaging. Complete the phase's two-minute onboarding and simulated-load exit criteria. Live Twitch acceptance remains #39; OBS and release gates remain #40 and #42.
+
+Only unit 1 is implemented by this plan's first PR. No database migration or runtime transport switch is part of that PR; rollback is a normal code revert. Capability results are snapshots and must be recomputed at eventual execution. Provider extensions and actor badges cannot grant effect permissions.

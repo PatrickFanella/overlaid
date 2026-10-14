@@ -611,18 +611,16 @@ func capRunes(value string, limit int) string {
 }
 
 func mapChatMessage(message EventSubMessage) (events.Event, bool) {
-	event := message.Payload.Event
-	text := stringValue(nestedMap(event, "message"), "text")
-	user := firstNonEmpty(stringValue(event, "chatter_user_name"), stringValue(event, "chatter_user_login"), "Twitch chatter")
-	if strings.TrimSpace(text) == "" {
+	chat := normalizedChat(message)
+	if strings.TrimSpace(chat.Text) == "" {
 		return events.Event{}, false
 	}
-	mapped := overlayEvent(events.EventTypeChatMessage, "twitch", user, text, events.SeverityInfo, message)
+	mapped := overlayEvent(events.EventTypeChatMessage, "twitch", chat.Actor.DisplayName, chat.Text, events.SeverityInfo, message)
 	if mapped.Data == nil {
 		mapped.Data = map[string]any{}
 	}
-	mapped.Data["viewerId"] = stringValue(event, "chatter_user_id")
-	mapped.Data["viewerLogin"] = stringValue(event, "chatter_user_login")
+	mapped.Data["viewerId"] = chat.Actor.ID
+	mapped.Data["viewerLogin"] = chat.Actor.Login
 	return mapped, true
 }
 
