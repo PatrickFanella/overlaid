@@ -1,4 +1,6 @@
 import { BotWorkspace } from './Bot';
+import { useAccount } from './accountSession';
+import { BotIdentityPanel } from './bot/BotIdentityPanel';
 import { TwitchInteractionsManager } from './components/TwitchInteractionsManager';
 import { DashboardShell } from './DashboardShell';
 import { useDeskStatus } from './deskStatus';
@@ -6,6 +8,7 @@ import { MissingSecretNotice } from './ActiveProfile';
 import { PageHead } from './ui';
 
 const sections = [
+  ['#bot-identity', 'Bot identity'],
   ['#bot-commands', 'Commands'],
   ['#bot-timers', 'Timers'],
   ['#bot-community', 'Counters and quotes'],
@@ -25,12 +28,13 @@ export function DashboardChatPage() {
 
 function Chat() {
   const { apiBaseUrl, operatorSecret } = useDeskStatus();
+  const { account } = useAccount();
 
   return (
     <>
       <PageHead
         title="Chat and bot"
-        lede="Bot commands, timers, and community data, plus moderation with guarded destructive actions. Everything here writes through the operator-protected API."
+        lede="Bot commands, timers, and community data, plus moderation with guarded destructive actions. Changes use the authenticated API and workspace permissions."
       />
       <nav className="flex flex-wrap gap-1" aria-label="Chat sections">
         {sections.map(([href, label]) => (
@@ -39,7 +43,8 @@ function Chat() {
           </a>
         ))}
       </nav>
-      <MissingSecretNotice operatorSecret={operatorSecret} />
+      {account.deploymentMode !== 'hosted' ? <MissingSecretNotice operatorSecret={operatorSecret} /> : null}
+      <BotIdentityPanel apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} />
       <BotWorkspace />
       <TwitchInteractionsManager apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} />
     </>

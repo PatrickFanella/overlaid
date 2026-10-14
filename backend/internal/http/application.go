@@ -543,6 +543,10 @@ func controlError(w http.ResponseWriter, err error) {
 		http.Error(w, "tenant permission denied", 403)
 		return
 	}
+	if errors.Is(err, tenancy.ErrBotRevision) {
+		http.Error(w, "bot selection changed; reload before retrying", 409)
+		return
+	}
 	if errors.Is(err, tenancy.ErrLimit) || errors.Is(err, tenantdb.ErrLimit) {
 		http.Error(w, err.Error(), 409)
 		return
