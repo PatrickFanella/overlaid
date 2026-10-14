@@ -72,6 +72,7 @@ func newFixture(t *testing.T) fixture {
 		 WITH CHECK(tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid);
 		ALTER TABLE river_job ENABLE ROW LEVEL SECURITY;
 		ALTER TABLE river_job FORCE ROW LEVEL SECURITY;
+		DROP POLICY IF EXISTS tenant_isolation ON river_job;
 		CREATE POLICY tenant_isolation ON river_job
 		 USING(args->>'tenant_id'=nullif(current_setting('app.tenant_id',true),''))
 		 WITH CHECK(args->>'tenant_id'=nullif(current_setting('app.tenant_id',true),''));

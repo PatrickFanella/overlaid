@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -67,6 +67,9 @@ func (s *Store) Expire(ctx context.Context) error {
 		_, err = tx.ExecContext(ctx, `DELETE FROM bot_audit_events WHERE /*tenant:bot_audit_events*/ AND created_at<now()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1)`, id)
 		if err == nil {
 			_, err = tx.ExecContext(ctx, `DELETE FROM stream_events WHERE /*tenant:stream_events*/ AND created_at<now()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1)`, id)
+		}
+		if err == nil {
+			_, err = tx.ExecContext(ctx, `DELETE FROM normalized_chat_events WHERE /*tenant:normalized_chat_events*/ AND received_at<now()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1)`, id)
 		}
 		if err == nil {
 			_, err = tx.ExecContext(ctx, `DELETE FROM stream_session_readiness_snapshots WHERE /*tenant:stream_session_readiness_snapshots*/ AND captured_at<now()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1)`, id)
@@ -181,6 +184,9 @@ func (s *Store) DeleteViewer(ctx context.Context, actor, tenant, providerUserID,
 		if _, err = tx.ExecContext(ctx, `DELETE FROM bot_quotes WHERE /*tenant:bot_quotes*/ AND lower(author)=lower($1)`, login); err != nil {
 			return err
 		}
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM normalized_chat_events WHERE /*tenant:normalized_chat_events*/ AND (actor_id=$1 OR ($2<>'' AND actor_login=lower($2)))`, providerUserID, login); err != nil {
+		return err
 	}
 	if err = pruneNewsroom(ctx, tx, providerUserID, login, nil); err != nil {
 		return err

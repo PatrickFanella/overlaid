@@ -30,6 +30,8 @@ Optional Postgres integration checks use `OVERLAID_TEST_DATABASE_URL` pointing t
 
 The River compatibility spike is an isolated module in `backend/spikes/river`. `make verify` vets and tests it; `scripts/ci-postgres.sh` also runs its uncached race tests against the disposable database. Keep spike dependencies and fixture-only migrations out of the application module and production migrations until the durable-ingestion implementation is reviewed.
 
+Retained platform chat uses `platformingest` and the narrow `tenantdb.Tx.EnqueueChatDispatch` bridge. Preserve atomic event/native-payload/job persistence, active connection binding, canonical envelope IDs, bounded admission, forced RLS and cascading lifecycle deletion. River workers and the Twitch consumer migration are separate work; never enable a second command dispatcher alongside the existing path. Pinned River SQL provenance and MPL notice live in `docs/vendor/river/`.
+
 ## Newsroom conventions
 
 - Newsroom is rebuilt in Go and Vite at `/dashboard/newsroom`; use the existing account, tenant, and Twitch EventSub boundaries. Keep dashboard `desk-*` and OBS `sc-*` styling separate.
