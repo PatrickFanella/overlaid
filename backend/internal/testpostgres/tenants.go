@@ -16,11 +16,12 @@ import (
 )
 
 type TenantFixture struct {
-	Admin      *sql.DB
-	RuntimeURL string
-	WorkerURL  string
-	Schema     string
-	Migrate    func()
+	Admin       *sql.DB
+	RuntimeURL  string
+	WorkerURL   string
+	BotAdminURL string
+	Schema      string
+	Migrate     func()
 }
 
 // Every fixture owns its schema and login/lookup roles, retains only shared
@@ -52,6 +53,7 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	role := "tenant_runtime_" + suffix
 	lookup := "tenant_lookup_" + suffix
 	worker := "tenant_worker_" + suffix
+	botAdmin := "tenant_bot_admin_" + suffix
 	password := hex.EncodeToString(nonce[:]) + "-fixture"
 	if _, err = admin.Exec(`CREATE SCHEMA ` + schema + `; CREATE ROLE ` + role + ` LOGIN PASSWORD '` + password + `' NOSUPERUSER NOBYPASSRLS;`); err != nil {
 		admin.Close()
@@ -73,6 +75,14 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 			t.Error(err)
 		} else if exists {
 			if _, err := admin.Exec(`DROP OWNED BY ` + worker + `; DROP ROLE ` + worker); err != nil {
+				t.Error(err)
+			}
+		}
+		var botExists bool
+		if err := admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)`, botAdmin).Scan(&botExists); err != nil {
+			t.Error(err)
+		} else if botExists {
+			if _, err := admin.Exec(`DROP OWNED BY ` + botAdmin + `; DROP ROLE ` + botAdmin); err != nil {
 				t.Error(err)
 			}
 		}
@@ -162,11 +172,24 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(strings.ReplaceAll(string(rawBots), "overlaid_runtime", role)); err != nil {
 		t.Fatal(err)
 	}
+	rawServiceBots, err := os.ReadFile(filepath.Join(root, "0011_service_bot_accounts.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	serviceMigration := strings.NewReplacer("overlaid_runtime", role, "overlaid_worker", worker, "overlaid_bot_admin", botAdmin).Replace(string(rawServiceBots))
+	if _, err = owner.Exec(serviceMigration); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(`ALTER ROLE ` + botAdmin + ` LOGIN PASSWORD '` + password + `'`); err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(botAdmin, password)
+	botAdminURL := u.String()
 	if _, err = owner.Exec(`ALTER ROLE ` + worker + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}
 	u.User = url.UserPassword(worker, password)
 	workerURL := u.String()
 	u.User = url.UserPassword(role, password)
-	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, Schema: schema, Migrate: migrate}
+	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, BotAdminURL: botAdminURL, Schema: schema, Migrate: migrate}
 }

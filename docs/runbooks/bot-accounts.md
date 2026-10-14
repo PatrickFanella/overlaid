@@ -1,6 +1,6 @@
 # Tenant-owned bot identity storage
 
-[Issue #60](https://git.subcult.tv/subculture-collective/overlaid/issues/60) adds the persistence boundary for a tenant bringing its own Twitch bot. This is a store foundation: no bot OAuth route, desk control or sender switch is enabled. Existing broadcaster authorization, EventSub, commands and Newsroom continue through their current paths. Service-owned shared identities require a separate administrative access boundary in the next unit.
+[Issue #60](https://git.subcult.tv/subculture-collective/overlaid/issues/60) adds the persistence boundary for a tenant bringing its own Twitch bot. This is a store foundation: no bot OAuth route, desk control or sender switch is enabled. Existing broadcaster authorization, EventSub, commands and Newsroom continue through their current paths. The [service-owned vault](service-bot-vault.md) supplies a separate administrative access boundary; tenant delegation and OAuth remain later units.
 
 Apply `0010_bot_accounts.sql` with administrator migration credentials before starting this revision in managed mode. It creates a forced-RLS table and adds a nullable composite tenant/bot reference to broadcaster connections. Existing connections remain unbound. File mode has no new persistence path. No credentials are copied or imported automatically.
 
