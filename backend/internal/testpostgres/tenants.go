@@ -155,6 +155,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(strings.ReplaceAll(strings.ReplaceAll(string(rawEcho), "overlaid_runtime", role), "overlaid_worker", worker)); err != nil {
 		t.Fatal(err)
 	}
+	rawBots, err := os.ReadFile(filepath.Join(root, "0010_bot_accounts.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.ReplaceAll(string(rawBots), "overlaid_runtime", role)); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = owner.Exec(`ALTER ROLE ` + worker + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}
