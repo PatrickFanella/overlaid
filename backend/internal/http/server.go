@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/history"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/interactions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/mpris"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/newsroom"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/obsws"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/sessions"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/state"
@@ -26,6 +28,18 @@ import (
 )
 
 type Server struct {
+	fileCommands              *bot.FileCommands
+	botCommandsLoadError      string
+	commandConfigMu           sync.Mutex
+	newsroom                  *newsroom.Store
+	newsroomLoadError         string
+	newsroomJobs              chan newsroomJob
+	newsroomChat              chan events.Event
+	newsroomJobMu             sync.Mutex
+	newsroomQueued            map[string]bool
+	newsroomDeliveryMu        sync.Mutex
+	newsroomQuickMu           sync.Mutex
+	newsroomQuickAt           time.Time
 	tenantID                  string
 	tenantContext             context.Context
 	credentialStore           *tenancy.Store
@@ -95,10 +109,31 @@ func newServer(cfg config.Config, bus *events.Bus, scope *tenantdb.DB) *Server {
 		log.Printf("failed to load overlay state: %v", err)
 	}
 	server := &Server{config: cfg, bus: bus, history: eventHistory, historyLoadError: historyLoadError, historyWritable: historyWritable, obs: obsws.Client{URL: cfg.OBSWebSocketURL, Password: cfg.OBSWebSocketPass}, state: store, stateLoadError: stateLoadError, twitch: newTwitchAuthStore(cfg.TwitchTokenFile), twitchEventSubDiagnostics: twitch.NewDiagnosticsStore(cfg.TwitchEventSub), mux: http.NewServeMux()}
+	server.newsroomJobs = make(chan newsroomJob, 100)
+	server.newsroomChat = make(chan events.Event, 100)
+	server.newsroomQueued = map[string]bool{}
+	var errNewsroom error
 	server.dashboardConfig, server.dashboardConfigLoadError = newDashboardConfigStore(cfg, scope)
 	server.sessions, server.sessionsLoadError = newSessionStore(cfg, scope)
+	if scope != nil {
+		server.newsroom, errNewsroom = newsroom.NewTenant(scope)
+	} else if cfg.DatabaseURL == "" {
+		server.newsroom, errNewsroom = newsroom.NewFile(cfg.NewsroomFile)
+	} else {
+		errNewsroom = fmt.Errorf("managed newsroom requires a tenant scope")
+	}
+	if errNewsroom != nil {
+		server.newsroomLoadError = errNewsroom.Error()
+	}
 	server.refreshActiveSession(context.Background())
 	server.botStore, server.botLoadError = newBotStore(cfg, scope)
+	if cfg.DatabaseURL == "" {
+		var err error
+		server.fileCommands, err = bot.NewFileCommands(cfg.BotCommandsFile)
+		if err != nil {
+			server.botCommandsLoadError = err.Error()
+		}
+	}
 	server.botRuntime = bot.NewRuntime(nil)
 	if server.botStore != nil {
 		server.botRuntime = bot.NewRuntime(server.botStore)
@@ -108,11 +143,15 @@ func newServer(cfg config.Config, bus *events.Bus, scope *tenantdb.DB) *Server {
 	if server.interactions != nil {
 		rules = server.interactions.Rules()
 	}
+	if err := server.importNewsroomCommands(context.Background(), rules); err != nil {
+		server.botCommandsLoadError = err.Error()
+	}
 	server.twitchCommandProcessor = twitch.NewCommandProcessor(twitch.CommandProcessorConfig{Cooldown: 10 * time.Second, Aliases: interactions.AliasMap(rules), Custom: server.customTwitchCommands(context.Background()), Channel: cfg.TwitchChannel, Community: botCommunityAdapter{store: server.botStore}, APIVariables: bot.NewAPIVariableResolver(server.botStore), NowPlaying: server.nowPlaying.Snapshot, AllowCustom: func(name string) error {
-		if server.botStore == nil {
-			return nil
+		registry := server.commandsRegistry()
+		if registry == nil {
+			return fmt.Errorf("command registry unavailable")
 		}
-		return server.botStore.AllowItem(context.Background(), "commands", name)
+		return registry.AllowItem(context.Background(), "commands", name)
 	}})
 	if err := server.twitch.loadPersistedToken(); err != nil {
 		server.twitchTokenLoadError = err.Error()
@@ -130,10 +169,14 @@ func (s *Server) refreshTwitchCustomCommands(ctx context.Context) {
 }
 
 func (s *Server) customTwitchCommands(ctx context.Context) []twitch.CustomCommand {
-	if s == nil || s.botStore == nil {
+	if s == nil {
 		return nil
 	}
-	commands, err := s.botStore.ListCommands(ctx)
+	registry := s.commandsRegistry()
+	if registry == nil {
+		return nil
+	}
+	commands, err := registry.ListCommands(ctx)
 	if err != nil {
 		log.Printf("failed to load bot custom commands: %v", err)
 		return nil
@@ -330,6 +373,8 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) StartBackground(ctx context.Context) {
+	go s.runNewsroomWorker(ctx)
+	go s.runNewsroomChat(ctx)
 	if s.botStore != nil {
 		scheduler := bot.TimerScheduler{Store: s.botStore, Channel: s.config.TwitchChannel, Publish: s.publishEvent, StreamSessionID: s.activeSessionID}
 		go func() {

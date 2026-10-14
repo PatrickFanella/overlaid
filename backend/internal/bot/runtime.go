@@ -13,6 +13,7 @@ type Role string
 
 const (
 	RoleViewer      Role = "viewer"
+	RoleSupporter   Role = "supporter"
 	RoleModerator   Role = "moderator"
 	RoleBroadcaster Role = "broadcaster"
 	RoleOperator    Role = "operator"
@@ -211,6 +212,8 @@ func NormalizeRole(role Role) Role {
 		return RoleBroadcaster
 	case RoleModerator:
 		return RoleModerator
+	case RoleSupporter:
+		return RoleSupporter
 	default:
 		return RoleViewer
 	}
@@ -227,12 +230,14 @@ func RoleAllows(actor Role, required Role) bool {
 func roleRank(role Role) int {
 	switch NormalizeRole(role) {
 	case RoleSystem:
-		return 5
+		return 6
 	case RoleOperator:
-		return 4
+		return 5
 	case RoleBroadcaster:
-		return 3
+		return 4
 	case RoleModerator:
+		return 3
+	case RoleSupporter:
 		return 2
 	default:
 		return 1

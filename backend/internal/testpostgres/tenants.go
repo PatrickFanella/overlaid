@@ -108,6 +108,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 		}
 	}
 	migrate()
+	rawNewsroom, err := os.ReadFile(filepath.Join(root, "0004_newsroom.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.ReplaceAll(strings.ReplaceAll(string(rawNewsroom), "overlaid_runtime", role), "overlaid_credential_lookup", lookup)); err != nil {
+		t.Fatal(err)
+	}
 	u.User = url.UserPassword(role, password)
 	return TenantFixture{Admin: owner, RuntimeURL: u.String(), Schema: schema, Migrate: migrate}
 }

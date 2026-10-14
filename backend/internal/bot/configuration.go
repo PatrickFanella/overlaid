@@ -95,14 +95,17 @@ func NormalizeCommand(command Command) (Command, error) {
 	if isReservedCommandName(command.Name) {
 		return Command{}, fmt.Errorf("command name %q is reserved", command.Name)
 	}
-	if command.Response == "" {
+	if command.Response == "" && !IsNewsroomAction(command.Action) {
 		return Command{}, errors.New("command response is required")
 	}
 	if len(command.Response) > 500 {
 		return Command{}, errors.New("command response must be 500 characters or less")
 	}
 	switch command.Action {
-	case "ticker", "alert":
+	case "ticker", "alert", "newsroom_submit", "newsroom_capture", "newsroom_current", "newsroom_question", "newsroom_raffle":
+		if IsNewsroomAction(command.Action) {
+			command.ResponseMode = "chat"
+		}
 	default:
 		return Command{}, fmt.Errorf("unsupported command action %q", command.Action)
 	}
@@ -112,7 +115,7 @@ func NormalizeCommand(command Command) (Command, error) {
 		return Command{}, fmt.Errorf("unsupported command response mode %q", command.ResponseMode)
 	}
 	switch command.RoleRequired {
-	case "viewer", "moderator", "broadcaster", "operator", "system":
+	case "viewer", "supporter", "moderator", "broadcaster", "operator", "system":
 	default:
 		return Command{}, fmt.Errorf("unsupported command role %q", command.RoleRequired)
 	}
@@ -169,7 +172,7 @@ func isSafeBotName(name string) bool {
 
 func isReservedCommandName(name string) bool {
 	switch name {
-	case "alert", "clear", "brb", "back":
+	case "alert", "clear", "brb", "back", "count", "quote", "addquote", "delquote":
 		return true
 	default:
 		return false

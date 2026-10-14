@@ -12,6 +12,9 @@ func (s *Server) recordBotAuditForEvent(ctx context.Context, event events.Event)
 	if s == nil || s.botRuntime == nil || event.Type != events.EventTypeCommand || event.Source != "twitch" {
 		return
 	}
+	if boolData(event.Data, "newsroomRequest") {
+		return
+	}
 	data := event.Data
 	command := stringData(data, "command")
 	if command == "" || stringData(data, "originalCommand") == "" {
@@ -19,6 +22,9 @@ func (s *Server) recordBotAuditForEvent(ctx context.Context, event events.Event)
 	}
 	action := firstNonEmptyString(stringData(data, "action"), command)
 	actorRole := bot.RoleViewer
+	if boolData(data, "isSubscriber") || boolData(data, "isVIP") {
+		actorRole = bot.RoleSupporter
+	}
 	if boolData(data, "isModerator") {
 		actorRole = bot.RoleModerator
 	}
@@ -37,6 +43,7 @@ func (s *Server) recordBotAuditForEvent(ctx context.Context, event events.Event)
 	}
 	s.botRuntime.RecordOutcome(ctx, bot.AuditOutcome{
 		Source:           bot.SourceChat,
+		ActorID:          stringData(data, "viewerId"),
 		ActorLogin:       stringData(data, "login"),
 		ActorDisplayName: stringData(data, "user"),
 		ActorRole:        actorRole,

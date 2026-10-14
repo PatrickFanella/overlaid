@@ -63,6 +63,11 @@ func (k Keyring) seal(tenant, provider string, raw []byte) ([]byte, error) {
 func (k Keyring) Seal(tenant, provider string, raw []byte) ([]byte, error) {
 	return k.seal(tenant, provider, raw)
 }
+
+// Unseal reads a credential bound to its workspace, purpose and key version.
+func (k Keyring) Unseal(tenant, purpose, version string, sealed []byte) ([]byte, error) {
+	return k.open(tenant, purpose, version, sealed)
+}
 func (k Keyring) open(tenant, provider, version string, sealed []byte) ([]byte, error) {
 	tenant = strings.ToLower(tenant)
 	key, ok := k.Keys[version]

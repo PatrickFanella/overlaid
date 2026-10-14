@@ -3,6 +3,25 @@ package httpapi
 import "net/http"
 
 func (s *Server) routes() {
+	s.mux.HandleFunc("POST /api/newsroom/briefing", s.requireOperator(s.newsroomBriefing))
+	s.mux.HandleFunc("POST /api/newsroom/token", s.requireOperator(s.newsroomToken))
+	s.mux.HandleFunc("GET /api/newsroom/shared", s.newsroomShared)
+	s.mux.HandleFunc("GET /api/newsroom/quick-add", s.newsroomQuickAdd)
+	s.mux.HandleFunc("POST /api/newsroom/quick-add", s.newsroomQuickAdd)
+	s.mux.HandleFunc("GET /api/newsroom/overlay", s.requireOverlay(s.newsroomOverlay))
+	s.mux.HandleFunc("POST /api/newsroom/playlist", s.requireOperator(s.newsroomPlaylist))
+	s.mux.HandleFunc("POST /api/newsroom/announce/{kind}", s.requireOperator(s.newsroomAnnounce))
+	s.mux.HandleFunc("GET /api/newsroom/providers", s.requireOperator(s.newsroomProviderStatus))
+	s.mux.HandleFunc("PUT /api/newsroom/providers", s.requireOperator(s.newsroomProviderSave))
+	s.mux.HandleFunc("POST /api/newsroom/items/{id}/enrich", s.requireOperator(s.newsroomEnrichRequest))
+	s.mux.HandleFunc("POST /api/newsroom/items/{id}/coverage", s.requireOperator(s.newsroomCoverage))
+	s.mux.HandleFunc("POST /api/newsroom/notes/discord", s.requireOperator(s.newsroomDiscord))
+	s.mux.HandleFunc("GET /api/newsroom/bundles", s.requireOperator(s.newsroomBundles))
+	s.mux.HandleFunc("GET /api/newsroom/queue", s.requireOperator(s.newsroomQueue))
+	s.mux.HandleFunc("GET /api/newsroom/broadcasts/{id}/export", s.requireOperator(s.newsroomBroadcastExport))
+	s.mux.HandleFunc("GET /api/newsroom", s.requireOperator(s.newsroomGet))
+	s.mux.HandleFunc("POST /api/newsroom", s.requireOperator(s.newsroomCommand))
+	s.mux.HandleFunc("GET /api/newsroom/notes", s.requireOperator(s.newsroomNotes))
 	s.mux.HandleFunc("GET /version", s.version)
 	s.mux.HandleFunc("GET /healthz", s.healthz)
 	s.mux.HandleFunc("GET /readyz", s.readyz)
@@ -73,7 +92,11 @@ func (s *Server) routes() {
 func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", s.config.AllowedOrigin)
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Overlay-Operator-Secret,X-Overlay-Webhook-Secret")
+		if s.config.AllowedOrigin != "*" && s.config.AllowedOrigin != "" {
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Add("Vary", "Origin")
+		}
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Overlay-Operator-Secret,X-Overlay-Webhook-Secret,X-Newsroom-Add-Token")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

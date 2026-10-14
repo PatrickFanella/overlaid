@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -74,6 +75,14 @@ func (s *Store) Expire(ctx context.Context) error {
 			_, err = tx.ExecContext(ctx, `DELETE FROM stream_sessions WHERE /*tenant:stream_sessions*/ AND ended_at IS NOT NULL AND ended_at<now()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1)`, id)
 		}
 		if err == nil {
+			var days int
+			err = tx.QueryRowContext(ctx, `SELECT retention_days FROM tenants WHERE id=$1`, id).Scan(&days)
+			if err == nil {
+				cutoff := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+				err = pruneNewsroom(ctx, tx, "", "", &cutoff)
+			}
+		}
+		if err == nil {
 			_, err = tx.ExecContext(ctx, `DELETE FROM tenant_usage WHERE /*tenant:tenant_usage*/ AND window_start<now()-interval '2 days'`)
 		}
 		if err == nil {
@@ -107,7 +116,11 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 	result := map[string]any{"tenant": t, "formatVersion": 1}
 	bytes := 0
 	for _, table := range ProductTables {
-		rows, err := tx.QueryContext(ctx, `SELECT to_jsonb(row) FROM (SELECT * FROM `+table+` WHERE /*tenant:`+table+`*/ LIMIT 250001) row`)
+		query := `SELECT to_jsonb(row) FROM (SELECT * FROM ` + table + ` WHERE /*tenant:` + table + `*/ LIMIT 250001) row`
+		if table == "newsroom_documents" {
+			query = `SELECT jsonb_build_object('document',document,'updatedAt',updated_at) FROM newsroom_documents WHERE /*tenant:newsroom_documents*/ AND id='default'`
+		}
+		rows, err := tx.QueryContext(ctx, query)
 		if err != nil {
 			return nil, err
 		}
@@ -168,6 +181,9 @@ func (s *Store) DeleteViewer(ctx context.Context, actor, tenant, providerUserID,
 		if _, err = tx.ExecContext(ctx, `DELETE FROM bot_quotes WHERE /*tenant:bot_quotes*/ AND lower(author)=lower($1)`, login); err != nil {
 			return err
 		}
+	}
+	if err = pruneNewsroom(ctx, tx, providerUserID, login, nil); err != nil {
+		return err
 	}
 	// Kept state can contain identity-bearing ticker text or legacy payloads.
 	// Clear derived retained state instead of leaving an unsearchable copy.

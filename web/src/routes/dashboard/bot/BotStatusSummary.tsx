@@ -19,6 +19,7 @@ export function BotStatusSummary({ status, audit }: BotStatusSummaryProps) {
       >
         <KeyValues
           items={[
+            ['command storage', status?.commandStorage ?? 'postgres'],
             ['commands', String(status?.commandCount ?? 0)],
             ['timers', String(status?.timerCount ?? 0)],
             ['counters', String(status?.counterCount ?? 0)],
@@ -26,6 +27,7 @@ export function BotStatusSummary({ status, audit }: BotStatusSummaryProps) {
             ['audit events', String(status?.auditCount ?? 0)],
           ]}
         />
+        {status?.commandStorage && status.commandStorage !== 'postgres' ? <Notice>Commands use the shared self-host registry. PostgreSQL is required for bot timers, community data and durable audits.</Notice> : null}
         {status?.loadError ? <Notice tone="warn">Load error: {status.loadError}</Notice> : null}
         {status?.lastAuditError ? <Notice tone="bad">Audit error: {status.lastAuditError}</Notice> : null}
       </Panel>

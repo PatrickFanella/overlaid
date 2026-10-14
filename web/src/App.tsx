@@ -1,4 +1,7 @@
 import type { ReactElement } from 'react';
+import { NewsroomSharedPage } from './routes/NewsroomShared';
+import { OverlayNewsroomPage } from './routes/OverlayNewsroom';
+import { DashboardNewsroomPage } from './routes/dashboard/Newsroom';
 import { DashboardAccountPage } from './routes/dashboard/Account';
 import { LegalPage, PublicStatusPage } from './routes/Legal';
 import { HomePage } from './routes/Home';
@@ -24,18 +27,21 @@ type AppProps = {
 };
 
 const pages: Record<string, () => ReactElement> = {
+  '/newsroom/shared': () => <NewsroomSharedPage />,
   '/': () => <HomePage />,
   '/dashboard/account': () => <DashboardAccountPage />,
   '/privacy': () => <LegalPage kind="privacy" />,
   '/terms': () => <LegalPage kind="terms" />,
   '/status': () => <PublicStatusPage />,
   '/dashboard': () => <DashboardOnAirPage />,
+  '/dashboard/newsroom': () => <DashboardNewsroomPage />,
   '/dashboard/scenes': () => <DashboardScenesPage />,
   '/dashboard/chat': () => <DashboardChatPage />,
   '/dashboard/overlays': () => <DashboardOverlaysPage />,
   '/dashboard/health': () => <DashboardHealthPage />,
   '/dashboard/settings': () => <DashboardSettingsPage />,
   '/dashboard/sessions': () => <DashboardSessionsPage />,
+  '/overlay/newsroom': () => <OverlayNewsroomPage />,
   '/overlay/alerts': () => <OverlayAlertsPage />,
   '/overlay/chat': () => <OverlayChatPage />,
   '/overlay/goals': () => <OverlayGoalsPage />,

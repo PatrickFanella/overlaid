@@ -17,9 +17,10 @@ func commandEventWithData(original ChatCommand, command ChatCommand, aliased boo
 		"alias":           aliased,
 		"args":            truncateCommandText(original.Args, 180),
 		"user":            user.Name,
-		"login":           user.Login,
-		"isBroadcaster":   user.IsBroadcaster,
-		"isModerator":     user.IsModerator,
+		"viewerId":        user.ID, "sourceMessageId": user.MessageID, "isSubscriber": user.IsSubscriber, "isVIP": user.IsVIP,
+		"login":         user.Login,
+		"isBroadcaster": user.IsBroadcaster,
+		"isModerator":   user.IsModerator,
 	}
 	for key, value := range extra {
 		data[key] = value

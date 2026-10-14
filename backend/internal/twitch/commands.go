@@ -1,6 +1,7 @@
 package twitch
 
 import (
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,10 @@ type ChatCommand struct {
 
 type ChatCommandUser struct {
 	Name          string
+	ID            string
+	MessageID     string
+	IsSubscriber  bool
+	IsVIP         bool
 	Login         string
 	IsBroadcaster bool
 	IsModerator   bool
@@ -92,6 +97,9 @@ func chatCommandRole(user ChatCommandUser) string {
 	if user.IsModerator {
 		return "moderator"
 	}
+	if user.IsSubscriber || user.IsVIP {
+		return "supporter"
+	}
 	return "viewer"
 }
 
@@ -107,6 +115,30 @@ func NewCommandProcessor(config CommandProcessorConfig) *CommandProcessor {
 	return &CommandProcessor{aliases: cloneAliases(config.Aliases), custom: newCustomCommandExecutor(config, now),
 		community: &communityCommandExecutor{store: config.Community},
 		builtin:   &builtinCommandExecutor{cooldown: cooldown, now: now, lastRun: make(map[string]time.Time)}}
+}
+
+func (p *CommandProcessor) HandleMessage(text string, user ChatCommandUser) []events.Event {
+	if command, ok := ParseChatCommand(text); ok {
+		return p.Handle(command, user)
+	}
+	if !strings.Contains(text, "http://") && !strings.Contains(text, "https://") {
+		return nil
+	}
+	p.custom.mu.RLock()
+	commands := []CustomCommand{}
+	for _, c := range p.custom.commands {
+		if c.Action == "newsroom_capture" {
+			commands = append(commands, c)
+		}
+	}
+	p.custom.mu.RUnlock()
+	sort.Slice(commands, func(i, j int) bool { return commands[i].Name < commands[j].Name })
+	if len(commands) == 0 {
+		return nil
+	}
+	c := commands[0]
+	command := ChatCommand{Name: c.Name, Args: text}
+	return p.custom.execute(command, command, false, c, user)
 }
 
 func (p *CommandProcessor) Handle(command ChatCommand, user ChatCommandUser) []events.Event {

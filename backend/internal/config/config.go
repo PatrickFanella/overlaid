@@ -8,6 +8,13 @@ import (
 )
 
 type Config struct {
+	BotCommandsFile        string
+	NewsroomFile           string
+	NewsroomAnthropicKey   string
+	NewsroomYouTubeKey     string
+	NewsroomBraveKey       string
+	NewsroomDiscordWebhook string
+	NewsroomAIModel        string
 	DeploymentMode         string
 	VaultKeys              string
 	VaultActiveKey         string
@@ -42,6 +49,13 @@ type Config struct {
 
 func Load() Config {
 	return Config{
+		BotCommandsFile:        env("BOT_COMMANDS_FILE", "/data/bot-commands.json"),
+		NewsroomAnthropicKey:   env("ANTHROPIC_API_KEY", ""),
+		NewsroomYouTubeKey:     env("YOUTUBE_API_KEY", ""),
+		NewsroomBraveKey:       env("BRAVE_SEARCH_API_KEY", ""),
+		NewsroomDiscordWebhook: env("NEWSROOM_DISCORD_WEBHOOK", ""),
+		NewsroomAIModel:        env("NEWSROOM_AI_MODEL", "claude-haiku-4-5-20251001"),
+		NewsroomFile:           env("NEWSROOM_FILE", "/data/newsroom.json"),
 		DeploymentMode:         env("DEPLOYMENT_MODE", "selfhost"),
 		VaultKeys:              env("VAULT_KEYS", ""),
 		VaultActiveKey:         env("VAULT_ACTIVE_KEY", "v1"),

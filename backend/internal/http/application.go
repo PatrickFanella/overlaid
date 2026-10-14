@@ -24,7 +24,11 @@ const csrfCookie = "overlaid_csrf"
 const oauthCookie = "overlaid_oauth"
 
 type tenantTrustKey struct{}
-type tenantTrust struct{ operator, overlay, webhook bool }
+type tenantTrust struct {
+	operator, overlay, webhook bool
+	role                       string
+	actor                      string
+}
 type tenantRuntime struct {
 	server *Server
 	cancel context.CancelFunc
@@ -206,7 +210,7 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 		}
 	}
 	s := newServer(cfg, events.NewBus(32), scope)
-	if s.stateLoadError != "" || s.historyLoadError != "" || s.botLoadError != "" || s.sessionsLoadError != "" || s.dashboardConfigLoadError != "" || s.interactionsLoadErrorValue() != "" {
+	if s.newsroomLoadError != "" || s.stateLoadError != "" || s.historyLoadError != "" || s.botLoadError != "" || s.sessionsLoadError != "" || s.dashboardConfigLoadError != "" || s.interactionsLoadErrorValue() != "" {
 		return nil, errors.New("tenant product storage is unavailable")
 	}
 	s.tenantID = id
@@ -285,7 +289,7 @@ func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Add("Vary", "Origin")
 	}
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Overlay-Operator-Secret,X-Overlay-Webhook-Secret,X-Overlaid-CSRF,X-Overlaid-Tenant")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Overlay-Operator-Secret,X-Overlay-Webhook-Secret,X-Overlaid-CSRF,X-Overlaid-Tenant,X-Newsroom-Add-Token")
 	w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 	if r.Method == http.MethodOptions {
 		if origin != a.origin {
@@ -327,7 +331,11 @@ func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sessionToken := ""
 	requestActor := ""
 	trust := tenantTrust{}
-	if strings.HasPrefix(r.URL.Path, "/api/integrations/webhook/") {
+	if r.URL.Path == "/api/newsroom/quick-add" {
+		id = a.newsroomCapabilityTenant(r.Context(), r.Header.Get("X-Newsroom-Add-Token"), "add")
+	} else if r.URL.Path == "/api/newsroom/shared" {
+		id = a.newsroomCapabilityTenant(r.Context(), r.URL.Query().Get("token"), "share")
+	} else if strings.HasPrefix(r.URL.Path, "/api/integrations/webhook/") {
 		provided := strings.TrimSpace(r.Header.Get("X-Overlay-Webhook-Secret"))
 		if provided == "" {
 			provided = bearerToken(r.Header.Get("Authorization"))
@@ -339,7 +347,7 @@ func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			id = tenantdb.BootstrapID
 		}
 		trust.webhook = id != ""
-	} else if (r.URL.Path == "/api/events/stream" || r.URL.Path == "/api/overlay/display") && r.URL.Query().Get("key") != "" {
+	} else if (r.URL.Path == "/api/events/stream" || r.URL.Path == "/api/overlay/display" || r.URL.Path == "/api/newsroom/overlay") && r.URL.Query().Get("key") != "" {
 		id, _ = a.store.CredentialTenant(r.Context(), r.URL.Query().Get("key"), "overlay")
 		trust.overlay = id != ""
 	} else {
@@ -365,6 +373,8 @@ func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "CSRF validation required", 403)
 				return
 			}
+			trust.actor = actor
+			trust.role = t.Role
 			trust.operator = true
 			trust.overlay = true
 			if r.URL.Path == "/api/auth/twitch/login-url" || r.URL.Path == "/api/auth/twitch/login" {
@@ -400,6 +410,8 @@ func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "tenant permission denied", 403)
 			return
 		}
+
+		trust.role = tenant.Role
 	}
 	stop := context.AfterFunc(a.ctx, cancel)
 	defer stop()
@@ -412,6 +424,15 @@ func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.Handler().ServeHTTP(w, r.WithContext(context.WithValue(ctx, tenantTrustKey{}, trust)))
 }
 func routeAllowed(role, method, path string) bool {
+	if strings.HasPrefix(path, "/api/newsroom") {
+		if path != "/api/newsroom" && path != "/api/newsroom/notes" && path != "/api/newsroom/queue" && path != "/api/newsroom/bundles" && !(strings.HasPrefix(path, "/api/newsroom/broadcasts/") && strings.HasSuffix(path, "/export") && (method == http.MethodGet || method == http.MethodHead)) {
+			return tenancy.Allowed(role, "configure")
+		}
+		if method == http.MethodGet || method == http.MethodHead {
+			return tenancy.Allowed(role, "read") || tenancy.Allowed(role, "moderate")
+		}
+		return tenancy.Allowed(role, "configure") || tenancy.Allowed(role, "moderate")
+	}
 	if strings.HasPrefix(path, "/api/bot/moderation/") {
 		return tenancy.Allowed(role, "moderate")
 	}

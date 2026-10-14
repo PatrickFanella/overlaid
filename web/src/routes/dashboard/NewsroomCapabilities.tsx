@@ -1,0 +1,11 @@
+import { useState } from 'react';
+import { Field, Notice } from './ui';
+type TokenRequest = (kind: string, shelfId: string, revoke: boolean) => Promise<string>;
+export function NewsroomAddToken({ tokenRequest, busy }: { tokenRequest: TokenRequest; busy: boolean }) {
+  const [token, setToken] = useState(''); const [revoke, setRevoke] = useState(false);
+  return <div className="grid gap-3"><p>Use the included browser extension to send the current page directly to the deck or a shelf. Its add token cannot control OBS, read notes, or change provider settings.</p><div className="flex flex-wrap gap-2"><button className="desk-btn" disabled={busy} onClick={async () => { setToken(await tokenRequest('add', '', false)); }}>Generate / rotate add token</button><button className="desk-btn desk-btn--ghost" disabled={busy} onClick={async () => { if (!revoke) { setRevoke(true); return; } await tokenRequest('add', '', true); setToken(''); setRevoke(false); }}>{revoke ? 'Confirm revoke add token' : 'Revoke add token'}</button></div>{token ? <><Notice>Copy this token now; it is shown only here. Rotation invalidates the previous token.</Notice><Field label="Newsroom extension token"><input className="desk-input" readOnly value={token} /></Field></> : null}</div>;
+}
+export function NewsroomShelfSharing({ shelfId, tokenRequest, busy }: { shelfId: string; tokenRequest: TokenRequest; busy: boolean }) {
+  const [url, setURL] = useState(''); const [confirm, setConfirm] = useState(false);
+  return <div className="grid gap-2"><div className="flex flex-wrap gap-2"><button className="desk-btn desk-btn--small" disabled={busy} onClick={async () => { if (!confirm) { setConfirm(true); return; } setConfirm(false); const token = await tokenRequest('share', shelfId, false); if (token) { const link = new URL('/newsroom/shared', window.location.origin); link.searchParams.set('token', token); setURL(link.toString()); } }}>{confirm ? 'Confirm share titles and source URLs' : 'Create / rotate share link'}</button><button className="desk-btn desk-btn--small desk-btn--ghost" disabled={busy} onClick={async () => { await tokenRequest('share', shelfId, true); setURL(''); }}>Revoke share link</button></div>{url ? <Field label="Read-only shelf link"><input className="desk-input" readOnly value={url} /></Field> : null}</div>;
+}

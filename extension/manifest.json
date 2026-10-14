@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Over-Laid Newsroom",
+  "version": "0.1.0",
+  "description": "Send the current page or a link to your Over-Laid reaction deck or shelf.",
+  "permissions": ["storage", "activeTab", "contextMenus"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Add page to Over-Laid Newsroom" },
+  "options_page": "options.html"
+}

@@ -93,6 +93,16 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) buildReadinessReport(ctx context.Context) readinessResponse {
 	checks := []readinessCheck{{Name: "process", Status: "ok"}}
+	if s.botCommandsLoadError != "" {
+		checks = append(checks, readinessCheck{Name: "bot_commands", Status: "degraded", Hint: "Shared command registry import or storage failed; inspect bot command configuration"})
+	}
+	if s.newsroomLoadError != "" || s.newsroom == nil {
+		checks = append(checks, readinessCheck{Name: "newsroom", Status: "degraded", Hint: "Newsroom storage is unavailable; check migrations or the retained file"})
+	} else if _, err := s.newsroom.Get(ctx); err != nil {
+		checks = append(checks, readinessCheck{Name: "newsroom", Status: "degraded", Hint: "Newsroom storage cannot be read"})
+	} else {
+		checks = append(checks, readinessCheck{Name: "newsroom", Status: "ok"})
+	}
 	checks = append(checks, s.buildExposureReadinessChecks()...)
 	checks = append(checks, s.buildEventPipelineReadinessChecks()...)
 	checks = append(checks, s.buildBotReadinessChecks()...)
@@ -251,6 +261,22 @@ func (s *Server) putTwitchInteractions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.commandConfigMu.Lock()
+	defer s.commandConfigMu.Unlock()
+	if registry := s.commandsRegistry(); registry != nil {
+		commands, err := registry.ListCommands(r.Context())
+		if err != nil {
+			http.Error(w, "bot commands unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		aliases := interactions.AliasMap(request.Rules)
+		for _, command := range commands {
+			if _, exists := aliases[command.Name]; exists {
+				http.Error(w, "chat alias conflicts with bot command: "+command.Name, http.StatusConflict)
+				return
+			}
+		}
+	}
 	savedRules, err := s.interactions.Replace(request.Rules)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -530,6 +556,17 @@ func (s *Server) publishEventSubEvent(event events.Event) {
 	s.publishEvent(event)
 	// Persist the chat event before queuing moderation audit foreign keys.
 	s.enforceModerationForEvent(context.Background(), event)
+	if event.Type == events.EventTypeCommand && boolData(event.Data, "newsroomRequest") {
+		select {
+		case s.newsroomChat <- event:
+		default:
+			event.Data = cloneEventData(event.Data)
+			event.Message = "Newsroom command queue full"
+			event.Severity = events.SeverityWarning
+			event.Data["newsroomRequest"] = false
+			s.recordBotAuditForEvent(context.Background(), event)
+		}
+	}
 }
 
 func (s *Server) publishEvent(event events.Event) {
