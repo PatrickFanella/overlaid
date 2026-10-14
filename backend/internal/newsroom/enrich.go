@@ -45,9 +45,11 @@ type ProviderKeys struct {
 	Discord   string `json:"discord"`
 }
 type Enricher struct {
-	Client *http.Client
-	Keys   ProviderKeys
-	Model  string
+	Admit          func(context.Context, string, int64) error
+	SearchReserved bool
+	Client         *http.Client
+	Keys           ProviderKeys
+	Model          string
 }
 
 func HostRisk(raw string) string {
@@ -65,6 +67,9 @@ func HostRisk(raw string) string {
 }
 
 func (e Enricher) Enrich(ctx context.Context, item Item, ai bool) Enrichment {
+	if e.Admit != nil {
+		_ = e.Admit(ctx, "metadata", 1)
+	}
 	result := Enrichment{DMCARisk: HostRisk(item.URL), Topics: []string{}, Coverage: []Coverage{}, AIStatus: "disabled", UpdatedAt: time.Now().UTC()}
 	client := e.Client
 	if client == nil {
@@ -141,6 +146,10 @@ func (e Enricher) Enrich(ctx context.Context, item Item, ai bool) Enrichment {
 			} else {
 				if err := e.analyze(ctx, client, item, &result); err != nil {
 					result.AIStatus = "failed"
+					if errors.Is(err, ErrUsageBlocked) {
+						result.AIStatus = "skipped"
+						result.AIInputEvidence.Outcome = "skipped"
+					}
 					result.Error = err.Error()
 				} else {
 					result.AIStatus = "complete"
@@ -277,6 +286,14 @@ func (e Enricher) youtube(ctx context.Context, client *http.Client, id string, r
 }
 
 func (e Enricher) analyze(ctx context.Context, client *http.Client, item Item, result *Enrichment) error {
+	if result.AIInputEvidence == nil {
+		result.AIInputEvidence = aiEvidence(extractionEvidence(item, *result, false), e.Model)
+	}
+	if e.Admit != nil {
+		if err := e.Admit(ctx, "ai", 1); err != nil {
+			return err
+		}
+	}
 	model := e.Model
 	if model == "" {
 		model = "claude-haiku-4-5-20251001"
@@ -358,6 +375,11 @@ func (e Enricher) Search(ctx context.Context, query string) ([]Coverage, error) 
 	client := e.Client
 	if client == nil {
 		client = PublicClient(nil)
+	}
+	if e.Admit != nil && !e.SearchReserved {
+		if err := e.Admit(ctx, "search", 1); err != nil {
+			return nil, err
+		}
 	}
 	raw, err := fetch(ctx, client, "https://api.search.brave.com/res/v1/web/search?count=6&q="+url.QueryEscape(bounded(query, 300)), map[string]string{"X-Subscription-Token": e.Keys.Brave})
 	if err != nil {

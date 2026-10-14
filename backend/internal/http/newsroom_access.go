@@ -48,7 +48,11 @@ func (s *Server) newsroomQuickAdd(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "newsroom unavailable", 503)
 			return
 		}
-		writeJSON(w, map[string]any{"shelves": d.Shelves, "segments": d.Segments})
+		shelves := []map[string]string{}
+		for _, shelf := range d.Shelves {
+			shelves = append(shelves, map[string]string{"id": shelf.ID, "name": shelf.Name})
+		}
+		writeJSON(w, map[string]any{"shelves": shelves, "segments": d.Segments})
 		return
 	}
 	var input struct {
@@ -109,7 +113,13 @@ func (s *Server) newsroomShared(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	segments := []newsroom.Segment{}
-	for _, segment := range d.Segments {
+	var shelfRow newsroom.Shelf
+	for _, row := range d.Shelves {
+		if row.ID == shelf {
+			shelfRow = row
+		}
+	}
+	for _, segment := range d.ShelfSegments(shelfRow) {
 		for _, item := range items {
 			if item["segmentId"] == segment.ID {
 				segments = append(segments, segment)

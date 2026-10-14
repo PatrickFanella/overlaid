@@ -24,7 +24,7 @@ func (s *Server) newsroomGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Raffle.Command = s.newsroomRaffleCommand(r.Context())
-	writeJSON(w, d)
+	s.newsroomResponse(w, r, d)
 }
 
 func (s *Server) newsroomCommand(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +44,7 @@ func (s *Server) newsroomCommand(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "one newsroom command required", 400)
 		return
 	}
-	if !map[string]bool{"quicklink-save": true, "quicklink-delete": true, "shelf-import": true, "shelf-order": true, "shelf-item-order": true, "mod-status": true, "submit": true, "approve": true, "reject": true, "edit": true, "display-title": true, "review-start": true, "review-extend": true, "review-release": true, "undo-reject": true, "broadcast-start": true, "broadcast-end": true, "broadcast-update": true, "bundle-create": true, "bundle-edit": true, "undo-play": true, "focus": true, "play": true, "stop": true, "shelve": true, "create-shelf": true, "delete-shelf": true, "reorder": true, "delete": true, "settings": true, "batch-submit": true, "clear-pending": true, "create-segment": true, "delete-segment": true, "segment": true, "segment-order": true, "question-submit": true, "question-approve": true, "question-reject": true, "question-show": true, "question-answer": true, "raffle-start": true, "raffle-draw": true, "raffle-reroll": true}[c.Action] {
+	if !map[string]bool{"shelf-preparation": true, "shelf-copy": true, "shelf-send": true, "shelf-segment": true, "segment-target": true, "usage-settings": true, "broadcast-carry": true, "broadcast-boundaries": true, "quicklink-save": true, "quicklink-delete": true, "shelf-import": true, "shelf-order": true, "shelf-item-order": true, "mod-status": true, "submit": true, "approve": true, "reject": true, "edit": true, "display-title": true, "review-start": true, "review-extend": true, "review-release": true, "undo-reject": true, "broadcast-start": true, "broadcast-end": true, "broadcast-update": true, "bundle-create": true, "bundle-edit": true, "undo-play": true, "focus": true, "play": true, "stop": true, "shelve": true, "create-shelf": true, "delete-shelf": true, "reorder": true, "delete": true, "settings": true, "batch-submit": true, "clear-pending": true, "create-segment": true, "delete-segment": true, "segment": true, "segment-order": true, "question-submit": true, "question-approve": true, "question-reject": true, "question-show": true, "question-answer": true, "raffle-start": true, "raffle-draw": true, "raffle-reroll": true}[c.Action] {
 		http.Error(w, "invalid newsroom action", 400)
 		return
 	}
@@ -66,7 +66,7 @@ func (s *Server) newsroomCommand(w http.ResponseWriter, r *http.Request) {
 			c.ActorID = trust.actor
 		}
 	}
-	if strings.HasPrefix(c.Action, "broadcast-") && !c.Owner || c.Force && !c.Owner {
+	if (strings.HasPrefix(c.Action, "broadcast-") || c.Action == "usage-settings") && !c.Owner || c.Force && !c.Owner {
 		http.Error(w, "workspace owner required", 403)
 		return
 	}
@@ -96,7 +96,7 @@ func (s *Server) newsroomCommand(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	d.Raffle.Command = s.newsroomRaffleCommand(r.Context())
-	writeJSON(w, d)
+	s.newsroomResponse(w, r, d)
 }
 
 func (s *Server) newsroomNotes(w http.ResponseWriter, r *http.Request) {

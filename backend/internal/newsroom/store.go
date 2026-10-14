@@ -155,6 +155,15 @@ func (s *Store) Apply(ctx context.Context, c Command) (Document, error) {
 	if _, err = tx.ExecContext(ctx, `UPDATE newsroom_documents SET document=$1,updated_at=now() WHERE /*tenant:newsroom_documents*/ AND id='default'`, raw); err != nil {
 		return Document{}, err
 	}
+	if c.Action == "episode-publish" || c.Action == "episode-revoke" {
+		var hash any
+		if publication, ok := d.Publications[c.ID]; ok {
+			hash = publication.Hash
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO newsroom_documents(id,document,token_hash) VALUES($1,'{}',$2) ON CONFLICT(tenant_id,id) DO UPDATE SET token_hash=excluded.token_hash,updated_at=now()`, "episode:"+c.ID, hash); err != nil {
+			return Document{}, err
+		}
+	}
 	if err = tx.Commit(); err != nil {
 		return Document{}, err
 	}

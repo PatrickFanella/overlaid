@@ -47,7 +47,7 @@ func PublicClient(reserve func(context.Context) error) *http.Client {
 		if req.URL.Scheme != "http" && req.URL.Scheme != "https" || req.URL.User != nil {
 			return errors.New("redirect refused")
 		}
-		if via[0].URL.Host != req.URL.Host && (via[0].Header.Get("x-api-key") != "" || via[0].Header.Get("X-Subscription-Token") != "" || via[0].URL.Query().Get("key") != "") {
+		if via[0].Header.Get("x-api-key") != "" || via[0].Header.Get("X-Subscription-Token") != "" || via[0].URL.Query().Get("key") != "" {
 			return errors.New("provider redirect refused")
 		}
 		if via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {

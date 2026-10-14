@@ -174,7 +174,7 @@ func TestUncertainDeliveryAndLeaseFailClosed(t *testing.T) {
 func TestShelfImportPreservesTitleAndSegments(t *testing.T) {
 	s, _ := NewFile("")
 	d := applyWorkflowTest(t, s, Command{Action: "shelf-import", Name: "Shared", ImportSegments: []Segment{{ID: "source", Name: "Headlines"}}, ImportItems: []ShelfLink{{URL: "https://example.org/source", Title: "Original title", SegmentID: "source"}, {URL: "https://example.org/ungrouped", Title: "Ungrouped"}}})
-	if d.Items[0].Title != "Original title" || d.Items[0].SegmentID == "source" || d.Items[0].SegmentID != d.Segments[0].ID || d.Items[1].SegmentID != "" {
+	if d.Items[0].Title != "Original title" || d.Items[0].SegmentID == "source" || d.Items[0].SegmentID != d.Shelves[0].Segments[0].ID || d.Items[1].SegmentID != "" {
 		t.Fatal("segment import flattened or reused IDs")
 	}
 }

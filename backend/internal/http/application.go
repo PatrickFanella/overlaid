@@ -333,6 +333,8 @@ func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	trust := tenantTrust{}
 	if r.URL.Path == "/api/newsroom/quick-add" {
 		id = a.newsroomCapabilityTenant(r.Context(), r.Header.Get("X-Newsroom-Add-Token"), "add")
+	} else if r.URL.Path == "/api/newsroom/episode" {
+		id = a.newsroomCapabilityTenant(r.Context(), r.URL.Query().Get("token"), "episode")
 	} else if r.URL.Path == "/api/newsroom/shared" {
 		id = a.newsroomCapabilityTenant(r.Context(), r.URL.Query().Get("token"), "share")
 	} else if strings.HasPrefix(r.URL.Path, "/api/integrations/webhook/") {
@@ -425,7 +427,10 @@ func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 func routeAllowed(role, method, path string) bool {
 	if strings.HasPrefix(path, "/api/newsroom") {
-		if path != "/api/newsroom" && path != "/api/newsroom/notes" && path != "/api/newsroom/queue" && path != "/api/newsroom/bundles" && !(strings.HasPrefix(path, "/api/newsroom/broadcasts/") && strings.HasSuffix(path, "/export") && (method == http.MethodGet || method == http.MethodHead)) {
+		if path == "/api/newsroom/usage" || strings.HasSuffix(path, "/episode") || strings.HasSuffix(path, "/discord") && strings.Contains(path, "/broadcasts/") || path == "/api/newsroom/automation" {
+			return role == "owner"
+		}
+		if path != "/api/newsroom" && path != "/api/newsroom/notes" && path != "/api/newsroom/queue" && path != "/api/newsroom/bundles" && path != "/api/newsroom/broadcasts" && path != "/api/newsroom/activity" && !(strings.HasPrefix(path, "/api/newsroom/broadcasts/") && strings.HasSuffix(path, "/export") && (method == http.MethodGet || method == http.MethodHead)) {
 			return tenancy.Allowed(role, "configure")
 		}
 		if method == http.MethodGet || method == http.MethodHead {

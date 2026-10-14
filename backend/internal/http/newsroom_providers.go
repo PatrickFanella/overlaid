@@ -51,7 +51,7 @@ func (s *Server) newsroomProviderKeys(ctx context.Context) (newsroom.ProviderKey
 }
 func (s *Server) newsroomEnricher(ctx context.Context) (newsroom.Enricher, error) {
 	keys, err := s.newsroomProviderKeys(ctx)
-	return newsroom.Enricher{Keys: keys, Model: s.config.NewsroomAIModel, Client: newsroom.PublicClient(s.newsroom.ReserveHTTP)}, err
+	return newsroom.Enricher{Admit: s.newsroom.AdmitPaid, Keys: keys, Model: s.config.NewsroomAIModel, Client: newsroom.PublicClient(s.newsroom.ReserveHTTP)}, err
 }
 func (s *Server) newsroomProviderStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -267,10 +267,43 @@ func (s *Server) newsroomCoverage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "provider unavailable", 503)
 		return
 	}
+	count := int64(1)
+	if len(d.Settings.PreferredSources) > 0 {
+		count = 2
+	}
+	if e.Keys.Brave == "" {
+		http.Error(w, "Brave Search key is not configured", 409)
+		return
+	}
+	if err := s.newsroom.AdmitPaid(r.Context(), "search", count); err != nil {
+		http.Error(w, err.Error(), 409)
+		return
+	}
+	e.SearchReserved = true
 	coverage, err := e.Search(r.Context(), item.Title)
 	if err != nil {
 		http.Error(w, err.Error(), 502)
 		return
+	}
+	if len(d.Settings.PreferredSources) > 0 {
+		sites := []string{}
+		for _, host := range d.Settings.PreferredSources {
+			sites = append(sites, "site:"+host)
+		}
+		targeted, err := e.Search(r.Context(), item.Title+" ("+strings.Join(sites, " OR ")+")")
+		if err != nil {
+			http.Error(w, err.Error(), 502)
+			return
+		}
+		seen := map[string]bool{}
+		combined := []newsroom.Coverage{}
+		for _, row := range append(targeted, coverage...) {
+			if !seen[row.URL] {
+				seen[row.URL] = true
+				combined = append(combined, row)
+			}
+		}
+		coverage = combined
 	}
 	rank := func(raw string) bool {
 		u, err := url.Parse(raw)
@@ -296,7 +329,7 @@ func (s *Server) newsroomCoverage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not retain coverage", 503)
 		return
 	}
-	writeJSON(w, out)
+	s.newsroomResponse(w, r, out)
 }
 
 func (s *Server) newsroomBriefing(w http.ResponseWriter, r *http.Request) {
@@ -324,7 +357,7 @@ func (s *Server) newsroomBriefing(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "briefing could not be saved", 503)
 		return
 	}
-	writeJSON(w, out)
+	s.newsroomResponse(w, r, out)
 }
 func (s *Server) newsroomDiscord(w http.ResponseWriter, r *http.Request) {
 	if s.newsroom == nil {
@@ -403,7 +436,7 @@ func (s *Server) newsroomPlaylist(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, d)
+	s.newsroomResponse(w, r, d)
 }
 
 func (s *Server) newsroomAnnounce(w http.ResponseWriter, r *http.Request) {

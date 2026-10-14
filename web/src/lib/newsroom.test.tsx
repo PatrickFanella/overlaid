@@ -71,3 +71,15 @@ it('renders a newly attached bundle when provider coverage is null',()=>{
  const doc=demoNewsroom();const item={...doc.items[0],bundleId:'bundle',enrichment:{coverage:null} as unknown as NonNullable<typeof doc.items[0]['enrichment']>};doc.bundles=[{id:'bundle',revision:0,title:'Story',prepNotes:'',sources:[],leadSource:{title:item.title,url:item.url,kind:item.kind},leadId:item.id,createdAt:'',updatedAt:''}];
  expect(renderToStaticMarkup(<NewsroomBundleCard item={item} doc={doc} command={async()=>true} busy={false} curate/>)).toContain('Save story bundle');
 });
+
+it('preserves timing in portable shelf exports without exposing preparation settings',()=>{
+ const doc=demoNewsroom();doc.shelves[0]={...doc.shelves[0],template:true,prepPrompts:'Private checklist',segments:[{id:'timed',name:'Opening',targetMinutes:15},{id:'empty',name:'Research',targetMinutes:20}]};doc.items[2].segmentId='timed';const exported=shelfExport(doc,'next-show');expect(exported.segments).toHaveLength(2);expect(exported.segments[0].targetMinutes).toBe(15);expect(JSON.stringify(exported)).not.toContain('Private checklist');expect(JSON.stringify(exported)).not.toContain('template');
+});
+it('places ungrouped stories at the saved position without dropping untimed material',()=>{
+ const doc=demoNewsroom();doc.segments=[{id:'a',name:'Opening',targetMinutes:15},{id:'b',name:'Closing'}];doc.items[0].segmentId='a';doc.items.push({...doc.items[0],id:'end',segmentId:'b'},{...doc.items[0],id:'ungrouped',segmentId:''});doc.order=['community','end','ungrouped'];doc.ungroupedPosition=1;expect(orderedNewsroomItems(doc).map(item=>item.id)).toEqual(['community','ungrouped','end']);
+});
+
+it('renders public episodes from the allowlisted fields without extra stored keys',async()=>{
+ const {EpisodeContent}=await import('../routes/dashboard/NewsroomShowExtras');const episode={title:'Public title',date:'2026-10-14',stories:[{title:'Story',url:'https://example.org/story',timestamp:'00:10'}],prepPrompts:'PRIVATE CHECKLIST',reviewToken:'PRIVATE TOKEN'};
+ const html=renderToStaticMarkup(<EpisodeContent episode={episode}/>);expect(html).toContain('Public title');expect(html).toContain('00:10');expect(html).not.toContain('PRIVATE CHECKLIST');expect(html).not.toContain('PRIVATE TOKEN');
+});
