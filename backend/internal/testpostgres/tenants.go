@@ -180,6 +180,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(serviceMigration); err != nil {
 		t.Fatal(err)
 	}
+	rawDelegations, err := os.ReadFile(filepath.Join(root, "0012_shared_bot_delegations.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.NewReplacer("overlaid_runtime", role, "overlaid_worker", worker, "overlaid_bot_admin", botAdmin).Replace(string(rawDelegations))); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = owner.Exec(`ALTER ROLE ` + botAdmin + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}

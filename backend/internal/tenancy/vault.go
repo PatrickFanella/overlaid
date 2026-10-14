@@ -113,6 +113,9 @@ func (s *Store) SaveConnection(ctx context.Context, k Keyring, tenant, actor, pr
 	if err != nil {
 		return err
 	}
+	if err = revokeSharedBinding(ctx, tx); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -163,6 +166,9 @@ func (s *Store) RevokeConnection(ctx context.Context, tenant, actor, provider st
 	}
 	diff, _ := json.Marshal(map[string]string{"provider": provider})
 	if _, err = tx.ExecContext(ctx, `INSERT INTO tenant_change_audit(tenant_id,actor_account_id,action,diff) VALUES($1,$2,'connection.revoke',$3)`, tenant, actor, diff); err != nil {
+		return err
+	}
+	if err = revokeSharedBinding(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -27,12 +27,13 @@ type ServiceBotAccount struct {
 	Revoked  bool     `json:"revoked"`
 }
 type ServiceBotReceipt struct {
-	ID           string    `json:"id"`
-	BotAccountID string    `json:"botAccountId"`
-	Revision     int64     `json:"revision"`
-	Action       string    `json:"action"`
-	Principal    string    `json:"principal"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID              string    `json:"id"`
+	BotAccountID    string    `json:"botAccountId"`
+	Revision        int64     `json:"revision"`
+	Action          string    `json:"action"`
+	Principal       string    `json:"principal"`
+	CreatedAt       time.Time `json:"createdAt"`
+	CatalogRevision *int64    `json:"catalogRevision,omitempty"`
 }
 
 // OpenBotAdminStore rejects effective and reachable role privileges, including
@@ -66,7 +67,7 @@ func (s *BotAdminStore) validate(ctx context.Context) error {
  EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER')) AND
  (r.rolsuper OR r.rolbypassrls OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relowner=r.oid))),
  EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,pg_roles r
- WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relname NOT IN('service_bot_accounts','service_bot_account_audit')
+ WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relname NOT IN('service_bot_accounts','service_bot_account_audit','service_bot_catalog')
  AND (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER'))
  AND has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')),
  (SELECT count(*)=2 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity AND
@@ -75,6 +76,15 @@ func (s *BotAdminStore) validate(ctx context.Context) error {
  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname IN('service_bot_accounts','service_bot_account_audit'))
  AND has_table_privilege(current_user,'service_bot_accounts','SELECT') AND has_table_privilege(current_user,'service_bot_accounts','INSERT') AND has_table_privilege(current_user,'service_bot_accounts','UPDATE')
  AND has_table_privilege(current_user,'service_bot_account_audit','SELECT') AND has_table_privilege(current_user,'service_bot_account_audit','INSERT') AND has_table_privilege(current_user,'service_bot_account_audit','DELETE')`).Scan(&unsafe, &private, &ready)
+	if err == nil && !unsafe && !private && ready {
+		err = s.db.QueryRowContext(ctx, `SELECT c.relrowsecurity AND c.relforcerowsecurity AND
+		(SELECT count(*)=2 AND bool_and(
+ (p.polname='catalog_admin' AND p.polcmd='*' AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles) AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE pg_has_role(current_user,role_id,'MEMBER')))
+ OR (p.polname='catalog_runtime' AND p.polcmd='r' AND pg_get_expr(p.polqual,p.polrelid)='available' AND p.polwithcheck IS NULL AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles))
+ ) FROM pg_policy p WHERE p.polrelid=c.oid)
+		AND has_table_privilege(current_user,c.oid,'SELECT') AND has_table_privilege(current_user,c.oid,'INSERT') AND has_table_privilege(current_user,c.oid,'UPDATE')
+		FROM pg_class c WHERE c.oid='service_bot_catalog'::regclass`).Scan(&ready)
+	}
 	if err != nil || unsafe || private || !ready {
 		return errors.New("separate restricted bot administrator role and forced RLS required")
 	}
@@ -146,6 +156,9 @@ func (s *BotAdminStore) SaveValidated(ctx context.Context, k Keyring, c BotCrede
 	if err != nil {
 		return ServiceBotAccount{}, err
 	}
+	if _, err = tx.ExecContext(ctx, `UPDATE service_bot_catalog SET available=false,grant_revision=$2,revision=revision+1,login=$3 WHERE id=$1`, result.ID, result.Revision, result.Login); err != nil {
+		return ServiceBotAccount{}, err
+	}
 	if err = serviceBotAudit(ctx, tx, result.ID, result.Revision, "grant"); err != nil {
 		return ServiceBotAccount{}, err
 	}
@@ -155,12 +168,16 @@ func (s *BotAdminStore) SaveValidated(ctx context.Context, k Keyring, c BotCrede
 	return result, nil
 }
 
-func serviceBotAudit(ctx context.Context, tx *sql.Tx, id string, revision int64, action string) error {
+func serviceBotAudit(ctx context.Context, tx *sql.Tx, id string, revision int64, action string, catalogRevision ...int64) error {
 	// Only receipt maintenance takes this lock, always after the account lock.
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('service_bot_audit:'||current_database()||':'||current_schema(),0))`); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO service_bot_account_audit(bot_account_id,revision,action) VALUES($1,$2,$3)`, id, revision, action); err != nil {
+	var publicationRevision any
+	if len(catalogRevision) > 0 {
+		publicationRevision = catalogRevision[0]
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO service_bot_account_audit(bot_account_id,revision,action,catalog_revision) VALUES($1,$2,$3,$4)`, id, revision, action, publicationRevision); err != nil {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `DELETE FROM service_bot_account_audit WHERE created_at<now()-interval '90 days' OR id IN(SELECT id FROM service_bot_account_audit ORDER BY created_at DESC,id DESC OFFSET 1024)`)
@@ -220,6 +237,9 @@ func (s *BotAdminStore) Resolve(ctx context.Context, k Keyring, id string, expec
 	if _, err = tx.ExecContext(ctx, `UPDATE service_bot_accounts SET ciphertext=$2,key_version=$3,login=$4,scopes=$5 WHERE id=$1`, id, ciphertext, k.Active, updated.Login, scopes); err != nil {
 		return BotCredential{}, err
 	}
+	if _, err = tx.ExecContext(ctx, `UPDATE service_bot_catalog SET login=$2 WHERE id=$1`, id, updated.Login); err != nil {
+		return BotCredential{}, err
+	}
 	if err = serviceBotAudit(ctx, tx, id, revision, "refresh"); err != nil {
 		return BotCredential{}, err
 	}
@@ -245,6 +265,9 @@ func (s *BotAdminStore) Revoke(ctx context.Context, id string, expected int64) (
 		return 0, ErrBotRevision
 	}
 	if err != nil {
+		return 0, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE service_bot_catalog SET available=false,grant_revision=$2,revision=revision+1 WHERE id=$1`, id, revision); err != nil {
 		return 0, err
 	}
 	if err = serviceBotAudit(ctx, tx, id, revision, "revoke"); err != nil {
@@ -275,7 +298,7 @@ func (s *BotAdminStore) Receipts(ctx context.Context, limit int) ([]ServiceBotRe
 	if limit < 1 || limit > 100 {
 		return nil, errors.New("receipt limit must be between 1 and 100")
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,bot_account_id,revision,action,principal,created_at FROM service_bot_account_audit ORDER BY created_at DESC,id DESC LIMIT $1`, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,bot_account_id,revision,action,principal,created_at,catalog_revision FROM service_bot_account_audit ORDER BY created_at DESC,id DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +306,7 @@ func (s *BotAdminStore) Receipts(ctx context.Context, limit int) ([]ServiceBotRe
 	items := []ServiceBotReceipt{}
 	for rows.Next() {
 		var r ServiceBotReceipt
-		if err = rows.Scan(&r.ID, &r.BotAccountID, &r.Revision, &r.Action, &r.Principal, &r.CreatedAt); err != nil {
+		if err = rows.Scan(&r.ID, &r.BotAccountID, &r.Revision, &r.Action, &r.Principal, &r.CreatedAt, &r.CatalogRevision); err != nil {
 			return nil, err
 		}
 		items = append(items, r)
