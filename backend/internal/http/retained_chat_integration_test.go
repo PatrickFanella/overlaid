@@ -122,7 +122,7 @@ func TestRetainedApplicationRegistryNewsroomEchoAndRestart(t *testing.T) {
 	var sends atomic.Int32
 	previous := twitchHTTPClient
 	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() != twitchChatMessagesEndpoint {
+		if r.URL.String() != "https://api.twitch.tv/helix/chat/messages" {
 			return nil, errors.New("unexpected fixture provider call")
 		}
 		sends.Add(1)

@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -9,6 +11,8 @@ import (
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/twitchsend"
 )
 
 func TestOutboundChatResponseFromEvent(t *testing.T) {
@@ -18,6 +22,24 @@ func TestOutboundChatResponseFromEvent(t *testing.T) {
 	response, ok := outboundChatResponseFromEvent(event)
 	if !ok || response.Message != "hello chat" {
 		t.Fatalf("unexpected chat response %#v ok=%v", response, ok)
+	}
+}
+
+func TestPublicationPreservesUncertainReceiptAndActionIdentity(t *testing.T) {
+	s := NewServer(config.Config{TwitchClientID: "client"}, events.NewBus(4))
+	s.twitch.token = &twitchTokenInfo{AccessToken: "access", Scope: []string{"user:write:chat"}, UserID: "host", ExpiresAt: time.Now().Add(time.Hour)}
+	old := twitchHTTPClient
+	t.Cleanup(func() { twitchHTTPClient = old })
+	calls := 0
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, context.DeadlineExceeded
+	})}
+	event := events.NewCommand("twitch", "response", "", events.SeveritySuccess, map[string]any{"chatResponse": map[string]any{"message": "hello"}})
+	err := s.publishEventContext(t.Context(), event)
+	var deliveryErr *twitchsend.DeliveryError
+	if !errors.As(err, &deliveryErr) || !errors.Is(err, context.DeadlineExceeded) || deliveryErr.Receipt.ActionID != event.ID || deliveryErr.Receipt.Status != platform.Uncertain || calls != 1 {
+		t.Fatalf("lost delivery outcome/action: %v, calls=%d", err, calls)
 	}
 }
 
