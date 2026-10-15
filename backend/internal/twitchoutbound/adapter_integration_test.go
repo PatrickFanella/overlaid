@@ -61,6 +61,9 @@ func (p *provider) RoundTrip(r *http.Request) (*http.Response, error) {
 		p.validations++
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "OAuth ")
 		subject := "456"
+		if strings.HasPrefix(token, "shared") {
+			subject = "999"
+		}
 		if strings.HasPrefix(token, "bot") {
 			subject = "123"
 		}
@@ -89,6 +92,9 @@ func (p *provider) RoundTrip(r *http.Request) (*http.Response, error) {
 			return response(400, `{"message":"PRIVATE"}`), nil
 		}
 		access := "host-new"
+		if strings.HasPrefix(r.Form.Get("refresh_token"), "shared") {
+			access = "shared-new"
+		}
 		if strings.HasPrefix(r.Form.Get("refresh_token"), "bot") {
 			access = "bot-new"
 		}
@@ -96,13 +102,13 @@ func (p *provider) RoundTrip(r *http.Request) (*http.Response, error) {
 		return response(200, string(raw)), nil
 	case "api.twitch.tv/helix/moderation/moderators":
 		p.roles++
-		if r.URL.Query().Get("broadcaster_id") != "456" || r.URL.Query().Get("user_id") != "123" || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer host") {
+		if r.URL.Query().Get("broadcaster_id") != "456" || (r.URL.Query().Get("user_id") != "123" && r.URL.Query().Get("user_id") != "999") || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer host") {
 			return response(403, `{"message":"PRIVATE wrong role scope"}`), nil
 		}
 		if !p.moderator {
 			return response(200, `{"data":[]}`), nil
 		}
-		return response(200, `{"data":[{"user_id":"123"}]}`), nil
+		return response(200, `{"data":[{"user_id":"`+r.URL.Query().Get("user_id")+`"}]}`), nil
 	case "api.twitch.tv/helix/chat/messages":
 		p.sends++
 		var body struct {
@@ -165,7 +171,7 @@ func newFixture(t *testing.T, own bool) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = x.pacer.Close() })
-	x.p = &provider{moderator: true, scopes: map[string][]string{"456": {"user:write:chat", "moderation:read"}, "123": {"user:write:chat"}}}
+	x.p = &provider{moderator: true, scopes: map[string][]string{"456": {"user:write:chat", "moderation:read"}, "123": {"user:write:chat"}, "999": {"user:write:chat", "user:bot"}}}
 	x.adapter, err = New(x.store, x.keys, Config{ClientID: "client", ClientSecret: "client-secret", Client: &http.Client{Transport: x.p}})
 	if err != nil {
 		t.Fatal(err)

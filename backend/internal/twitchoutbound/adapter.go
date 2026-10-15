@@ -30,6 +30,7 @@ type Adapter struct {
 	keys   tenancy.Keyring
 	config Config
 	client *http.Client
+	shared *tenancy.BotExecutionStore
 }
 
 func New(store *tenancy.Store, keys tenancy.Keyring, c Config) (*Adapter, error) {
@@ -79,7 +80,7 @@ func (a *Adapter) entitled(ctx context.Context, tenant string) (*tenantdb.DB, er
 
 // Authorize is the trusted callback supplied to the fenced executor. Only
 // chat.send/reply user-token effects are supported. Active shared selection
-// fails closed until a separate restricted service-vault adapter exists.
+// fails closed unless NewShared supplied a validated service execution pool.
 func (a *Adapter) Authorize(ctx context.Context, t platformoutbound.Target) (platformoutbound.Authorization, error) {
 	authDeadline := time.Now().Add(10 * time.Second)
 	if t.Deadline.Before(authDeadline) {
@@ -98,7 +99,7 @@ func (a *Adapter) Authorize(ctx context.Context, t platformoutbound.Target) (pla
 	if err != nil {
 		return platformoutbound.Authorization{}, selectionError(err)
 	}
-	if selection.Shared || !validUser(selection.SenderID) {
+	if selection.Shared && a.shared == nil || !validUser(selection.SenderID) {
 		return platformoutbound.Authorization{}, platformoutbound.ErrDenied
 	}
 	broadcaster, err := a.broadcaster(ctx, t.TenantID, t.ChannelID)
@@ -106,7 +107,26 @@ func (a *Adapter) Authorize(ctx context.Context, t platformoutbound.Target) (pla
 		return platformoutbound.Authorization{}, err
 	}
 	sender := broadcaster
-	if selection.BotAccountID != "" {
+	if selection.Shared {
+		if err = a.consent(ctx, t, selection); err != nil {
+			return platformoutbound.Authorization{}, err
+		}
+		var validationErr error
+		sender, err = a.shared.Resolve(ctx, a.keys, selection.SharedBotID, selection.GrantRevision, selection.CatalogRevision, func(c tenancy.BotCredential) (tenancy.BotCredential, error) {
+			updated, e := a.credential(ctx, c, selection.SenderID)
+			validationErr = e
+			return updated, e
+		})
+		if validationErr != nil {
+			return platformoutbound.Authorization{}, validationErr
+		}
+		if err != nil {
+			return platformoutbound.Authorization{}, selectionError(err)
+		}
+		if !slices.Contains(sender.Scopes, "user:bot") {
+			return platformoutbound.Authorization{}, platformoutbound.ErrDenied
+		}
+	} else if selection.BotAccountID != "" {
 		var validationErr error
 		sender, err = a.store.ResolveBoundBotAccount(ctx, a.keys, t.TenantID, t.ChannelID, selection.BotAccountID, func(c tenancy.BotCredential) (tenancy.BotCredential, error) {
 			updated, e := a.credential(ctx, c, selection.SenderID)
@@ -160,7 +180,7 @@ func (a *Adapter) Authorize(ctx context.Context, t platformoutbound.Target) (pla
 }
 
 func selectionError(err error) error {
-	if errors.Is(err, tenancy.ErrDenied) {
+	if errors.Is(err, tenancy.ErrDenied) || errors.Is(err, tenancy.ErrBotRevision) {
 		return platformoutbound.ErrDenied
 	}
 	return errUnavailable
@@ -182,8 +202,11 @@ func (a *Adapter) current(ctx context.Context, t platformoutbound.Target, bindin
 	if err != nil {
 		return selectionError(err)
 	}
-	if current.Shared || current.Binding != binding {
+	if current.Binding != binding {
 		return platformoutbound.ErrDenied
+	}
+	if current.Shared {
+		return a.consent(ctx, t, current)
 	}
 	return nil
 }

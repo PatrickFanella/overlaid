@@ -20,6 +20,7 @@ type TenantFixture struct {
 	RuntimeURL        string
 	WorkerURL         string
 	BotAdminURL       string
+	BotExecutorURL    string
 	PacerURL          string
 	OutboundWorkerURL string
 	Schema            string
@@ -58,6 +59,7 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	botAdmin := "tenant_bot_admin_" + suffix
 	pacer := "tenant_pacer_" + suffix
 	outbound := "tenant_outbound_" + suffix
+	botExecutor := "tenant_bot_executor_" + suffix
 	password := hex.EncodeToString(nonce[:]) + "-fixture"
 	if _, err = admin.Exec(`CREATE SCHEMA ` + schema + `; CREATE ROLE ` + role + ` LOGIN PASSWORD '` + password + `' NOSUPERUSER NOBYPASSRLS;`); err != nil {
 		admin.Close()
@@ -103,6 +105,15 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 			t.Error(err)
 		} else if outboundExists {
 			if _, err := admin.Exec(`DROP OWNED BY ` + outbound + `; DROP ROLE ` + outbound); err != nil {
+				t.Error(err)
+			}
+		}
+
+		var executorExists bool
+		if err := admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)`, botExecutor).Scan(&executorExists); err != nil {
+			t.Error(err)
+		} else if executorExists {
+			if _, err := admin.Exec(`DROP OWNED BY ` + botExecutor + `; DROP ROLE ` + botExecutor); err != nil {
 				t.Error(err)
 			}
 		}
@@ -244,6 +255,19 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 		t.Fatal(err)
 	}
 
+	rawSharedExecution, err := os.ReadFile(filepath.Join(root, "0018_shared_bot_execution.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.NewReplacer("overlaid_bot_executor", botExecutor, "overlaid_bot_admin", botAdmin).Replace(string(rawSharedExecution))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(`ALTER ROLE ` + botExecutor + ` LOGIN PASSWORD '` + password + `'`); err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(botExecutor, password)
+	botExecutorURL := u.String()
+
 	if _, err = owner.Exec(`ALTER ROLE ` + outbound + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}
@@ -266,5 +290,5 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	u.User = url.UserPassword(worker, password)
 	workerURL := u.String()
 	u.User = url.UserPassword(role, password)
-	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, BotAdminURL: botAdminURL, PacerURL: pacerURL, OutboundWorkerURL: outboundURL, Schema: schema, Migrate: migrate}
+	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, BotAdminURL: botAdminURL, BotExecutorURL: botExecutorURL, PacerURL: pacerURL, OutboundWorkerURL: outboundURL, Schema: schema, Migrate: migrate}
 }

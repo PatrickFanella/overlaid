@@ -67,20 +67,20 @@ func (s *BotAdminStore) validate(ctx context.Context) error {
  EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER')) AND
  (r.rolsuper OR r.rolbypassrls OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relowner=r.oid))),
  EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,pg_roles r
- WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relname NOT IN('service_bot_accounts','service_bot_account_audit','service_bot_catalog')
+ WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relname NOT IN('service_bot_accounts','service_bot_account_audit','service_bot_catalog','service_bot_execution_receipts')
  AND (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER'))
  AND has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')),
  (SELECT count(*)=2 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity AND
  (SELECT count(*)=1 AND bool_and(p.polname='service_bot_admin' AND p.polcmd='*' AND
- EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE role_id<>0 AND pg_has_role(current_user,role_id,'MEMBER'))) FROM pg_policy p WHERE p.polrelid=c.oid))
+ EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE role_id<>0 AND pg_has_role(current_user,role_id,'MEMBER'))) FROM pg_policy p WHERE p.polrelid=c.oid AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE CASE WHEN role_id=0 THEN true ELSE pg_has_role(current_user,role_id,'MEMBER') OR pg_has_role(session_user,role_id,'MEMBER') END)))
  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname IN('service_bot_accounts','service_bot_account_audit'))
  AND has_table_privilege(current_user,'service_bot_accounts','SELECT') AND has_table_privilege(current_user,'service_bot_accounts','INSERT') AND has_table_privilege(current_user,'service_bot_accounts','UPDATE')
  AND has_table_privilege(current_user,'service_bot_account_audit','SELECT') AND has_table_privilege(current_user,'service_bot_account_audit','INSERT') AND has_table_privilege(current_user,'service_bot_account_audit','DELETE')`).Scan(&unsafe, &private, &ready)
 	if err == nil && !unsafe && !private && ready {
 		err = s.db.QueryRowContext(ctx, `SELECT c.relrowsecurity AND c.relforcerowsecurity AND
-		(SELECT count(*)=2 AND bool_and(
+		(SELECT count(*)=3 AND bool_and(
  (p.polname='catalog_admin' AND p.polcmd='*' AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles) AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE pg_has_role(current_user,role_id,'MEMBER')))
- OR (p.polname='catalog_runtime' AND p.polcmd='r' AND pg_get_expr(p.polqual,p.polrelid)='available' AND p.polwithcheck IS NULL AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles))
+ OR (p.polname IN('catalog_runtime','catalog_executor') AND p.polcmd='r' AND pg_get_expr(p.polqual,p.polrelid)='available' AND p.polwithcheck IS NULL AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles))
  ) FROM pg_policy p WHERE p.polrelid=c.oid)
 		AND has_table_privilege(current_user,c.oid,'SELECT') AND has_table_privilege(current_user,c.oid,'INSERT') AND has_table_privilege(current_user,c.oid,'UPDATE')
 		FROM pg_class c WHERE c.oid='service_bot_catalog'::regclass`).Scan(&ready)
