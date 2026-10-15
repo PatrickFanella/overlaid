@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -135,6 +135,9 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 		if table == "platform_outbound_actions" {
 			query = `SELECT jsonb_build_object('actionId',id,'eventId',event_id,'connectionId',connection_id,'state',state,'code',code,'providerMessageId',provider_message_id,'failure',failure,'retryAfter',retry_after_ns,'createdAt',created_at,'startedAt',started_at,'finishedAt',finished_at) FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ LIMIT 250001`
 		}
+		if table == "platform_moderation_actions" {
+			query = `SELECT jsonb_build_object('actionId',id,'eventId',event_id,'connectionId',connection_id,'capability',capability,'state',state,'code',code,'failure',failure,'retryAfter',retry_after_ns,'createdAt',created_at,'startedAt',started_at,'finishedAt',finished_at) FROM platform_moderation_actions WHERE /*tenant:platform_moderation_actions*/ LIMIT 250001`
+		}
 		if table == "platform_dispatch_receipts" {
 			query = `SELECT jsonb_build_object('eventId',event_id,'connectionId',connection_id,'state',state,'code',code,'startedAt',started_at,'finishedAt',finished_at) FROM platform_dispatch_receipts WHERE /*tenant:platform_dispatch_receipts*/ LIMIT 250001`
 		}
@@ -199,6 +202,9 @@ func (s *Store) DeleteViewer(ctx context.Context, actor, tenant, providerUserID,
 		if _, err = tx.ExecContext(ctx, `DELETE FROM bot_quotes WHERE /*tenant:bot_quotes*/ AND lower(author)=lower($1)`, login); err != nil {
 			return err
 		}
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM platform_moderation_actions WHERE /*tenant:platform_moderation_actions*/ AND target_actor_id=$1`, providerUserID); err != nil {
+		return err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM normalized_chat_events WHERE /*tenant:normalized_chat_events*/ AND (actor_id=$1 OR ($2<>'' AND actor_login=lower($2)))`, providerUserID, login); err != nil {
 		return err

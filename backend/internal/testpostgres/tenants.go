@@ -265,6 +265,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(`ALTER ROLE ` + botExecutor + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}
+	rawModeration, err := os.ReadFile(filepath.Join(root, "0019_moderation_actions.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.ReplaceAll(string(rawModeration), "overlaid_runtime", role)); err != nil {
+		t.Fatal(err)
+	}
 	u.User = url.UserPassword(botExecutor, password)
 	botExecutorURL := u.String()
 
