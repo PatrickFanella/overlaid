@@ -236,6 +236,14 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(strings.ReplaceAll(string(rawOutboundWorker), "overlaid_outbound_worker", outbound)); err != nil {
 		t.Fatal(err)
 	}
+	rawSenderSelection, err := os.ReadFile(filepath.Join(root, "0017_sender_selection.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(string(rawSenderSelection)); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err = owner.Exec(`ALTER ROLE ` + outbound + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}

@@ -1,10 +1,10 @@
 # Fenced outbound execution
 
-`platformoutbound.NewExecutor` joins the retained action ledger, restricted pacing pool, trusted authorization adapter and single-attempt sender. It opens no pool, registers no worker and changes no application startup behavior. Current broadcaster replies keep their existing path. The [restricted outbound client](outbound-worker.md) can construct a worker around this executor, but remains unregistered at application startup. Real broadcaster/bot authorization adapters, moderation priority and cutover remain later units.
+`platformoutbound.NewExecutor` joins the retained action ledger, restricted pacing pool, trusted authorization adapter and single-attempt sender. It opens no pool, registers no worker and changes no application startup behavior. Current broadcaster replies keep their existing path. The [restricted outbound client](outbound-worker.md) can construct a worker around this executor, but remains unregistered at application startup. A [tenant Twitch adapter](tenant-outbound-auth.md) now supplies broadcaster/own-bot authorization for explicit construction. Shared service-bot execution, moderation priority and cutover remain later units.
 
 Construct the executor with an already validated product scope and `chatpacing.Store`. It checks database, schema, server address and port before accepting the pair. The prior ledger/queue/pacing migrations must be applied through the administrator workflow; this unit adds no migration or credential configuration.
 
-`Execute` accepts the existing three-field `ChatSendArgs`. It validates canonical tenant/action IDs and requires the job deadline to equal the retained ledger deadline. A deleted source/action is an idempotent no-op. Running or terminal work obtains no second claim; expired work is terminalized through the ledger. An altered job deadline cannot renew or prematurely claim an action.
+`Execute` accepts the existing three-field `ChatSendArgs`. It validates canonical tenant/action IDs and requires the job deadline to equal the retained ledger deadline. A deleted source/action is an idempotent no-op. Trusted adapters may return an opaque `Authorization.Binding`; it must match across the claim as well as the sender subject, so same-subject reauthorization or selection cycles cannot silently reuse an earlier approval. Running or terminal work obtains no second claim; expired work is terminalized through the ledger. An altered job deadline cannot renew or prematurely claim an action.
 
 Execution follows this order:
 

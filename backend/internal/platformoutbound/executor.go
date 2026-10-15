@@ -31,7 +31,9 @@ type Target struct {
 // preserve the supplied action/channel, honor ctx, and make one bounded attempt.
 // Credentials belong inside the adapter closure and never enter job arguments.
 type Authorization struct {
-	SenderID     string
+	SenderID string
+	// Binding fences a provider adapter's exact local sender selection across the claim.
+	Binding      string
 	Capabilities platform.CapabilityReport
 	Send         func(context.Context, platform.OutboundMessage) (platform.Receipt, error)
 }
@@ -167,7 +169,7 @@ func (e *Executor) Execute(ctx context.Context, args platform.ChatSendArgs) (res
 	r := platform.Receipt{ActionID: t.ActionID, Status: platform.Rejected, Failure: platform.Permanent}
 	second, authErr := e.authorized(attemptCtx, t)
 	switch {
-	case errors.Is(authErr, ErrDenied) || authErr == nil && second.SenderID != first.SenderID:
+	case errors.Is(authErr, ErrDenied) || authErr == nil && (second.SenderID != first.SenderID || second.Binding != first.Binding):
 		r.Failure = platform.Unauthorized
 	case authErr != nil:
 		r.Failure = platform.Retryable
