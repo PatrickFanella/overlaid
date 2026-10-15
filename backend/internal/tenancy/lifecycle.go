@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -131,6 +131,9 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 		}
 		if table == "bot_accounts" {
 			query = `SELECT jsonb_build_object('id',id,'provider',provider,'userId',provider_user_id,'login',login,'scopes',scopes,'revoked',revoked_at IS NOT NULL) FROM bot_accounts WHERE /*tenant:bot_accounts*/ LIMIT 250001`
+		}
+		if table == "platform_outbound_actions" {
+			query = `SELECT jsonb_build_object('actionId',id,'eventId',event_id,'connectionId',connection_id,'state',state,'code',code,'providerMessageId',provider_message_id,'failure',failure,'retryAfter',retry_after_ns,'createdAt',created_at,'startedAt',started_at,'finishedAt',finished_at) FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ LIMIT 250001`
 		}
 		if table == "platform_dispatch_receipts" {
 			query = `SELECT jsonb_build_object('eventId',event_id,'connectionId',connection_id,'state',state,'code',code,'startedAt',started_at,'finishedAt',finished_at) FROM platform_dispatch_receipts WHERE /*tenant:platform_dispatch_receipts*/ LIMIT 250001`
