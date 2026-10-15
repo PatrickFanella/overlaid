@@ -219,25 +219,7 @@ func (s *Store) Finish(ctx context.Context, c Claim, r platform.Receipt) error {
 	if c.tenant != s.db.TenantID() || len(c.token) != 64 || !validHash(c.Message.ActionID) || r.ActionID != c.Message.ActionID || r.RetryAfter < 0 {
 		return ErrFence
 	}
-	switch r.Status {
-	case platform.Delivered:
-		if !validProviderID(r.ProviderMessageID) || r.Failure != "" || r.RetryAfter != 0 {
-			return ErrInvalid
-		}
-	case platform.Uncertain:
-		if r.ProviderMessageID != "" || r.Failure != "" || r.RetryAfter != 0 {
-			return ErrInvalid
-		}
-	case platform.Rejected:
-		if r.ProviderMessageID != "" {
-			return ErrInvalid
-		}
-		switch r.Failure {
-		case platform.Retryable, platform.Unauthorized, platform.Unsupported, platform.QuotaLimited, platform.Permanent:
-		default:
-			return ErrInvalid
-		}
-	default:
+	if !validReceipt(r) {
 		return ErrInvalid
 	}
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -254,6 +236,34 @@ func (s *Store) Finish(ctx context.Context, c Claim, r platform.Receipt) error {
 		return ErrFence
 	}
 	return nil
+}
+
+func validReceipt(r platform.Receipt) bool {
+	if r.RetryAfter < 0 {
+		return false
+	}
+	switch r.Status {
+	case platform.Delivered:
+		if !validProviderID(r.ProviderMessageID) || r.Failure != "" || r.RetryAfter != 0 {
+			return false
+		}
+	case platform.Uncertain:
+		if r.ProviderMessageID != "" || r.Failure != "" || r.RetryAfter != 0 {
+			return false
+		}
+	case platform.Rejected:
+		if r.ProviderMessageID != "" {
+			return false
+		}
+		switch r.Failure {
+		case platform.Retryable, platform.Unauthorized, platform.Unsupported, platform.QuotaLimited, platform.Permanent:
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+	return true
 }
 
 // RecoverExpired terminalizes a bounded batch. Running actions become uncertain;
