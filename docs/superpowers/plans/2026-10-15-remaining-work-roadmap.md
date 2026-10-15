@@ -1,0 +1,117 @@
+# Remaining-work roadmap
+
+Tracking: [#34](https://git.subcult.tv/subculture-collective/overlaid/issues/34). Baseline: merged main `a2f9841efa83582998a676eec1f12213a7652490`, after PR #83, on October 15, 2026.
+
+This is the current delivery order for the remaining 16 open issues. It supersedes the scheduling and current-state sections of the [October 5 roadmap](2026-10-05-multiplatform-parity-roadmap.md). That document and the [research catalogue](../../research/2026-10-05-bot-parity-research.md) retain the detailed parity scope; the [accepted ADRs](../../adr/README.md) retain their architectural authority. No accepted feature is removed by this roadmap. Provider documentation and competitor coverage must be refreshed when the relevant implementation unit starts; the October research is not a current API guarantee.
+
+## Outcome and priorities
+
+Deliver a public multi-tenant bot and overlay service for Twitch, Kick, Discord and YouTube Live, while keeping single-tenant self-hosting supported. Finish the Twitch execution boundary, then prioritize the shared automation engine and chat depth. Alerts/media, loyalty and the paid tier follow those foundations. Final branding and provider registrations run alongside implementation rather than holding up unrelated work.
+
+Each implementation unit should leave a usable, reviewable result. A planning document does not activate providers, publish a release or authorize a live test. Existing operator authorization and the applicable issue/runbook determine those actions. Use synthetic credentials and provider transports until a controlled external acceptance session is ready.
+
+## Starting point
+
+| State | Evidence and limit |
+| --- | --- |
+| Complete: Phase 0 and Phase 1 implementation | PRs #44–46; issues #3–22, #38 and #41 are closed. Tenant scopes, forced RLS, vaults, sessions, plans and lifecycle controls are already foundations to extend. |
+| Complete: Newsroom rebuild and feature catch-up | PRs #48–49. Preserve the shared Chat command manager, retained editorial workflow, enrichment fencing and existing overlay/account boundaries. Newsroom does not complete the broader Discord, media or automation phases. |
+| Complete: 17 bounded Phase 2 units | Closed issues #50–82 (even numbers), merged PRs #51–83; see [Phase 2 tracking](https://git.subcult.tv/subculture-collective/overlaid/issues/24) and its [implementation plan](2026-10-14-phase-2-platform-layer.md). |
+| Incomplete: Phase 2 activation and transport | Retained chat is opt-in; legacy remains default. Outbound workers/adapters are unregistered at startup. Shared service-vault execution, priority/warnings, cutover, conduits, additional normalized events and onboarding exits remain. |
+| Recorded operational baseline | [October 13 homelab receipts](../../qa/2026-10-13-phase-1-homelab.md) document a prior deployment/alert publication/restore. This roadmap does not refresh production or establish real provider credentials, natural backup execution or actual rollback. |
+| Verified implementation checks | PR #83 head `07f503b` and merged main `a2f9841` have successful hosted verification. The recorded local disposable PostgreSQL run includes `make verify`, 133 frontend tests and both uncached Go race suites. This is separate from deployment and live qualification. |
+
+## Delivery sequence
+
+| Order | Deliverable | Tracking | Start dependency | Exit |
+| --- | --- | --- | --- | --- |
+| 1 | Finish Twitch identity, execution and transport | #24 | Existing contracts, ledgers, pacing and bot stores | Controlled onboarding, bot identity/badge, restart/revocation and full simulated-load evidence. |
+| 2 | Build the versioned engine and variable language | #25 | Stable normalized chat/effect contracts; can start while conduit or external acceptance work proceeds | Existing commands, timers, rewards and quick actions use one engine, with traces and effect-free replay. |
+| 3 | Deliver chat-bot depth and import compatibility | #26 | Engine versions, restrictions and trace contract | Nightbot/Fossabot catalogue coverage with explicit gaps and a successful import rehearsal. |
+| 4 | Expand automation effects and the OBS bridge | #27 | Engine/effect contract; implement in batches alongside #26 after that contract is stable | Platform/HTTP/OBS catalogue coverage and controlled real-OBS scene/text proof. |
+| Early vertical slice | Explain and approve a missing-input fallback | #47 | Bounded engine version/trace contract from #25 plus the minimal OBS effect path | One configured, rehearsable, approved fallback with stale-observation and duplicate-effect protection. It need not wait for all of #25 or #27. |
+| 5 | Add Kick | #28 | Reusable engine/capabilities and outbound boundary; Kick registration under #23 | Existing command/filter fixtures run on Kick; unsupported effects are explicit. |
+| 6 | Add Discord | #29 | Engine events, session reports and Discord registration | Linked server, go-live post and opt-in viewer role sync pass controlled acceptance. |
+| 7 | Add YouTube Live | #30 | Adapter/engine contract and Google/YouTube approvals | Two controlled one-hour tenant sessions stay within quota with visible headroom. |
+| 8 | Deliver alerts, widgets and open media requests | #31 | Engine queues/priority, object-storage lifecycle and needed event adapters | Queued alerts, useful widgets and a moderated media queue have working stop/removal controls and tenant isolation. |
+| 9 | Deliver viewers and loyalty | #32 | Retained event lifecycle; cross-platform identity links need their adapters | Viewer-initiated linking, bounded currency accounting, giveaways and games pass retention/isolation checks. |
+| 10 | Add payments, integrations and service analytics | #33 | Stable entitlement/lifecycle contracts and Stripe registration | Signed billing events change plans safely, self-host stays independent, and the chosen public integration/analytics scope is accepted. |
+| Alongside delivery | External registrations and branding | #23 | Owner decisions and provider access | Each required registration/review has a non-secret receipt for its consuming phase. |
+| Alongside delivery | Existing-product Twitch and OBS acceptance | #39, #40 | Controlled accounts/targets, owned OBS collection and an exact candidate revision | Real workflows have dated results, restored fixtures and explicit unresolved failures. |
+| Release gate | Qualify the first named self-hosted release | #42 | #39 and #40 plus a selected artifact and target | Exact deployed revision, real credential restore, monitoring visibility, target rollback and reviewed release publication. |
+
+The first named single-channel release can complete before the later multi-platform phases. Phase 2 bot/badge acceptance is additional evidence; it does not silently replace #39's existing-product tests. An external provider delay does not block parser, engine, fixture or unrelated platform work. Neither #24 nor #34 closes merely because its child implementation issues are closed.
+
+## Next Twitch implementation units — #24
+
+Create a bounded issue for a unit when implementation starts, linked to #24. The identifiers below describe planned units; they are not new issue numbers. Do not recreate the completed #50–82 tickets.
+
+| Unit | Result and affected boundary | Dependency | Decisive verification |
+| --- | --- | --- | --- |
+| P2.1 | Restricted shared service-vault execution in `tenancy` and `twitchoutbound`. Resolve only a currently published identity with exact grant/catalog/delegation revisions and tenant/channel consent. Add a dedicated restricted role/pool if needed; the administrator store must not become a worker credential. | PR #83 and current publication/consent stores | Separate pool cannot administer grants or read tenant/queue data; combined and reachable roles reject. Revocation, unpublish/republish, reauthorization, changed binding/role/plan and concurrent refresh cannot send under stale consent. Real send transport stays mocked. |
+| P2.2 | Priority-aware outbound scheduling and visible pacing/limit failures. Use the existing action ledger, River jobs and global account/channel pacing; do not reserve future slots for low-priority chatter. | P2.1's authorization contract; moderation action identity/receipt contract before enabling moderation effects | Mixed-priority synthetic load proves moderation is not starved, quotas remain global across tenants, deadlines remain fixed and retry hints never replay an uncertain action. Add deterministic headroom/warning threshold checks. |
+| P2.3 | Opt-in outbound integration through the existing shared registry. Persist actions/jobs once and select one active sender/controller. Add readiness, explicit configuration and a documented rollback boundary. | P2.1–P2.2 and compatibility fixtures for every existing reply-producing path | Legacy and retained senders cannot both execute; controller loss/role failure degrades without fallback. Restart, duplicates, known echo IDs, manual broadcaster commands, Newsroom requests, pause/cooldown and cancellation retain behavior. |
+| P2.4 | Expand normalized Twitch events and capability mappings in reviewed batches. Keep native delivery IDs, raw-payload limits, permissions and lifecycle deletion. | Current chat ingest; shared contracts needed by each batch | Native fixtures prove each event's identity, typed fields and redacted projection; duplicate delivery and tenant isolation pass before new subscriptions are enabled. |
+| P2.5 | App-authorized conduit/shard ownership and subscription reconciliation. Keep the current transport recoverable until replacement compatibility is proven. | Shared authorization, event contracts from P2.4 for subscribed kinds and operator-owned grants from #23 | Synthetic shard disconnect/reassignment/restart and subscription drift cannot duplicate dispatch or cross tenant boundaries. Live migration gets a separate controlled receipt. |
+| P2.6 | Complete Chat onboarding: request enabled-feature grants, verify current role, explain blocked capabilities and perform an explicit test send with a receipt. | Activated execution/transport contracts, P2.3 and P2.5 | Fresh-tenant onboarding is timed; bot subject/badge and reconnect/revocation are observed in a controlled session. A full 1,000-channel simulation includes queueing, priorities and deadlines rather than only the pacing model. |
+
+The current pacer permits a conservative 20 attempts per rolling 30 seconds per account and one-second channel spacing. The original moderator-capacity target is not enabled. Keep that budget until current provider rules, role evidence and a reviewed policy justify a change; do not raise it as a prerequisite for finishing an unrelated unit. Headroom/warning metrics belong with P2.2, even though broader analytics remain under #33.
+
+Every unit preserves immutable tenant scopes, forced RLS, source lifecycle cascades, one dispatcher, durable pre-effect claims, no replay after uncertainty, selection revisions and bounded redacted receipts. See [outbound worker](../../runbooks/outbound-worker.md), [tenant authorization](../../runbooks/tenant-outbound-auth.md) and [shared consent](../../runbooks/shared-bot-delegation.md).
+
+## Engine and chat implementation order — #25 and #26
+
+Write the bounded Phase 3 plan against [ADR 0005](../../adr/0005-automation-engine.md) and [ADR 0006](../../adr/0006-variable-language-sandbox.md) before its first code change.
+
+1. **Version and validate automation documents.** Add immutable versions, tenant-owned references, stable trigger occurrence/run identity, mandatory permission/entitlement gates and atomic cooldown/limit reservations. Invalid trees, cycles, depth/step/loop budgets and cross-tenant references must fail before execution.
+2. **Build the variable parser and migration preview.** Add syntax/version-aware ASTs, ranges, nesting, lazy fallbacks, diagnostics and bounded caches. Preserve original brace templates and unknown literal text; compare rendered fixtures before selecting a new version. Fuzz malformed input and verify captured clock/seed behavior.
+3. **Run bounded effects and durable continuations.** Start with chat and the minimal approved dashboard/OBS action interfaces; add delay/cancellation, output/presets and priority/pause semantics. Link run steps to outbound receipts without turning ambiguous delivery into an engine retry.
+4. **Expose traces and replay.** Record why filters/restrictions/effects passed or failed, with truncation and redaction. Reproduce pinned versions/context separately from testing current configuration. Replay uses captured external values and cannot mutate network, OBS or product state through effects.
+5. **Migrate existing behavior in batches.** Commands, Newsroom bot entries, timers, reward rules and quick-action sequences need compatibility fixtures, a single selected executor per item, rollback mappings and reviewed version changes. Preserve the general Chat command manager. Remove a legacy path only after its replacement has parity evidence.
+6. **Finish the editor and advanced variables.** Version history, publish/rollback controls, guarded HTTP variables and delayed-response capabilities require tenant/role/deletion tests. Hosted `$(eval)` remains disabled until ADR 0006's child-process, OS memory/time/process and network/filesystem isolation is demonstrated; there is no in-process fallback.
+7. **Deliver #26 in catalogue batches.** Commands/roles/aliases/reply modes and chat management; default commands/variables; timers/keywords/filters/lookalikes; public pages and retained search; importers. Record each Nightbot/Fossabot checklist item as covered, intentionally different or still missing. Test a real export/import fixture without provider side effects.
+
+The #47 fallback slice may start after the version/trace contract and minimal effect path exist. It must distinguish a missing input from unknown/disconnected/stale/muted/hidden state, explain one proposal, revalidate it on approval and retain a bounded receipt. Rehearsal performs no OBS effect. Qualification uses #40's owned test collection and restores its original state.
+
+## Later-phase boundaries to preserve
+
+| Tracking | Required scope that remains |
+| --- | --- |
+| #27 | Typed event filters; platform moderation/stream/reward effects; guarded HTTP, Discord and webhook effects; OBS bridge/events; mobile-usable presets/quick actions/control deck; versioned setup import/export. Existing manual controls and Newsroom Discord delivery are inputs, not full catalogue acceptance. |
+| #28 | Tenant OAuth/webhook verification/reconciliation, normalized Kick events, chat/moderation execution, explicit unavailable capabilities and observed bot identity. Confirm current provider contracts before implementing them. |
+| #29 | Templated go-live/clip posts, signed slash-command interactions, opt-in linked-viewer roles with fallback, and session recap. Keep this separate from Newsroom's existing confirmed webhook exports. |
+| #30 | Live detection, bounded live chat, supported monetization/membership/poll mapping, per-tenant/shared quota accounting, opt-in bot replies and moderated bot identity. Public launch waits for required Google review/quota acceptance. |
+| #31 | Alert variations and priority queues; tenant media storage; event-fed goal/subathon/poll/prediction/counter/chat widgets; embeddable-source policy; approve-first controls, user/queue limits, blocks, fast stop, desk/OBS players, backup playlist and public queue. Preserve the non-removable copyright-stop notice. Currency costs integrate after #32's ledger exists. |
+| #32 | Watch/message/first/last-seen viewer records, viewer-initiated identity linking, capped currencies/transfers/role bonuses/ranks, giveaway modes/luck/overlay and games. Newsroom raffles are not full loyalty acceptance. |
+| #33 | Donations/subscriptions/portal and signed idempotent plan updates; tenant usage/service metrics; scoped public OAuth API/event stream; sandboxed plugins only if demand justifies that conditional scope. Validate paid-tier packaging using usage data; bot custody/onboarding already exists and must not be rebuilt. |
+
+For #31, do not block the basic media queue on loyalty: add costs only after #32 is ready. For #33, safety/operational metrics needed by an earlier unit ship with that unit; a later analytics phase is not a reason to omit them.
+
+## External acceptance and release
+
+| Issue | Next action | Evidence required to close |
+| --- | --- | --- |
+| #23 | Owner resolves final branding/bot identity and prepares the required Twitch, Kick, Discord, Google/YouTube and Stripe registrations in time for their phases. Domain/privacy/terms are already recorded as complete. | Non-secret registration/review receipts, explicit pending/rejected reviews and links to consuming phases. Request secrets through private tooling only. No account creation or publication is performed by this roadmap. |
+| #39 | Prepare an exact-revision controlled Twitch session for OAuth/re-consent, EventSub/reconnect, a custom reply/echo suppression, consenting moderation targets and reversible reward/redemption changes. | Dated real-provider receipts, cleanup and unresolved failures. Mocked HTTP and fixture browser workflows do not close this issue. |
+| #40 | Select an owned test collection and record OBS version, networking/auth and source revision. Check useful demos, keyed live sources, reconnect/display settings and scene/source controls. | OBS CEF screenshots/results and action receipts; restore original source/collection state. Chromium alone does not close this issue. |
+| #42 | After #39/#40, select the approved target and exact artifact, restore real retained data/credentials into an isolated clone, prove readiness-aware monitoring/notification visibility and execute target rollback. | Matching deployed `/version`, immutable artifacts, restore/rollback receipts, reviewed scope/limitations/recovery notes and separately authorized tag/release publication. Prior Phase 1 deployment/restore is baseline evidence only. |
+
+Unobserved natural backup execution and device notification display remain evidence gaps from the earlier operational receipt. Refresh scheduler/service/artifact evidence when qualifying #42; do not assume elapsed time closed them. Named release acceptance does not authorize changing active production while planning.
+
+## Verification and issue handling
+
+Run `make verify` for every delivered unit. Changes to persistence, worker roles, claims, queues or concurrency also use `bash scripts/ci-postgres.sh`, which owns disposable PostgreSQL and includes uncached application/River race suites. Add the smallest behavior check that can disprove the unit's acceptance; do not count skipped integration fixtures as a pass.
+
+Separate six evidence states in each closeout: local checks, exact PR-head hosted checks, reviewed merge, merged-main checks, deployment and controlled runtime/provider acceptance. Record revision and limitations. Use fixture browser checks for changed user flows; use OBS/provider qualification for their actual environments. Never send real Twitch/Discord effects from fixtures.
+
+Keep #34 as the umbrella and #24–33 as phase owners. Use bounded implementation issues for reviewed units, link their PRs and assign their phase milestone. Close a unit after its implementation acceptance and reviewed merge; keep its phase open until the full exit is demonstrated. External #23/#39/#40/#42 close only from their own receipts. The #47 dependency is the bounded engine contract, not the whole later catalogue.
+
+Before starting the next unit, refresh the checkout, issue/PR state and relevant evidence. Preserve dirty work and active services. Database cutovers require additive migrations, one writer/dispatcher, retained claims, a private backup/restore path and a documented recovery boundary; an old binary must not resume against incompatible shared schema.
+
+## First work to start
+
+1. Create the bounded P2.1 shared-vault execution issue under #24 and specify its role/consent/refresh denial tests before implementation.
+2. Prepare the Phase 3 bounded plan under #25 using the existing accepted engine/variable decisions. Engine contract work may proceed while P2.4–P2.6 or external reviews wait.
+3. Keep #23's registration checklist and #39/#40's controlled-session prerequisites visible; do not perform live effects or request secrets in public issue text.
+
+No calendar dates or completion percentages are promised here. Estimate a unit after its implementation plan exposes the migration, provider and verification work; update this roadmap when a dependency or accepted scope changes.

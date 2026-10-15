@@ -1,5 +1,7 @@
 # Multi-platform parity roadmap
 
+> **Delivery order superseded on October 15, 2026:** use the [remaining-work roadmap](2026-10-15-remaining-work-roadmap.md) for current status, dependencies and next units. This document retains the accepted product scope and original phase catalogue. Its dated status/research statements are historical.
+
 > **For agentic workers:** This is a program plan, not a task list. Each phase below becomes its own implementation plan in this directory before work starts, with task-level checkboxes, and its architectural choices become ADRs in `docs/adr/`. Evidence for every claim about Nightbot, Fossabot, Firebot, and the platform APIs is in `docs/research/2026-10-05-bot-parity-research.md`.
 
 **Goal:** Turn over-laid from a self-hosted, single-channel Twitch desk into a public, multi-tenant stream bot and overlay service on Twitch, Kick, YouTube Live, and Discord. It should match Nightbot and Fossabot on chat-bot depth and Firebot on automation, then go past all three where a hosted, cross-platform service has an advantage.
@@ -21,7 +23,7 @@
 
 ---
 
-## Current state — October 13, 2026
+## Historical state — October 13, 2026
 
 Phase 0 is merged through [PR #44](https://git.subcult.tv/subculture-collective/overlaid/pulls/44) at `a64ac84`; #38 and its milestone are closed. The owner accepted six ADRs under #10–12. Phase 1 implementation merged in PR #45 at `6de594f` and follows those decisions in [the bounded plan](2026-10-13-phase-1-tenancy.md).
 
@@ -274,6 +276,6 @@ These have long lead times and gate later phases.
 
 1. **Final name and domain**, and the bot account's username. "overlaid" stands in until then. Needed before the external sign-ups below.
 
-## Next step
+## Current next step
 
-Phase 1 implementation and hosted PostgreSQL/race checks are merged; close its operations tracking with the homelab receipts under #21. Run operator-led Twitch/OBS qualification through #39–40 and track first self-host release proof in #42. The bounded Phase 1 implementation plan must use two-tenant isolation and preserved self-host bootstrap as its first decisive acceptance criteria. Long-lead registrations remain #23.
+Follow the [remaining-work roadmap](2026-10-15-remaining-work-roadmap.md). Phase 0/1 and #41 are complete; Phase 2 is in progress through merged PR #83. Start with restricted shared service-vault execution under #24, prepare the bounded engine plan under #25, and keep #23/#39/#40/#42's external and release gates separate. Do not restart completed implementation work from the historical sequence above.
