@@ -38,3 +38,28 @@ func (t *Tx) EnqueueChatDispatch(ctx context.Context, connectionID, eventID stri
 	}
 	return result.Job.ID, nil
 }
+
+// EnqueueChatSend commits with the owning ledger transaction. Callers cannot
+// choose a tenant, queue, priority, deadline or private message job argument.
+func (t *Tx) EnqueueChatSend(ctx context.Context, actionID string) (int64, error) {
+	if !t.db.IsScoped() || !eventIDPattern.MatchString(actionID) {
+		return 0, errors.New("scoped outbound action identity required")
+	}
+	var deadline time.Time
+	if err := t.QueryRowContext(ctx, `SELECT deadline FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1 AND state='pending' AND deadline>now()`, actionID).Scan(&deadline); err != nil {
+		return 0, err
+	}
+	var schema string
+	if err := t.raw.QueryRowContext(ctx, `SELECT current_schema()`).Scan(&schema); err != nil {
+		return 0, err
+	}
+	client, err := river.NewClient(riverdatabasesql.New(nil), &river.Config{Schema: schema})
+	if err != nil {
+		return 0, err
+	}
+	result, err := client.InsertTx(ctx, t.raw, platform.ChatSendArgs{TenantID: t.db.tenant, ActionID: actionID, Deadline: deadline.UTC().Unix()}, &river.InsertOpts{Queue: "chat_outbound", MaxAttempts: 3, Priority: 4})
+	if err != nil {
+		return 0, err
+	}
+	return result.Job.ID, nil
+}

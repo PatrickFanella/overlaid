@@ -10,3 +10,13 @@ type ChatDispatchArgs struct {
 }
 
 func (ChatDispatchArgs) Kind() string { return "overlaid_chat_dispatch" }
+
+// ChatSendArgs references the private ledger rather than copying message text,
+// credentials or a claim token. Deadline is never renewed by job insertion.
+type ChatSendArgs struct {
+	TenantID string `json:"tenant_id"`
+	ActionID string `json:"action_id"`
+	Deadline int64  `json:"deadline"`
+}
+
+func (ChatSendArgs) Kind() string { return "overlaid_chat_send" }

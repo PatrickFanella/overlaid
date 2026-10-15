@@ -90,6 +90,9 @@ func Open(databaseURL, tenantID string) (*DB, error) {
 'platform_connections'::regclass,'tenant_credentials'::regclass,'tenant_imports'::regclass,'tenant_usage'::regclass,'overlay_state'::regclass,'newsroom_documents'::regclass,
 'normalized_chat_events'::regclass,'platform_event_payloads'::regclass,'river_job'::regclass,'platform_dispatch_receipts'::regclass,'twitch_sent_messages'::regclass,'bot_accounts'::regclass,'shared_bot_delegations'::regclass,'platform_outbound_actions'::regclass)`).Scan(&migrated)
 	if err == nil && migrated {
+		err = raw.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='river_job'::regclass AND confrelid='platform_outbound_actions'::regclass AND conname='overlaid_outbound_job' AND contype='f' AND convalidated)`).Scan(&migrated)
+	}
+	if err == nil && migrated {
 		err = raw.QueryRowContext(ctx, `SELECT position('episode:' in pg_get_functiondef('resolve_newsroom_capability(text,text)'::regprocedure))>0`).Scan(&migrated)
 	}
 	if err != nil || !migrated {
