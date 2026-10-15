@@ -49,17 +49,12 @@ func stopOutbound(t *testing.T, c *river.Client[*sql.Tx]) {
 
 func waitOutbound(t *testing.T, db *sql.DB, state string) {
 	t.Helper()
-	end := time.Now().Add(15 * time.Second)
-	for time.Now().Before(end) {
-		var got string
-		if err := db.QueryRow(`SELECT state FROM river_job WHERE kind='overlaid_chat_send'`).Scan(&got); err != nil {
-			t.Fatal(err)
-		}
-		if got == state {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	if awaitOutbound(ctx, db, state) {
+		return
 	}
+	logOutboundDiagnostics(t, db)
 	t.Fatalf("outbound job did not reach %s", state)
 }
 
@@ -239,6 +234,7 @@ func TestOutboundRiverPacingSnoozeAndRestart(t *testing.T) {
 	select {
 	case <-events:
 	case <-time.After(10 * time.Second):
+		logOutboundDiagnostics(t, service)
 		t.Fatal("job did not snooze")
 	}
 	stopOutbound(t, c)
