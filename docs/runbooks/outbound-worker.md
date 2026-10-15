@@ -23,3 +23,22 @@ Only fixed diagnostics cross this boundary. Provider errors, credentials, messag
 Run `bash scripts/ci-postgres.sh` for `make verify` and both uncached race suites against disposable PostgreSQL. Worker fixtures exercise real River leasing, preparation retry/exhaustion, pacing snooze/restart, expired jobs, completed redelivery, abandoned claims and terminal/bookkeeping failures. They also exercise forged tenant context, direct private-table denial, combined memberships with and without inheritance, broad PUBLIC/kind policies, missing forced RLS, dangerous grants and mismatched schemas. Synthetic send callbacks produce fixture receipts; no provider messages are sent. Existing chat leasing and lifecycle tests run alongside them.
 
 For rollback before activation, stop any explicitly constructed fixture/client and retain the additive role, policy and all ledger/pacing state. Do not delete claims or requeue actions to repair uncertain delivery. No production sending path changes in this unit. Local fixture results do not qualify live OAuth grants, provider roles, production throughput or cutover.
+
+## Failure diagnosis in fixtures
+
+[Issue #90](https://git.subcult.tv/subculture-collective/overlaid/issues/90) records a hosted restart/snooze failure on merged main `de6a449`: River's job fetch reached its ten-second timeout, then the test did not observe completion. A later green run does not establish that failure's cause. The merged pacing revision `f71131c` passed [hosted verification](https://git.subcult.tv/subculture-collective/overlaid/actions/runs/15556/jobs/28701).
+
+The fixture's completion waiter retains its fifteen-second observation budget and now applies that context to each database query. A blocked query can no longer wait beyond that budget indefinitely. On completion or snooze-observation failure, the test logs an independent diagnostic snapshot bounded to one second. It reads activity first so a locked job table cannot hide the activity result.
+
+The snapshot contains only pool connection/wait counts; counts of active sessions, lock waits, I/O waits and blocked sessions for the worker's own database role; and job state, attempts, error count and timing relative to the database clock. Separate success flags distinguish unavailable activity/job observations from measured zeros. No job arguments, error bodies, query text, role names, credentials, claims or provider payloads are logged. Diagnostics use the existing restricted worker pool and add no grants. The regression fixture holds a disposable job-table lock, verifies that the state query honors cancellation, and confirms that a blocked job read still reports lock counts. A three-second fixture-only unlock watchdog prevents a broken waiter from hanging that regression.
+
+October 15 local investigation on `f71131c`: eight consecutive uncached race runs of `TestOutboundRiverPacingSnoozeAndRestart` passed. Three combined uncached race runs of `platformoutbound`, `twitchoutbound` and `tenancy` also passed with the disposable PostgreSQL container limited to one CPU and 512 MiB. These are finite synthetic observations. No River fetch/worker timeout, action deadline, pacing rule, claim or startup behavior changed. The original hosted fetch-timeout cause remains unresolved; capture the failure snapshot if it recurs before choosing a runtime fix.
+
+With `OVERLAID_TEST_DATABASE_URL` already pointing to a disposable database, focused checks from `backend/` are:
+
+```bash
+go test -race -count=8 -run '^TestOutboundRiverPacingSnoozeAndRestart$' ./internal/platformoutbound
+go test -race -count=1 -run '^TestOutboundDiagnostics' ./internal/platformoutbound
+```
+
+Run `bash scripts/ci-postgres.sh` from the repository root for the full disposable verification gate. Test diagnostics do not establish production health or authorize replay of a claimed action.
