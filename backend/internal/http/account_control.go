@@ -181,6 +181,9 @@ func (a *Application) control(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch parts[3] {
+	case "bots":
+		a.botControl(w, r, t, actor, token, parts)
+		return
 	case "members":
 		if !tenancy.Allowed(t.Role, "connect") {
 			controlError(w, tenancy.ErrDenied)

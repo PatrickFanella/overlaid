@@ -82,6 +82,29 @@ func (a *Application) accountCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "OAuth state or consent rejected", 401)
 		return
 	}
+	var botPurpose *botOAuthPurpose
+	if raw, ok := strings.CutPrefix(purpose, "bot:"); ok {
+		var p botOAuthPurpose
+		if json.Unmarshal([]byte(raw), &p) != nil {
+			controlError(w, tenancy.ErrDenied)
+			return
+		}
+		token, err := a.authorizeBotCallback(r, id, p)
+		if err != nil {
+			controlError(w, err)
+			return
+		}
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		unbind, err := a.bindSessionRequest(ctx, token, cancel)
+		if err != nil {
+			controlError(w, err)
+			return
+		}
+		defer unbind()
+		r = r.WithContext(ctx)
+		botPurpose = &p
+	}
 	helper := &Server{config: a.config}
 	response, err := helper.exchangeTwitchCode(r.Context(), r.URL.Query().Get("code"))
 	if err != nil || response.AccessToken == "" || response.ExpiresIn <= 0 {
@@ -103,12 +126,34 @@ func (a *Application) accountCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	defer result.Body.Close()
 	var identity struct {
-		ClientID string `json:"client_id"`
-		UserID   string `json:"user_id"`
-		Login    string `json:"login"`
+		ClientID  string   `json:"client_id"`
+		UserID    string   `json:"user_id"`
+		Login     string   `json:"login"`
+		Scopes    []string `json:"scopes"`
+		ExpiresIn int      `json:"expires_in"`
 	}
 	if result.StatusCode != 200 || json.NewDecoder(http.MaxBytesReader(w, result.Body, 65536)).Decode(&identity) != nil || identity.ClientID != a.config.TwitchClientID || identity.UserID == "" || identity.Login == "" {
 		http.Error(w, "OAuth identity rejected", 401)
+		return
+	}
+	if botPurpose != nil {
+		if _, err = a.authorizeBotCallback(r, id, *botPurpose); err != nil {
+			controlError(w, err)
+			return
+		}
+		if response.RefreshToken == "" || identity.ExpiresIn <= 0 || identity.ExpiresIn > 366*24*60*60 || response.ExpiresIn > 366*24*60*60 || len(missingScopes(botOAuthScopes, identity.Scopes)) != 0 {
+			http.Error(w, "bot authorization did not include required chat permissions", 401)
+			return
+		}
+		if identity.ExpiresIn < response.ExpiresIn {
+			response.ExpiresIn = identity.ExpiresIn
+		}
+		credential := botCredentialFromOAuth(identity.UserID, identity.Login, identity.Scopes, response)
+		if _, err = a.store.SaveValidatedBotAccount(r.Context(), a.keys, id, botPurpose.Actor, credential); err != nil {
+			controlError(w, err)
+			return
+		}
+		http.Redirect(w, r, a.origin+"/dashboard/chat?botAuth=success", http.StatusFound)
 		return
 	}
 	if purpose == "login" {
