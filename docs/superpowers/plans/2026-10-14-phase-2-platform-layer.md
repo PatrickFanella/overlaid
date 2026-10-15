@@ -2,6 +2,14 @@
 
 Tracking: [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). Contract: ADR 0004. Start from main `dc13188`, after Newsroom PR #49.
 
+## Status — October 15, 2026
+
+Seventeen bounded units (#50–82, even numbers) are closed through merged PRs #51–83. Contracts, atomic retained chat, opt-in registry dispatch, bot stores/onboarding/consent, typed delivery, outbound ledger/jobs, durable pacing, executor, restricted worker and broadcaster/own-bot authorization are implemented. Outbound worker/adapter registration remains off at application startup.
+
+The [remaining-work roadmap](2026-10-15-remaining-work-roadmap.md#next-twitch-implementation-units--24) defines the current P2.1–P2.6 sequence: restricted shared execution, priority/warnings, opt-in cutover, normalized-event expansion, conduits and onboarding acceptance. The numbered sequence below records the phase's implementation history and contracts; completed units are not new work.
+
+## Implementation sequence and retained contracts
+
 The existing Twitch user-token WebSocket remains the active transport during migration. Each unit must preserve current commands, moderation, Newsroom lifecycle handling and overlay projection until its replacement has executable compatibility evidence.
 
 1. **Chat and capability contracts — #50.** Add the adapter interface, explicit delivery outcomes, a versioned capability registry and a typed chat envelope. Identity uses tenant, connection, platform, kind and native delivery identity; receipt time never changes it. Twitch chat mapping consumes the typed payload while retaining existing display and moderation fields. Verify redelivery identity, tenant separation, invalid inputs, capability intersections and existing Twitch tests, then `make verify`.
@@ -12,4 +20,4 @@ The existing Twitch user-token WebSocket remains the active transport during mig
 6. **Conduit workers and subscriptions.** Add app-authorized conduit reconciliation and worker-owned WebSocket shards after durable ingestion and bot identity are ready. Prove shard recovery and tenant subscription isolation before replacing the current transport.
 7. **Desk onboarding and acceptance.** Connect platform, request feature grants, inspect bot role and explicitly test messaging. Complete the phase's two-minute onboarding and simulated-load exit criteria. Live Twitch acceptance remains #39; OBS and release gates remain #40 and #42.
 
-Unit 1 was merged in PR #51, the River spike in PR #53, retained ingestion under #54 in PR #55, and worker execution under #56 in PR #57. [Issue #58](https://git.subcult.tv/subculture-collective/overlaid/issues/58) adds opt-in retained Twitch chat through the existing registry; see [its runbook](../../runbooks/retained-twitch-chat.md). Bot sender activation, outbound pacing, conduits and additional event kinds remain later units. Capability results are snapshots and must be recomputed at execution. Provider extensions and actor badges cannot grant effect permissions.
+Unit 1 was merged in PR #51, the River spike in PR #53, retained ingestion under #54 in PR #55, and worker execution under #56 in PR #57. [Issue #58](https://git.subcult.tv/subculture-collective/overlaid/issues/58) adds opt-in retained Twitch chat through the existing registry; see [its runbook](../../runbooks/retained-twitch-chat.md). Bot sender activation, restricted shared service-vault execution, moderation priority/warnings, conduits and additional normalized event kinds remain. Durable outbound pacing itself is complete in PR #77. Capability results are snapshots and must be recomputed at execution. Provider extensions and actor badges cannot grant effect permissions.

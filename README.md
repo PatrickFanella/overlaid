@@ -2,7 +2,7 @@
 
 Overlay MVP for OBS + homelab alerts.
 
-Development status, October 13, 2026: the single-channel Twitch/OBS application includes bot commands, moderation, reward management, sessions and recovery tooling. Local checks and fixture browser workflows pass; live Twitch/OBS and first self-host release qualification remain open. Phase 0 is merged. Phase 1 adds PostgreSQL tenant isolation, accounts, roles, encrypted connection custody, plan limits and data lifecycle controls; its release and provider acceptance evidence is tracked separately from implementation. Follow the [roadmap](docs/superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md), [development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4), and [dated evidence](docs/qa/2026-10-13-development-state.md).
+Development status, October 15, 2026: Phase 0 and Phase 1 implementation, the Newsroom rebuild and 17 bounded Phase 2 units are merged. Twitch bot activation, shared service-vault execution, conduits and full onboarding remain under Phase 2; live Twitch/OBS and the first named self-hosted release remain separate acceptance work. The [remaining-work roadmap](docs/superpowers/plans/2026-10-15-remaining-work-roadmap.md) defines delivery order and completion gates. The [original scope](docs/superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md), [development project](https://git.subcult.tv/subculture-collective/overlaid/projects/4) and [Phase 1 operational receipts](docs/qa/2026-10-13-phase-1-homelab.md) retain their detailed context.
 
 Created from `subculture-collective/project-template`.
 
