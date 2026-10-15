@@ -163,14 +163,7 @@ func readAccount(ctx context.Context, tx *sql.Tx, key string) (accountState, tim
 	var now time.Time
 	err := tx.QueryRowContext(ctx, `SELECT attempts,greatest(blocked_until,'0001-01-01 UTC'::timestamptz),coalesce(lease_until,'0001-01-01 UTC'::timestamptz),clock_timestamp() FROM chat_pacing_accounts WHERE account_key=$1 FOR UPDATE`, key).Scan(&raw, &a.BlockedUntil, &a.LeaseUntil, &now)
 	if err == nil {
-		err = json.Unmarshal(raw, &a.Attempts)
-	}
-	if err == nil {
-		for i, at := range a.Attempts {
-			if at <= 0 || i > 0 && at < a.Attempts[i-1] {
-				return a, now, ErrInvalid
-			}
-		}
+		a.Attempts, err = decodeAttempts(raw)
 	}
 	return a, now, err
 }
