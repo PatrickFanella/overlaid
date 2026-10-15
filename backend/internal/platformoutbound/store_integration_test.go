@@ -94,6 +94,7 @@ func TestDuplicateAdmissionClaimAndRestart(t *testing.T) {
 	if created.Load() != 1 {
 		t.Fatalf("duplicate admission %d", created.Load())
 	}
+	sendJobs(t, a, 1)
 	id, _, _ := s.Admit(t.Context(), r)
 	changed := r
 	changed.Text = "changed"

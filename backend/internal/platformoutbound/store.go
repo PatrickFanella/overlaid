@@ -1,5 +1,5 @@
 // Package platformoutbound retains chat follow-up actions and delivery fences.
-// It never resolves credentials, schedules jobs or calls a provider.
+// It atomically schedules jobs but never resolves credentials or calls a provider.
 package platformoutbound
 
 import (
@@ -130,6 +130,9 @@ func (s *Store) Admit(ctx context.Context, r Request) (string, bool, error) {
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO platform_outbound_actions(id,event_id,connection_id,action_key,channel_id,message,reply_to_id,capability,payload_hash,deadline) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, r.EventID, r.ConnectionID, r.Key, channel, r.Text, r.ReplyToID, capability, fingerprint, deadline)
 	if err != nil {
+		return "", false, err
+	}
+	if _, err = tx.EnqueueChatSend(ctx, id); err != nil {
 		return "", false, err
 	}
 	return id, true, tx.Commit()
