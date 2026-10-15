@@ -115,12 +115,6 @@ type OutboundMessage struct {
 	ActionID, ChannelID, Text, ReplyToID string
 }
 
-type ModerationAction struct {
-	ActionID, ChannelID, UserID, MessageID, Reason string
-	Capability                                     Capability
-	Duration                                       time.Duration
-}
-
 // EventSink acknowledges only after durable ingest. Webhook adapters call it
 // from their verified receiver; they need not manufacture a polling loop.
 type EventSink interface {
@@ -130,6 +124,6 @@ type EventSink interface {
 type Adapter interface {
 	Ingest(context.Context, Connection, EventSink) error
 	Send(context.Context, Connection, OutboundMessage) (Receipt, error)
-	Moderate(context.Context, Connection, ModerationAction) (Receipt, error)
+	Moderate(context.Context, Connection, ModerationAction) (ModerationReceipt, error)
 	Capabilities(context.Context, Connection) CapabilityReport
 }

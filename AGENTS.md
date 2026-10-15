@@ -38,6 +38,8 @@ Tenant-owned bot accounts use separate vault ciphertext and explicit broadcaster
 
 `chatpacing.Inspect` and the explicit `overlaid-pacing-probe` CLI use read-only transactions and expose fixed metadata only. Preserve admission-policy parity, database-clock observations, original-deadline risk, bounded reason codes, early headroom warnings and no row creation/pruning/slot reservation. A clear report is not a permit or effect authorization; no inspection pool is opened at application startup.
 
+`platform.NewTwitchModerationIntent` defines versioned, source-scoped moderation identity and immutable payload fingerprints for delete/timeout/ban/unban. Preserve exact field validation, source-derived deadlines, separate moderation receipts and fail-closed uncertainty normalization. The contract grants no effect permission; durable moderation admission/jobs/claims, provider authorization and priority arbitration remain separate work. Never route moderation receipts through the chat-message completion validator.
+
 ## Newsroom conventions
 
 - Newsroom is rebuilt in Go and Vite at `/dashboard/newsroom`; use the existing account, tenant, and Twitch EventSub boundaries. Keep dashboard `desk-*` and OBS `sc-*` styling separate.
