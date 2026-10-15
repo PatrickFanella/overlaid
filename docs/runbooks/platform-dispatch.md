@@ -20,7 +20,7 @@ This is an at-most-once admission contract, not proof of exactly-once external d
 
 Apply `0008_platform_dispatch.sql` through the administrator migration path before starting the updated managed API. Startup requires forced RLS on the receipt table. The migration creates the non-login `overlaid_worker` group role and a chat-kind policy on `river_job`, grants River metadata access, and keeps product-table access separate. It records completion atomically in the application migration ledger.
 
-This migration does not create or change a production login password. The future live worker integration must supply an isolated non-owner login inheriting only `overlaid_worker`, plus the normal validated product pool. Do not give the River pool `overlaid_runtime` membership or product grants. Disposable tests create and remove their own login roles.
+This migration does not create or change a production login password. The future live worker integration must supply an isolated non-owner login inheriting only `overlaid_worker`, plus the normal validated product pool. Do not give the River pool `overlaid_runtime` or `overlaid_outbound_worker` membership, or product grants. Both clients now share the [restricted queue-role checks](outbound-worker.md), including reachable memberships without inheritance, exact kind-policy predicates and forced RLS. Disposable tests create and remove their own login roles.
 
 Rollback of the boundary retains the additive receipt table and role. Do not delete receipts to force retry. Installations opting into retained mode must also follow the integration runbook's controller shutdown and mode-guard procedure before changing consumers.
 

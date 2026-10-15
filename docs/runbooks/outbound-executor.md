@@ -1,6 +1,6 @@
 # Fenced outbound execution
 
-`platformoutbound.NewExecutor` joins the retained action ledger, restricted pacing pool, trusted authorization adapter and single-attempt sender. It opens no pool, registers no worker and changes no application startup behavior. Current broadcaster replies keep their existing path. Real broadcaster/bot authorization adapters, outbound leasing, moderation priority and cutover remain later units.
+`platformoutbound.NewExecutor` joins the retained action ledger, restricted pacing pool, trusted authorization adapter and single-attempt sender. It opens no pool, registers no worker and changes no application startup behavior. Current broadcaster replies keep their existing path. The [restricted outbound client](outbound-worker.md) can construct a worker around this executor, but remains unregistered at application startup. Real broadcaster/bot authorization adapters, moderation priority and cutover remain later units.
 
 Construct the executor with an already validated product scope and `chatpacing.Store`. It checks database, schema, server address and port before accepting the pair. The prior ledger/queue/pacing migrations must be applied through the administrator workflow; this unit adds no migration or credential configuration.
 
@@ -23,4 +23,4 @@ Only bounded fixed error classes cross the executor boundary. Adapter error text
 
 Run `bash scripts/ci-postgres.sh` for `make verify`, PostgreSQL fixtures and both uncached race suites. Executor fixtures use synthetic authorization and the real Twitch transport behind an in-memory HTTP mock. They cover concurrent execution, restart, revoked/default-denied gates, sender changes, callback panic, cancellation before/during send, quota cooldown, malformed outcomes, pacing deferral, preparation retry, echo/receipt failure, original deadlines and mismatched database schemas. No Twitch messages are sent.
 
-This is an execution boundary ready for a reviewed worker integration. It does not prove live OAuth grants, provider roles, distributed throughput, moderation priority or production cutover. No rollback of application sending is needed while it remains unregistered; retain the existing ledger and pacing state for later activation.
+This execution boundary is used by the separately constructed restricted outbound worker. It does not prove live OAuth grants, provider roles, distributed throughput, moderation priority or production cutover. No rollback of application sending is needed while it remains unregistered; retain the existing ledger and pacing state for later activation.
