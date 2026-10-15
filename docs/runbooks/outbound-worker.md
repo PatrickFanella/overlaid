@@ -1,6 +1,6 @@
 # Restricted outbound worker
 
-`platformoutbound.NewClient` connects the fenced executor to River through a separate restricted service pool. It leases only `overlaid_chat_send` jobs in `chat_outbound`. Application startup does not construct this client or open its pool. Current broadcaster replies keep their existing path; real sender authorization adapters, moderation priority and an opt-in cutover remain later work.
+`platformoutbound.NewClient` connects the fenced executor to River through a separate restricted service pool. It leases only `overlaid_chat_send` jobs in `chat_outbound`. Application startup does not construct this client or open its pool. Current broadcaster replies keep their existing path; the [tenant Twitch authorization adapter](tenant-outbound-auth.md) supports broadcaster/own-bot construction. Shared service-bot execution, moderation priority and an opt-in cutover remain later work.
 
 Apply `0016_outbound_worker.sql` through the administrator migration workflow after the ledger, outbound queue and pacing migrations. It creates the non-login `overlaid_outbound_worker` group, grants the required River metadata/sequence access, and adds a send-kind policy to the already forced-RLS `river_job`. It neither creates a production login nor grants access to product, credential or pacing tables. Retain the existing migration and private backup/restore procedure.
 
