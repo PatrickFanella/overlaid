@@ -63,7 +63,23 @@ func validID(id string) bool {
 
 // Permit is private execution state, never a browser/engine DTO or job argument.
 // The consumer must start a bounded send immediately and complete within 30s.
-type Permit struct{ account, channel, token string }
+type Permit struct {
+	account, channel, token string
+	until                   time.Time
+}
+
+// Deadline is a conservative local use-by time measured from acquisition start,
+// so remote database clock offsets or a delayed reply cannot lengthen a lease.
+func (p Permit) Deadline() time.Time { return p.until }
+
+// DatabaseIdentity exposes only connection metadata for validating that an
+// executor uses the canonical pacing database alongside its product pool.
+func (s *Store) DatabaseIdentity(ctx context.Context) ([4]string, error) {
+	var id [4]string
+	err := s.db.QueryRowContext(ctx, `SELECT current_database(),current_schema(),coalesce(inet_server_addr()::text,'local'),coalesce(inet_server_port(),0)::text`).Scan(&id[0], &id[1], &id[2], &id[3])
+	return id, err
+}
+
 type Decision struct {
 	Granted bool
 	RetryAt time.Time
@@ -73,6 +89,7 @@ type Decision struct {
 // Acquire books no future slots: a denied request leaves the existing budget
 // intact. This lets a later priority-aware scheduler choose moderation first.
 func (s *Store) Acquire(ctx context.Context, sender, channel string) (Decision, error) {
+	acquisitionStarted := time.Now()
 	if !validID(sender) || !validID(channel) {
 		return Decision{}, ErrInvalid
 	}
@@ -126,6 +143,7 @@ func (s *Store) Acquire(ctx context.Context, sender, channel string) (Decision, 
 	}
 	permit := Permit{account: account, channel: channelKey, token: hex.EncodeToString(nonce[:])}
 	a.begin(now)
+	permit.until = acquisitionStarted.Add(leaseDuration)
 	raw, _ := json.Marshal(a.Attempts)
 	if _, err = tx.ExecContext(ctx, `UPDATE chat_pacing_accounts SET attempts=$1,lease_hash=$2,lease_until=$3,updated_at=$4 WHERE account_key=$5`, raw, digest([]byte(permit.token)), a.LeaseUntil, now, account); err != nil {
 		return Decision{}, err
