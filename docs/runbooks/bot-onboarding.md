@@ -21,7 +21,7 @@ Authenticated control routes are under `/api/tenants/{tenant}/bots`:
 
 All mutations use the existing session/CSRF or self-host bootstrap authorization boundary. Shared revision conflicts return 409 and require reload. Capabilities remain allowlisted by the [delegation store](shared-bot-delegation.md). The panel requires confirmation for selection/revocation, clears confirmation on reload, displays stale consent and disables mutations for managers. Provider roles, scopes and entitlements must still be checked by the future sender; saved consent is a snapshot.
 
-Service-administrator OAuth is not exposed by these routes. Service publication still uses the separate restricted administrative vault; production provisioning and its OAuth workflow remain subsequent work. No service credential is copied to the browser or tenant tables.
+Service-administrator OAuth is not exposed by these routes. Service publication still uses the separate restricted administrative vault; the [operator CLI](service-bot-admin.md) supplies its separate OAuth workflow. Production provisioning remains operator work. No service credential is copied to the browser or tenant tables.
 
 Verification separates three proof states: disposable PostgreSQL HTTP/store tests with mocked OAuth; full local build/lint/frontend/race checks; and browser interaction checks using a synthetic local API fixture. Browser fixtures demonstrate panel behavior, not live provider or deployed-runtime acceptance. No real OAuth authorization, provider message, credential provisioning or deployment is performed by the tests.
 
