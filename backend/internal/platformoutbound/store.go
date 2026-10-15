@@ -117,7 +117,7 @@ func (s *Store) Admit(ctx context.Context, r Request) (string, bool, error) {
 		limit = 10000
 	}
 	var total, perEvent int64
-	err = tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER(WHERE event_id=$1) FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/`, r.EventID).Scan(&total, &perEvent)
+	err = tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER(WHERE event_id=$1) FROM (SELECT event_id FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ UNION ALL SELECT event_id FROM platform_moderation_actions WHERE /*tenant:platform_moderation_actions*/) actions`, r.EventID).Scan(&total, &perEvent)
 	if err != nil {
 		return "", false, err
 	}

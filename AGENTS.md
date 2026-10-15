@@ -40,6 +40,8 @@ Tenant-owned bot accounts use separate vault ciphertext and explicit broadcaster
 
 `platform.NewTwitchModerationIntent` defines versioned, source-scoped moderation identity and immutable payload fingerprints for delete/timeout/ban/unban. Preserve exact field validation, source-derived deadlines, separate moderation receipts and fail-closed uncertainty normalization. The contract grants no effect permission; durable moderation admission/jobs/claims, provider authorization and priority arbitration remain separate work. Never route moderation receipts through the chat-message completion validator.
 
+`platformmoderation` retains typed moderation follow-ups under forced RLS. Preserve canonical retained-source reconstruction, exact conflict fingerprints, shared chat/moderation plan and per-source bounds, target-message binding, hashed one-use claims, database-clock deadline checks, detached completion and terminal recovery. Source/target viewer deletion and retention must cascade private input; exports contain metadata only. The store schedules no jobs and grants no effect permission. Moderation receipts must never use the chat completion validator, and no moderation worker is registered at startup.
+
 ## Newsroom conventions
 
 - Newsroom is rebuilt in Go and Vite at `/dashboard/newsroom`; use the existing account, tenant, and Twitch EventSub boundaries. Keep dashboard `desk-*` and OBS `sc-*` styling separate.
