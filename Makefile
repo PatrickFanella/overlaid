@@ -40,6 +40,7 @@ build: build-probe ## Build backend binaries and frontend assets
 	mkdir -p bin
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/over-laid-api ./cmd/app
 	cd backend && go build -o ../bin/overlaid-admin ./cmd/admin
+	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/overlaid-bot-admin ./cmd/bot-admin
 	pnpm --dir web run build
 
 build-probe: ## Build the readiness monitoring probe
