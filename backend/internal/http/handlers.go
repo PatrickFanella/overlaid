@@ -597,7 +597,7 @@ func (s *Server) publishEventContext(ctx context.Context, event events.Event) er
 	s.nowPlaying.Observe(event)
 	var result error
 	if response, ok := outboundChatResponseFromEvent(event); ok {
-		_, result = s.sendTwitchChatMessage(ctx, response.Message)
+		_, result = s.sendTwitchChatAction(ctx, event.ID, response.Message)
 	}
 	if s.bus != nil {
 		s.bus.Publish(event)

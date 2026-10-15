@@ -101,6 +101,9 @@ const (
 	Permanent    FailureKind = "permanent"
 )
 
+// Receipt describes one attempt, not an exactly-once provider guarantee.
+// Uncertain outcomes must not be automatically retried, even if an error also
+// matches a context timeout. RetryAfter is advisory for confirmed rejections.
 type Receipt struct {
 	ActionID, ProviderMessageID string
 	Status                      DeliveryStatus
