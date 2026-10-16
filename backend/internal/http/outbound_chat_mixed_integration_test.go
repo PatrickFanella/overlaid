@@ -605,8 +605,14 @@ func qualifyRetainedSharedCooldown(t *testing.T, scenario sharedCooldownScenario
 	observationMu.Lock()
 	defer observationMu.Unlock()
 	if recoverAndDrain {
-		if len(observedShared) != sharedReplies+1 || maxSharedUsed != 20 || observedShared[len(observedShared)-1].Sub(observedShared[0]) < 30*time.Second {
+		// Spaced arrivals may let old charges expire before the window fills.
+		// Require replenishment and the account bound in both workloads; only
+		// the separately admitted burst must saturate the entire window.
+		if len(observedShared) != sharedReplies+1 || maxSharedUsed < 1 || maxSharedUsed > 20 || len(observedShared) <= maxSharedUsed || observedShared[len(observedShared)-1].Sub(observedShared[0]) < 30*time.Second {
 			t.Fatal("shared burst did not exercise natural rolling-window replenishment", len(observedShared), maxSharedUsed)
+		}
+		if !continuous && maxSharedUsed != 20 {
+			t.Fatal("shared burst did not saturate the account window", maxSharedUsed)
 		}
 		var rejected int
 		if err := f.Admin.QueryRow(`SELECT count(*) FROM platform_outbound_actions WHERE tenant_id=$1 AND state='rejected'`, alpha.tenant).Scan(&rejected); err != nil || rejected != 1 {

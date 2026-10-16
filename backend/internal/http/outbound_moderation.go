@@ -62,7 +62,7 @@ func (a *Application) moderationContext(ctx context.Context, target platformmode
 }
 
 // These wrappers are explicit foundations, not startup registration. They rely
-// on the retained controller's validated roles and barrier; the future consumer
+// on the retained controller's validated roles and barrier; an owning consumer
 // must stop before its supplied pools or controller ownership are released.
 func (a *Application) moderationAuthorize(authorize platformmoderation.Authorize) platformmoderation.Authorize {
 	return func(ctx context.Context, target platformmoderation.Target) (platformmoderation.Authorization, error) {
