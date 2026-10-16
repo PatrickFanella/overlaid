@@ -8,13 +8,47 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
+func TestManagedConcurrentControllerChecks(t *testing.T) {
+	app, _, _, _ := applicationFixture(t)
+	var workers sync.WaitGroup
+	errors := make(chan error, 16)
+	for range 16 {
+		workers.Go(func() {
+			for range 16 {
+				if err := app.checkChatController(t.Context()); err != nil {
+					errors <- err
+					return
+				}
+			}
+		})
+	}
+	workers.Wait()
+	close(errors)
+	for err := range errors {
+		t.Error("healthy concurrent ownership check failed", err)
+	}
+	if !app.chatReady() {
+		t.Fatal("concurrent checks stopped healthy controller")
+	}
+	unlockChatController(t, app)
+	if err := app.checkChatController(t.Context()); err == nil || app.chatReady() {
+		t.Fatal("serialization hid ownership loss", err)
+	}
+}
+
 func unlockChatController(t *testing.T, app *Application) {
 	t.Helper()
+	release, err := acquireGate(t.Context(), app.chatControl.checks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
 	var released bool
 	if err := app.chatControl.lease.QueryRowContext(t.Context(), `SELECT pg_advisory_unlock(`+chatControllerKey+`)`).Scan(&released); err != nil || !released {
 		t.Fatal("fixture did not release controller ownership", released, err)

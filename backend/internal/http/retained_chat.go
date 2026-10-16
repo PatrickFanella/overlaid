@@ -28,6 +28,9 @@ type chatController struct {
 	pool  *sql.DB
 	lease *sql.Conn
 	live  atomic.Bool
+	// Keep each query and its row scan together on the pinned connection.
+	// database/sql serializes driver calls, not an entire QueryRow/Scan pair.
+	checks chan struct{}
 }
 
 func (a *Application) initChatDispatch() error {
@@ -46,7 +49,7 @@ func (a *Application) initChatDispatch() error {
 	}
 	pool.SetMaxOpenConns(16)
 	pool.SetMaxIdleConns(4)
-	a.chatControl = &chatController{pool: pool}
+	a.chatControl = &chatController{pool: pool, checks: make(chan struct{}, 1)}
 	if retained {
 		if a.config.TwitchChatSendMode == "retained" {
 			a.chatWorker, err = platformdispatch.NewControlledClient(ctx, pool, a.store.Product, a.handleRetainedChat, a.outboundLeaseReady)
@@ -164,8 +167,21 @@ func (a *Application) checkChatController(ctx context.Context) error {
 	}
 	check, stop := context.WithTimeout(ctx, time.Second)
 	defer stop()
+	release, err := acquireGate(check, a.chatControl.checks)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		a.chatControl.live.Store(false)
+		a.cancel()
+		return errors.New("chat controller unavailable")
+	}
+	defer release()
+	if !a.chatReady() {
+		return errors.New("chat controller unavailable")
+	}
 	var held bool
-	err := a.chatControl.lease.QueryRowContext(check, chatControllerHeld).Scan(&held)
+	err = a.chatControl.lease.QueryRowContext(check, chatControllerHeld).Scan(&held)
 	if err != nil && ctx.Err() != nil {
 		// A canceled caller must not stop unrelated tenant work.
 		return ctx.Err()

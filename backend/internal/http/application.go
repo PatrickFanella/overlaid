@@ -146,7 +146,10 @@ func (a *Application) Close() error {
 	if a.chatControl != nil {
 		if a.chatControl.lease != nil {
 			ctx, stop := context.WithTimeout(context.Background(), time.Second)
-			_, _ = a.chatControl.lease.ExecContext(ctx, `SELECT pg_advisory_unlock(`+chatControllerKey+`)`)
+			if release, err := acquireGate(ctx, a.chatControl.checks); err == nil {
+				_, _ = a.chatControl.lease.ExecContext(ctx, `SELECT pg_advisory_unlock(`+chatControllerKey+`)`)
+				release()
+			}
 			stop()
 			result = errors.Join(result, a.chatControl.lease.Close())
 		}
