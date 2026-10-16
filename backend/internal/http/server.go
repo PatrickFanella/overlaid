@@ -195,7 +195,7 @@ func (s *Server) customTwitchCommands(ctx context.Context) []twitch.CustomComman
 	}
 	out := make([]twitch.CustomCommand, 0, len(commands))
 	for _, command := range commands {
-		out = append(out, twitch.CustomCommand{Name: command.Name, Enabled: command.Enabled, Response: command.Response, Action: command.Action, ResponseMode: command.ResponseMode, RoleRequired: command.RoleRequired, CooldownSeconds: command.CooldownSeconds})
+		out = append(out, twitch.CustomCommand{RegistryID: command.ID, SnapshotFingerprint: bot.CommandSnapshotFingerprint(s.tenantID, command), Name: command.Name, Enabled: command.Enabled, Response: command.Response, Action: command.Action, ResponseMode: command.ResponseMode, RoleRequired: command.RoleRequired, CooldownSeconds: command.CooldownSeconds})
 	}
 	return out
 }

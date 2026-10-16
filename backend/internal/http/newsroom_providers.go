@@ -527,7 +527,8 @@ func (s *Server) executeNewsroomRequest(ctx context.Context, event events.Event)
 			break
 		}
 	}
-	if command.ID == "" || !command.Enabled || command.Action != stringData(event.Data, "action") {
+	fingerprint := bot.CommandSnapshotFingerprint(s.tenantID, command)
+	if command.ID == "" || !command.Enabled || command.Action != stringData(event.Data, "action") || command.ID != stringData(event.Data, "registryCommandId") || fingerprint == "" || fingerprint != stringData(event.Data, "registryCommandFingerprint") {
 		return errors.New("command disabled or changed")
 	}
 	role := bot.RoleViewer

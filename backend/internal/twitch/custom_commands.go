@@ -70,7 +70,7 @@ func (e *customCommandExecutor) execute(original ChatCommand, resolved ChatComma
 		if e.onNamedCooldown(custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
 			return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
 		}
-		return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command queued", map[string]any{"custom": true, "action": custom.Action, "newsroomRequest": true, "newsroomArgs": truncateCommandText(original.Args, 8000)})}
+		return []events.Event{withCustomSnapshot(commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command queued", map[string]any{"custom": true, "action": custom.Action, "newsroomRequest": true, "newsroomArgs": truncateCommandText(original.Args, 8000)}), custom)}
 	}
 	template := e.renderer.Render(custom.Response, bot.TemplateContext{User: user.Login, DisplayName: user.Name, Channel: e.channel, Args: original.Args, Command: resolved.Name})
 	mode := normalizeResponseMode(custom.ResponseMode)
@@ -86,7 +86,7 @@ func (e *customCommandExecutor) execute(original ChatCommand, resolved ChatComma
 	if e.onNamedCooldown(custom.Name, time.Duration(custom.CooldownSeconds)*time.Second) {
 		return []events.Event{commandEventWithData(original, resolved, aliased, user, events.SeverityWarning, "Command cooling down", map[string]any{"custom": true, "action": custom.Action})}
 	}
-	accepted := commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"custom": true, "action": custom.Action, "responseMode": mode, "unknownVariables": template.UnknownVariables})
+	accepted := withCustomSnapshot(commandEventWithData(original, resolved, aliased, user, events.SeveritySuccess, "Command accepted", map[string]any{"custom": true, "action": custom.Action, "responseMode": mode, "unknownVariables": template.UnknownVariables}), custom)
 	if mode == "chat" || mode == "both" {
 		accepted.Data["chatResponse"] = map[string]any{"message": template.Text, "command": custom.Name}
 	}
@@ -177,4 +177,15 @@ func normalizeResponseMode(mode string) string {
 	default:
 		return "overlay"
 	}
+}
+
+func withCustomSnapshot(event events.Event, command CustomCommand) events.Event {
+	if command.RegistryID != "" && command.SnapshotFingerprint != "" {
+		if event.Data == nil {
+			event.Data = map[string]any{}
+		}
+		event.Data["registryCommandId"] = command.RegistryID
+		event.Data["registryCommandFingerprint"] = command.SnapshotFingerprint
+	}
+	return event
 }
