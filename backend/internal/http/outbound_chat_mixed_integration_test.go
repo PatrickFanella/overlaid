@@ -1,12 +1,14 @@
 package httpapi
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -168,6 +170,20 @@ func TestRetainedSenderMixedCooldownAndOriginalDeadline(t *testing.T) {
 }
 
 func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
+	qualifyRetainedSharedCooldown(t, false)
+}
+
+func TestRetainedSharedSenderNaturalRecoveryAndSaturation(t *testing.T) {
+	qualifyRetainedSharedCooldown(t, true)
+}
+
+func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
+	t.Helper()
+	cooldownSeconds := 60
+	if recoverAndDrain {
+		cooldownSeconds = 8
+	}
+
 	old, alpha, beta, f := applicationFixture(t)
 	owner, err := old.store.AccountForIdentity(t.Context(), "twitch", "gamma", "gamma")
 	if err != nil {
@@ -179,6 +195,13 @@ func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
 	}
 	gamma := accountFixture{id: owner, tenant: tenant.ID}
 	accounts := []accountFixture{alpha, beta, gamma}
+	if recoverAndDrain {
+		// Isolate the shared account budget from the separate tenant HTTP allowance.
+		// The free-plan expiry case above retains its normal limits.
+		if _, err := f.Admin.Exec(`UPDATE tenants SET plan_id='unlimited' WHERE id IN($1,$2)`, alpha.tenant, beta.tenant); err != nil {
+			t.Fatal(err)
+		}
+	}
 	channels := []string{"123", "456", "789"}
 	for index, account := range accounts {
 		channel := channels[index]
@@ -223,6 +246,10 @@ func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
 	}
 	previous := twitchHTTPClient
 	var alphaSends, betaSends, gammaSends, betaRoles atomic.Int32
+	sharedAccountKey := fmt.Sprintf("%x", sha256.Sum256([]byte(`["twitch","account","999"]`)))
+	var observationMu sync.Mutex
+	var observedShared []time.Time
+	maxSharedUsed := 0
 	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Host + r.URL.Path {
 		case "id.twitch.tv/oauth2/validate":
@@ -252,13 +279,17 @@ func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
 				return nil, err
 			}
 			var account accountFixture
+			var sendIndex int32
 			switch body.Channel {
 			case "123":
-				alphaSends.Add(1)
+				sendIndex = alphaSends.Add(1)
 				account = alpha
 			case "456":
-				betaSends.Add(1)
-				return nil, errors.New("shared cooldown bypassed across tenants")
+				sendIndex = betaSends.Add(1)
+				if !recoverAndDrain {
+					return nil, errors.New("shared cooldown bypassed across tenants")
+				}
+				account = beta
 			case "789":
 				gammaSends.Add(1)
 				account = gamma
@@ -276,10 +307,54 @@ func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
 			if err := f.Admin.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM platform_outbound_actions WHERE tenant_id=$1 AND state='running')`, account.tenant).Scan(&claimed); err != nil || !claimed {
 				return nil, errors.New("shared quota transport without claim")
 			}
-			if body.Channel == "123" {
-				return &http.Response{StatusCode: 429, Header: http.Header{"Retry-After": {"60"}}, Body: io.NopCloser(strings.NewReader(`{"message":"fixture quota"}`))}, nil
+			if body.Channel != "789" {
+				var rawAttempts []byte
+				var ready, leased bool
+				if err := f.Admin.QueryRowContext(r.Context(), `SELECT attempts,coalesce(blocked_until<=clock_timestamp(),true),lease_until>clock_timestamp() FROM chat_pacing_accounts WHERE account_key=$1`, sharedAccountKey).Scan(&rawAttempts, &ready, &leased); err != nil || !ready || !leased {
+					t.Logf("shared permit observation failed: ready=%v leased=%v error=%v", ready, leased, err)
+					return nil, errors.New("shared transport before cooldown or without active permit")
+				}
+				var charged []int64
+				if err := json.Unmarshal(rawAttempts, &charged); err != nil || len(charged) == 0 {
+					return nil, errors.New("invalid shared charge observation")
+				}
+				chargedAt := time.UnixMicro(charged[len(charged)-1])
+				used := len(charged)
+				observationMu.Lock()
+				// The prior send completed before this account's next permit. Completion
+				// conservatively moves its retained charge forward; observe that final time.
+				if len(observedShared) > 0 {
+					if len(charged) < 2 {
+						observationMu.Unlock()
+						return nil, errors.New("prior shared completion missing from bounded burst")
+					}
+					observedShared[len(observedShared)-1] = time.UnixMicro(charged[len(charged)-2])
+				}
+				observedShared = append(observedShared, chargedAt)
+				expectedUsed := 0
+				for _, at := range observedShared {
+					if at.After(chargedAt.Add(-30 * time.Second)) {
+						expectedUsed++
+					}
+				}
+				if used > maxSharedUsed {
+					maxSharedUsed = used
+				}
+				observedCount := len(observedShared)
+				observationMu.Unlock()
+				if used != expectedUsed || used > 20 {
+					t.Logf("shared charge mismatch: stored=%d observed=%d transports=%d", used, expectedUsed, observedCount)
+					return nil, errors.New("shared rolling account charge mismatch")
+				}
 			}
-			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"data":[{"message_id":"shared-quota-gamma","is_sent":true}]}`))}, nil
+			if body.Channel == "123" && sendIndex == 1 {
+				return &http.Response{StatusCode: 429, Header: http.Header{"Retry-After": {fmt.Sprint(cooldownSeconds)}}, Body: io.NopCloser(strings.NewReader(`{"message":"fixture quota"}`))}, nil
+			}
+			messageID := "shared-quota-gamma"
+			if body.Channel != "789" {
+				messageID = fmt.Sprintf("shared-recovered-%s-%d", body.Channel, sendIndex)
+			}
+			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"data":[{"message_id":"%s","is_sent":true}]}`, messageID)))}, nil
 		}
 		return nil, errors.New("unexpected shared quota request")
 	})}
@@ -316,7 +391,11 @@ func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	originalDeadline := time.Now().UTC().Truncate(time.Second).Add(20*time.Second + 999*time.Millisecond)
+	remaining := 20*time.Second + 999*time.Millisecond
+	if recoverAndDrain {
+		remaining = 90*time.Second + 999*time.Millisecond
+	}
+	originalDeadline := time.Now().UTC().Truncate(time.Second).Add(remaining)
 	aged := packet("456", "blocked-source", "blocked-delivery", "!sharedquota")
 	aged.Metadata.MessageTimestamp = originalDeadline.Add(-2 * time.Minute)
 	send(app, 1, aged)
@@ -361,21 +440,55 @@ func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
 	if err := f.Admin.QueryRow(`SELECT blocked_until=$2 AND blocked_until>clock_timestamp() AND jsonb_array_length(attempts)=1 AND lease_until IS NULL FROM chat_pacing_accounts WHERE account_key=$1`, sharedKey, blockedUntil).Scan(&preserved); err != nil || !preserved {
 		t.Fatal("restart reset shared pacing state", preserved, err)
 	}
-	// Observe the same job's natural original-deadline scheduling; do not advance
-	// clocks, promote retries, clear cooldowns or grant another pacing slot.
+	if recoverAndDrain {
+		// Together with the original beta reply, this is a 24-reply shared burst.
+		// Submit each input twice; no job or pacing timestamp is modified.
+		for index := 0; index < 23; index++ {
+			tenantIndex := index % 2
+			send(restarted, tenantIndex, packet(channels[tenantIndex], fmt.Sprintf("burst-source-%d", index), fmt.Sprintf("burst-delivery-%d", index), "!sharedquota"))
+		}
+	}
+	// Observe natural scheduling without advancing clocks, promoting retries,
+	// clearing cooldowns or granting another pacing slot.
 	deadline = originalDeadline.Add(10 * time.Second)
+	wantState := "rejected"
+	if recoverAndDrain {
+		wantState = "delivered"
+		deadline = time.Now().Add(75 * time.Second)
+	}
 	for {
 		var state string
 		if err := f.Admin.QueryRow(`SELECT state FROM platform_outbound_actions WHERE tenant_id=$1 AND id=$2`, beta.tenant, actionID).Scan(&state); err != nil {
 			t.Fatal(err)
 		}
-		if state == "rejected" {
+		if state == wantState {
 			break
 		}
-		if state != "pending" || time.Now().After(deadline) {
-			t.Fatal("shared queued action did not expire without a claim", state)
+		if (!recoverAndDrain && state != "pending") || time.Now().After(deadline) {
+			t.Fatal("shared queued action did not reach its expected outcome", state, wantState)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	if recoverAndDrain {
+		for {
+			var delivered, failed int
+			if err := f.Admin.QueryRow(`SELECT count(*) FILTER(WHERE state='delivered'),count(*) FILTER(WHERE state IN('rejected','uncertain')) FROM platform_outbound_actions WHERE tenant_id IN($1,$2)`, alpha.tenant, beta.tenant).Scan(&delivered, &failed); err != nil {
+				t.Fatal(err)
+			}
+			if failed > 1 {
+				var summary, usage string
+				_ = f.Admin.QueryRow(`SELECT coalesce(jsonb_agg(jsonb_build_object('state',state,'code',code,'failure',failure))::text,'[]') FROM platform_outbound_actions WHERE tenant_id IN($1,$2)`, alpha.tenant, beta.tenant).Scan(&summary)
+				_ = f.Admin.QueryRow(`SELECT coalesce(jsonb_agg(jsonb_build_object('kind',kind,'used',used))::text,'[]') FROM tenant_usage WHERE tenant_id IN($1,$2)`, alpha.tenant, beta.tenant).Scan(&usage)
+				t.Fatal("shared burst reached unexpected terminal failures", delivered, failed, summary, usage)
+			}
+			if delivered == 24 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("shared burst did not drain naturally", delivered)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 	if err := restarted.Close(); err != nil {
 		t.Fatal(err)
@@ -384,14 +497,18 @@ func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
 	var storedDeadline time.Time
 	var started bool
 	var finalJobID, finalJobDeadline int64
-	if err := f.Admin.QueryRow(`SELECT a.code,a.deadline,a.started_at IS NOT NULL,j.id,(j.args->>'deadline')::bigint FROM platform_outbound_actions a JOIN river_job j ON j.overlaid_outbound_tenant_id=a.tenant_id AND j.overlaid_action_id=a.id WHERE a.tenant_id=$1 AND a.id=$2`, beta.tenant, actionID).Scan(&code, &storedDeadline, &started, &finalJobID, &finalJobDeadline); err != nil || code != "expired" || !storedDeadline.Equal(originalDeadline) || started || finalJobID != jobID || finalJobDeadline != jobDeadline {
+	if err := f.Admin.QueryRow(`SELECT a.code,a.deadline,a.started_at IS NOT NULL,j.id,(j.args->>'deadline')::bigint FROM platform_outbound_actions a JOIN river_job j ON j.overlaid_outbound_tenant_id=a.tenant_id AND j.overlaid_action_id=a.id WHERE a.tenant_id=$1 AND a.id=$2`, beta.tenant, actionID).Scan(&code, &storedDeadline, &started, &finalJobID, &finalJobDeadline); err != nil || (!recoverAndDrain && code != "expired") || !storedDeadline.Equal(originalDeadline) || started != recoverAndDrain || finalJobID != jobID || finalJobDeadline != jobDeadline {
 		t.Fatal("shared queued action replayed or changed identity", code, storedDeadline, started, finalJobID, err)
 	}
-	if alphaSends.Load() != 1 || betaSends.Load() != 0 || gammaSends.Load() != 1 {
+	wantAlpha, wantBeta := int32(1), int32(0)
+	if recoverAndDrain {
+		wantAlpha, wantBeta = 13, 12
+	}
+	if alphaSends.Load() != wantAlpha || betaSends.Load() != wantBeta || gammaSends.Load() != 1 {
 		t.Fatal("shared quota transport repeated or crossed scopes", alphaSends.Load(), betaSends.Load(), gammaSends.Load())
 	}
 	var attempts, permits, runnable int
-	if err := f.Admin.QueryRow(`SELECT coalesce(sum(jsonb_array_length(attempts)),0),count(*) FILTER(WHERE lease_until IS NOT NULL) FROM chat_pacing_accounts`).Scan(&attempts, &permits); err != nil || attempts != 2 || permits != 0 {
+	if err := f.Admin.QueryRow(`SELECT coalesce(sum(jsonb_array_length(attempts)),0),count(*) FILTER(WHERE lease_until IS NOT NULL) FROM chat_pacing_accounts`).Scan(&attempts, &permits); err != nil || (!recoverAndDrain && attempts != 2) || (recoverAndDrain && (attempts < 1 || attempts > 21)) || permits != 0 {
 		t.Fatal("shared denial charged or leaked permit", attempts, permits, err)
 	}
 	if err := f.Admin.QueryRow(`SELECT count(*) FROM river_job WHERE state NOT IN('completed','cancelled','discarded')`).Scan(&runnable); err != nil || runnable != 0 {
@@ -399,8 +516,33 @@ func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
 	}
 	for index, account := range accounts {
 		var receipts, echoes int
-		if err := f.Admin.QueryRow(`SELECT (SELECT count(*) FROM platform_dispatch_receipts WHERE tenant_id=$1 AND state='completed'),(SELECT count(*) FROM twitch_sent_messages WHERE tenant_id=$1)`, account.tenant).Scan(&receipts, &echoes); err != nil || receipts != 1 || (index < 2 && echoes != 0) || (index == 2 && echoes != 1) {
+		wantReceipts, wantEchoes := 1, 0
+		if index == 2 {
+			wantEchoes = 1
+		}
+		if recoverAndDrain && index < 2 {
+			wantEchoes = 12
+			wantReceipts = 12
+			if index == 0 {
+				wantReceipts++
+			}
+		}
+		if err := f.Admin.QueryRow(`SELECT (SELECT count(*) FROM platform_dispatch_receipts WHERE tenant_id=$1 AND state='completed'),(SELECT count(*) FROM twitch_sent_messages WHERE tenant_id=$1)`, account.tenant).Scan(&receipts, &echoes); err != nil || receipts != wantReceipts || echoes != wantEchoes {
 			t.Fatal("shared quota receipts/echo isolation changed", index, receipts, echoes, err)
 		}
+	}
+	observationMu.Lock()
+	defer observationMu.Unlock()
+	if recoverAndDrain {
+		if len(observedShared) != 25 || maxSharedUsed != 20 || observedShared[len(observedShared)-1].Sub(observedShared[0]) < 30*time.Second {
+			t.Fatal("shared burst did not exercise natural rolling-window replenishment", len(observedShared), maxSharedUsed)
+		}
+		var rejected int
+		if err := f.Admin.QueryRow(`SELECT count(*) FROM platform_outbound_actions WHERE tenant_id=$1 AND state='rejected'`, alpha.tenant).Scan(&rejected); err != nil || rejected != 1 {
+			t.Fatal("original shared quota action changed outcome", rejected, err)
+		}
+		t.Logf("shared_attempts=%d successful_shared_replies=24 max_account_window_used=%d charged_span=%s", len(observedShared), maxSharedUsed, observedShared[len(observedShared)-1].Sub(observedShared[0]))
+	} else if len(observedShared) != 1 {
+		t.Fatal("expired shared action charged another attempt", len(observedShared))
 	}
 }
