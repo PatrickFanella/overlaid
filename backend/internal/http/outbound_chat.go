@@ -64,7 +64,7 @@ func (a *Application) prepareOutboundChat(ctx context.Context) error {
 	if err != nil {
 		return errors.New("retained chat authorization configuration invalid")
 	}
-	executor, err := platformoutbound.NewExecutorWithPacingHint(ctx, a.store.Product, b.pacing, a.outboundAuthorize(adapter.Authorize), a.outboundSendGate, a.outboundPacingIdentity(adapter.PacingSender))
+	executor, err := platformoutbound.NewExecutorWithFairPreparation(ctx, a.store.Product, b.pacing, a.outboundAuthorize(adapter.Authorize), a.outboundSendGate, a.outboundPacingIdentity(adapter.PacingSender))
 	if err != nil {
 		return errors.New("retained chat execution configuration invalid")
 	}

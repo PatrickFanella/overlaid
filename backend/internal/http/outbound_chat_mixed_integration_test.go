@@ -170,15 +170,33 @@ func TestRetainedSenderMixedCooldownAndOriginalDeadline(t *testing.T) {
 }
 
 func TestRetainedSharedSenderCooldownAcrossTenantsAndRestart(t *testing.T) {
-	qualifyRetainedSharedCooldown(t, false)
+	qualifyRetainedSharedCooldown(t, sharedCooldownExpiry)
 }
 
 func TestRetainedSharedSenderNaturalRecoveryAndSaturation(t *testing.T) {
-	qualifyRetainedSharedCooldown(t, true)
+	qualifyRetainedSharedCooldown(t, sharedCooldownBurst)
 }
 
-func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
+func TestRetainedSharedSenderSustainedUnevenArrivals(t *testing.T) {
+	qualifyRetainedSharedCooldown(t, sharedCooldownContinuous)
+}
+
+type sharedCooldownScenario int
+
+const (
+	sharedCooldownExpiry sharedCooldownScenario = iota
+	sharedCooldownBurst
+	sharedCooldownContinuous
+)
+
+func qualifyRetainedSharedCooldown(t *testing.T, scenario sharedCooldownScenario) {
 	t.Helper()
+	recoverAndDrain := scenario != sharedCooldownExpiry
+	continuous := scenario == sharedCooldownContinuous
+	sharedReplies, alphaReplies, betaReplies, gammaReplies := 24, 12, 12, 1
+	if continuous {
+		sharedReplies, alphaReplies, betaReplies, gammaReplies = 31, 24, 7, 3
+	}
 	cooldownSeconds := 60
 	if recoverAndDrain {
 		cooldownSeconds = 8
@@ -284,7 +302,7 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 				}
 				account = beta
 			case "789":
-				gammaSends.Add(1)
+				sendIndex = gammaSends.Add(1)
 				account = gamma
 			default:
 				return nil, errors.New("unknown shared quota channel")
@@ -343,7 +361,7 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 			if body.Channel == "123" && sendIndex == 1 {
 				return &http.Response{StatusCode: 429, Header: http.Header{"Retry-After": {fmt.Sprint(cooldownSeconds)}}, Body: io.NopCloser(strings.NewReader(`{"message":"fixture quota"}`))}, nil
 			}
-			messageID := "shared-quota-gamma"
+			messageID := fmt.Sprintf("shared-quota-gamma-%d", sendIndex)
 			if body.Channel != "789" {
 				messageID = fmt.Sprintf("shared-recovered-%s-%d", body.Channel, sendIndex)
 			}
@@ -436,7 +454,44 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 	if err := f.Admin.QueryRow(`SELECT blocked_until=$2 AND blocked_until>clock_timestamp() AND jsonb_array_length(attempts)=1 AND lease_until IS NULL FROM chat_pacing_accounts WHERE account_key=$1`, sharedKey, blockedUntil).Scan(&preserved); err != nil || !preserved {
 		t.Fatal("restart reset shared pacing state", preserved, err)
 	}
-	if recoverAndDrain {
+	if continuous {
+		// Keep admitting hot-tenant work while the real workers run. Every
+		// fourth arrival adds quieter-tenant work; no clock/job is promoted.
+		arrivalStart := time.Now()
+		quietProgress := 0
+		for index := 0; index < 24; index++ {
+			timer := time.NewTimer(1500 * time.Millisecond)
+			select {
+			case <-timer.C:
+			case <-t.Context().Done():
+				timer.Stop()
+				t.Fatal(t.Context().Err())
+			}
+			send(restarted, 0, packet("123", fmt.Sprintf("hot-source-%d", index), fmt.Sprintf("hot-delivery-%d", index), "!sharedquota"))
+			if index%4 == 3 {
+				send(restarted, 1, packet("456", fmt.Sprintf("quiet-source-%d", index), fmt.Sprintf("quiet-delivery-%d", index), "!sharedquota"))
+			}
+			if index == 8 || index == 16 {
+				var pending int
+				if err := f.Admin.QueryRow(`SELECT count(*) FROM platform_outbound_actions WHERE tenant_id IN($1,$2) AND state='pending'`, alpha.tenant, beta.tenant).Scan(&pending); err != nil || pending == 0 {
+					t.Fatal("independent probe did not overlap shared backlog", pending, err)
+				}
+				send(restarted, 2, packet("789", fmt.Sprintf("independent-source-%d", index), fmt.Sprintf("independent-delivery-%d", index), "!sharedquota"))
+				want := 2
+				if index == 16 {
+					want = 3
+				}
+				waitOutboundState(t, restarted, gamma.tenant, want, "delivered")
+			}
+			if index == 15 {
+				var hotPending int
+				if err := f.Admin.QueryRow(`SELECT count(*) FILTER(WHERE tenant_id=$2 AND state='delivered'),count(*) FILTER(WHERE tenant_id=$1 AND state='pending') FROM platform_outbound_actions WHERE tenant_id IN($1,$2)`, alpha.tenant, beta.tenant).Scan(&quietProgress, &hotPending); err != nil || quietProgress < 2 || hotPending == 0 {
+					t.Fatal("quiet tenant did not durably progress alongside hot backlog and future arrivals", quietProgress, hotPending, err)
+				}
+			}
+		}
+		t.Logf("arrival_span=%s hot_arrivals=24 quiet_arrivals=6 quiet_delivered_at_midpoint=%d quiet_sent_during_arrivals=%d", time.Since(arrivalStart), quietProgress, betaSends.Load())
+	} else if recoverAndDrain {
 		// Together with the original beta reply, this is a 24-reply shared burst.
 		// Submit each input twice; no job or pacing timestamp is modified.
 		for index := 0; index < 23; index++ {
@@ -477,7 +532,7 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 				_ = f.Admin.QueryRow(`SELECT coalesce(jsonb_agg(jsonb_build_object('kind',kind,'used',used))::text,'[]') FROM tenant_usage WHERE tenant_id IN($1,$2)`, alpha.tenant, beta.tenant).Scan(&usage)
 				t.Fatal("shared burst reached unexpected terminal failures", delivered, failed, summary, usage)
 			}
-			if delivered == 24 {
+			if delivered == sharedReplies {
 				break
 			}
 			if time.Now().After(deadline) {
@@ -498,13 +553,13 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 	}
 	wantAlpha, wantBeta := int32(1), int32(0)
 	if recoverAndDrain {
-		wantAlpha, wantBeta = 13, 12
+		wantAlpha, wantBeta = int32(alphaReplies+1), int32(betaReplies)
 	}
-	if alphaSends.Load() != wantAlpha || betaSends.Load() != wantBeta || gammaSends.Load() != 1 {
+	if alphaSends.Load() != wantAlpha || betaSends.Load() != wantBeta || gammaSends.Load() != int32(gammaReplies) {
 		t.Fatal("shared quota transport repeated or crossed scopes", alphaSends.Load(), betaSends.Load(), gammaSends.Load())
 	}
 	var attempts, permits, runnable int
-	if err := f.Admin.QueryRow(`SELECT coalesce(sum(jsonb_array_length(attempts)),0),count(*) FILTER(WHERE lease_until IS NOT NULL) FROM chat_pacing_accounts`).Scan(&attempts, &permits); err != nil || (!recoverAndDrain && attempts != 2) || (recoverAndDrain && (attempts < 1 || attempts > 21)) || permits != 0 {
+	if err := f.Admin.QueryRow(`SELECT coalesce(sum(jsonb_array_length(attempts)),0),count(*) FILTER(WHERE lease_until IS NOT NULL) FROM chat_pacing_accounts`).Scan(&attempts, &permits); err != nil || (!recoverAndDrain && attempts != 2) || (recoverAndDrain && (attempts < 1 || attempts > 20+gammaReplies)) || permits != 0 {
 		t.Fatal("shared denial charged or leaked permit", attempts, permits, err)
 	}
 	if err := f.Admin.QueryRow(`SELECT count(*) FROM river_job WHERE state NOT IN('completed','cancelled','discarded')`).Scan(&runnable); err != nil || runnable != 0 {
@@ -514,13 +569,12 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 		var receipts, echoes int
 		wantReceipts, wantEchoes := 1, 0
 		if index == 2 {
-			wantEchoes = 1
+			wantReceipts, wantEchoes = gammaReplies, gammaReplies
 		}
 		if recoverAndDrain && index < 2 {
-			wantEchoes = 12
-			wantReceipts = 12
+			wantEchoes, wantReceipts = betaReplies, betaReplies
 			if index == 0 {
-				wantReceipts++
+				wantEchoes, wantReceipts = alphaReplies, alphaReplies+1
 			}
 		}
 		if err := f.Admin.QueryRow(`SELECT (SELECT count(*) FROM platform_dispatch_receipts WHERE tenant_id=$1 AND state='completed'),(SELECT count(*) FROM twitch_sent_messages WHERE tenant_id=$1)`, account.tenant).Scan(&receipts, &echoes); err != nil || receipts != wantReceipts || echoes != wantEchoes {
@@ -530,7 +584,7 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 	observationMu.Lock()
 	defer observationMu.Unlock()
 	if recoverAndDrain {
-		if len(observedShared) != 25 || maxSharedUsed != 20 || observedShared[len(observedShared)-1].Sub(observedShared[0]) < 30*time.Second {
+		if len(observedShared) != sharedReplies+1 || maxSharedUsed != 20 || observedShared[len(observedShared)-1].Sub(observedShared[0]) < 30*time.Second {
 			t.Fatal("shared burst did not exercise natural rolling-window replenishment", len(observedShared), maxSharedUsed)
 		}
 		var rejected int
@@ -541,7 +595,7 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 		if err := f.Admin.QueryRow(`SELECT coalesce(max(used) FILTER(WHERE tenant_id=$1),0),coalesce(max(used) FILTER(WHERE tenant_id=$2),0) FROM tenant_usage WHERE tenant_id IN($1,$2) AND kind='http'`, alpha.tenant, beta.tenant).Scan(&alphaHTTP, &betaHTTP); err != nil || alphaHTTP <= 0 || betaHTTP <= 0 || alphaHTTP > 120 || betaHTTP > 120 {
 			t.Fatal("free-plan headroom was not preserved", alphaHTTP, betaHTTP, err)
 		}
-		t.Logf("shared_attempts=%d successful_shared_replies=24 max_account_window_used=%d charged_span=%s alpha_http_peak=%d beta_http_peak=%d", len(observedShared), maxSharedUsed, observedShared[len(observedShared)-1].Sub(observedShared[0]), alphaHTTP, betaHTTP)
+		t.Logf("shared_attempts=%d successful_shared_replies=%d max_account_window_used=%d charged_span=%s alpha_http_peak=%d beta_http_peak=%d", len(observedShared), sharedReplies, maxSharedUsed, observedShared[len(observedShared)-1].Sub(observedShared[0]), alphaHTTP, betaHTTP)
 	} else if len(observedShared) != 1 {
 		t.Fatal("expired shared action charged another attempt", len(observedShared))
 	}
