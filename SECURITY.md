@@ -2,9 +2,9 @@
 
 ## Supported scope
 
-This repository is a public base template. Security work here focuses on safe defaults, secret hygiene, and guidance for derived projects.
+This repository contains the Over-Laid application: its Go API, React dashboard/overlays, PostgreSQL tenant stores, Twitch/OBS integration and optional Newsroom providers. Security-relevant boundaries include workspace authorization, forced row-level security, credential custody, public/add/share capabilities, untrusted URL retrieval and provider-effect execution.
 
-Derived repositories should add stack-specific security policy details before production use.
+The project is under active development. A passing test suite or implemented contract is not a supported-release guarantee; see [current capabilities and limits](docs/reference/project-status.md) for activation and acceptance boundaries.
 
 ## Reporting a vulnerability
 
@@ -35,7 +35,7 @@ Use placeholders in docs and examples. Report only secret key names and presence
 
 ## Dependency and supply-chain hygiene
 
-Derived templates should:
+Contributors should:
 
 - commit lockfiles for application projects when the stack expects them
 - pin container base images deliberately

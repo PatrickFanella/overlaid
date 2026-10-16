@@ -13,7 +13,7 @@ services:
     # ports: []
     # environment:
     #   OBS_WEBSOCKET_URL: ws://localhost:4455
-    #   DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@localhost:${POSTGRES_PORT:-55432}/${POSTGRES_DB:-app}?sslmode=disable
+    #   DATABASE_URL: postgres://overlaid_app:${OVERLAID_DATABASE_PASSWORD:-change-me-runtime}@localhost:${POSTGRES_PORT:-55432}/${POSTGRES_DB:-app}?sslmode=disable
 
     # MPRIS runs on the host user session bus. Enable this only when the API
     # container should read now-playing data from the same Linux desktop user.

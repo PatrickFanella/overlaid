@@ -135,6 +135,8 @@ If the restored data is stale or unexpected, stop the API again and repeat with 
 
 Restore Postgres with the API stopped so event-history writes cannot race the restore.
 
+The command below assumes the destination cluster already has the matching owners, restricted roles and policy dependencies. A database dump does not recreate cluster login roles or your vault keyring. For a fresh cluster or a current multi-tenant backup, first follow [tenancy and recovery](tenancy-and-recovery.md#data-lifecycle-and-restore) and validate the complete matching schema/role graph on an isolated target. Keep the selected backup, keyring, binary and migrations together; the dated restore evidence below does not qualify later schemas. The `--clean` example replaces objects in its target database, so verify the destination and a recoverable backup before using it.
+
 1. Stop the API:
 
 ```bash

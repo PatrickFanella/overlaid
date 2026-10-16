@@ -1,0 +1,41 @@
+# Current capabilities and limits
+
+Reviewed against main through PR #170 on October 16, 2026. This page is a capability snapshot for readers evaluating Over-Laid. The [remaining-work roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) defines delivery order and acceptance gates; dated QA reports record observations from their named environments.
+
+## Implemented product workflows
+
+The operator desk provides OBS scene/input/item controls, quick actions and sequences, readiness/recovery views, session reports, event history, overlay configuration and browser-source previews. Eleven overlay routes include Newsroom, with offline demo rendering. Twitch EventSub supplies chat and supported alert/reward events through the existing event pipeline.
+
+The general Chat command manager owns custom commands and Newsroom actions. PostgreSQL-backed bot features include timers, counters, quotes, API variables, audit evidence, moderation rules/nuke workflows and reward management. File mode retains the shared command registry and selected file-backed product state; it is not equivalent to the managed database feature set.
+
+Newsroom includes moderator triage and review coordination, the reaction deck/segments, shelves and story bundles, named shows/recordings, saved play notes, templates, questions, raffles, chapter/Markdown exports, confirmed Discord webhook delivery, shared shelves and opt-in public episodes. Optional enrichment includes source extraction, YouTube metadata/playlist imports, Claude analysis and Brave related coverage. Keys, scopes and network/provider availability determine which operations can run. [Newsroom operation](../runbooks/newsroom.md) explains the defaults, usage bounds, failure states and privacy projections.
+
+## Accounts and storage
+
+`DEPLOYMENT_MODE=selfhost` exposes one bootstrap workspace through operator-header authorization. PostgreSQL is optional, but needed for the full managed product stores. `DEPLOYMENT_MODE=hosted` requires PostgreSQL, a vault keyring and account sessions; the global operator secret grants no hosted access. Forced RLS, immutable tenant scopes, member roles, CSRF/origin controls, encrypted provider custody, hashed capabilities, retention, exports and deletion are implemented.
+
+Free, paid and unlimited plan records enforce allowances; their presence does not mean payments are enabled. Plan assignment is an administrator operation. Billing and general media-upload purchasing remain roadmap work.
+
+Managed runtime capacity defaults to 100 and can explicitly select 1–1000. Finite fixtures exercise actual runtime creation/resumption, retained overlay-only commands and retention at 1000. These are not 1000 live provider connections or a full chat-delivery throughput qualification.
+
+## Twitch execution: what starts and what does not
+
+| Boundary | Activation and limit |
+| --- | --- |
+| Legacy chat | Default dispatch and sender behavior. Existing broadcaster controls remain available with the required channel authorization. |
+| Retained ingestion/dispatch | Opt in with `TWITCH_CHAT_DISPATCH_MODE=retained` and an isolated `PLATFORM_WORKER_DATABASE_URL`. Persisted mode/controller guards prevent accidental incompatible fallback. |
+| Retained chat sender | Opt in with `TWITCH_CHAT_SEND_MODE=retained`, retained dispatch, a separate outbound worker URL and pacing URL. Shared bot execution additionally needs its restricted execution connection. [Setup and rollback](../runbooks/retained-chat-sender.md) describe all prerequisites. |
+| Bot custody and selection | Tenant-owned OAuth, service-administrator custody, explicit publication/delegation and selected-identity checks are implemented. Credentials alone do not grant sending permission or establish a Twitch Chat Bot badge. |
+| Retained moderation | Contracts, atomic ledger/jobs, separate pacing/worker roles, typed transport, fresh authorization, priority/fairness, lifecycle ownership and actual automatic/radiation source binding are implemented. Consumer construction is explicit internal code; no moderation environment switch or default startup registration exists. |
+
+An explicitly installed moderation consumer drains direct effects before ownership and refuses unbound dashboard/batch fallback even while prepared or stopped. Automatic/radiation admission records queue acceptance separately from provider delivery. Durable authorized operator/batch occurrences, owner-facing asynchronous status and persisted activation/downgrade guards remain before configured moderation startup. See [routing](../runbooks/moderation-routing.md) and [consumer ownership](../runbooks/moderation-consumer.md).
+
+The retained ledgers use durable pre-effect claims and preserve uncertainty without automatic replay. Readiness, a pacing report or queue admission is not effect authorization or proof of delivery. Finite shared-cooldown, uneven-arrival and mixed moderation/chat fixtures support the implemented boundaries; broader hostile-load and full thousand-channel delivery acceptance remain open.
+
+## Roadmap and release qualification
+
+Remaining work includes the rest of Twitch transport/onboarding/conduit integration and acceptance, the versioned automation engine, deeper chat/import compatibility, Kick, Discord bot operation, YouTube Live, expanded media/alerts, loyalty and billing. Newsroom's implemented Discord webhook export is distinct from a Discord bot adapter; YouTube story metadata is distinct from YouTube Live chat ingestion.
+
+The original parity scope remains in the [multi-platform plan](../superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md); scheduling follows the [remaining-work roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md). The June Twitch-only acceptance and October deployment reports are dated evidence, not blanket acceptance of subsequent changes.
+
+`make verify`, disposable PostgreSQL/race checks, PR-head CI, merged-main CI, deployed revision, provider behavior and restore/release qualification are separate proof states. The first named self-hosted release, controlled Twitch/OBS workflows and live bot identity/badge acceptance remain separate gates. No production readiness or complete multi-platform parity is implied by this capability snapshot.
