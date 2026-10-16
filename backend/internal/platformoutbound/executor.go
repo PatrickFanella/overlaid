@@ -39,6 +39,10 @@ type Authorization struct {
 }
 type Authorize func(context.Context, Target) (Authorization, error)
 
+// PacingIdentity reads local selected-sender metadata only. Its result may defer
+// work but grants no authorization, permit or claim. It must not call providers.
+type PacingIdentity func(context.Context, Target) (string, error)
+
 // SendGate pairs a provider attempt and durable successful echo bookkeeping with
 // the consumer's echo check. It grants neither authorization nor a ledger claim.
 type SendGate func(context.Context, Target, context.CancelFunc) (release func(), err error)
@@ -47,6 +51,7 @@ type Executor struct {
 	product   *tenantdb.DB
 	pacer     *chatpacing.Store
 	authorize Authorize
+	identify  PacingIdentity
 	sendGate  SendGate
 }
 
@@ -83,6 +88,61 @@ func NewExecutorWithGate(ctx context.Context, product *tenantdb.DB, pacer *chatp
 	}
 	executor.sendGate = gate
 	return executor, nil
+}
+
+// NewExecutorWithPacingHint opts into read-only preparation before fresh provider
+// authorization. Existing constructors retain their original execution path.
+func NewExecutorWithPacingHint(ctx context.Context, product *tenantdb.DB, pacer *chatpacing.Store, authorize Authorize, gate SendGate, identify PacingIdentity) (*Executor, error) {
+	if identify == nil {
+		return nil, ErrInvalid
+	}
+	executor, err := NewExecutorWithGate(ctx, product, pacer, authorize, gate)
+	if err != nil {
+		return nil, err
+	}
+	executor.identify = identify
+	return executor, nil
+}
+
+func (e *Executor) pacingHint(ctx context.Context, t Target) (retry time.Time, err error) {
+	if e.identify == nil {
+		return time.Time{}, nil
+	}
+	defer func() {
+		if recover() != nil {
+			retry = time.Time{}
+			err = errExecutionAuth
+		}
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	if t.Deadline.Before(deadline) {
+		deadline = t.Deadline
+	}
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	sender, err := e.identify(ctx, t)
+	if errors.Is(err, ErrDenied) {
+		return time.Time{}, ErrDenied
+	}
+	if err != nil {
+		return time.Time{}, errExecutionAuth
+	}
+	report, err := e.pacer.Inspect(ctx, sender, t.ChannelID, t.Deadline)
+	if err != nil {
+		return time.Time{}, errExecutionPacing
+	}
+	return pacingRetry(report), nil
+}
+
+// Recheck all known waits within one second. This preserves River's short
+// snooze path and prompt deadline handling while avoiding provider work. Fair
+// admission is still decided only by AcquireFair after full authorization.
+func pacingRetry(report chatpacing.Report) time.Time {
+	wait := max(report.CooldownWaitMS, report.BudgetWaitMS, report.ClockWaitMS, report.ChannelWaitMS, report.PermitWaitMS)
+	if wait <= 0 {
+		return time.Time{}
+	}
+	return report.ObservedAt.Add(time.Duration(min(wait, int64(1000))) * time.Millisecond)
 }
 
 type Execution struct {
@@ -162,6 +222,14 @@ func (e *Executor) Execute(ctx context.Context, args platform.ChatSendArgs) (res
 	}
 	if !t.Deadline.After(time.Now()) {
 		return reject(ctx, store, t, platform.Permanent)
+	}
+	if retry, hintErr := e.pacingHint(ctx, t); hintErr != nil {
+		if errors.Is(hintErr, ErrDenied) {
+			return reject(ctx, store, t, platform.Unauthorized)
+		}
+		return result, hintErr
+	} else if !retry.IsZero() {
+		return Execution{RetryAt: retry}, nil
 	}
 	// Bound initial authorization by the original action deadline as well.
 	authDeadline := time.Now().Add(10 * time.Second)

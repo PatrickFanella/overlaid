@@ -78,6 +78,31 @@ func (a *Adapter) entitled(ctx context.Context, tenant string) (*tenantdb.DB, er
 	return db, nil
 }
 
+// PacingSender reads only local selection, entitlement and consent metadata.
+// It neither reads credentials nor checks provider roles. The executor may use
+// this snapshot only to defer work; Authorize still runs before permit and claim.
+func (a *Adapter) PacingSender(ctx context.Context, t platformoutbound.Target) (string, error) {
+	if !tenantdb.ValidID(t.TenantID) || !validUser(t.ChannelID) || t.ConnectionID != "twitch:"+t.ChannelID || (t.Capability != "chat.send" && t.Capability != "chat.reply") || !t.Deadline.After(time.Now()) {
+		return "", platformoutbound.ErrDenied
+	}
+	if _, err := a.entitled(ctx, t.TenantID); err != nil {
+		return "", err
+	}
+	selection, err := a.store.ChatSenderSelection(ctx, t.TenantID, t.ChannelID)
+	if err != nil {
+		return "", selectionError(err)
+	}
+	if !validUser(selection.SenderID) {
+		return "", platformoutbound.ErrDenied
+	}
+	if selection.Shared {
+		if err := a.consent(ctx, t, selection); err != nil {
+			return "", err
+		}
+	}
+	return selection.SenderID, nil
+}
+
 // Authorize is the trusted callback supplied to the fenced executor. Only
 // chat.send/reply user-token effects are supported. Active shared selection
 // fails closed unless NewShared supplied a validated service execution pool.

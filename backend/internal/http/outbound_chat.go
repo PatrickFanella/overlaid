@@ -64,7 +64,7 @@ func (a *Application) prepareOutboundChat(ctx context.Context) error {
 	if err != nil {
 		return errors.New("retained chat authorization configuration invalid")
 	}
-	executor, err := platformoutbound.NewExecutorWithGate(ctx, a.store.Product, b.pacing, a.outboundAuthorize(adapter.Authorize), a.outboundSendGate)
+	executor, err := platformoutbound.NewExecutorWithPacingHint(ctx, a.store.Product, b.pacing, a.outboundAuthorize(adapter.Authorize), a.outboundSendGate, a.outboundPacingIdentity(adapter.PacingSender))
 	if err != nil {
 		return errors.New("retained chat execution configuration invalid")
 	}
@@ -226,6 +226,25 @@ func (a *Application) outboundContext(ctx context.Context) (context.Context, con
 		cancel()
 	}
 	return child, func() { stop(); cancel() }
+}
+
+func (a *Application) outboundPacingIdentity(identify platformoutbound.PacingIdentity) platformoutbound.PacingIdentity {
+	return func(ctx context.Context, target platformoutbound.Target) (string, error) {
+		ctx, cancel := a.outboundContext(ctx)
+		defer cancel()
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-a.outbound.started:
+		}
+		if a.config.DeploymentMode == "hosted" && target.TenantID == tenantdb.BootstrapID {
+			return "", platformoutbound.ErrDenied
+		}
+		if err := a.guardOutboundChat(ctx); err != nil {
+			return "", err
+		}
+		return identify(ctx, target)
+	}
 }
 
 func (a *Application) outboundAuthorize(authorize platformoutbound.Authorize) platformoutbound.Authorize {
