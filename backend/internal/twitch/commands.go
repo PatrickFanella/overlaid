@@ -27,13 +27,15 @@ type ChatCommandUser struct {
 }
 
 type CustomCommand struct {
-	Name            string
-	Enabled         bool
-	Response        string
-	Action          string
-	ResponseMode    string
-	RoleRequired    string
-	CooldownSeconds int
+	RegistryID          string
+	SnapshotFingerprint string
+	Name                string
+	Enabled             bool
+	Response            string
+	Action              string
+	ResponseMode        string
+	RoleRequired        string
+	CooldownSeconds     int
 }
 
 type CommunityStore interface {

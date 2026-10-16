@@ -689,3 +689,18 @@ func TestCommandDispatcherCommunityPrecedenceAndExecutorIsolation(t *testing.T) 
 		t.Fatalf("built-in cooldown leaked into other executors: custom=%#v community=%#v", custom, quote)
 	}
 }
+
+func TestSavedCommandSnapshotSurvivesModesAndAlias(t *testing.T) {
+	for _, mode := range []string{"chat", "both", "overlay"} {
+		p := NewCommandProcessor(CommandProcessorConfig{Aliases: map[string]string{"alias": "snapshot"}, Custom: []CustomCommand{{RegistryID: "saved-id", SnapshotFingerprint: strings.Repeat("a", 64), Name: "snapshot", Enabled: true, Response: "private response", Action: "ticker", ResponseMode: mode, RoleRequired: "viewer"}}})
+		out := p.HandleMessage("!alias", ChatCommandUser{Login: "viewer"})
+		if len(out) == 0 || out[0].Data["registryCommandId"] != "saved-id" || out[0].Data["registryCommandFingerprint"] != strings.Repeat("a", 64) {
+			t.Fatal("snapshot metadata lost", mode)
+		}
+	}
+	p := NewCommandProcessor(CommandProcessorConfig{Custom: []CustomCommand{{RegistryID: "news-id", SnapshotFingerprint: strings.Repeat("b", 64), Name: "snapshotnews", Enabled: true, Action: "newsroom_submit", RoleRequired: "viewer"}}})
+	out := p.HandleMessage("!snapshotnews https://example.org/fixture", ChatCommandUser{Login: "viewer"})
+	if len(out) != 1 || out[0].Data["registryCommandId"] != "news-id" || out[0].Data["registryCommandFingerprint"] != strings.Repeat("b", 64) || out[0].Data["newsroomRequest"] != true {
+		t.Fatal("queued Newsroom snapshot lost")
+	}
+}

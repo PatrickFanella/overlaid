@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/newsroom"
@@ -292,5 +293,68 @@ func TestNewsroomCatchupOwnerAndPublicProjectionBoundaries(t *testing.T) {
 	s.Handler().ServeHTTP(w, r)
 	if w.Code != 404 {
 		t.Fatal("public capability route not scoped", w.Code)
+	}
+}
+
+func TestQueuedNewsroomRequiresOriginalSavedCommandSnapshot(t *testing.T) {
+	for _, change := range []string{"response", "cooldown", "disable-reenable", "delete-recreate", "missing-metadata"} {
+		t.Run(change, func(t *testing.T) {
+			s := NewServer(config.Config{}, events.NewBus(4))
+			ctx := t.Context()
+			registry := s.commandsRegistry()
+			command, err := registry.SaveCommand(ctx, bot.Command{Name: "snapshotnews", Enabled: true, Action: "newsroom_submit", RoleRequired: "viewer"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.refreshTwitchCustomCommands(ctx)
+			queued := s.twitchCommandProcessor.HandleMessage("!snapshotnews https://example.org/snapshot", twitch.ChatCommandUser{ID: "7", Login: "viewer", MessageID: "native"})
+			if len(queued) != 1 || queued[0].Data["registryCommandId"] != command.ID || queued[0].Data["registryCommandFingerprint"] != bot.CommandSnapshotFingerprint(s.tenantID, command) {
+				t.Fatal("saved identity not propagated")
+			}
+			switch change {
+			case "response":
+				command.Response = "changed"
+				_, err = registry.SaveCommand(ctx, command)
+			case "cooldown":
+				command.CooldownSeconds = 1
+				_, err = registry.SaveCommand(ctx, command)
+			case "disable-reenable":
+				_, err = registry.SetCommandEnabled(ctx, command.ID, false)
+				if err == nil {
+					_, err = registry.SetCommandEnabled(ctx, command.ID, true)
+				}
+			case "delete-recreate":
+				err = registry.DeleteCommand(ctx, command.ID)
+				if err == nil {
+					command.ID = ""
+					_, err = registry.SaveCommand(ctx, command)
+				}
+			case "missing-metadata":
+				delete(queued[0].Data, "registryCommandId")
+				delete(queued[0].Data, "registryCommandFingerprint")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = s.executeNewsroomRequest(ctx, queued[0]); err == nil {
+				t.Fatal("stale or unbound snapshot executed")
+			}
+			desk, err := s.newsroom.Get(ctx)
+			if err != nil || len(desk.Items) != 0 {
+				t.Fatal("stale request mutated desk", err)
+			}
+			s.refreshTwitchCustomCommands(ctx)
+			fresh := s.twitchCommandProcessor.HandleMessage("!snapshotnews https://example.org/snapshot", twitch.ChatCommandUser{ID: "7", Login: "viewer", MessageID: "fresh-native"})
+			if len(fresh) != 1 || fresh[0].Data["newsroomRequest"] != true {
+				t.Fatal("fresh request not admitted")
+			}
+			if err = s.executeNewsroomRequest(ctx, fresh[0]); err != nil {
+				t.Fatal("fresh snapshot rejected", err)
+			}
+			desk, err = s.newsroom.Get(ctx)
+			if err != nil || len(desk.Items) != 1 {
+				t.Fatal("fresh request did not mutate desk", err)
+			}
+		})
 	}
 }

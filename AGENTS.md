@@ -51,6 +51,7 @@ Both pacing constructors must validate current and original session identities a
 ## Newsroom conventions
 
 - Newsroom is rebuilt in Go and Vite at `/dashboard/newsroom`; use the existing account, tenant, and Twitch EventSub boundaries. Keep dashboard `desk-*` and OBS `sc-*` styling separate.
+- Saved registry events carry command ID and a tenant-scoped configuration/write snapshot fingerprint. Queued Newsroom execution must compare them against a fresh registry read before effects. Missing/mismatched metadata fails closed; the digest is not an atomic database revision or provider permission. Preserve aliases, roles/cooldowns and response modes.
 - Newsroom Twitch actions belong to the general bot command registry and dispatcher. Do not add a separate parser or command settings to the Newsroom document. Legacy settings import once; preserve existing commands and the import marker.
 - Retained Newsroom commands use exact revisions and atomic persistence. Moderator members may triage links/questions and edit card notes, while deck, provider, sharing, and raffle controls require configure permission.
 - Newsroom show boundaries, review claims, and editorial revisions use the same retained tenant document. Show mutations and forced claim release require the owner. Preserve literal cursor search, read-only exports, review-token fencing, and revision checks that ignore provider changes.
