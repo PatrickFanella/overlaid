@@ -39,6 +39,7 @@ type tenantRuntime struct {
 type Application struct {
 	sendGates         map[string]*tenantSendGate
 	outbound          *outboundChat
+	moderation        *moderationConsumer
 	chatControl       *chatController
 	chatWorker        *river.Client[*sql.Tx]
 	chatWorkerStarted bool
@@ -137,6 +138,9 @@ func NewApplication(cfg config.Config) (*Application, error) {
 }
 func (a *Application) Close() error {
 	a.cancel()
+	a.mu.Lock()
+	moderation := a.moderation
+	a.mu.Unlock()
 	var result error
 	if a.chatControl != nil {
 		a.chatControl.live.Store(false)
@@ -144,6 +148,12 @@ func (a *Application) Close() error {
 	stopCtx, stopWorkers := context.WithTimeout(context.Background(), 50*time.Second)
 	if a.outbound != nil {
 		a.outbound.ready.Store(false)
+	}
+	if moderation != nil {
+		if err := moderation.close(stopCtx); err != nil {
+			stopWorkers()
+			return err
+		}
 	}
 	if a.chatWorkerStarted {
 		result = errors.Join(result, a.chatWorker.Stop(stopCtx))
@@ -552,6 +562,7 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 	failed := a.sweepError || !a.sweepRan || time.Since(a.sweepAt) > 3*time.Minute
 	count := len(a.runtimes)
 	capacityBlocked := a.runtimeCapacityBlocked && count >= a.config.TenantRuntimeLimit
+	moderation := a.moderation
 	a.mu.Unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -598,6 +609,14 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 			status = "degraded"
 		}
 		checks = append(checks, map[string]string{"name": "chat_outbound", "status": outbound})
+	}
+	if moderation != nil {
+		check := "ok"
+		if !moderation.isReady() {
+			check = "degraded"
+			status = "degraded"
+		}
+		checks = append(checks, map[string]string{"name": "moderation_outbound", "status": check})
 	}
 	writeJSON(w, map[string]any{"status": status, "checks": checks, "productName": a.config.ProductName, "deploymentMode": a.config.DeploymentMode, "activeRuntimes": count, "runtimeLimit": a.config.TenantRuntimeLimit})
 }
