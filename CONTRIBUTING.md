@@ -21,10 +21,10 @@ This repository is the `over-laid` application. Keep changes small, reviewable, 
 Prefer concise conventional-style subjects:
 
 ```text
-feat: add stack recipe
-docs: update Open Pilot guidance
-fix: correct make target detection
-chore: refresh template metadata
+feat: add a Newsroom export control
+docs: clarify retained sender setup
+fix: preserve a queued action deadline
+chore: update frontend dependencies
 ```
 
 ## Open Pilot issues
@@ -48,7 +48,7 @@ Good Open Pilot tasks are:
 
 ## Verification commands
 
-Use the narrowest deterministic command that proves the change.
+Run `make verify` from the repository root. Use a narrower command only when the issue explicitly selects that scope. Go commands run from `backend/`; frontend scripts run through `pnpm --dir web`.
 
 Default full check:
 
@@ -59,12 +59,20 @@ make verify
 Examples:
 
 ```bash
-go test ./...
+(cd backend && go test ./...)
 pnpm --dir web run test
-uv run pytest
-cargo test --all
 docker compose config --quiet
 ```
+
+Go uses the module's 1.26 toolchain (`go 1.26.0`); the frontend build image uses Node 24 and `web/package.json` selects pnpm 10.33.0. [Getting started](docs/runbooks/getting-started.md#native-development) explains running the API, database and Vite separately. `make dev` starts only Vite.
+
+PostgreSQL integration tests skip unless `OVERLAID_TEST_DATABASE_URL` points to a disposable database. For the complete database/race gate, run:
+
+```bash
+GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh
+```
+
+The script owns a disposable PostgreSQL container, runs `make verify` and the uncached application/isolated River race suites, then cleans up its own resources. Never point fixtures at an application database. Report local checks, hosted CI and live provider acceptance separately.
 
 ## Project boundaries
 

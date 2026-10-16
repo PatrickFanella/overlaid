@@ -24,7 +24,7 @@ func TestTenantRuntimeLimitConfiguration(t *testing.T) {
 func TestTwitchScopeDefaultsMatchDeployment(t *testing.T) {
 	t.Setenv("TWITCH_SCOPES", "")
 	defaults := strings.Join(Load().TwitchScopes, " ")
-	for _, file := range []string{"../../../docker-compose.yml", "../../../.env.example", "../../../README.md"} {
+	for _, file := range []string{"../../../docker-compose.yml", "../../../.env.example", "../../../docs/reference/stack.md"} {
 		data, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)

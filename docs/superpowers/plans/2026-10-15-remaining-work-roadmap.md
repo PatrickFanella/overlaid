@@ -2,6 +2,8 @@
 
 Tracking: [#34](https://git.subcult.tv/subculture-collective/overlaid/issues/34). Baseline: merged main `a2f9841efa83582998a676eec1f12213a7652490`, after PR #83, on October 15, 2026.
 
+For a reader-facing snapshot through PR #170, see [current capabilities and limits](../../reference/project-status.md). The starting-point table below records the October 15 baseline; subsequent unit sections record later implementation. Use the linked activation runbooks for current configuration rather than inferring startup behavior from a historical unit description.
+
 This records the October 15 delivery order for the 16 open program issues at the baseline. Bounded implementation issues are added as their units start. It supersedes the scheduling and current-state sections of the [October 5 roadmap](2026-10-05-multiplatform-parity-roadmap.md). That document and the [research catalogue](../../research/2026-10-05-bot-parity-research.md) retain the detailed parity scope; the [accepted ADRs](../../adr/README.md) retain their architectural authority. No accepted feature is removed by this roadmap. Provider documentation and competitor coverage must be refreshed when the relevant implementation unit starts; the October research is not a current API guarantee.
 
 ## Outcome and priorities

@@ -15,6 +15,7 @@ Add each route as an OBS Browser Source at the listed size. `/dashboard/overlays
 | `/overlay/goals` | 780×640 | One primary goal with quarter ticks, up to three secondary meters. |
 | `/overlay/now-playing` | 920×260 | MPRIS track strip. Falls back to the fisheye circle mark when there is no album art. |
 | `/overlay/ticker` | 1920×72 | Full-width lower rail. Scrolls once there are two or more items. |
+| `/overlay/newsroom` | 1920×1080 | Current approved story or selected audience question. See the [Newsroom guide](newsroom.md) for privacy and playback behavior. |
 | `/overlay/camera` | 1920×1080 | Purple frame, corner registration marks and a nameplate. Size it to the camera source and stack it on top. |
 | `/overlay/starting` | 1920×1080 | Full-frame countdown card. |
 | `/overlay/brb` | 1920×1080 | Full-frame intermission card driven by `brb` events from the dashboard. |
@@ -28,6 +29,7 @@ Every overlay:
 - `?demo=1` plays sample events locally and never connects to the API. Use it to check layout in OBS without Twitch or a running stream.
 - `?status=1` keeps the connection pip visible. It normally hides while the stream is connected, so it never shows up on air.
 - `?apiBaseUrl=http://host:8080` overrides the API origin.
+- `?key=<OVERLAY_TOKEN>` authorizes live overlay reads. Copy the URL from the Overlays page; never use the operator secret. Demo mode needs no credential.
 
 Empty states such as "Waiting for Twitch chat" show only while connecting or reconnecting. Once the event stream is live they disappear, so a quiet chat at the start of a stream stays blank.
 
