@@ -260,12 +260,21 @@ func TestNewsroomCatchupOwnerAndPublicProjectionBoundaries(t *testing.T) {
 		t.Fatal("private prep leaked to quick-add", quickResult.Code, quickResult.Body.String())
 	}
 	limit := int64(9000)
-	s.newsroom.Internal(ctx, newsroom.Command{Action: "usage-settings", Owner: true, UsagePolicy: &newsroom.UsagePolicy{AllowanceMicros: &limit, WarningPercent: 80}})
+	configured, err := s.newsroom.Internal(ctx, newsroom.Command{Action: "usage-settings", Owner: true, UsagePolicy: &newsroom.UsagePolicy{AllowanceMicros: &limit, WarningPercent: 80}})
+	if err != nil || configured.UsagePolicy.AllowanceMicros == nil || *configured.UsagePolicy.AllowanceMicros != limit {
+		t.Fatal("usage policy fixture not configured", err)
+	}
 	r := httptest.NewRequest("GET", "/api/newsroom", nil)
 	r = r.WithContext(context.WithValue(ctx, tenantTrustKey{}, tenantTrust{operator: true, role: "moderator", actor: "mod"}))
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, r)
-	if w.Code != 200 || strings.Contains(w.Body.String(), "9000") {
+	var projected struct {
+		UsagePolicy newsroom.UsagePolicy `json:"usagePolicy"`
+	}
+	if err = json.Unmarshal(w.Body.Bytes(), &projected); err != nil {
+		t.Fatal("moderator response is not JSON", err)
+	}
+	if w.Code != 200 || projected.UsagePolicy.AllowanceMicros != nil || projected.UsagePolicy.WarningPercent != 0 {
 		t.Fatal("moderator usage leak", w.Code, w.Body.String())
 	}
 	for _, path := range []string{"/api/newsroom/usage", "/api/newsroom/automation", "/api/newsroom/broadcasts/any/discord", "/api/newsroom/broadcasts/any/episode"} {
