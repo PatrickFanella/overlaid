@@ -88,6 +88,10 @@ func (s *Store) Admit(ctx context.Context, r Request) (string, bool, error) {
 // jobs together. A conflict or failed enqueue rolls back every new action. It
 // neither executes a command nor grants provider effect permission.
 func (s *Store) AdmitBatch(ctx context.Context, requests []Request) ([]Admission, error) {
+	return s.admitBatch(ctx, requests, nil)
+}
+
+func (s *Store) admitBatch(ctx context.Context, requests []Request, bindings []RegistryReply) ([]Admission, error) {
 	if len(requests) == 0 || len(requests) > 16 {
 		return nil, ErrInvalid
 	}
@@ -111,8 +115,14 @@ func (s *Store) AdmitBatch(ctx context.Context, requests []Request) ([]Admission
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Lock the tenant before reading its plan. A joined lock/read can lose its
+	// joined row during PostgreSQL's recheck after a concurrent reassignment.
+	var tenant string
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM tenants WHERE id=$1 FOR UPDATE`, s.db.TenantID()).Scan(&tenant); err != nil {
+		return nil, err
+	}
 	var raw []byte
-	if err = tx.QueryRowContext(ctx, `SELECT p.limits FROM tenants t JOIN plans p ON p.id=t.plan_id WHERE t.id=$1 FOR UPDATE OF t`, s.db.TenantID()).Scan(&raw); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT p.limits FROM tenants t JOIN plans p ON p.id=t.plan_id WHERE t.id=$1`, s.db.TenantID()).Scan(&raw); err != nil {
 		return nil, err
 	}
 	fresh := 0
@@ -136,6 +146,11 @@ func (s *Store) AdmitBatch(ctx context.Context, requests []Request) ([]Admission
 			return nil, err
 		}
 		return results, nil
+	}
+	if bindings != nil {
+		if err = s.lockRegistryReplies(ctx, tx, bindings, results, raw); err != nil {
+			return nil, err
+		}
 	}
 	var channel string
 	var deadline time.Time

@@ -2,13 +2,10 @@ package httpapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"sync"
 
-	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platformoutbound"
@@ -37,7 +34,7 @@ type registryReplyCollection struct {
 	mu        sync.Mutex
 	server    *Server
 	source    platform.ChatEvent
-	requests  []platformoutbound.Request
+	requests  []platformoutbound.RegistryReply
 	snapshots map[string]string
 	current   *registryReplyOutput
 	closed    bool
@@ -116,9 +113,10 @@ func (s *Server) collectRegistryReply(ctx context.Context, actionID, message str
 	}
 	// Position zero is the single chat effect of these versioned output kinds.
 	// Display IDs and rendered text are deliberately absent from the action key.
-	raw, _ := json.Marshal([]string{"registry-reply-v1", output.commandID, output.fingerprint, output.kind, "0"})
-	sum := sha256.Sum256(raw)
-	key := hex.EncodeToString(sum[:])
+	key := platformoutbound.RegistryReplyKey(output.commandID, output.fingerprint, output.kind)
+	if key == "" {
+		return fail(errRegistryReply)
+	}
 	for _, prior := range c.requests {
 		if prior.Key == key {
 			return fail(errRegistryReply)
@@ -128,7 +126,7 @@ func (s *Server) collectRegistryReply(ctx context.Context, actionID, message str
 		return fail(errRegistryReply)
 	}
 	c.snapshots[output.commandID] = output.fingerprint
-	c.requests = append(c.requests, platformoutbound.Request{EventID: c.source.ID, ConnectionID: c.source.ConnectionID, Key: key, Text: message})
+	c.requests = append(c.requests, platformoutbound.RegistryReply{Request: platformoutbound.Request{EventID: c.source.ID, ConnectionID: c.source.ConnectionID, Key: key, Text: message}, CommandID: output.commandID, SnapshotFingerprint: output.fingerprint, EffectKind: output.kind})
 	return nil
 }
 
@@ -154,31 +152,6 @@ func (c *registryReplyCollection) admit(ctx context.Context) error {
 	if len(c.requests) == 0 {
 		return nil
 	}
-	registry := c.server.commandsRegistry()
-	if registry == nil {
-		return errRegistryReply
-	}
-	commands, err := registry.ListCommands(ctx)
-	if err != nil {
-		return err
-	}
-	matched := 0
-	for _, command := range commands {
-		if expected, ok := c.snapshots[command.ID]; ok {
-			if !command.Enabled || bot.CommandSnapshotFingerprint(c.server.tenantID, command) != expected {
-				return errRegistryReply
-			}
-			if err := registry.AllowItem(ctx, "commands", command.Name); err != nil {
-				return err
-			}
-			matched++
-		}
-	}
-	if matched != len(c.snapshots) {
-		return errRegistryReply
-	}
-	// The fresh snapshot comparison above is not a transaction fence against a
-	// concurrent registry edit. Admission atomically binds only source and replies.
-	_, err = c.server.retainedReplies.store.AdmitBatch(ctx, c.requests)
+	_, err := c.server.retainedReplies.store.AdmitRegistryBatch(ctx, c.requests)
 	return err
 }
