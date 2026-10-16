@@ -34,6 +34,10 @@ The snapshot contains only pool connection/wait counts; counts of active session
 
 October 15 local investigation on `f71131c`: eight consecutive uncached race runs of `TestOutboundRiverPacingSnoozeAndRestart` passed. Three combined uncached race runs of `platformoutbound`, `twitchoutbound` and `tenancy` also passed with the disposable PostgreSQL container limited to one CPU and 512 MiB. These are finite synthetic observations. No River fetch/worker timeout, action deadline, pacing rule, claim or startup behavior changed. The original hosted fetch-timeout cause remains unresolved; capture the failure snapshot if it recurs before choosing a runtime fix.
 
+The timeout recurred on PR #96 at `714ef37` in [hosted run 15576/job 28730](https://git.subcult.tv/subculture-collective/overlaid/actions/runs/15576/jobs/28730). The late snapshot read activity successfully and observed a running job at attempt one, but its job scan failed. The timing zeros in that partial snapshot are unavailable measurements; the late absence of lock waits does not rule out earlier contention.
+
+A separate diagnostic defect is reproducible without a timeout: River stores a job with no errors as a NULL error array, so `cardinality(errors)` cannot scan into an integer. The diagnostic query now counts that absence as zero. A fresh-job regression failed before this change and passed afterward; the restart fixture also checks metadata after a real snooze. This repairs the observation, not the River fetch. Runtime deadlines and claim handling are unchanged, and #90 remains open. Fifty focused uncached race repetitions of the restart test passed locally using Go 1.26.0, matching the hosted toolchain. This finite result does not reproduce or resolve the timeout.
+
 With `OVERLAID_TEST_DATABASE_URL` already pointing to a disposable database, focused checks from `backend/` are:
 
 ```bash
