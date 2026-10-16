@@ -73,3 +73,5 @@ Tenant-owned bot accounts use separate vault ciphertext and explicit broadcaster
 
 - Use qualified Docker Hub image names in Dockerfiles so Docker and rootless Podman resolve the same base images.
 - Keep build-context exclusions in `backend/.dockerignore` and `web/.dockerignore`; local environment files, dependencies, generated assets, and test artifacts must not be copied into image builds.
+
+`platformmoderation.NewExecutor` composes ledger/pacing identity checks, original deadlines, fresh authorization and one bounded moderation attempt. Preserve exact client/moderator/binding/capability comparisons after a committed one-use claim, private action equality, conservative permit lifetime, detached completion and fixed errors. `Execution.Done` forbids replay even alongside an error; only pre-claim preparation may defer. Normalize through the moderation receipt resolver, never the chat validator or echo store. No moderation client, worker or startup caller is registered by this executor.

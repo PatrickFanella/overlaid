@@ -143,7 +143,7 @@ type Claim struct {
 
 // Start commits the running fence before exposing the action. Concurrent or
 // repeated starts, including after restart, cannot obtain another claim. The
-// future executor must freshly authorize the effect after this durable fence.
+// executor must freshly authorize the effect after this durable fence.
 func (s *Store) Start(ctx context.Context, id string) (Claim, bool, error) {
 	if !validHash(id) {
 		return Claim{}, false, ErrInvalid
