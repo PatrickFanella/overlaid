@@ -117,17 +117,9 @@ func ownedModerationFixture(t *testing.T, shared bool) *moderationOwnerFixture {
 
 func (h *moderationOwnerFixture) admit(t *testing.T) platform.ModerationIntent {
 	t.Helper()
+	source := h.source(t, time.Now().UTC())
 	db, err := h.app.store.Product.Scoped(h.account.tenant)
 	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC()
-	source, err := platform.NewChatEvent(platform.Connection{TenantID: h.account.tenant, ID: "twitch:123", Platform: "twitch"}, "owner-source", now, now, platform.ChatMessage{MessageID: "owner-source", Text: "PRIVATE_OWNER_SOURCE", Actor: platform.Identity{ID: "777"}, Channel: platform.Identity{ID: "123"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ingest, _ := platformingest.New(db)
-	if _, err := ingest.IngestChat(t.Context(), source, nil); err != nil {
 		t.Fatal(err)
 	}
 	intent, err := platform.NewTwitchModerationIntent(source, "owner-delete", platform.ModerationAction{ChannelID: "123", Capability: "message.delete", MessageID: "owner-source"})
@@ -139,6 +131,24 @@ func (h *moderationOwnerFixture) admit(t *testing.T) platform.ModerationIntent {
 		t.Fatal("owner admission", created, err)
 	}
 	return intent
+}
+
+func (h *moderationOwnerFixture) source(t *testing.T, occurred time.Time) platform.ChatEvent {
+	t.Helper()
+	db, err := h.app.store.Product.Scoped(h.account.tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	source, err := platform.NewChatEvent(platform.Connection{TenantID: h.account.tenant, ID: "twitch:123", Platform: "twitch"}, "owner-source", occurred, now, platform.ChatMessage{MessageID: "owner-source", Text: "PRIVATE_OWNER_SOURCE", Actor: platform.Identity{ID: "777"}, Channel: platform.Identity{ID: "123"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ingest, _ := platformingest.New(db)
+	if _, err := ingest.IngestChat(t.Context(), source, nil); err != nil {
+		t.Fatal(err)
+	}
+	return source
 }
 
 func moderationOwnerCheck(t *testing.T, app *Application) string {
