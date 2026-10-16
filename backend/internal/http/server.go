@@ -32,6 +32,7 @@ type Server struct {
 	platformIngest            *platformingest.Store
 	retainedReplies           *registryReplyAdmission
 	chatReady                 func() bool
+	chatFence                 func(context.Context) error
 	retainedChatGate          chan struct{}
 	chatSendGate              chan struct{}
 	newsroomTwitchClient      *twitch.Client

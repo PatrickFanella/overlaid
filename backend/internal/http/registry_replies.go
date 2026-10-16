@@ -152,6 +152,9 @@ func (c *registryReplyCollection) admit(ctx context.Context) error {
 	if len(c.requests) == 0 {
 		return nil
 	}
+	if err := c.server.checkChatFence(ctx); err != nil {
+		return err
+	}
 	_, err := c.server.retainedReplies.store.AdmitRegistryBatch(ctx, c.requests)
 	return err
 }

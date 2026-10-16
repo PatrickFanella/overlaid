@@ -65,6 +65,11 @@ func (s *Server) sendTwitchChatMessage(ctx context.Context, message string) (str
 }
 
 func (s *Server) sendTwitchChatAction(ctx context.Context, actionID, message string) (string, error) {
+	ctx, stop := s.chatEffectContext(ctx)
+	defer stop()
+	if err := s.checkChatFence(ctx); err != nil {
+		return "", err
+	}
 	if s.retainedReplies != nil {
 		return "", s.collectRegistryReply(ctx, actionID, message)
 	}
@@ -81,10 +86,17 @@ func (s *Server) sendTwitchChatAction(ctx context.Context, actionID, message str
 	}
 	token, ok := s.ensureTwitchToken(ctx)
 	if !ok || strings.TrimSpace(token.AccessToken) == "" || strings.TrimSpace(token.UserID) == "" {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		return "", fmt.Errorf("%w: authenticated Twitch token required", errTwitchChatUnavailable)
 	}
 	if !hasScope(token.Scope, "user:write:chat") {
 		return "", fmt.Errorf("%w: user:write:chat", errTwitchChatMissingScope)
+	}
+	// Gate waits and credential refresh may outlast controller ownership.
+	if err := s.checkChatFence(ctx); err != nil {
+		return "", err
 	}
 	receipt, err := twitchsend.SendUserMessage(ctx, twitchHTTPClient, s.config.TwitchClientID, token.AccessToken, token.UserID, platform.OutboundMessage{ActionID: actionID, ChannelID: token.UserID, Text: message})
 	if err != nil {
@@ -99,4 +111,26 @@ func (s *Server) sendTwitchChatAction(ctx context.Context, actionID, message str
 		}
 	}
 	return receipt.ProviderMessageID, nil
+}
+
+func (s *Server) chatEffectContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	child, cancel := context.WithCancel(ctx)
+	if s.tenantContext == nil {
+		return child, cancel
+	}
+	stopTenant := context.AfterFunc(s.tenantContext, cancel)
+	if s.tenantContext.Err() != nil {
+		cancel()
+	}
+	return child, func() { stopTenant(); cancel() }
+}
+
+func (s *Server) checkChatFence(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.chatFence != nil {
+		return s.chatFence(ctx)
+	}
+	return nil
 }

@@ -213,10 +213,12 @@ func TestRetainedModeControllerGuardAndReadiness(t *testing.T) {
 	}
 	app.Close()
 	cfg.TwitchChatDispatchMode = "legacy"
-	cfg.TwitchEventSub = true
-	if legacy, err := NewApplication(cfg); err == nil {
-		legacy.Close()
-		t.Fatal("mode marker allowed legacy ingestion")
+	for _, enabled := range []bool{false, true} {
+		cfg.TwitchEventSub = enabled
+		if legacy, err := NewApplication(cfg); err == nil {
+			_ = legacy.Close()
+			t.Fatal("mode marker allowed legacy writer", enabled)
+		}
 	}
 }
 

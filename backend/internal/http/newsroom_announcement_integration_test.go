@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -153,6 +154,21 @@ func TestPostgresManualAnnouncementRequestsAndReceiptOnlyRetries(t *testing.T) {
 	if response := executeApplication(app, denied); response.Code != 403 {
 		t.Fatal("moderator can prepare announcement", response.Code)
 	}
+	// A request which already reached its runtime must still fence admission.
+	previewResponse = executeApplication(app, accountRequest("GET", "/api/newsroom/announce/current", "", alpha))
+	if previewResponse.Code != 200 || json.Unmarshal(previewResponse.Body.Bytes(), &preview) != nil {
+		t.Fatal(previewResponse.Code, previewResponse.Body.String())
+	}
+	body.Fingerprint = preview["fingerprint"]
+	func() {
+		fence := s.chatFence
+		defer func() { s.chatFence = fence }()
+		s.chatFence = func(context.Context) error { return errors.New("fixture controller unavailable") }
+		if response := post(alpha, body); response.code != 503 {
+			t.Fatal("manual admission bypassed controller fence", response)
+		}
+		count(0)
+	}()
 	// An unresolved retained request cannot switch to the default transport.
 	s.retainedReplies = nil
 	if response := post(alpha, body); response.code != 409 {
