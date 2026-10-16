@@ -52,6 +52,8 @@ Both pacing constructors must validate current and original session identities a
 
 `platformoutbound.AdmitManual` retains explicit Newsroom announcements under a separate manual source, never a fabricated chat event. Preserve actor/request-key identity, fresh configure permission under the tenant lock, immutable payload conflicts, fixed DB-clock deadlines, combined limits and atomic source/action/job admission. Keep the exact-one-source and composite cascading foreign keys, metadata-only exports, subject-viewer/retention/member/tenant deletion and unchanged existing chat identities. The store grants no HTTP or sender activation; unresolved intents must not gain fresh retry keys automatically. Migration 0026 requires a compatible runtime; old binaries cannot safely read manual rows.
 
+Manual Newsroom HTTP requests use server-projected previews, authenticated scope comparisons and `AdmitNewsroomAnnouncement` content locks. Preserve tenant-before-document mutation locks, configure/CSRF checks, read-only `LookupManual` retries, queued-versus-delivered responses and no mode fallback. The UI must persist one scoped unresolved intent before POST; errors/reload/receipt checks must never generate replacement keys or admit missing work. Explicit clearing changes local bookkeeping only. No startup path selects retained sending.
+
 ## Newsroom conventions
 
 - Newsroom is rebuilt in Go and Vite at `/dashboard/newsroom`; use the existing account, tenant, and Twitch EventSub boundaries. Keep dashboard `desk-*` and OBS `sc-*` styling separate.

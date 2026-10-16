@@ -439,50 +439,6 @@ func (s *Server) newsroomPlaylist(w http.ResponseWriter, r *http.Request) {
 	s.newsroomResponse(w, r, d)
 }
 
-func (s *Server) newsroomAnnounce(w http.ResponseWriter, r *http.Request) {
-	if s.newsroom == nil {
-		http.Error(w, "newsroom unavailable", 503)
-		return
-	}
-	d, err := s.newsroom.Get(r.Context())
-	if err != nil {
-		http.Error(w, "newsroom unavailable", 503)
-		return
-	}
-	message := ""
-	switch r.PathValue("kind") {
-	case "current":
-		for _, i := range d.Items {
-			if i.ID == d.CurrentID {
-				message = i.ChatAnnouncement()
-			}
-		}
-	case "raffle":
-		if d.Raffle.Winner != "" {
-			message = "Raffle winner: @" + d.Raffle.Winner
-		} else if d.Raffle.Open {
-			entry := s.newsroomRaffleCommand(r.Context())
-			if entry == "" {
-				http.Error(w, "enable a raffle-entry command in Chat first", 409)
-				return
-			}
-			message = "Raffle open: type " + entry + " to enter"
-		}
-	default:
-		http.Error(w, "unknown announcement", 400)
-		return
-	}
-	if message == "" {
-		http.Error(w, "nothing to announce", 409)
-		return
-	}
-	if _, err = s.sendTwitchChatMessage(r.Context(), message); err != nil {
-		http.Error(w, "Twitch announcement failed; check the connected channel and scopes", 502)
-		return
-	}
-	writeJSON(w, map[string]bool{"announced": true})
-}
-
 func (s *Server) newsroomOverlay(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if s.newsroom == nil {

@@ -19,6 +19,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/newsroom/quick-add", s.newsroomQuickAdd)
 	s.mux.HandleFunc("GET /api/newsroom/overlay", s.requireOverlay(s.newsroomOverlay))
 	s.mux.HandleFunc("POST /api/newsroom/playlist", s.requireOperator(s.newsroomPlaylist))
+	s.mux.HandleFunc("GET /api/newsroom/announce/{kind}", s.requireOperator(s.newsroomAnnouncementPreview))
 	s.mux.HandleFunc("POST /api/newsroom/announce/{kind}", s.requireOperator(s.newsroomAnnounce))
 	s.mux.HandleFunc("GET /api/newsroom/providers", s.requireOperator(s.newsroomProviderStatus))
 	s.mux.HandleFunc("PUT /api/newsroom/providers", s.requireOperator(s.newsroomProviderSave))

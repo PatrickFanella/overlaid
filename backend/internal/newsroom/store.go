@@ -132,6 +132,12 @@ func (s *Store) Apply(ctx context.Context, c Command) (Document, error) {
 		return Document{}, err
 	}
 	defer tx.Rollback()
+	// Keep the same tenant -> document order as retained announcement admission.
+	// Episode/capability inserts later in this transaction also reference tenant.
+	var tenant string
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM tenants WHERE id=$1 FOR UPDATE`, s.db.TenantID()).Scan(&tenant); err != nil {
+		return Document{}, err
+	}
 	initial, _ := json.Marshal(Empty())
 	if _, err = tx.ExecContext(ctx, `INSERT INTO newsroom_documents(id,document) VALUES('default',$1) ON CONFLICT(tenant_id,id) DO NOTHING`, initial); err != nil {
 		return Document{}, err

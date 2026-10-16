@@ -39,6 +39,10 @@ func manualIdentity(tenant string, r ManualRequest) (string, string, string) {
 // AdmitManual commits source, one immutable chat action and its payload-free job
 // together. It is unregistered at startup and makes no provider request.
 func (s *Store) AdmitManual(ctx context.Context, r ManualRequest) (ManualAdmission, error) {
+	return s.admitManual(ctx, r, false)
+}
+
+func (s *Store) admitManual(ctx context.Context, r ManualRequest, bindNewsroom bool) (ManualAdmission, error) {
 	if !tenantdb.ValidID(r.ActorAccountID) || r.ActorAccountID != strings.ToLower(r.ActorAccountID) || !tenantdb.ValidID(r.RequestKey) || r.RequestKey != strings.ToLower(r.RequestKey) || !validText(r.ConnectionID, 256, false) || !validText(r.Text, 500, false) || !validText(r.ViewerID, 128, true) || !validText(r.ViewerLogin, 128, true) || r.ViewerLogin != strings.ToLower(r.ViewerLogin) || r.Kind != "newsroom_current" && r.Kind != "newsroom_raffle" {
 		return ManualAdmission{}, ErrInvalid
 	}
@@ -113,6 +117,11 @@ func (s *Store) AdmitManual(ctx context.Context, r ManualRequest) (ManualAdmissi
 	}
 	if err != nil {
 		return ManualAdmission{}, err
+	}
+	if bindNewsroom {
+		if err = s.lockNewsroomAnnouncement(ctx, tx, r); err != nil {
+			return ManualAdmission{}, err
+		}
 	}
 	var created time.Time
 	if err = tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&created); err != nil {
