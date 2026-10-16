@@ -34,7 +34,7 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 	err = db.QueryRowContext(ctx, `SELECT
  EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR has_schema_privilege(r.oid,current_schema(),'CREATE') OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relowner=r.oid))),
  EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,pg_roles r WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relname NOT IN('chat_pacing_accounts','chat_pacing_channels') AND (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')),
- (SELECT count(*)=2 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity AND has_table_privilege(current_user,c.oid,'SELECT') AND has_table_privilege(current_user,c.oid,'INSERT') AND has_table_privilege(current_user,c.oid,'UPDATE') AND has_table_privilege(current_user,c.oid,'DELETE') AND NOT EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND has_table_privilege(r.oid,c.oid,'TRUNCATE,REFERENCES,TRIGGER')) AND (SELECT count(*)=1 AND bool_and(p.polname='pacer_only' AND p.polcmd='*' AND p.polpermissive AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles) AND pg_get_expr(p.polqual,p.polrelid)='true' AND pg_get_expr(p.polwithcheck,p.polrelid)='true' AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE pg_has_role(current_user,role_id,'MEMBER'))) FROM pg_policy p WHERE p.polrelid=c.oid)) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname IN('chat_pacing_accounts','chat_pacing_channels'))`).Scan(&unsafe, &private, &ready)
+ EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('chat_pacing_accounts') AND attname='fair_state' AND atttypid='jsonb'::regtype AND attnotnull AND NOT attisdropped) AND (SELECT count(*)=2 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity AND has_table_privilege(current_user,c.oid,'SELECT') AND has_table_privilege(current_user,c.oid,'INSERT') AND has_table_privilege(current_user,c.oid,'UPDATE') AND has_table_privilege(current_user,c.oid,'DELETE') AND NOT EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND has_table_privilege(r.oid,c.oid,'TRUNCATE,REFERENCES,TRIGGER')) AND (SELECT count(*)=1 AND bool_and(p.polname='pacer_only' AND p.polcmd='*' AND p.polpermissive AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles) AND pg_get_expr(p.polqual,p.polrelid)='true' AND pg_get_expr(p.polwithcheck,p.polrelid)='true' AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE pg_has_role(current_user,role_id,'MEMBER'))) FROM pg_policy p WHERE p.polrelid=c.oid)) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname IN('chat_pacing_accounts','chat_pacing_channels'))`).Scan(&unsafe, &private, &ready)
 	if err != nil || unsafe || private || !ready {
 		_ = db.Close()
 		return nil, errors.New("separate restricted pacing role and exact forced RLS required")
@@ -65,6 +65,7 @@ func validID(id string) bool {
 // The consumer must start a bounded send immediately and complete within 30s.
 type Permit struct {
 	account, channel, token string
+	action                  string
 	until                   time.Time
 }
 
@@ -89,6 +90,18 @@ type Decision struct {
 // Acquire books no future slots: a denied request leaves the existing budget
 // intact. This lets a later priority-aware scheduler choose moderation first.
 func (s *Store) Acquire(ctx context.Context, sender, channel string) (Decision, error) {
+	return s.acquire(ctx, sender, channel, nil)
+}
+
+// AcquireFair registers retained work and grants only the selected tenant turn.
+// A granted action cannot acquire another permit while its deadline is retained.
+func (s *Store) AcquireFair(ctx context.Context, sender, channel string, r FairRequest) (Decision, error) {
+	if !r.valid() {
+		return Decision{}, ErrInvalid
+	}
+	return s.acquire(ctx, sender, channel, &r)
+}
+func (s *Store) acquire(ctx context.Context, sender, channel string, request *FairRequest) (Decision, error) {
 	acquisitionStarted := time.Now()
 	if !validID(sender) || !validID(channel) {
 		return Decision{}, ErrInvalid
@@ -133,15 +146,83 @@ func (s *Store) Acquire(ctx context.Context, sender, channel string) (Decision, 
 	if err = tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 		return Decision{}, err
 	}
+	var fairRaw []byte
+	if err = tx.QueryRowContext(ctx, `SELECT fair_state FROM chat_pacing_accounts WHERE account_key=$1`, account).Scan(&fairRaw); err != nil {
+		return Decision{}, err
+	}
+	fair, err := decodeFair(fairRaw)
+	if err != nil {
+		return Decision{}, err
+	}
+	action := ""
+	if request == nil {
+		if fair.Version != 0 {
+			return Decision{}, ErrFairRequired
+		}
+	} else {
+		action, err = fair.register(now, *request, channelKey)
+		if err != nil {
+			return Decision{}, err
+		}
+	}
 	ready := a.readyAt(now, next)
-	if ready.After(now) {
+	if request != nil {
+		channels := map[string]time.Time{}
+		channelKeys := make([]string, 0, len(fair.Waiters))
+		for _, w := range fair.Waiters {
+			channelKeys = append(channelKeys, w.Channel)
+		}
+		keyJSON, _ := json.Marshal(channelKeys)
+		rows, readErr := tx.QueryContext(ctx, `SELECT channel_key,greatest(next_at,'0001-01-01 UTC'::timestamptz) FROM chat_pacing_channels WHERE account_key=$1 AND channel_key IN(SELECT jsonb_array_elements_text($2::jsonb))`, account, keyJSON)
+		if readErr != nil {
+			return Decision{}, readErr
+		}
+		for rows.Next() {
+			var k string
+			var at time.Time
+			if readErr = rows.Scan(&k, &at); readErr != nil {
+				break
+			}
+			channels[k] = at
+		}
+		rowsErr := rows.Err()
+		closeErr := rows.Close()
+		if readErr != nil || rowsErr != nil || closeErr != nil {
+			return Decision{}, errors.Join(readErr, rowsErr, closeErr)
+		}
+		eligible := !ready.After(now) && fair.winner(now, channels) == action
+		if eligible {
+			if err = fair.grant(now, action); err != nil {
+				return Decision{}, err
+			}
+		}
+		fairRaw, err = json.Marshal(fair)
+		if err != nil {
+			return Decision{}, ErrFairState
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE chat_pacing_accounts SET fair_state=$1,updated_at=$2 WHERE account_key=$3`, fairRaw, now, account); err != nil {
+			return Decision{}, err
+		}
+		if !eligible {
+			// A poll hint is not a future reservation. Observe early completions and
+			// other tenant turns without snoozing for the full abandoned-lease bound.
+			retry := now.Add(time.Second)
+			if ready.After(now) && ready.Before(retry) {
+				retry = ready
+			}
+			if request.Deadline.Before(retry) {
+				retry = request.Deadline
+			}
+			return Decision{RetryAt: retry}, tx.Commit()
+		}
+	} else if ready.After(now) {
 		return Decision{RetryAt: ready}, tx.Commit()
 	}
 	var nonce [32]byte
 	if _, err = rand.Read(nonce[:]); err != nil {
 		return Decision{}, err
 	}
-	permit := Permit{account: account, channel: channelKey, token: hex.EncodeToString(nonce[:])}
+	permit := Permit{account: account, channel: channelKey, token: hex.EncodeToString(nonce[:]), action: action}
 	a.begin(now)
 	permit.until = acquisitionStarted.Add(leaseDuration)
 	raw, _ := json.Marshal(a.Attempts)
@@ -172,6 +253,16 @@ func readAccount(ctx context.Context, tx *sql.Tx, key string) (accountState, tim
 // whole sender. A detached, five-second transaction preserves provider cooldown
 // after cancellation; failures leave the durable lease in place.
 func (s *Store) Complete(ctx context.Context, p Permit, retryAfter time.Duration) error {
+	return s.complete(ctx, p, retryAfter, false)
+}
+
+// CompleteUnclaimed retains the charged budget and tenant turn but releases
+// the action marker for a pre-claim storage failure. Callers must still recheck
+// the durable action ledger before any retry; this never authorizes replay.
+func (s *Store) CompleteUnclaimed(ctx context.Context, p Permit) error {
+	return s.complete(ctx, p, 0, true)
+}
+func (s *Store) complete(ctx context.Context, p Permit, retryAfter time.Duration, unclaimed bool) error {
 	if len(p.token) != 64 || len(p.account) != 64 || len(p.channel) != 64 || retryAfter < 0 {
 		return ErrFence
 	}
@@ -201,6 +292,30 @@ func (s *Store) Complete(ctx context.Context, p Permit, retryAfter time.Duration
 	}
 	if err = tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 		return err
+	}
+	if unclaimed && p.action != "" {
+		var fairRaw []byte
+		if err = tx.QueryRowContext(ctx, `SELECT fair_state FROM chat_pacing_accounts WHERE account_key=$1`, p.account).Scan(&fairRaw); err != nil {
+			return err
+		}
+		fair, decodeErr := decodeFair(fairRaw)
+		if decodeErr != nil {
+			return decodeErr
+		}
+		kept := fair.Waiters[:0]
+		for _, w := range fair.Waiters {
+			if w.Action != p.action {
+				kept = append(kept, w)
+			}
+		}
+		fair.Waiters = kept
+		fairRaw, err = json.Marshal(fair)
+		if err != nil {
+			return ErrFairState
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE chat_pacing_accounts SET fair_state=$1 WHERE account_key=$2`, fairRaw, p.account); err != nil {
+			return err
+		}
 	}
 	a.complete(now, retryAfter)
 	raw, _ := json.Marshal(a.Attempts)
