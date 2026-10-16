@@ -141,3 +141,7 @@ The merged P2.1 revision `de6a449` has a hosted race-test failure in the existin
 ## P2.2 moderation authorization — #99
 
 [Issue #99](https://git.subcult.tv/subculture-collective/overlaid/issues/99) adds [fresh selected-identity moderation authorization](../../runbooks/twitch-moderation-authorization.md) after merged transport PR #98. Broadcaster, own and shared bots use the existing custody/refresh boundary with moderation-specific scopes and exact shared capability consent. Invocation rechecks identity, binding, role, scope, plan and consent, and binds the exact private action. This callback is not a pacing permit or one-use ledger fence. Endpoint pacing, fenced moderation execution, the dedicated worker, mixed-priority arbitration and opt-in registry integration remain unfinished.
+
+## P2.2 durable moderation pacing — #101
+
+[Issue #101](https://git.subcult.tv/subculture-collective/overlaid/issues/101) adds [isolated moderation sender/channel admission](../../runbooks/moderation-pacing.md) after merged authorization PR #100. Hashed client/moderator and client/broadcaster keys coordinate conservative spacing, fenced in-flight leases and durable cooldowns across tenants. The fresh authorization result exposes its validated client ID for the future executor's pacing namespace. No pool or executor is activated. Fenced moderation execution, the dedicated worker, mixed-priority arbitration and opt-in registry integration remain unfinished.
