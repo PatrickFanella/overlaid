@@ -321,6 +321,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(string(rawModerationPriority)); err != nil {
 		t.Fatal(err)
 	}
+	rawFairTurns, err := os.ReadFile(filepath.Join(root, "0023_outbound_fair_turns.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.NewReplacer("overlaid_outbound_worker", outbound, "overlaid_moderation_worker", moderation).Replace(string(rawFairTurns))); err != nil {
+		t.Fatal(err)
+	}
 	u.User = url.UserPassword(moderationPacer, password)
 	moderationPacerURL := u.String()
 	u.User = url.UserPassword(moderation, password)
