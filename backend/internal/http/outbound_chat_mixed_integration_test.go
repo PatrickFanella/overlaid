@@ -260,6 +260,7 @@ func qualifyRetainedSharedCooldown(t *testing.T, scenario sharedCooldownScenario
 	sharedAccountKey := fmt.Sprintf("%x", sha256.Sum256([]byte(`["twitch","account","999"]`)))
 	var observationMu sync.Mutex
 	var observedShared []time.Time
+	quietCompetingMessages := []string{}
 	maxSharedUsed := 0
 	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Host + r.URL.Path {
@@ -365,6 +366,19 @@ func qualifyRetainedSharedCooldown(t *testing.T, scenario sharedCooldownScenario
 			if body.Channel != "789" {
 				messageID = fmt.Sprintf("shared-recovered-%s-%d", body.Channel, sendIndex)
 			}
+			if continuous && body.Channel == "456" {
+				// Observe actual committed hot backlog when quiet work makes
+				// progress. A later checkpoint may legitimately find it drained.
+				var hotPending int
+				if err := f.Admin.QueryRowContext(r.Context(), `SELECT count(*) FROM platform_outbound_actions WHERE tenant_id=$1 AND state='pending'`, alpha.tenant).Scan(&hotPending); err != nil {
+					return nil, err
+				}
+				if hotPending > 0 {
+					observationMu.Lock()
+					quietCompetingMessages = append(quietCompetingMessages, messageID)
+					observationMu.Unlock()
+				}
+			}
 			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"data":[{"message_id":"%s","is_sent":true}]}`, messageID)))}, nil
 		}
 		return nil, errors.New("unexpected shared quota request")
@@ -459,6 +473,7 @@ func qualifyRetainedSharedCooldown(t *testing.T, scenario sharedCooldownScenario
 		// fourth arrival adds quieter-tenant work; no clock/job is promoted.
 		arrivalStart := time.Now()
 		quietProgress := 0
+		quietCompetingProgress := 0
 		for index := 0; index < 24; index++ {
 			timer := time.NewTimer(1500 * time.Millisecond)
 			select {
@@ -485,12 +500,18 @@ func qualifyRetainedSharedCooldown(t *testing.T, scenario sharedCooldownScenario
 			}
 			if index == 15 {
 				var hotPending int
-				if err := f.Admin.QueryRow(`SELECT count(*) FILTER(WHERE tenant_id=$2 AND state='delivered'),count(*) FILTER(WHERE tenant_id=$1 AND state='pending') FROM platform_outbound_actions WHERE tenant_id IN($1,$2)`, alpha.tenant, beta.tenant).Scan(&quietProgress, &hotPending); err != nil || quietProgress < 2 || hotPending == 0 {
-					t.Fatal("quiet tenant did not durably progress alongside hot backlog and future arrivals", quietProgress, hotPending, err)
+				observationMu.Lock()
+				witnesses, _ := json.Marshal(quietCompetingMessages)
+				observationMu.Unlock()
+				// Require durable delivery of the exact responses observed under
+				// competition, rather than sampling backlog at an unrelated time.
+				if err := f.Admin.QueryRow(`SELECT count(*) FILTER(WHERE tenant_id=$2 AND state='delivered'),count(*) FILTER(WHERE tenant_id=$1 AND state='pending'),count(*) FILTER(WHERE tenant_id=$2 AND state='delivered' AND provider_message_id IN(SELECT jsonb_array_elements_text($3::jsonb))) FROM platform_outbound_actions WHERE tenant_id IN($1,$2)`, alpha.tenant, beta.tenant, witnesses).Scan(&quietProgress, &hotPending, &quietCompetingProgress); err != nil || quietProgress < 2 || quietCompetingProgress < 2 {
+					t.Fatal("quiet tenant did not durably progress alongside observed hot backlog and future arrivals", quietProgress, quietCompetingProgress, hotPending, err)
 				}
+				t.Logf("midpoint_hot_pending=%d quiet_delivered_under_observed_competition=%d", hotPending, quietCompetingProgress)
 			}
 		}
-		t.Logf("arrival_span=%s hot_arrivals=24 quiet_arrivals=6 quiet_delivered_at_midpoint=%d quiet_sent_during_arrivals=%d", time.Since(arrivalStart), quietProgress, betaSends.Load())
+		t.Logf("arrival_span=%s hot_arrivals=24 quiet_arrivals=6 quiet_delivered_at_midpoint=%d quiet_delivered_under_observed_competition=%d quiet_sent_during_arrivals=%d", time.Since(arrivalStart), quietProgress, quietCompetingProgress, betaSends.Load())
 	} else if recoverAndDrain {
 		// Together with the original beta reply, this is a 24-reply shared burst.
 		// Submit each input twice; no job or pacing timestamp is modified.
