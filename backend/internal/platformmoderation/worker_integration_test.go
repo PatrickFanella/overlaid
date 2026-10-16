@@ -313,44 +313,54 @@ func TestModerationRiverTerminalOutcomesNeverRetry(t *testing.T) {
 }
 
 func TestModerationClientRejectsWrongRolesSchemasAndPolicy(t *testing.T) {
-	f, product, pacer, _ := executionFixture(t)
-	e, err := NewExecutor(t.Context(), product, pacer, func(context.Context, Target) (Authorization, error) { return Authorization{}, ErrDenied })
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = NewWorker(nil); !errors.Is(err, ErrInvalid) {
-		t.Fatal("nil executor worker", err)
-	}
-	if _, err = NewClient(t.Context(), nil, e); err == nil {
-		t.Fatal("nil queue pool accepted")
-	}
-	if _, err = NewClient(t.Context(), pool(t, f.ModerationWorkerURL), nil); !errors.Is(err, ErrInvalid) {
-		t.Fatal("nil executor client", err)
-	}
-	for _, dsn := range []string{f.RuntimeURL, f.WorkerURL, f.OutboundWorkerURL, f.BotAdminURL, f.BotExecutorURL, f.PacerURL, f.ModerationPacerURL} {
-		if _, err = NewClient(t.Context(), pool(t, dsn), e); err == nil {
-			t.Fatal("wrong queue role accepted")
-		}
-	}
-	_, foreign, _, _ := executionFixture(t)
-	wrong := *e
-	wrong.product = foreign
-	if _, err = NewClient(t.Context(), pool(t, f.ModerationWorkerURL), &wrong); err == nil {
-		t.Fatal("foreign schema accepted")
-	}
-	u, _ := url.Parse(f.ModerationWorkerURL)
-	v, _ := url.Parse(f.OutboundWorkerURL)
-	if _, err = f.Admin.Exec(`GRANT ` + v.User.Username() + ` TO ` + u.User.Username() + ` WITH INHERIT FALSE`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = NewClient(t.Context(), pool(t, f.ModerationWorkerURL), e); err == nil {
-		t.Fatal("reachable combined membership accepted")
-	}
-	if _, err = f.Admin.Exec(`REVOKE ` + v.User.Username() + ` FROM ` + u.User.Username() + `; ALTER POLICY moderation_worker_dispatch ON river_job USING(true) WITH CHECK(true)`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = NewClient(t.Context(), pool(t, f.ModerationWorkerURL), e); err == nil {
-		t.Fatal("changed policy accepted")
+	for _, mode := range []string{"explicit", "controlled-closed"} {
+		t.Run(mode, func(t *testing.T) {
+			build := NewClient
+			if mode == "controlled-closed" {
+				build = func(ctx context.Context, service *sql.DB, executor *Executor) (*river.Client[*sql.Tx], error) {
+					return NewControlledClient(ctx, service, executor, func() bool { return false })
+				}
+			}
+			f, product, pacer, _ := executionFixture(t)
+			e, err := NewExecutor(t.Context(), product, pacer, func(context.Context, Target) (Authorization, error) { return Authorization{}, ErrDenied })
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = NewWorker(nil); !errors.Is(err, ErrInvalid) {
+				t.Fatal("nil executor worker", err)
+			}
+			if _, err = build(t.Context(), nil, e); err == nil {
+				t.Fatal("nil queue pool accepted")
+			}
+			if _, err = build(t.Context(), pool(t, f.ModerationWorkerURL), nil); !errors.Is(err, ErrInvalid) {
+				t.Fatal("nil executor client", err)
+			}
+			for _, dsn := range []string{f.RuntimeURL, f.WorkerURL, f.OutboundWorkerURL, f.BotAdminURL, f.BotExecutorURL, f.PacerURL, f.ModerationPacerURL} {
+				if _, err = build(t.Context(), pool(t, dsn), e); err == nil {
+					t.Fatal("wrong queue role accepted")
+				}
+			}
+			_, foreign, _, _ := executionFixture(t)
+			wrong := *e
+			wrong.product = foreign
+			if _, err = build(t.Context(), pool(t, f.ModerationWorkerURL), &wrong); err == nil {
+				t.Fatal("foreign schema accepted")
+			}
+			u, _ := url.Parse(f.ModerationWorkerURL)
+			v, _ := url.Parse(f.OutboundWorkerURL)
+			if _, err = f.Admin.Exec(`GRANT ` + v.User.Username() + ` TO ` + u.User.Username() + ` WITH INHERIT FALSE`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = build(t.Context(), pool(t, f.ModerationWorkerURL), e); err == nil {
+				t.Fatal("reachable combined membership accepted")
+			}
+			if _, err = f.Admin.Exec(`REVOKE ` + v.User.Username() + ` FROM ` + u.User.Username() + `; ALTER POLICY moderation_worker_dispatch ON river_job USING(true) WITH CHECK(true)`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = build(t.Context(), pool(t, f.ModerationWorkerURL), e); err == nil {
+				t.Fatal("changed policy accepted")
+			}
+		})
 	}
 }
 
