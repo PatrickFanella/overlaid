@@ -35,6 +35,8 @@ type tenantRuntime struct {
 	cancel context.CancelFunc
 }
 type Application struct {
+	sendGates         map[string]*tenantSendGate
+	outbound          *outboundChat
 	chatControl       *chatController
 	chatWorker        *river.Client[*sql.Tx]
 	chatWorkerStarted bool
@@ -65,6 +67,15 @@ func NewApplication(cfg config.Config) (*Application, error) {
 	}
 	if cfg.TwitchChatDispatchMode == "retained" && (cfg.DatabaseURL == "" || cfg.WorkerDatabaseURL == "") {
 		return nil, errors.New("retained chat requires product and separate worker databases")
+	}
+	if cfg.TwitchChatSendMode == "" {
+		cfg.TwitchChatSendMode = "legacy"
+	}
+	if cfg.TwitchChatSendMode != "legacy" && cfg.TwitchChatSendMode != "retained" {
+		return nil, errors.New("TWITCH_CHAT_SEND_MODE must be legacy or retained")
+	}
+	if cfg.TwitchChatSendMode == "retained" && (cfg.TwitchChatDispatchMode != "retained" || strings.TrimSpace(cfg.OutboundWorkerDatabaseURL) == "" || strings.TrimSpace(cfg.PacingDatabaseURL) == "") {
+		return nil, errors.New("retained chat sending requires retained ingestion and separate outbound worker and pacing databases")
 	}
 	if cfg.DeploymentMode != "selfhost" && cfg.DeploymentMode != "hosted" {
 		return nil, errors.New("DEPLOYMENT_MODE must be selfhost or hosted")
@@ -120,11 +131,18 @@ func (a *Application) Close() error {
 	if a.chatControl != nil {
 		a.chatControl.live.Store(false)
 	}
-	if a.chatWorkerStarted {
-		ctx, stop := context.WithTimeout(context.Background(), 35*time.Second)
-		result = errors.Join(result, a.chatWorker.Stop(ctx))
-		stop()
+	stopCtx, stopWorkers := context.WithTimeout(context.Background(), 50*time.Second)
+	if a.outbound != nil {
+		a.outbound.ready.Store(false)
 	}
+	if a.chatWorkerStarted {
+		result = errors.Join(result, a.chatWorker.Stop(stopCtx))
+	}
+	if a.outbound != nil {
+		result = errors.Join(result, a.outbound.close(stopCtx))
+	}
+	stopWorkers()
+
 	if a.chatControl != nil {
 		if a.chatControl.lease != nil {
 			ctx, stop := context.WithTimeout(context.Background(), time.Second)
@@ -140,8 +158,9 @@ func (a *Application) Close() error {
 		stop()
 	}
 	a.mu.Lock()
-	for _, r := range a.runtimes {
+	for id, r := range a.runtimes {
 		r.cancel()
+		a.releaseSendGateLocked(id, r.server.chatSendGate)
 	}
 	a.runtimes = map[string]tenantRuntime{}
 	a.mu.Unlock()
@@ -263,6 +282,15 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	s.tenantContext = child
 	s.chatReady = a.chatReady
 	s.chatFence = a.checkChatController
+	if a.config.TwitchChatSendMode == "retained" {
+		s.retainedReplies, err = newRegistryReplyAdmission(scope)
+		if err != nil {
+			cancel()
+			return nil, errors.New("retained chat admission unavailable")
+		}
+		s.chatFence = a.guardOutboundChat
+		a.retainRuntimeSendGateLocked(id, s)
+	}
 	a.runtimes[id] = tenantRuntime{server: s, cancel: cancel}
 	s.StartBackground(child)
 	return s, nil
@@ -272,6 +300,7 @@ func (a *Application) invalidate(id string) {
 	defer a.mu.Unlock()
 	if r, ok := a.runtimes[id]; ok {
 		r.cancel()
+		a.releaseSendGateLocked(id, r.server.chatSendGate)
 		delete(a.runtimes, id)
 	}
 	delete(a.overlayKeys, id)
@@ -536,6 +565,14 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 			status = "degraded"
 		}
 		checks = append(checks, map[string]string{"name": "chat_dispatch", "status": chat})
+	}
+	if a.outbound != nil {
+		outbound := "ok"
+		if !a.outboundReady() {
+			outbound = "degraded"
+			status = "degraded"
+		}
+		checks = append(checks, map[string]string{"name": "chat_outbound", "status": outbound})
 	}
 	writeJSON(w, map[string]any{"status": status, "checks": checks, "productName": a.config.ProductName, "deploymentMode": a.config.DeploymentMode, "activeRuntimes": count})
 }

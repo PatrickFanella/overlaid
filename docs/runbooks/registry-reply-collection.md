@@ -2,7 +2,7 @@
 
 Tracking: [#123](https://git.subcult.tv/subculture-collective/overlaid/issues/123), parent [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This is unit two of the [outbound cutover plan](../superpowers/plans/2026-10-16-outbound-registry-cutover.md).
 
-The private `newRegistryReplyAdmission` constructor binds a tenant-scoped product database and the existing outbound store. No application startup path calls it. There is no new environment setting, provider transport, worker registration or SQL migration. Installations retain their current sender behavior.
+The private `newRegistryReplyAdmission` constructor binds a tenant-scoped product database and the existing outbound store. [Explicit retained chat startup](retained-chat-sender.md) installs it before a runtime starts; legacy remains the default. This collector adds no parser or SQL migration.
 
 When explicitly selected before a runtime accepts work, `dispatchRetainedChat` opens a private collector after the existing echo check. It reconstructs the canonical Twitch envelope, checks tenant identity and requires the exact envelope to exist in retained storage. Changed input, missing sources and foreign tenants fail before command execution. The existing processor still performs parsing, aliases, roles, plan checks, cooldown reservation and response rendering once. The existing durable dispatch receipt remains the handler replay fence.
 
@@ -20,4 +20,4 @@ Cancellation, publication errors or an aborted collector leave no newly admitted
 
 The disposable PostgreSQL fixture exercises the existing custom response modes and overlay effects, Newsroom current, cooldown/role rejection, repeat dispatch identities, immutable rerender conflicts, stale snapshots, cancellation, exact retained-envelope/tenant checks, source deletion and expired admission. A failing mock transport confirms these paths make zero provider requests. Pure tests cover output ordering, duplicate/missing output identity, context ownership and display-independent keys. The full PostgreSQL verification/race gate remains required.
 
-The collector is not a one-sender deployment guard. Non-chat sources, controller ownership, startup validation, readiness/shutdown, rollback and opt-in worker activation remain unfinished. No live Twitch/OBS behavior or full thousand-channel delivery qualification is implied.
+The collector alone is not a one-sender deployment guard. The [opt-in application controller](retained-chat-sender.md) supplies pool validation, persistent selection, effect fences, readiness and shutdown. Broader lifecycle/load and live acceptance remain unfinished. No live Twitch/OBS behavior or full thousand-channel delivery qualification is implied.

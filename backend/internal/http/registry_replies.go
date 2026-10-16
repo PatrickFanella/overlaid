@@ -14,7 +14,7 @@ import (
 
 var errRegistryReply = errors.New("registry reply source or snapshot unavailable")
 
-// Explicit construction only: no startup path selects this admission boundary.
+// Application startup selects this boundary only for retained chat sending.
 // Installation must happen before a runtime starts accepting work. Selection
 // blocks every unbound central chat send, including manual callbacks.
 type registryReplyAdmission struct {

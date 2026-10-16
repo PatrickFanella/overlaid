@@ -48,7 +48,11 @@ func (a *Application) initChatDispatch() error {
 	pool.SetMaxIdleConns(4)
 	a.chatControl = &chatController{pool: pool}
 	if retained {
-		a.chatWorker, err = platformdispatch.NewClient(ctx, pool, a.store.Product, a.handleRetainedChat)
+		if a.config.TwitchChatSendMode == "retained" {
+			a.chatWorker, err = platformdispatch.NewControlledClient(ctx, pool, a.store.Product, a.handleRetainedChat, a.outboundLeaseReady)
+		} else {
+			a.chatWorker, err = platformdispatch.NewClient(ctx, pool, a.store.Product, a.handleRetainedChat)
+		}
 		if err != nil {
 			return errors.New("retained chat worker configuration invalid")
 		}
@@ -70,18 +74,59 @@ func (a *Application) initChatDispatch() error {
 	if !retained && mode == "retained" {
 		return errors.New("retained chat mode guard blocks legacy ingestion")
 	}
+	var senderMode string
+	err = a.store.Product.QueryRowContext(ctx, `SELECT value FROM app_metadata WHERE /*tenant:app_metadata*/ AND key='chat_send_mode'`).Scan(&senderMode)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return errors.New("chat sender mode unavailable")
+	}
+	if senderMode != "" && (senderMode != "retained-v1" || a.config.TwitchChatSendMode != "retained") {
+		return errors.New("retained chat sender guard blocks incompatible startup")
+	}
+	if err := a.prepareOutboundChat(ctx); err != nil {
+		return err
+	}
 	if retained {
-		if _, err = a.store.Product.ExecContext(ctx, `INSERT INTO app_metadata(key,value) VALUES('chat_dispatch_mode','retained') ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_at=now()`); err != nil {
-			return errors.New("chat dispatch mode unavailable")
+		tx, err := a.store.Product.BeginTx(ctx, nil)
+		if err != nil {
+			return errors.New("chat mode persistence unavailable")
+		}
+		defer func() { _ = tx.Rollback() }()
+		if _, err := tx.ExecContext(ctx, `INSERT INTO app_metadata(key,value) VALUES('chat_dispatch_mode','retained') ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_at=now()`); err != nil {
+			return errors.New("chat mode persistence unavailable")
+		}
+		if a.outbound != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO app_metadata(key,value) VALUES('chat_send_mode','retained-v1') ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_at=now()`); err != nil {
+				return errors.New("chat mode persistence unavailable")
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return errors.New("chat mode persistence unavailable")
 		}
 	}
 	a.chatControl.live.Store(true)
+	// Start retains the supplied context for worker lifetime. Bound startup by
+	// canceling the application on timeout, rather than expiring a successful
+	// worker's context after this function returns.
+	startupTimer := time.AfterFunc(10*time.Second, a.cancel)
+	defer startupTimer.Stop()
 	if retained {
 		if err = a.chatWorker.Start(a.ctx); err != nil {
-			a.chatControl.live.Store(false)
 			return errors.New("retained chat worker could not start")
 		}
 		a.chatWorkerStarted = true
+	}
+	if a.outbound != nil {
+		if err := a.outbound.worker.Start(a.ctx); err != nil {
+			return errors.New("retained chat sender could not start")
+		}
+		a.outbound.workerStarted = true
+	}
+	if !startupTimer.Stop() || a.ctx.Err() != nil {
+		return errors.New("chat worker startup unavailable")
+	}
+	if a.outbound != nil {
+		a.outbound.ready.Store(true)
+		close(a.outbound.started)
 	}
 	go func() {
 		ticker := time.NewTicker(time.Second)
@@ -93,6 +138,12 @@ func (a *Application) initChatDispatch() error {
 			case <-ticker.C:
 				if a.checkChatController(a.ctx) != nil {
 					return
+				}
+				if a.outbound != nil {
+					if !a.outboundReady() || a.validateOutboundChat(a.ctx) != nil {
+						a.failOutboundChat()
+						return
+					}
 				}
 			}
 		}

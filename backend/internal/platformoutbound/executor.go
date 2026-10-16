@@ -39,14 +39,20 @@ type Authorization struct {
 }
 type Authorize func(context.Context, Target) (Authorization, error)
 
+// SendGate pairs a provider attempt and durable successful echo bookkeeping with
+// the consumer's echo check. It grants neither authorization nor a ledger claim.
+type SendGate func(context.Context, Target, context.CancelFunc) (release func(), err error)
+
 type Executor struct {
 	product   *tenantdb.DB
 	pacer     *chatpacing.Store
 	authorize Authorize
+	sendGate  SendGate
 }
 
 // NewExecutor constructs no worker and opens no pool. Execution is not wired
-// into application startup. Both validated pools must address the same schema.
+// by default; explicit retained chat startup supplies both validated pools in
+// the same schema.
 func NewExecutor(ctx context.Context, product *tenantdb.DB, pacer *chatpacing.Store, authorize Authorize) (*Executor, error) {
 	if product == nil || !product.IsScoped() || pacer == nil || authorize == nil {
 		return nil, ErrInvalid
@@ -63,6 +69,20 @@ func NewExecutor(ctx context.Context, product *tenantdb.DB, pacer *chatpacing.St
 		return nil, errors.New("outbound product and pacing database must match")
 	}
 	return &Executor{product: product, pacer: pacer, authorize: authorize}, nil
+}
+
+// NewExecutorWithGate adds an installation-owned send/echo lifecycle gate. The
+// release stays held through provider outcome, successful echo and ledger writes.
+func NewExecutorWithGate(ctx context.Context, product *tenantdb.DB, pacer *chatpacing.Store, authorize Authorize, gate SendGate) (*Executor, error) {
+	if gate == nil {
+		return nil, ErrInvalid
+	}
+	executor, err := NewExecutor(ctx, product, pacer, authorize)
+	if err != nil {
+		return nil, err
+	}
+	executor.sendGate = gate
+	return executor, nil
 }
 
 type Execution struct {
@@ -164,6 +184,16 @@ func (e *Executor) Execute(ctx context.Context, args platform.ChatSendArgs) (res
 	}
 	attemptCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
+	if e.sendGate != nil {
+		release, err := e.sendGate(attemptCtx, t, cancel)
+		if err != nil {
+			return result, errors.New("outbound send gate unavailable")
+		}
+		if release == nil {
+			return result, errors.New("outbound send gate unavailable")
+		}
+		defer release()
+	}
 	claim, started, startErr := store.Start(attemptCtx, t.ActionID)
 	if startErr != nil {
 		return result, errExecutionStore

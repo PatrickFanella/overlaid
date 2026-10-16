@@ -41,6 +41,17 @@ func (s *BotExecutionStore) DatabaseIdentity(ctx context.Context) ([4]string, er
 	err := s.db.QueryRowContext(ctx, `SELECT current_database(),current_schema(),coalesce(inet_server_addr()::text,'local'),coalesce(inet_server_port(),0)::text`).Scan(&id[0], &id[1], &id[2], &id[3])
 	return id, err
 }
+
+// Validate rechecks the restricted execution boundary without resolving secrets.
+func (s *BotExecutionStore) Validate(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return errors.New("bot execution database unavailable")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return s.validate(ctx)
+}
+
 func (s *BotExecutionStore) validate(ctx context.Context) error {
 	var unsafe, private, ready, policies bool
 	err := s.db.QueryRowContext(ctx, `WITH reachable AS (

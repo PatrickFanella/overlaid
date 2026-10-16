@@ -40,7 +40,7 @@ func Validate(ctx context.Context, service *sql.DB, product *tenantdb.DB, kind s
  ) SELECT
  EXISTS(SELECT 1 FROM reachable r WHERE r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR EXISTS(SELECT 1 FROM tables c WHERE c.relowner=r.oid)),
  EXISTS(SELECT 1 FROM tables c,reachable r WHERE
- (c.relname NOT IN('river_job','river_queue','river_notification','river_migration','river_leader') AND has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
+ (c.relname NOT IN('river_job','river_queue','river_notification','river_migration','river_leader') AND (has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') OR has_any_column_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))
  OR (c.relname IN('river_job','river_queue','river_notification','river_leader') AND has_table_privilege(r.oid,c.oid,'TRUNCATE,REFERENCES,TRIGGER'))
  OR (c.relname='river_migration' AND has_table_privilege(r.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))),
  (SELECT count(*)=5 AND bool_and(has_table_privilege(current_user,c.oid,'SELECT') AND

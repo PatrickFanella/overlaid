@@ -12,7 +12,7 @@ import (
 )
 
 // Worker connects River leasing to the durable executor. It is not registered
-// in application startup; construction requires a separately validated pool.
+// by default; retained chat sending requires a separately validated pool.
 type Worker struct {
 	river.WorkerDefaults[platform.ChatSendArgs]
 	executor *Executor
@@ -28,6 +28,18 @@ func NewWorker(executor *Executor) (*Worker, error) {
 // NewClient opens no pools. The caller owns their lifetimes and must supply a
 // trusted authorization adapter through the executor before starting the client.
 func NewClient(ctx context.Context, service *sql.DB, executor *Executor) (*river.Client[*sql.Tx], error) {
+	return newClient(ctx, service, executor, nil)
+}
+
+// NewControlledClient delays leasing until the owning controller activates it.
+func NewControlledClient(ctx context.Context, service *sql.DB, executor *Executor, active func() bool) (*river.Client[*sql.Tx], error) {
+	if active == nil {
+		return nil, ErrInvalid
+	}
+	return newClient(ctx, service, executor, active)
+}
+
+func newClient(ctx context.Context, service *sql.DB, executor *Executor, active func() bool) (*river.Client[*sql.Tx], error) {
 	w, err := NewWorker(executor)
 	if err != nil {
 		return nil, err
@@ -38,6 +50,9 @@ func NewClient(ctx context.Context, service *sql.DB, executor *Executor) (*river
 	}
 	workers := river.NewWorkers()
 	river.AddWorker(workers, w)
+	if active != nil {
+		driver = platformqueue.Gate(driver, active)
+	}
 	return river.NewClient(driver, &river.Config{
 		Schema: schema, PollOnly: true, Workers: workers,
 		Queues: map[string]river.QueueConfig{"chat_outbound": {MaxWorkers: 4}},

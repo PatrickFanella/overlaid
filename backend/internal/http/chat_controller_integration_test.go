@@ -23,7 +23,7 @@ func unlockChatController(t *testing.T, app *Application) {
 
 func controllerToken(t *testing.T, app *Application, account accountFixture, staleValidation ...bool) {
 	t.Helper()
-	token := twitchTokenInfo{AccessToken: "fixture-access", UserID: "123", Login: "fixture", Scope: []string{"user:write:chat"}, ValidatedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}
+	token := twitchTokenInfo{AccessToken: "fixture-access", UserID: "123", Login: "fixture", Scope: []string{"user:read:chat", "user:write:chat"}, ValidatedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}
 	if len(staleValidation) > 0 && staleValidation[0] {
 		token.ValidatedAt = time.Now().Add(-2 * time.Hour)
 	}
