@@ -51,11 +51,11 @@ func (a *Application) initChatDispatch() error {
 	pool.SetMaxIdleConns(4)
 	a.chatControl = &chatController{pool: pool, checks: make(chan struct{}, 1)}
 	if retained {
+		active := a.chatReady
 		if a.config.TwitchChatSendMode == "retained" {
-			a.chatWorker, err = platformdispatch.NewControlledClient(ctx, pool, a.store.Product, a.handleRetainedChat, a.outboundLeaseReady)
-		} else {
-			a.chatWorker, err = platformdispatch.NewClient(ctx, pool, a.store.Product, a.handleRetainedChat)
+			active = a.outboundLeaseReady
 		}
+		a.chatWorker, err = platformdispatch.NewPreparedClient(ctx, pool, a.store.Product, a.handleRetainedChat, active, a.prepareRetainedChat)
 		if err != nil {
 			return errors.New("retained chat worker configuration invalid")
 		}
@@ -152,6 +152,30 @@ func (a *Application) initChatDispatch() error {
 		}
 	}()
 	return nil
+}
+
+func (a *Application) prepareRetainedChat(ctx context.Context, tenant string) (platformdispatch.Handler, error) {
+	if err := a.checkChatController(ctx); err != nil {
+		return nil, err
+	}
+	if a.config.DeploymentMode == "hosted" && tenant == tenantdb.BootstrapID {
+		return nil, errors.New("tenant runtime unavailable")
+	}
+	s, err := a.runtime(ctx, tenant)
+	if err != nil {
+		return nil, err
+	}
+	// Bind the exact prepared runtime; invalidation must cancel it rather than
+	// turn a post-fence lookup into another capacity admission.
+	return func(ctx context.Context, event platform.ChatEvent) error {
+		if event.TenantID != tenant || s.tenantContext.Err() != nil {
+			return errors.New("tenant runtime unavailable")
+		}
+		if err := a.checkChatController(ctx); err != nil {
+			return err
+		}
+		return s.dispatchRetainedChat(ctx, event)
+	}, nil
 }
 
 func (a *Application) chatReady() bool {

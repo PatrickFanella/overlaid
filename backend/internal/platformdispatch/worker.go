@@ -23,10 +23,15 @@ import (
 
 type Handler func(context.Context, platform.ChatEvent) error
 
+// Preparation initializes trusted runtime resources before the handler fence.
+// It must not execute commands or grant provider permission.
+type Preparation func(context.Context, string) (Handler, error)
+
 type Worker struct {
 	river.WorkerDefaults[platform.ChatDispatchArgs]
 	product *tenantdb.DB
 	handle  Handler
+	prepare Preparation
 }
 
 var eventID = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -42,7 +47,7 @@ func NewWorker(product *tenantdb.DB, handler Handler) (*Worker, error) {
 // that this role cannot directly read product rows and targets the same database
 // and schema as the immutable product pool. The caller owns pool lifetimes.
 func NewClient(ctx context.Context, service *sql.DB, product *tenantdb.DB, handler Handler) (*river.Client[*sql.Tx], error) {
-	return newClient(ctx, service, product, handler, nil)
+	return newClient(ctx, service, product, handler, nil, nil)
 }
 
 // NewControlledClient delays leasing until the owning controller activates it.
@@ -50,14 +55,24 @@ func NewControlledClient(ctx context.Context, service *sql.DB, product *tenantdb
 	if active == nil {
 		return nil, errors.New("chat worker activation gate required")
 	}
-	return newClient(ctx, service, product, handler, active)
+	return newClient(ctx, service, product, handler, active, nil)
 }
 
-func newClient(ctx context.Context, service *sql.DB, product *tenantdb.DB, handler Handler, active func() bool) (*river.Client[*sql.Tx], error) {
+// NewPreparedClient adds pre-handler runtime preparation to controlled leasing.
+// Existing receipts and missing/expired sources retain their terminal path.
+func NewPreparedClient(ctx context.Context, service *sql.DB, product *tenantdb.DB, handler Handler, active func() bool, preparation Preparation) (*river.Client[*sql.Tx], error) {
+	if active == nil || preparation == nil {
+		return nil, errors.New("chat worker preparation and activation gate required")
+	}
+	return newClient(ctx, service, product, handler, active, preparation)
+}
+
+func newClient(ctx context.Context, service *sql.DB, product *tenantdb.DB, handler Handler, active func() bool, preparation Preparation) (*river.Client[*sql.Tx], error) {
 	w, err := NewWorker(product, handler)
 	if err != nil || service == nil {
 		return nil, errors.New("chat worker configuration invalid")
 	}
+	w.prepare = preparation
 	serviceSchema, err := platformqueue.Validate(ctx, service, product, "overlaid_chat_dispatch")
 	if err != nil {
 		return nil, err
@@ -85,7 +100,23 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[platform.ChatDispatchA
 	if err != nil {
 		return cancel("invalid_job")
 	}
-	event, token, terminal, err := prepare(ctx, db, a)
+	handler, prepared := w.handle, w.prepare == nil
+	if w.prepare != nil && time.Now().Unix() < a.Deadline {
+		var needsRuntime bool
+		err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM normalized_chat_events WHERE /*tenant:normalized_chat_events*/ AND id=$1 AND connection_id=$2)
+ AND NOT EXISTS(SELECT 1 FROM platform_dispatch_receipts WHERE /*tenant:platform_dispatch_receipts*/ AND event_id=$1)`, a.EventID, a.ConnectionID).Scan(&needsRuntime)
+		if err != nil {
+			return errors.New("dispatch_prepare_unavailable")
+		}
+		if needsRuntime {
+			handler, err = w.prepare(ctx, a.TenantID)
+			if err != nil || handler == nil {
+				return errors.New("dispatch_runtime_unavailable")
+			}
+			prepared = true
+		}
+	}
+	event, token, terminal, err := prepare(ctx, db, a, prepared)
 	if err != nil {
 		return errors.New("dispatch_prepare_unavailable")
 	}
@@ -95,7 +126,7 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[platform.ChatDispatchA
 		}
 		return cancel(terminal)
 	}
-	handlerErr := w.run(ctx, event)
+	handlerErr := w.run(ctx, event, handler)
 	state, code := "completed", "completed"
 	if ctx.Err() != nil {
 		state, code = "uncertain", "handler_cancelled"
@@ -120,16 +151,16 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[platform.ChatDispatchA
 	return nil
 }
 
-func (w *Worker) run(ctx context.Context, event platform.ChatEvent) (err error) {
+func (w *Worker) run(ctx context.Context, event platform.ChatEvent, handler Handler) (err error) {
 	defer func() {
 		if recover() != nil {
 			err = errors.New("handler_failed")
 		}
 	}()
-	return w.handle(ctx, event)
+	return handler(ctx, event)
 }
 
-func prepare(ctx context.Context, db *tenantdb.DB, a platform.ChatDispatchArgs) (platform.ChatEvent, string, string, error) {
+func prepare(ctx context.Context, db *tenantdb.DB, a platform.ChatDispatchArgs, mayStart bool) (platform.ChatEvent, string, string, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return platform.ChatEvent{}, "", "", err
@@ -193,6 +224,11 @@ func prepare(ctx context.Context, db *tenantdb.DB, a platform.ChatDispatchArgs) 
 		if err != nil || event.Platform != "twitch" || channel != event.Chat.Channel.ID || event.ConnectionID != "twitch:"+channel || !granted {
 			code = "connection_unavailable"
 		}
+	}
+	// A source or receipt may change between the metadata read and this locked
+	// reconstruction. Never start a new handler without its prepared runtime.
+	if code == "" && !mayStart {
+		return platform.ChatEvent{}, "", "", errors.New("runtime not prepared")
 	}
 	var nonce [16]byte
 	if _, err = rand.Read(nonce[:]); err != nil {

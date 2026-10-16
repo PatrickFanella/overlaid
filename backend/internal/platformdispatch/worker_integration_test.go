@@ -325,6 +325,62 @@ func TestAbandonedStartAndPreExecutionChecks(t *testing.T) {
 	}
 }
 
+func TestRuntimePreparationPreservesTerminalAndStartFences(t *testing.T) {
+	_, db, _, _ := fixture(t)
+	fallback, prepared, preparations := 0, 0, 0
+	w, _ := NewWorker(db, func(context.Context, platform.ChatEvent) error { fallback++; return nil })
+	unavailable := true
+	w.prepare = func(context.Context, string) (Handler, error) {
+		preparations++
+		if unavailable {
+			return nil, errors.New("PRIVATE runtime unavailable")
+		}
+		return func(context.Context, platform.ChatEvent) error { prepared++; return nil }, nil
+	}
+	job := ingest(t, db, "prepare-runtime", time.Time{})
+	if _, _, _, err := prepare(t.Context(), db, job.Args, false); err == nil {
+		t.Fatal("new handler fenced without prepared resources")
+	}
+	if err := w.Work(t.Context(), job); err == nil || err.Error() != "dispatch_runtime_unavailable" {
+		t.Fatal("runtime failure not fixed preparation error", err)
+	}
+	if rows, err := Receipts(t.Context(), db, 100); err != nil || len(rows) != 0 {
+		t.Fatal("preparation failure retained a handler receipt", rows, err)
+	}
+	unavailable = false
+	if err := w.Work(t.Context(), job); err != nil {
+		t.Fatal(err)
+	}
+	receipt(t, db, job, "completed", "completed")
+	unavailable = true
+	if err := w.Work(t.Context(), job); err != nil {
+		t.Fatal("completed job unnecessarily prepared another runtime", err)
+	}
+	expired := ingest(t, db, "prepare-expired", time.Now().Add(-3*time.Minute))
+	if err := w.Work(t.Context(), expired); err == nil {
+		t.Fatal("expired job executed")
+	}
+	receipt(t, db, expired, "skipped", "expired")
+	missing := ingest(t, db, "prepare-missing", time.Time{})
+	if _, err := db.ExecContext(t.Context(), `DELETE FROM normalized_chat_events WHERE /*tenant:normalized_chat_events*/ AND id=$1`, missing.Args.EventID); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Work(t.Context(), missing); err == nil {
+		t.Fatal("missing source executed")
+	}
+	abandoned := ingest(t, db, "prepare-abandoned", time.Time{})
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO platform_dispatch_receipts(event_id,connection_id,state,code,claim_token) VALUES($1,$2,'running','started','prior-token')`, abandoned.Args.EventID, abandoned.Args.ConnectionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Work(t.Context(), abandoned); err == nil {
+		t.Fatal("prior start executed")
+	}
+	receipt(t, db, abandoned, "uncertain", "prior_start")
+	if preparations != 2 || prepared != 1 || fallback != 0 {
+		t.Fatal("runtime preparation replayed or used unbound handler", preparations, prepared, fallback)
+	}
+}
+
 func TestReceiptRetentionAndTenantDeletion(t *testing.T) {
 	f, a, b, _ := fixture(t)
 	w, _ := NewWorker(a, func(context.Context, platform.ChatEvent) error { return nil })
