@@ -16,6 +16,14 @@ import (
 
 const chatControllerKey = `hashtextextended('overlaid:chat-controller:'||current_database()||':'||current_schema(),0)`
 
+// A live session is insufficient: its advisory lock can have been released.
+// PostgreSQL represents a bigint advisory key as two unsigned OID halves.
+const chatControllerHeld = `SELECT EXISTS(SELECT 1 FROM pg_locks
+ WHERE locktype='advisory' AND pid=pg_backend_pid() AND granted
+ AND mode='ExclusiveLock' AND objsubid=1
+ AND classid=((` + chatControllerKey + ` >> 32) & 4294967295)::oid
+ AND objid=(` + chatControllerKey + ` & 4294967295)::oid)`
+
 type chatController struct {
 	pool  *sql.DB
 	lease *sql.Conn
@@ -24,9 +32,10 @@ type chatController struct {
 
 func (a *Application) initChatDispatch() error {
 	retained := a.config.TwitchChatDispatchMode == "retained"
-	if !retained && !a.config.TwitchEventSub {
-		return nil
-	}
+	// Disabling ingestion does not disable manual announcement endpoints. Every
+	// managed chat writer participates in the same installation-level ownership.
+	ctx, cancel := context.WithTimeout(a.ctx, 10*time.Second)
+	defer cancel()
 	dsn := a.config.DatabaseURL
 	if retained {
 		dsn = a.config.WorkerDatabaseURL
@@ -39,22 +48,22 @@ func (a *Application) initChatDispatch() error {
 	pool.SetMaxIdleConns(4)
 	a.chatControl = &chatController{pool: pool}
 	if retained {
-		a.chatWorker, err = platformdispatch.NewClient(a.ctx, pool, a.store.Product, a.handleRetainedChat)
+		a.chatWorker, err = platformdispatch.NewClient(ctx, pool, a.store.Product, a.handleRetainedChat)
 		if err != nil {
 			return errors.New("retained chat worker configuration invalid")
 		}
 	}
-	lease, err := pool.Conn(a.ctx)
+	lease, err := pool.Conn(ctx)
 	if err != nil {
 		return errors.New("chat controller unavailable")
 	}
 	a.chatControl.lease = lease
 	var acquired bool
-	if err = lease.QueryRowContext(a.ctx, `SELECT pg_try_advisory_lock(`+chatControllerKey+`)`).Scan(&acquired); err != nil || !acquired {
+	if err = lease.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(`+chatControllerKey+`)`).Scan(&acquired); err != nil || !acquired {
 		return errors.New("another chat controller is active")
 	}
 	var mode string
-	err = a.store.Product.QueryRowContext(a.ctx, `SELECT value FROM app_metadata WHERE /*tenant:app_metadata*/ AND key='chat_dispatch_mode'`).Scan(&mode)
+	err = a.store.Product.QueryRowContext(ctx, `SELECT value FROM app_metadata WHERE /*tenant:app_metadata*/ AND key='chat_dispatch_mode'`).Scan(&mode)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return errors.New("chat dispatch mode unavailable")
 	}
@@ -62,7 +71,7 @@ func (a *Application) initChatDispatch() error {
 		return errors.New("retained chat mode guard blocks legacy ingestion")
 	}
 	if retained {
-		if _, err = a.store.Product.ExecContext(a.ctx, `INSERT INTO app_metadata(key,value) VALUES('chat_dispatch_mode','retained') ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_at=now()`); err != nil {
+		if _, err = a.store.Product.ExecContext(ctx, `INSERT INTO app_metadata(key,value) VALUES('chat_dispatch_mode','retained') ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_at=now()`); err != nil {
 			return errors.New("chat dispatch mode unavailable")
 		}
 	}
@@ -82,12 +91,7 @@ func (a *Application) initChatDispatch() error {
 			case <-a.ctx.Done():
 				return
 			case <-ticker.C:
-				ctx, stop := context.WithTimeout(a.ctx, time.Second)
-				err := lease.PingContext(ctx)
-				stop()
-				if err != nil {
-					a.chatControl.live.Store(false)
-					a.cancel()
+				if a.checkChatController(a.ctx) != nil {
 					return
 				}
 			}
@@ -100,14 +104,35 @@ func (a *Application) chatReady() bool {
 	return a.chatControl != nil && a.chatControl.live.Load() && a.ctx.Err() == nil
 }
 
+func (a *Application) checkChatController(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !a.chatReady() {
+		return errors.New("chat controller unavailable")
+	}
+	check, stop := context.WithTimeout(ctx, time.Second)
+	defer stop()
+	var held bool
+	err := a.chatControl.lease.QueryRowContext(check, chatControllerHeld).Scan(&held)
+	if err != nil && ctx.Err() != nil {
+		// A canceled caller must not stop unrelated tenant work.
+		return ctx.Err()
+	}
+	if err != nil || !held {
+		a.chatControl.live.Store(false)
+		a.cancel()
+		return errors.New("chat controller unavailable")
+	}
+	return nil
+}
+
 func (a *Application) handleRetainedChat(ctx context.Context, event platform.ChatEvent) error {
 	if !a.chatReady() || a.config.DeploymentMode == "hosted" && event.TenantID == tenantdb.BootstrapID {
 		return errors.New("chat controller unavailable")
 	}
-	if err := a.chatControl.lease.PingContext(ctx); err != nil {
-		a.chatControl.live.Store(false)
-		a.cancel()
-		return errors.New("chat controller unavailable")
+	if err := a.checkChatController(ctx); err != nil {
+		return err
 	}
 	s, err := a.runtime(ctx, event.TenantID)
 	if err != nil {

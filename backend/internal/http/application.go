@@ -262,6 +262,7 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	child, cancel := context.WithCancel(a.ctx)
 	s.tenantContext = child
 	s.chatReady = a.chatReady
+	s.chatFence = a.checkChatController
 	a.runtimes[id] = tenantRuntime{server: s, cancel: cancel}
 	s.StartBackground(child)
 	return s, nil

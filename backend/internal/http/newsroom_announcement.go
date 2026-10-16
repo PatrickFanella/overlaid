@@ -179,9 +179,20 @@ func (s *Server) newsroomAnnounce(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no receipt is available; check Twitch before clearing this unresolved request", http.StatusConflict)
 			return
 		}
+		ctx, stop := s.chatEffectContext(r.Context())
+		defer stop()
+		if err := s.checkChatFence(ctx); err != nil {
+			announcementError(w, err)
+			return
+		}
+		r = r.WithContext(ctx)
 		request, err := s.buildAnnouncementRequest(r.Context(), actor, body.RequestKey, kind)
 		if err != nil || platformoutbound.ManualFingerprint(request) != body.Fingerprint {
 			http.Error(w, "announcement changed; no new work was admitted", http.StatusConflict)
+			return
+		}
+		if err := s.checkChatFence(ctx); err != nil {
+			announcementError(w, err)
 			return
 		}
 		admitted, err := s.retainedReplies.store.AdmitNewsroomAnnouncement(r.Context(), request)

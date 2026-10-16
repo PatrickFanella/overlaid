@@ -205,6 +205,18 @@ func TestPostgresRegistryReplyCollection(t *testing.T) {
 			t.Fatal("canceled dispatch executed", err)
 		}
 	})
+	t.Run("controller-lost-after-collection", func(t *testing.T) {
+		event := source(t, "controller-lost", "!replyfence")
+		c := collect(t, event, "Fence")
+		fence := s.chatFence
+		defer func() { s.chatFence = fence }()
+		unavailable := errors.New("fixture controller unavailable")
+		s.chatFence = func(context.Context) error { return unavailable }
+		if err := c.admit(ctx); !errors.Is(err, unavailable) {
+			t.Fatal("collected replies bypassed final controller fence", err)
+		}
+		count(t, event, 0)
+	})
 	t.Run("source-binding", func(t *testing.T) {
 		event := source(t, "bound", "!replyfence")
 		modified := event
