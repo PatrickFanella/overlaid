@@ -34,15 +34,22 @@ type moderationConsumer struct {
 }
 
 func (a *Application) prepareModeration(ctx context.Context, queueURL, pacingURL string) (_ *moderationConsumer, err error) {
+	owned, stop := a.outboundContext(ctx)
+	defer stop()
+	ctx, cancel := context.WithTimeout(owned, 10*time.Second)
+	defer cancel()
+	// Drain direct effects before installing an owner. Never wait for routing
+	// while holding a.mu: direct routing snapshots the owner under that lock.
+	release, err := acquireModerationRoute(ctx, a.moderationRouting.TryLock, a.moderationRouting.Unlock)
+	if err != nil {
+		return nil, errModerationController
+	}
+	defer release()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.ctx.Err() != nil || a.moderation != nil || a.outbound == nil || a.config.TwitchChatSendMode != "retained" || strings.TrimSpace(queueURL) == "" || strings.TrimSpace(pacingURL) == "" {
 		return nil, errModerationController
 	}
-	owned, stop := a.outboundContext(ctx)
-	defer stop()
-	ctx, cancel := context.WithTimeout(owned, 10*time.Second)
-	defer cancel()
 	if a.guardOutboundChat(ctx) != nil {
 		return nil, errModerationController
 	}

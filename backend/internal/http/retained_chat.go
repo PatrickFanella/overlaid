@@ -321,6 +321,7 @@ func (s *Server) dispatchRetainedChat(ctx context.Context, event platform.ChatEv
 		if replies != nil {
 			outputContext = replies.outputContext(ctx, out)
 		}
+		outputContext = s.moderationSourceContext(outputContext, event, out)
 		if err := s.publishEventSubContext(outputContext, out, true); err != nil {
 			return err
 		}
