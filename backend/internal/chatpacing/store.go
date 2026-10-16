@@ -17,7 +17,8 @@ import (
 type Store struct{ db *sql.DB }
 
 // Open requires an explicit, separate restricted pacing DSN. Application startup
-// does not open this pool. Reachable SET ROLE privileges are checked as well.
+// opens this pool only for explicitly retained chat sending. Reachable SET ROLE
+// privileges are checked as well.
 func Open(ctx context.Context, dsn string) (*Store, error) {
 	if strings.TrimSpace(dsn) == "" {
 		return nil, ErrInvalid
@@ -30,16 +31,31 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(8)
 	db.SetMaxIdleConns(2)
+	s := &Store{db: db}
+	if err := s.Validate(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// Validate rechecks reachable privileges and exact schema/policy compatibility.
+// It reads metadata only and never reserves, prunes or repairs pacing state.
+func (s *Store) Validate(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return ErrInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	var unsafe, private, ready bool
-	err = db.QueryRowContext(ctx, `SELECT
+	err := s.db.QueryRowContext(ctx, `SELECT
  EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR has_schema_privilege(r.oid,current_schema(),'CREATE') OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relowner=r.oid))),
- EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,pg_roles r WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relname NOT IN('chat_pacing_accounts','chat_pacing_channels') AND (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')),
+ EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,pg_roles r WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relname NOT IN('chat_pacing_accounts','chat_pacing_channels') AND (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND (has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') OR has_any_column_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,REFERENCES'))),
  EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('chat_pacing_accounts') AND attname='fair_state' AND atttypid='jsonb'::regtype AND attnotnull AND NOT attisdropped) AND (SELECT count(*)=2 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity AND has_table_privilege(current_user,c.oid,'SELECT') AND has_table_privilege(current_user,c.oid,'INSERT') AND has_table_privilege(current_user,c.oid,'UPDATE') AND has_table_privilege(current_user,c.oid,'DELETE') AND NOT EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND has_table_privilege(r.oid,c.oid,'TRUNCATE,REFERENCES,TRIGGER')) AND (SELECT count(*)=1 AND bool_and(p.polname='pacer_only' AND p.polcmd='*' AND p.polpermissive AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles) AND pg_get_expr(p.polqual,p.polrelid)='true' AND pg_get_expr(p.polwithcheck,p.polrelid)='true' AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE pg_has_role(current_user,role_id,'MEMBER'))) FROM pg_policy p WHERE p.polrelid=c.oid)) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname IN('chat_pacing_accounts','chat_pacing_channels'))`).Scan(&unsafe, &private, &ready)
 	if err != nil || unsafe || private || !ready {
-		_ = db.Close()
-		return nil, errors.New("separate restricted pacing role and exact forced RLS required")
+		return errors.New("separate restricted pacing role and exact forced RLS required")
 	}
-	return &Store{db: db}, nil
+	return nil
 }
 func (s *Store) Close() error { return s.db.Close() }
 

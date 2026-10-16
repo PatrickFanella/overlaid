@@ -1,6 +1,6 @@
 # Manual Newsroom announcement requests
 
-Tracking: [#129](https://git.subcult.tv/subculture-collective/overlaid/issues/129), parent [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This connects the [manual-source foundation](manual-outbound-sources.md) to authenticated requests and the Newsroom interface. No application startup path selects retained outbound sending yet.
+Tracking: [#129](https://git.subcult.tv/subculture-collective/overlaid/issues/129), parent [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This connects the [manual-source foundation](manual-outbound-sources.md) to authenticated requests and the Newsroom interface. [Retained chat startup](retained-chat-sender.md) selects this contract explicitly; legacy sending remains the default.
 
 `GET /api/newsroom/announce/{current|raffle}` prepares a read-only preview. It returns the current sending mode, tenant/actor scope and an opaque fingerprint of the server-projected message, connection, kind and subject viewer references. It does not refresh provider credentials, fetch the submitted page, create a source/job or send a message. Configure permission is required. Current-story announcements require the selected item to remain approved; raffle announcements use the selected winner or the currently enabled general-registry entry command.
 
@@ -30,4 +30,4 @@ Disposable PostgreSQL HTTP fixtures cover configure/CSRF/workspace boundaries, q
 
 Frontend fixtures cover lost responses, reload continuation, coherent queued/delivered/uncertain response validation, storage failure, scope mismatch and overlapping clicks. Browser verification with a synthetic saved intent in demo mode confirms reload restoration, acknowledgement-gated clearing, panel removal and no horizontal overflow at 1280 pixels. It does not qualify a live Twitch deployment. The full PostgreSQL verification/race gate includes 140 frontend tests.
 
-One-sender/controller ownership, startup pool/role validation, readiness/shutdown, rollback and opt-in sender activation remain under #24. There is no new runtime setting or startup worker registration in this unit. Default sending remains direct. Preserve the manual-source migration and compatible runtime when rolling back; do not discard claims or uncertain outcomes to recover an older binary.
+The [retained sender controller](retained-chat-sender.md) supplies explicit startup selection, pool/role validation, readiness/shutdown and a persistent rollback guard. Broader lifecycle/load acceptance remains under #24. Default sending remains direct. Preserve the manual-source migration and compatible runtime when rolling back; do not discard claims or uncertain outcomes to recover an older binary.

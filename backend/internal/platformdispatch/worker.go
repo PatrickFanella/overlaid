@@ -1,5 +1,5 @@
 // Package platformdispatch supplies the fenced consumer boundary. Application
-// startup does not register a live effect handler or start this worker yet.
+// startup selects this worker explicitly for retained Twitch ingestion.
 package platformdispatch
 
 import (
@@ -17,6 +17,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platformqueue"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver"
 	"github.com/riverqueue/river/riverdriver/riverdatabasesql"
 )
 
@@ -41,6 +42,18 @@ func NewWorker(product *tenantdb.DB, handler Handler) (*Worker, error) {
 // that this role cannot directly read product rows and targets the same database
 // and schema as the immutable product pool. The caller owns pool lifetimes.
 func NewClient(ctx context.Context, service *sql.DB, product *tenantdb.DB, handler Handler) (*river.Client[*sql.Tx], error) {
+	return newClient(ctx, service, product, handler, nil)
+}
+
+// NewControlledClient delays leasing until the owning controller activates it.
+func NewControlledClient(ctx context.Context, service *sql.DB, product *tenantdb.DB, handler Handler, active func() bool) (*river.Client[*sql.Tx], error) {
+	if active == nil {
+		return nil, errors.New("chat worker activation gate required")
+	}
+	return newClient(ctx, service, product, handler, active)
+}
+
+func newClient(ctx context.Context, service *sql.DB, product *tenantdb.DB, handler Handler, active func() bool) (*river.Client[*sql.Tx], error) {
 	w, err := NewWorker(product, handler)
 	if err != nil || service == nil {
 		return nil, errors.New("chat worker configuration invalid")
@@ -51,7 +64,11 @@ func NewClient(ctx context.Context, service *sql.DB, product *tenantdb.DB, handl
 	}
 	workers := river.NewWorkers()
 	river.AddWorker(workers, w)
-	return river.NewClient(riverdatabasesql.New(service), &river.Config{Schema: serviceSchema, PollOnly: true, Queues: map[string]river.QueueConfig{"ingest_followup": {MaxWorkers: 4}}, Workers: workers, JobTimeout: 30 * time.Second})
+	var driver riverdriver.Driver[*sql.Tx] = riverdatabasesql.New(service)
+	if active != nil {
+		driver = platformqueue.Gate(driver, active)
+	}
+	return river.NewClient(driver, &river.Config{Schema: serviceSchema, PollOnly: true, Queues: map[string]river.QueueConfig{"ingest_followup": {MaxWorkers: 4}}, Workers: workers, JobTimeout: 30 * time.Second})
 }
 
 func cancel(code string) error { return river.JobCancel(errors.New(code)) }
