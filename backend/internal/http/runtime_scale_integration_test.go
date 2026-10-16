@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -193,4 +194,152 @@ func qualifyRealRuntimeLimit(t *testing.T, limit int) {
 		t.Fatal("runtime jobs did not settle once", jobs, unfinished, err)
 	}
 	t.Logf("real_runtimes=%d retained_commands=%d duplicate_inputs=%d startup=%s processing=%s shutdown=%s heap_before=%d heap_populated=%d goroutines_before=%d goroutines_populated=%d goroutines_after_close=%d product_role_sessions=%d", limit, limit+1, limit, startup, processing, shutdown, before.HeapAlloc, populated.HeapAlloc, baselineGoroutines, populatedGoroutines, goruntime.NumGoroutine(), productSessions)
+}
+
+// This uses the normal application-wide resume/sweep path, including on restart.
+// All provider requests are forbidden; the commands only update tenant counters.
+func TestRetainedGlobalRuntimeResumeAndRetention(t *testing.T) {
+	const limit = 1000
+	old, alpha, beta, f := applicationFixture(t)
+	cfg := retainedSenderConfig(old.config, f)
+	cfg.TenantRuntimeLimit = limit
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Admin.Exec(`DELETE FROM tenants WHERE id IN ($1,$2)`, alpha.tenant, beta.tenant); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Admin.Exec(`INSERT INTO accounts(id,display_name)
+ SELECT ('00000000-0000-4000-8000-'||lpad((19000+i)::text,12,'0'))::uuid,'Resume owner '||i FROM generate_series(1,1000) i;
+ INSERT INTO tenants(id,slug,name,owner_account_id,plan_id,retention_days)
+ SELECT ('00000000-0000-4000-8000-'||lpad((20000+i)::text,12,'0'))::uuid,'runtime-resume-'||i,'Resume '||i,
+ ('00000000-0000-4000-8000-'||lpad((19000+i)::text,12,'0'))::uuid,'unlimited',CASE WHEN i%2=1 THEN 1 ELSE 365 END FROM generate_series(1,1000) i;
+ INSERT INTO tenant_memberships(tenant_id,account_id,role) SELECT id,owner_account_id,'owner' FROM tenants WHERE slug LIKE 'runtime-resume-%';
+ INSERT INTO platform_connections(tenant_id,provider,provider_user_id,login,scopes)
+ SELECT ('00000000-0000-4000-8000-'||lpad((20000+i)::text,12,'0'))::uuid,'twitch',(2000+i)::text,'fixture-'||i,'["user:read:chat","user:write:chat"]'::jsonb FROM generate_series(1,1000) i`); err != nil {
+		t.Fatal(err)
+	}
+	previous := twitchHTTPClient
+	var providerCalls atomic.Int32
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		providerCalls.Add(1)
+		return nil, errors.New("global runtime fixture forbids provider requests")
+	})}
+	defer func() { twitchHTTPClient = previous }()
+	for generation := 0; generation < 2; generation++ {
+		start := time.Now()
+		app, err := NewApplication(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = app.Close() })
+		ctx, cancel := context.WithCancel(t.Context())
+		app.StartBackground(ctx)
+		resumed := time.Since(start)
+		deadline := time.Now().Add(60 * time.Second)
+		for {
+			app.mu.Lock()
+			ran, failed := app.sweepRan, app.sweepError
+			app.mu.Unlock()
+			if ran {
+				if failed {
+					t.Fatal("global retention failed", generation)
+				}
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("global retention did not finish", generation)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		sweep := time.Since(start)
+		app.mu.Lock()
+		servers := make([]*Server, 0, len(app.runtimes))
+		for _, runtime := range app.runtimes {
+			servers = append(servers, runtime.server)
+		}
+		app.mu.Unlock()
+		if len(servers) != limit {
+			t.Fatal("global startup did not resume the configured tenant set", generation, len(servers))
+		}
+		status := httptest.NewRecorder()
+		app.publicStatus(status, httptest.NewRequest("GET", "/readyz", nil))
+		if !strings.Contains(status.Body.String(), `"status":"ok"`) || strings.Contains(status.Body.String(), `"degraded"`) {
+			t.Fatal("global runtime readiness degraded", generation, status.Body.String())
+		}
+		if generation == 1 {
+			var events, payloads, receipts, jobs, shortRetention int
+			if err := f.Admin.QueryRow(`SELECT (SELECT count(*) FROM normalized_chat_events),(SELECT count(*) FROM platform_event_payloads),(SELECT count(*) FROM platform_dispatch_receipts),(SELECT count(*) FROM river_job WHERE kind='overlaid_chat_dispatch'),(SELECT count(*) FROM normalized_chat_events e JOIN tenants t ON t.id=e.tenant_id WHERE t.retention_days=1)`).Scan(&events, &payloads, &receipts, &jobs, &shortRetention); err != nil || events != limit/2 || payloads != limit/2 || receipts != limit/2 || jobs != limit/2 || shortRetention != 0 {
+				t.Fatal("global retention did not preserve tenant policy and cascade private input", events, payloads, receipts, jobs, shortRetention, err)
+			}
+		}
+		processStart := time.Now()
+		for index := 1; index <= limit; index++ {
+			tenant := fmt.Sprintf("00000000-0000-4000-8000-%012d", 20000+index)
+			app.mu.Lock()
+			server := app.runtimes[tenant].server
+			app.mu.Unlock()
+			channel := fmt.Sprint(2000 + index)
+			message := packet(channel, fmt.Sprintf("resume-source-%d", generation), fmt.Sprintf("resume-delivery-%d", generation), "!count resumption")
+			for range 2 {
+				if err := server.ingestRetainedChat(t.Context(), message, twitch.Token{UserID: channel}); err != nil {
+					t.Fatal("resumed runtime ingestion failed", generation, index, err)
+				}
+			}
+		}
+		expected := limit
+		if generation == 1 {
+			expected += limit / 2
+		}
+		deadline = time.Now().Add(60 * time.Second)
+		for {
+			var completed, failed, unfinished int
+			if err := f.Admin.QueryRow(`SELECT count(*) FILTER(WHERE state='completed'),count(*) FILTER(WHERE state IN('failed','uncertain','skipped')),(SELECT count(*) FROM river_job WHERE kind='overlaid_chat_dispatch' AND state<>'completed') FROM platform_dispatch_receipts`).Scan(&completed, &failed, &unfinished); err != nil {
+				t.Fatal(err)
+			}
+			if failed != 0 {
+				t.Fatal("resumed command failed", generation, completed, failed)
+			}
+			if completed == expected && unfinished == 0 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("resumed commands did not finish", generation, completed, expected, unfinished)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		var counters, total, wrong, unfinished int
+		if err := f.Admin.QueryRow(`SELECT count(*),coalesce(sum(value),0),count(*) FILTER(WHERE value<>$1) FROM bot_counters WHERE name='resumption'`, generation+1).Scan(&counters, &total, &wrong); err != nil || counters != limit || total != limit*(generation+1) || wrong != 0 {
+			t.Fatal("restart replayed or crossed tenant counters", counters, total, wrong, err)
+		}
+		if err := f.Admin.QueryRow(`SELECT count(*) FROM river_job WHERE kind='overlaid_chat_dispatch' AND state<>'completed'`).Scan(&unfinished); err != nil || unfinished != 0 {
+			t.Fatal("resumed jobs did not settle", unfinished, err)
+		}
+		processing := time.Since(processStart)
+		cancel()
+		shutdownStart := time.Now()
+		if err := app.Close(); err != nil {
+			t.Fatal(err)
+		}
+		for _, server := range servers {
+			if server.tenantContext.Err() == nil {
+				t.Fatal("global shutdown left a live runtime")
+			}
+		}
+		if len(app.runtimes) != 0 || len(app.sendGates) != 0 {
+			t.Fatal("global shutdown retained runtime references")
+		}
+		t.Logf("generation=%d globally_resumed=%d startup=%s initial_sweep_finished=%s commands=%s shutdown=%s", generation, limit, resumed, sweep, processing, time.Since(shutdownStart))
+		if generation == 0 {
+			// Age only fixture-owned rows while the application is closed. Restart must
+			// apply each tenant's one-day or 365-day retention with the normal sweep.
+			if _, err := f.Admin.Exec(`UPDATE normalized_chat_events SET received_at=clock_timestamp()-interval '30 days'`); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	var actions int
+	if err := f.Admin.QueryRow(`SELECT count(*) FROM platform_outbound_actions`).Scan(&actions); err != nil || actions != 0 || providerCalls.Load() != 0 {
+		t.Fatal("global resume emitted a provider effect", actions, providerCalls.Load(), err)
+	}
 }
