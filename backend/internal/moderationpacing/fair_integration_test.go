@@ -185,6 +185,7 @@ func TestFairBindingsDeadlineCancellationAndExpiredCaller(t *testing.T) {
 		t.Fatal("canceled registration persisted", err)
 	}
 	state.Waiters[0].Deadline = time.Now().Add(-time.Second)
+	state.Waiters[0].ActiveUntil = state.Waiters[0].Deadline
 	raw, _ = json.Marshal(state)
 	if _, err = f.Admin.Exec(`UPDATE moderation_pacing_buckets SET fair_state=$1 WHERE kind='client'`, raw); err != nil {
 		t.Fatal(err)
@@ -247,7 +248,7 @@ func TestFairGrantRollbackPreclaimCleanupAndMalformedState(t *testing.T) {
 	if err = s.Complete(t.Context(), next.Permit, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.Admin.Exec(`UPDATE moderation_pacing_buckets SET fair_state='{"version":2}' WHERE kind='client'`); err != nil {
+	if _, err = f.Admin.Exec(`UPDATE moderation_pacing_buckets SET fair_state='{"version":3}' WHERE kind='client'`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.AcquireFair(t.Context(), "client", "1", "1", r); !errors.Is(err, ErrFairState) {
@@ -277,5 +278,60 @@ func TestFairClientAndTenantCapacity(t *testing.T) {
 	}
 	if _, err := s.AcquireFair(t.Context(), "new-client", "9", "9", fairRequest(999, 999, deadline)); !errors.Is(err, ErrCapacity) {
 		t.Fatal("client capacity", err)
+	}
+}
+
+func TestMissingFairCallerDoesNotHoldModerationChannelUntilActionExpiry(t *testing.T) {
+	f, s := fixture(t)
+	busy := acquire(t, s, "client", "100", "500")
+	deadline := time.Now().UTC().Add(time.Minute)
+	a := fairRequest(1, 1, deadline)
+	b := fairRequest(2, 2, deadline)
+	for i, r := range []FairRequest{a, b} {
+		if _, err := s.AcquireFair(t.Context(), "client", fmt.Sprint(101+i), "500", r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var raw []byte
+	if err := f.Admin.QueryRow(`SELECT fair_state FROM moderation_pacing_buckets WHERE kind='client'`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	state, err := permitturns.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket := state.Waiters[0].Ticket
+	state.Waiters[0].ActiveUntil = time.Now().Add(-time.Second)
+	raw, _ = json.Marshal(state)
+	if _, err = f.Admin.Exec(`UPDATE moderation_pacing_buckets SET fair_state=$1 WHERE kind='client'`, raw); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Complete(t.Context(), busy.Permit, 0); err != nil {
+		t.Fatal(err)
+	}
+	advance := func() {
+		if _, err := f.Admin.Exec(`UPDATE moderation_pacing_buckets SET next_at='-infinity' WHERE kind<>'client'`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	advance()
+	d, err := s.AcquireFair(t.Context(), "client", "102", "500", b)
+	if err != nil || !d.Granted {
+		t.Fatal("missing caller stalled active moderator", err)
+	}
+	if err = s.Complete(t.Context(), d.Permit, 0); err != nil {
+		t.Fatal(err)
+	}
+	advance()
+	d, err = s.AcquireFair(t.Context(), "client", "101", "500", a)
+	if err != nil || !d.Granted {
+		t.Fatal("rejoining caller lost turn", err)
+	}
+	if err = f.Admin.QueryRow(`SELECT fair_state FROM moderation_pacing_buckets WHERE kind='client'`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	state, err = permitturns.Decode(raw)
+	if err != nil || state.Waiters[0].Ticket != ticket || !state.Waiters[0].Deadline.Equal(deadline) {
+		t.Fatal("rejoin changed original identity", err)
 	}
 }

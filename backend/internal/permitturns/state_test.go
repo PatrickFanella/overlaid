@@ -123,7 +123,7 @@ func TestFairIdentityBoundsAndMalformedState(t *testing.T) {
 	if _, err = s.tick(); !errors.Is(err, ErrState) {
 		t.Fatal("counter wrapped", err)
 	}
-	for _, raw := range []string{`null`, `[]`, `{"version":2}`, `{"version":1,"counter":-1}`, `{"version":1,"extra":true}`, `{} {}`, strings.Repeat("x", 131073)} {
+	for _, raw := range []string{`null`, `[]`, `{"version":3}`, `{"version":1,"counter":-1}`, `{"version":1,"extra":true}`, `{} {}`, strings.Repeat("x", 131073)} {
 		if _, err := Decode([]byte(raw)); !errors.Is(err, ErrState) {
 			t.Fatal("malformed state accepted", err)
 		}
@@ -139,22 +139,40 @@ func TestResourcePairsAndLegacyStateCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := json.Marshal(s)
-	// Existing chat version-one records retain the original channel field and
-	// context-separated hash keys; extraction must not rename or salt them.
-	var legacy struct {
-		Version int `json:"version"`
-		Waiters []struct {
-			Channel, Action, Tenant string
-			Deadline                time.Time
-		}
+	// Build a frozen version-one shape without the new caller lease field.
+	type legacyWait struct {
+		Action   string    `json:"action"`
+		Tenant   string    `json:"tenant"`
+		Channel  string    `json:"channel"`
+		Deadline time.Time `json:"deadline"`
+		Ticket   int64     `json:"ticket"`
+		Granted  bool      `json:"granted"`
 	}
-	if err = json.Unmarshal(raw, &legacy); err != nil || legacy.Version != 1 || len(legacy.Waiters) != 1 || legacy.Waiters[0].Channel != channel || legacy.Waiters[0].Action != id {
-		t.Fatal("legacy record changed", err)
-	}
+	old := struct {
+		Version int          `json:"version"`
+		Counter int64        `json:"counter"`
+		Tenants []Tenant     `json:"tenants"`
+		Waiters []legacyWait `json:"waiters"`
+	}{1, s.Counter, s.Tenants, []legacyWait{{s.Waiters[0].Action, s.Waiters[0].Tenant, channel, r.Deadline, s.Waiters[0].Ticket, false}}}
+	raw, _ := json.Marshal(old)
 	restored, err := Decode(raw)
-	if err != nil || restored.Winner(now, map[string]time.Time{channel: now}) != id {
-		t.Fatal("legacy readiness changed", err)
+	if err != nil || restored.Version != 1 || restored.Winner(now, map[string]time.Time{channel: now}) != "" {
+		t.Fatal("legacy waiter was active without fresh registration", err)
+	}
+	ticket := restored.Waiters[0].Ticket
+	turn := restored.Tenants[0].Turn
+	same, err := restored.Register(now, r, channel)
+	if err != nil || same != id || restored.Version != 2 || restored.Waiters[0].Ticket != ticket || restored.Tenants[0].Turn != turn || restored.Winner(now, map[string]time.Time{channel: now}) != id {
+		t.Fatal("legacy upgrade changed identity or turn", err)
+	}
+	old.Waiters[0].Granted = true
+	raw, _ = json.Marshal(old)
+	restored, err = Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = restored.Register(now, r, channel); err != nil || restored.Winner(now, map[string]time.Time{channel: now}) != "" {
+		t.Fatal("legacy granted marker replayed", err)
 	}
 	s = State{}
 	for i := 1; i <= TenantLimit; i++ {
@@ -180,5 +198,98 @@ func TestResourcePairsAndLegacyStateCompatibility(t *testing.T) {
 		if _, err = s.Register(now, fairRequest(1, 999, now.Add(time.Minute)), bad); !errors.Is(err, ErrInvalid) {
 			t.Fatal("bad resource accepted", err)
 		}
+	}
+}
+
+func TestActiveCallerLeaseSkipsMissingCallerAndPreservesRejoin(t *testing.T) {
+	now := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+	var s State
+	channel := strings.Repeat("1", 64)
+	ready := map[string]time.Time{channel: now}
+	a := fairRequest(1, 1, now.Add(time.Minute))
+	b := fairRequest(2, 2, a.Deadline)
+	first, err := s.Register(now, a, channel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.Register(now, b, channel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket := s.Waiters[0].Ticket
+	counter := s.Counter
+	if s.Winner(now, ready) != first {
+		t.Fatal("initial order")
+	}
+	later := now.Add(ActiveLease)
+	if s.Winner(later, ready) != "" {
+		t.Fatal("expired caller lease remained eligible")
+	}
+	if _, err = s.Register(later, b, channel); err != nil || s.Counter != counter || s.Winner(later, ready) != second {
+		t.Fatal("active caller did not progress", err)
+	}
+	if err = s.Grant(later, second); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Register(later, a, channel); err != nil || s.Waiters[0].Ticket != ticket || !s.Waiters[0].Deadline.Equal(a.Deadline) || s.Winner(later, ready) != first {
+		t.Fatal("rejoin changed identity or lost turn", err)
+	}
+	if err = s.Grant(later, first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Register(later.Add(ActiveLease), a, channel); err != nil || s.Winner(later.Add(ActiveLease), ready) != "" {
+		t.Fatal("heartbeat replayed granted marker", err)
+	}
+	if _, err = s.Register(a.Deadline, a, channel); !errors.Is(err, ErrInvalid) {
+		t.Fatal("heartbeat renewed original deadline", err)
+	}
+}
+func TestActiveLeaseBoundsAndStorageEnvelopes(t *testing.T) {
+	now := time.Date(2026, 10, 16, 0, 0, 0, 123456789, time.UTC)
+	for _, paired := range []bool{false, true} {
+		var s State
+		deadline := now.Add(time.Minute)
+		for i := 1; i <= WaitLimit; i++ {
+			tenant := i
+			if tenant > TenantLimit {
+				tenant = 1
+			}
+			channel := fmt.Sprintf("%064x", i)
+			if paired {
+				channel += ":" + channel
+			}
+			if _, err := s.Register(now, fairRequest(tenant, i, deadline), channel); err != nil {
+				t.Fatal(err)
+			}
+		}
+		s.Counter = math.MaxInt64 - 1
+		for i := range s.Waiters {
+			s.Waiters[i].Ticket = s.Counter - int64(i)
+		}
+		for i := range s.Tenants {
+			s.Tenants[i].Turn = s.Counter
+		}
+		raw, _ := json.Marshal(s)
+		bound := 131072
+		if paired {
+			bound = 262144
+		}
+		if len(raw)+8192 > bound {
+			t.Fatal("new lease exceeds storage envelope", paired, len(raw))
+		}
+		if _, err := Decode(raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var s State
+	r := fairRequest(1, 1, now.Add(time.Second))
+	channel := strings.Repeat("1", 64)
+	if _, err := s.Register(now, r, channel); err != nil || !s.Waiters[0].ActiveUntil.Equal(r.Deadline) {
+		t.Fatal("caller lease exceeded original deadline", err)
+	}
+	s.Waiters[0].ActiveUntil = r.Deadline.Add(time.Nanosecond)
+	raw, _ := json.Marshal(s)
+	if _, err := Decode(raw); !errors.Is(err, ErrState) {
+		t.Fatal("malformed lease bound accepted", err)
 	}
 }
