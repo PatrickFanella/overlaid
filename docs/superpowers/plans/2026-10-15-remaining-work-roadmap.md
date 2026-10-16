@@ -110,7 +110,7 @@ Before starting the next unit, refresh the checkout, issue/PR state and relevant
 
 ## First work to start
 
-1. P2.1 shared-vault execution is merged in [PR #86](https://git.subcult.tv/subculture-collective/overlaid/pulls/86), closing #85; see the [shared execution runbook](../../runbooks/shared-bot-execution.md). P2.2 is in progress: visibility (#87 / PR #88) and the moderation contract (#89 / PR #91) are merged. The retained moderation ledger (#93 / PR #94) is merged. Atomic scheduling and restricted leasing are under #95; the handler, provider execution and priority arbitration remain unfinished.
+1. P2.1 shared-vault execution is merged in [PR #86](https://git.subcult.tv/subculture-collective/overlaid/pulls/86), closing #85; see the [shared execution runbook](../../runbooks/shared-bot-execution.md). P2.2 is in progress: visibility (#87 / PR #88) and the moderation contract (#89 / PR #91) are merged. The retained moderation ledger (#93 / PR #94) is merged. Atomic scheduling and restricted leasing (#95 / PR #96) are merged; the handler, provider execution and priority arbitration remain unfinished.
 2. Prepare the Phase 3 bounded plan under #25 using the existing accepted engine/variable decisions. Engine contract work may proceed while P2.4–P2.6 or external reviews wait.
 3. Keep #23's registration checklist and #39/#40's controlled-session prerequisites visible; do not perform live effects or request secrets in public issue text.
 
@@ -128,8 +128,12 @@ The merged P2.1 revision `de6a449` has a hosted race-test failure in the existin
 
 ## P2.2 retained moderation ledger — #93
 
-[Issue #93](https://git.subcult.tv/subculture-collective/overlaid/issues/93) adds the [moderation ledger](../../runbooks/platform-moderation.md): retained-source admission, shared chat/moderation allowances, fenced one-use claims, typed completion and source/target lifecycle deletion. Pacing visibility (#87 / PR #88), the moderation contract (#89 / PR #91) and bounded failure diagnostics (PR #92) are merged. The original hosted timeout in #90 remains unexplained; the merged diagnostics revision has successful hosted verification. Moderation River scheduling, fresh provider authorization/transport, moderation API pacing and mixed-priority arbitration remain unfinished. No scheduler or provider effect is activated by this ledger.
+[Issue #93](https://git.subcult.tv/subculture-collective/overlaid/issues/93) adds the [moderation ledger](../../runbooks/platform-moderation.md): retained-source admission, shared chat/moderation allowances, fenced one-use claims, typed completion and source/target lifecycle deletion. Pacing visibility (#87 / PR #88), the moderation contract (#89 / PR #91) and bounded failure diagnostics (PR #92) are merged. Issue #90 is now closed; its historical timeout cause was not established by finite verification; the merged diagnostics revision has successful hosted verification. Moderation River scheduling, fresh provider authorization/transport, moderation API pacing and mixed-priority arbitration remain unfinished. No scheduler or provider effect is activated by this ledger.
 
 ## P2.2 moderation jobs — #95
 
 [Issue #95](https://git.subcult.tv/subculture-collective/overlaid/issues/95) adds [atomic moderation jobs and isolated leasing](../../runbooks/moderation-queue.md) after the merged ledger in #93 / PR #94. It preserves payload-free job arguments, original deadlines, one job per action, pending-only migration catch-up and three-way chat/outbound/moderation role isolation. Jobs retain neutral priority four; this is not mixed-priority arbitration or a registered moderation executor. Provider authorization/transport, endpoint pacing, the handler and opt-in registry execution remain unfinished.
+
+## P2.2 typed moderation transport — #97
+
+[Issue #97](https://git.subcult.tv/subculture-collective/overlaid/issues/97) adds an unregistered [single-attempt Twitch moderation transport](../../runbooks/twitch-moderation.md) after merged scheduling PR #96. It maps delete/timeout/ban/unban to typed moderation receipts, preserves cancellation and original request bounds, refuses redirects/replayable bodies, and treats ambiguous results as uncertain. Fresh subject/scope/role/consent authorization, endpoint pacing, ledger execution, the dedicated moderation worker, mixed-priority arbitration and opt-in registry integration remain unfinished. This transport does not activate moderation effects or complete P2.2.
