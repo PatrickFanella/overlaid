@@ -55,14 +55,14 @@ func (s *Store) Inspect(ctx context.Context, sender, channel string, deadline ti
 	account, key := keys(sender, channel)
 	var now, next time.Time
 	var state accountState
-	var raw []byte
+	var raw, fairRaw []byte
 	err = tx.QueryRowContext(ctx, `SELECT clock_timestamp(),coalesce(a.attempts,'[]'::jsonb),
  greatest(coalesce(a.blocked_until,'-infinity'::timestamptz),'0001-01-01 UTC'::timestamptz),
  greatest(coalesce(a.lease_until,'-infinity'::timestamptz),'0001-01-01 UTC'::timestamptz),
- greatest(coalesce(c.next_at,'-infinity'::timestamptz),'0001-01-01 UTC'::timestamptz)
+ greatest(coalesce(c.next_at,'-infinity'::timestamptz),'0001-01-01 UTC'::timestamptz),coalesce(a.fair_state,'{}'::jsonb)
  FROM (SELECT $1::text account_key,$2::text channel_key) k
  LEFT JOIN chat_pacing_accounts a ON a.account_key=k.account_key
- LEFT JOIN chat_pacing_channels c ON c.account_key=k.account_key AND c.channel_key=k.channel_key`, account, key).Scan(&now, &raw, &state.BlockedUntil, &state.LeaseUntil, &next)
+ LEFT JOIN chat_pacing_channels c ON c.account_key=k.account_key AND c.channel_key=k.channel_key`, account, key).Scan(&now, &raw, &state.BlockedUntil, &state.LeaseUntil, &next, &fairRaw)
 	if err != nil {
 		return fail()
 	}
@@ -70,7 +70,16 @@ func (s *Store) Inspect(ctx context.Context, sender, channel string, deadline ti
 	if err != nil {
 		return fail()
 	}
+	fair, err := decodeFair(fairRaw)
+	if err != nil {
+		return fail()
+	}
 	result := reportAt(now, state, next, deadline)
+	if fair.Version != 0 {
+		result.Ready = false
+		result.Blocking = append(result.Blocking, "fair_admission_required")
+		result.Warnings = append(result.Warnings, "tenant_turn_unqualified")
+	}
 	if err = tx.Commit(); err != nil {
 		return fail()
 	}

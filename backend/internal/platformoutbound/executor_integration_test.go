@@ -220,9 +220,9 @@ func TestExecutorUncertainQuotaAndProviderPanic(t *testing.T) {
 				t.Fatal("unsafe replay", sends, err)
 			}
 			if mode == "quota" {
-				d, err := pacer.Acquire(t.Context(), "123", "999")
-				if err != nil || d.Granted || time.Until(d.RetryAt) < 40*time.Second {
-					t.Fatal("cooldown missing", d.Granted, err)
+				report, err := pacer.Inspect(t.Context(), "123", "999", time.Time{})
+				if err != nil || report.Ready || report.CooldownWaitMS < 40000 {
+					t.Fatal("cooldown missing", report, err)
 				}
 			}
 		})
@@ -373,5 +373,36 @@ func TestExecutorCancellationBeforeProviderIsRejected(t *testing.T) {
 	}
 	if r := receiptFor(t, db); r.State != "rejected" {
 		t.Fatal(r)
+	}
+}
+
+func TestExecutorFairPermitPreClaimStorageRetry(t *testing.T) {
+	f, db, pacer, args := executorFixture(t)
+	sends := 0
+	e, err := NewExecutor(t.Context(), db, pacer, func(context.Context, Target) (Authorization, error) {
+		return Authorization{SenderID: "123", Capabilities: fullCapabilities(), Send: func(_ context.Context, m platform.OutboundMessage) (platform.Receipt, error) {
+			sends++
+			return platform.Receipt{ActionID: m.ActionID, Status: platform.Delivered, ProviderMessageID: "sent"}, nil
+		}}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.Admin.Exec(`CREATE FUNCTION reject_fair_start() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.state='running' THEN RAISE EXCEPTION 'synthetic private fixture failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_fair_start BEFORE UPDATE ON platform_outbound_actions FOR EACH ROW EXECUTE FUNCTION reject_fair_start()`); err != nil {
+		t.Fatal(err)
+	}
+	result, err := e.Execute(t.Context(), args)
+	if !errors.Is(err, errExecutionStore) || result.Done || sends != 0 {
+		t.Fatal("preclaim failure boundary", result, sends, err)
+	}
+	if _, err = f.Admin.Exec(`DROP TRIGGER reject_fair_start ON platform_outbound_actions; UPDATE chat_pacing_channels SET next_at=clock_timestamp()-interval '1 second'`); err != nil {
+		t.Fatal(err)
+	}
+	result, err = e.Execute(t.Context(), args)
+	if err != nil || !result.Done || sends != 1 {
+		t.Fatal("preclaim retry lost", result, sends, err)
+	}
+	if _, err = e.Execute(t.Context(), args); err != nil || sends != 1 {
+		t.Fatal("postclaim replay", sends, err)
 	}
 }
