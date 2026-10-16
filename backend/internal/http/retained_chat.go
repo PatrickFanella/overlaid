@@ -188,14 +188,29 @@ func (s *Server) dispatchRetainedChat(ctx context.Context, event platform.ChatEv
 	if sent {
 		return nil
 	}
+	var replies *registryReplyCollection
+	if s.retainedReplies != nil {
+		replies, err = s.beginRegistryReplies(ctx, event)
+		if err != nil {
+			return err
+		}
+		defer replies.close()
+	}
 	rules := s.interactions.Rules()
 	for _, out := range twitch.EventsForNormalizedChat(event, s.twitchCommandProcessor, rules) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := s.publishEventSubContext(ctx, out, true); err != nil {
+		outputContext := ctx
+		if replies != nil {
+			outputContext = replies.outputContext(ctx, out)
+		}
+		if err := s.publishEventSubContext(outputContext, out, true); err != nil {
 			return err
 		}
+	}
+	if replies != nil {
+		return replies.admit(ctx)
 	}
 	return nil
 }
