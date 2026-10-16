@@ -98,7 +98,9 @@ const (
 	Unauthorized FailureKind = "unauthorized"
 	Unsupported  FailureKind = "unsupported"
 	QuotaLimited FailureKind = "quota_limited"
-	Permanent    FailureKind = "permanent"
+	// PlanLimited is a confirmed local chat allowance rejection, never provider backoff.
+	PlanLimited FailureKind = "plan_limited"
+	Permanent   FailureKind = "permanent"
 )
 
 // Receipt describes one attempt, not an exactly-once provider guarantee.

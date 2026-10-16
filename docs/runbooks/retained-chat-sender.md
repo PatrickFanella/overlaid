@@ -8,7 +8,7 @@ Tracking: [#133](https://git.subcult.tv/subculture-collective/overlaid/issues/13
 | --- | --- |
 | `TWITCH_CHAT_SEND_MODE` | `retained` explicitly selects durable chat sending; `legacy` remains the default. |
 | `TWITCH_CHAT_DISPATCH_MODE` | Must be `retained` when retained sending is selected. File mode is rejected. |
-| `DATABASE_URL` | Existing non-owner product/tenant login, with current migrations through 0026. |
+| `DATABASE_URL` | Existing non-owner product/tenant login, with current migrations through 0027. |
 | `PLATFORM_WORKER_DATABASE_URL` | Separate retained-ingestion login with only the chat-dispatch queue role. |
 | `PLATFORM_OUTBOUND_WORKER_DATABASE_URL` | Separate login inheriting only the outbound chat worker role. It must not also reach product, moderation, pacing or vault privileges. |
 | `OVERLAID_PACING_DATABASE_URL` | Separate restricted chat pacing login. This is the same private setting used by the read-only pacing probe. |
@@ -105,4 +105,12 @@ The natural 24-reply shared burst now runs with ordinary free-plan tenants and c
 
 A focused uncached Go 1.26.0 race run on Kvant, October 16, 2026, completed all 24 shared replies with 90 and 66 HTTP reservations for the two free-plan tenants. Its 25 shared charges spanned 44.04 seconds, reached the full window of 20 and retained natural replenishment. These are finite local observations, not portable throughput or allowance guarantees.
 
-Actual allowance exhaustion still fails closed. Distinguishing that local limit from provider authorization failures in retained receipts/UI remains separate work, as do continuous-load headroom, moderation priority and live-provider acceptance. No provider authorization cache, allowance increase, new pool or production migration is introduced.
+Actual allowance exhaustion fails closed with the fixed chat receipt failure `plan_limited`; provider rate limits remain `quota_limited` and permission failures remain `unauthorized`. See [local allowance receipts](#local-allowance-receipts). Continuous-load headroom, moderation priority and live-provider acceptance remain separate work. No provider authorization cache, allowance increase or new pool is introduced.
+
+## Local allowance receipts
+
+[Issue #153](https://git.subcult.tv/subculture-collective/overlaid/issues/153) distinguishes consumed tenant HTTP allowance from Twitch rate limits and authorization failures. Initial authorization, post-claim authorization and the final pre-transport reservation preserve `plan_limited`. The executor completes a terminal rejection, makes no provider send, attaches no provider retry delay and never extends the global account cooldown for that failure. A permit already charged before rejection is not refunded. Duplicate inputs and restarts do not replay it. The separate moderation contract is unchanged.
+
+Migration `0027_outbound_plan_limit.sql` expands only the chat ledger's failure allowlist. Explicit retained sender startup requires the validated compatible constraint before consuming jobs. Apply the migration with the existing administrator migration process before starting this build. For binary rollback, retain the expanded constraint, rows and claims; a compatible older reader may show a generic rejection. Do not shrink the constraint while `plan_limited` rows remain. This qualification uses disposable databases and does not apply a production migration.
+
+Adapter fixtures cover exhaustion at all three reservation boundaries, separate provider quota and permission failures, no local-limit cooldown, no slot refund and terminal no-replay. An actual application/River fixture consumes a general-registry command twice, records one `plan_limited` action with zero provider sends, releases the charged permit and restarts without replay. Startup fixtures reject the old constraint and accept the migrated schema. [Manual announcement receipts](manual-announcement-intents.md) expose the same fixed failure without message text or credentials.

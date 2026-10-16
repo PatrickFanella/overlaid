@@ -67,15 +67,21 @@ async function runAnnouncement(scope: AnnouncementScope, kind: AnnouncementKind,
   if (result.mode !== intent.mode || !['pending', 'running', 'delivered', 'rejected', 'uncertain'].includes(state) || result.queued !== queued || result.announced !== (state === 'delivered')) {
     throw new Error('The announcement response could not be confirmed. Keep this request unresolved.');
   }
+  let failure = '';
   if (intent.mode === 'retained') {
     const receipt = object(result.receipt);
     if (!hash.test(String(receipt.actionId)) || !hash.test(String(receipt.sourceId)) || receipt.state !== state || !Number.isFinite(Date.parse(String(receipt.deadline)))) {
       throw new Error('The announcement receipt could not be confirmed. Keep this request unresolved.');
     }
+    if (receipt.failure !== undefined && typeof receipt.failure !== 'string' || state !== 'rejected' && receipt.failure) {
+      throw new Error('The announcement receipt could not be confirmed. Keep this request unresolved.');
+    }
+    failure = typeof receipt.failure === 'string' ? receipt.failure : '';
   } else if (state !== 'delivered') {
     throw new Error('Direct delivery could not be confirmed. Check Twitch before clearing this request.');
   }
   if (state === 'uncertain') return { message: 'Delivery could not be confirmed. Check Twitch before starting another announcement.', unresolved: true };
   storage.removeItem(key);
-  return { message: queued ? 'Queued for Twitch chat. Delivery has not been confirmed.' : state === 'delivered' ? 'Posted in Twitch chat.' : 'The announcement was not delivered.', unresolved: false };
+  const rejection = failure === 'plan_limited' ? "The workspace's hourly HTTP allowance was reached. The announcement was not delivered. Wait for the allowance to reset before starting a new announcement." : failure === 'quota_limited' ? 'Twitch rejected the announcement because of a rate limit. It was not delivered.' : failure === 'unauthorized' ? 'The selected Twitch identity could not be authorized. The announcement was not delivered.' : 'The announcement was not delivered.';
+  return { message: queued ? 'Queued for Twitch chat. Delivery has not been confirmed.' : state === 'delivered' ? 'Posted in Twitch chat.' : rejection, unresolved: false };
 }

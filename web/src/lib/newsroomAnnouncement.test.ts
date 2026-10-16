@@ -47,6 +47,20 @@ describe('manual announcement intents',()=>{
    expect(hasAnnouncementIntent(scope,'current',saved)).toBe(true);expect(fetch).toHaveBeenCalledTimes(2);
   }
  });
+ it('distinguishes local allowance, provider quota and permissions on receipt-only retries',async()=>{
+  for(const [failure,text] of [['plan_limited',"workspace's hourly HTTP allowance"],['quota_limited','Twitch rejected'],['unauthorized','could not be authorized'],['private-unknown-failure','The announcement was not delivered.']]) {
+   const saved=storage();saved.setItem(announcementStorageKey(scope,'current'),JSON.stringify({version:1,mode:'retained',requestKey:key,fingerprint}));
+   const value=status('rejected');const fetch=vi.fn().mockResolvedValue(response({...value,receipt:{...value.receipt,failure}}));vi.stubGlobal('fetch',fetch);
+   const result=await announceNewsroom(scope,'current','',saved);
+   expect(result.message).toContain(text);expect(result.message).not.toContain('private-unknown');expect(result.unresolved).toBe(false);expect(fetch).toHaveBeenCalledOnce();expect(JSON.parse(fetch.mock.calls[0][1].body).retry).toBe(true);expect(hasAnnouncementIntent(scope,'current',saved)).toBe(false);
+  }
+ });
+ it('keeps malformed or contradictory failure metadata unresolved',async()=>{
+  for(const value of [{...status('delivered'),receipt:{...status('delivered').receipt,failure:'plan_limited'}},{...status('rejected'),receipt:{...status('rejected').receipt,failure:{private:'body'}}}]) {
+   const saved=storage();const fetch=vi.fn().mockResolvedValueOnce(response(preview)).mockResolvedValueOnce(response(value));vi.stubGlobal('fetch',fetch);
+   await expect(announceNewsroom(scope,'current','',saved)).rejects.toThrow('could not be confirmed');expect(hasAnnouncementIntent(scope,'current',saved)).toBe(true);
+  }
+ });
  it('never retries direct delivery after ambiguity and clears only by explicit acknowledgement',async()=>{
   const saved=storage();const fetch=vi.fn().mockResolvedValueOnce(response({...preview,mode:'direct'})).mockRejectedValueOnce(new Error('network lost'));vi.stubGlobal('fetch',fetch);
   await expect(announceNewsroom(scope,'current','',saved)).rejects.toThrow('network lost');

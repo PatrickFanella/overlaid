@@ -16,6 +16,8 @@ import (
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/newsroom"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/platformoutbound"
 )
 
 func TestPostgresManualAnnouncementRequestsAndReceiptOnlyRetries(t *testing.T) {
@@ -96,10 +98,29 @@ func TestPostgresManualAnnouncementRequestsAndReceiptOnlyRetries(t *testing.T) {
 		}
 	}
 	count(1)
+	var actionID string
+	if err := db.QueryRowContext(ctx, `SELECT id FROM platform_outbound_actions`).Scan(&actionID); err != nil {
+		t.Fatal(err)
+	}
+	ledger, _ := platformoutbound.New(db)
+	claim, started, err := ledger.Start(ctx, actionID)
+	if err != nil || !started {
+		t.Fatal(started, err)
+	}
+	if err := ledger.Finish(ctx, claim, platform.Receipt{ActionID: actionID, Status: platform.Rejected, Failure: platform.PlanLimited}); err != nil {
+		t.Fatal(err)
+	}
+	receiptBody := body
+	receiptBody.Retry = true
+	receiptResponse := post(alpha, receiptBody)
+	if receiptResponse.code != 200 || !strings.Contains(receiptResponse.body, `"failure":"plan_limited"`) || strings.Contains(receiptResponse.body, "Approved source") || strings.Contains(receiptResponse.body, "fixture-access") {
+		t.Fatal("manual failure projection missing or private", receiptResponse)
+	}
+	count(1)
 	d.Items[0].Status = "rejected"
 	writeDesk()
 	body.Retry = true
-	if response := post(alpha, body); response.code != 202 {
+	if response := post(alpha, body); response.code != 200 {
 		t.Fatal("receipt retry consulted changed desk", response)
 	}
 	count(1)

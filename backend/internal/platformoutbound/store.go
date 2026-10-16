@@ -330,6 +330,10 @@ func validReceipt(r platform.Receipt) bool {
 			return false
 		}
 		switch r.Failure {
+		case platform.PlanLimited:
+			if r.RetryAfter != 0 {
+				return false
+			}
 		case platform.Retryable, platform.Unauthorized, platform.Unsupported, platform.QuotaLimited, platform.Permanent:
 		default:
 			return false

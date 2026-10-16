@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/newsroom"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 )
 
@@ -53,8 +54,9 @@ func (s *Store) lockNewsroomAnnouncement(ctx context.Context, tx *tenantdb.Tx, r
 
 type ManualStatus struct {
 	ManualAdmission
-	State string `json:"state"`
-	Code  string `json:"code"`
+	State   string               `json:"state"`
+	Code    string               `json:"code"`
+	Failure platform.FailureKind `json:"failure,omitempty"`
 }
 
 // LookupManual never admits or re-enqueues work. A missing/purged record is an
@@ -82,7 +84,7 @@ func (s *Store) LookupManual(ctx context.Context, actor, key, kind, fingerprint 
 	source, _, _ := manualIdentity(tenant, ManualRequest{ActorAccountID: actor, RequestKey: key})
 	var status ManualStatus
 	var saved, actualKind string
-	err = tx.QueryRowContext(ctx, `SELECT s.id,a.id,s.deadline,s.kind,s.payload_hash,a.state,a.code FROM platform_manual_sources s JOIN platform_outbound_actions a ON a.tenant_id=s.tenant_id AND a.manual_source_id=s.id WHERE s.tenant_id=$1 AND s.id=$2`, tenant, source).Scan(&status.SourceID, &status.ActionID, &status.Deadline, &actualKind, &saved, &status.State, &status.Code)
+	err = tx.QueryRowContext(ctx, `SELECT s.id,a.id,s.deadline,s.kind,s.payload_hash,a.state,a.code,a.failure FROM platform_manual_sources s JOIN platform_outbound_actions a ON a.tenant_id=s.tenant_id AND a.manual_source_id=s.id WHERE s.tenant_id=$1 AND s.id=$2`, tenant, source).Scan(&status.SourceID, &status.ActionID, &status.Deadline, &actualKind, &saved, &status.State, &status.Code, &status.Failure)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ManualStatus{}, ErrManualMissing
 	}
