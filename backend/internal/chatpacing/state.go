@@ -5,6 +5,8 @@ package chatpacing
 import (
 	"errors"
 	"time"
+
+	"git.subcult.tv/PatrickFanella/over-laid/internal/permitturns"
 )
 
 const accountLimit = 20
@@ -12,9 +14,9 @@ const accountWindow = 30 * time.Second
 const channelInterval = time.Second
 const leaseDuration = 30 * time.Second
 
-var ErrInvalid = errors.New("invalid pacing request")
+var ErrInvalid = permitturns.ErrInvalid
 var ErrFence = errors.New("pacing completion fence rejected")
-var ErrCapacity = errors.New("pacing state capacity reached")
+var ErrCapacity = permitturns.ErrCapacity
 
 type accountState struct {
 	Attempts                 []int64

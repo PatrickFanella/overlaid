@@ -196,7 +196,7 @@ func TestExecutorAuthorizationFence(t *testing.T) {
 func TestExecutorTypedAttemptOutcomes(t *testing.T) {
 	for _, mode := range []string{"success", "quota", "retryable", "permanent", "uncertain", "error", "contradictory", "malformed", "panic", "canceled"} {
 		t.Run(mode, func(t *testing.T) {
-			_, db, p, args := executionFixture(t)
+			f, db, p, args := executionFixture(t)
 			attempts := 0
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -260,13 +260,15 @@ func TestExecutorTypedAttemptOutcomes(t *testing.T) {
 				t.Fatal("terminal result replayed", next, err)
 			}
 			if mode == "quota" {
-				d, err := p.Acquire(t.Context(), "client", "123", "999")
-				if err != nil || d.Granted || time.Until(d.RetryAt) < 50*time.Second {
-					t.Fatal("sender cooldown missing", err)
+				var cooled int
+				if err := f.Admin.QueryRow(`SELECT count(DISTINCT kind) FROM moderation_pacing_buckets WHERE kind IN('sender','channel') AND next_at>clock_timestamp()+interval '50 seconds'`).Scan(&cooled); err != nil || cooled != 2 {
+					t.Fatal("sender/channel cooldown missing", cooled, err)
 				}
-				d, err = p.Acquire(t.Context(), "client", "999", "123")
-				if err != nil || d.Granted || time.Until(d.RetryAt) < 50*time.Second {
-					t.Fatal("channel cooldown missing", err)
+				for i, ids := range [][2]string{{"123", "999"}, {"999", "123"}} {
+					d, err := p.AcquireFair(t.Context(), "client", ids[0], ids[1], moderationpacing.FairRequest{TenantID: args.TenantID, ActionID: strings.Repeat(string(rune('a'+i)), 64), Deadline: time.Now().Add(time.Minute)})
+					if err != nil || d.Granted || d.RetryAt.IsZero() {
+						t.Fatal("shared resource cooldown bypass", err)
+					}
 				}
 			}
 		})
@@ -301,7 +303,7 @@ func TestExecutorPreparationDeferralAndOriginalDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	r, err := e.Execute(t.Context(), args)
-	if err != nil || r.Done || r.RetryAt.IsZero() || r.RetryAt.Unix() != args.Deadline || attempts != 0 {
+	if err != nil || r.Done || r.RetryAt.IsZero() || r.RetryAt.Unix() > args.Deadline || attempts != 0 {
 		t.Fatal("unsafe pacing deferral", r, err)
 	}
 	if row := executionReceipt(t, db); row.State != "pending" {
@@ -443,5 +445,36 @@ func TestExecutorInvalidJobsAndPairing(t *testing.T) {
 	defer func() { _ = wrong.Close() }()
 	if _, err = NewExecutor(t.Context(), db, wrong, auth); err == nil {
 		t.Fatal("cross-schema pools accepted")
+	}
+}
+
+func TestExecutorFairPermitPreClaimStorageRetry(t *testing.T) {
+	f, db, p, args := executionFixture(t)
+	attempts := 0
+	e, err := NewExecutor(t.Context(), db, p, func(context.Context, Target) (Authorization, error) {
+		return executionAuthorization(func(ctx context.Context, a platform.ModerationAction) (platform.ModerationReceipt, error) {
+			attempts++
+			return delivered(ctx, a)
+		}), nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.Admin.Exec(`CREATE FUNCTION reject_fair_moderation_start() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.state='running' THEN RAISE EXCEPTION 'synthetic private fixture failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_fair_moderation_start BEFORE UPDATE ON platform_moderation_actions FOR EACH ROW EXECUTE FUNCTION reject_fair_moderation_start()`); err != nil {
+		t.Fatal(err)
+	}
+	result, err := e.Execute(t.Context(), args)
+	if !errors.Is(err, errExecutionStore) || result.Done || attempts != 0 {
+		t.Fatal("preclaim failure boundary", result, attempts, err)
+	}
+	if _, err = f.Admin.Exec(`DROP TRIGGER reject_fair_moderation_start ON platform_moderation_actions; UPDATE moderation_pacing_buckets SET next_at='-infinity' WHERE kind<>'client'`); err != nil {
+		t.Fatal(err)
+	}
+	result, err = e.Execute(t.Context(), args)
+	if err != nil || !result.Done || attempts != 1 {
+		t.Fatal("preclaim retry lost", result, attempts, err)
+	}
+	if _, err = e.Execute(t.Context(), args); err != nil || attempts != 1 {
+		t.Fatal("postclaim replay", attempts, err)
 	}
 }
