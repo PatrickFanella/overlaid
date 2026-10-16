@@ -20,3 +20,13 @@ type ChatSendArgs struct {
 }
 
 func (ChatSendArgs) Kind() string { return "overlaid_chat_send" }
+
+// ModerationArgs references a private ledger action. Targets, reasons,
+// credentials and claim tokens never enter jobs. Deadline is source-derived.
+type ModerationArgs struct {
+	TenantID string `json:"tenant_id"`
+	ActionID string `json:"action_id"`
+	Deadline int64  `json:"deadline"`
+}
+
+func (ModerationArgs) Kind() string { return "overlaid_moderation" }

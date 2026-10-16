@@ -42,7 +42,7 @@ The [retained platform ingestion store](docs/runbooks/platform-ingest.md) persis
 
 The [read-only pacing probe](docs/runbooks/pacing-inspection.md) reports account headroom, blocking reasons and original-deadline risk without reserving a permit. `make build` includes `overlaid-pacing-probe`; it uses an explicit private restricted connection and adds no application startup pool.
 
-The [retained moderation contract](docs/runbooks/moderation-contract.md) validates scoped delete/timeout/ban/unban intents and moderation-specific receipts. The [moderation ledger](docs/runbooks/platform-moderation.md) adds scoped admission, shared chat/moderation allowances, one-use claims and metadata-only lifecycle handling. Moderation scheduling, provider authorization/transport, priority arbitration and activation remain separate work.
+The [retained moderation contract](docs/runbooks/moderation-contract.md) validates scoped delete/timeout/ban/unban intents and moderation-specific receipts. The [moderation ledger](docs/runbooks/platform-moderation.md) adds scoped admission, shared chat/moderation allowances, one-use claims and metadata-only lifecycle handling. The [moderation queue](docs/runbooks/moderation-queue.md) adds atomic payload-free jobs and a separate leasing role. A moderation handler, provider authorization/transport, endpoint pacing, priority arbitration and activation remain separate work.
 
 ## Overlay MVP
 

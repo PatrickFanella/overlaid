@@ -16,15 +16,16 @@ import (
 )
 
 type TenantFixture struct {
-	Admin             *sql.DB
-	RuntimeURL        string
-	WorkerURL         string
-	BotAdminURL       string
-	BotExecutorURL    string
-	PacerURL          string
-	OutboundWorkerURL string
-	Schema            string
-	Migrate           func()
+	Admin               *sql.DB
+	RuntimeURL          string
+	WorkerURL           string
+	BotAdminURL         string
+	BotExecutorURL      string
+	PacerURL            string
+	OutboundWorkerURL   string
+	ModerationWorkerURL string
+	Schema              string
+	Migrate             func()
 }
 
 // Every fixture owns its schema and login/lookup roles, retains only shared
@@ -59,6 +60,7 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	botAdmin := "tenant_bot_admin_" + suffix
 	pacer := "tenant_pacer_" + suffix
 	outbound := "tenant_outbound_" + suffix
+	moderation := "tenant_moderation_" + suffix
 	botExecutor := "tenant_bot_executor_" + suffix
 	password := hex.EncodeToString(nonce[:]) + "-fixture"
 	if _, err = admin.Exec(`CREATE SCHEMA ` + schema + `; CREATE ROLE ` + role + ` LOGIN PASSWORD '` + password + `' NOSUPERUSER NOBYPASSRLS;`); err != nil {
@@ -105,6 +107,15 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 			t.Error(err)
 		} else if outboundExists {
 			if _, err := admin.Exec(`DROP OWNED BY ` + outbound + `; DROP ROLE ` + outbound); err != nil {
+				t.Error(err)
+			}
+		}
+
+		var moderationExists bool
+		if err := admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)`, moderation).Scan(&moderationExists); err != nil {
+			t.Error(err)
+		} else if moderationExists {
+			if _, err := admin.Exec(`DROP OWNED BY ` + moderation + `; DROP ROLE ` + moderation); err != nil {
 				t.Error(err)
 			}
 		}
@@ -272,6 +283,18 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(strings.ReplaceAll(string(rawModeration), "overlaid_runtime", role)); err != nil {
 		t.Fatal(err)
 	}
+	rawModerationQueue, err := os.ReadFile(filepath.Join(root, "0020_moderation_queue.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.NewReplacer("overlaid_runtime", role, "overlaid_moderation_worker", moderation).Replace(string(rawModerationQueue))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(`ALTER ROLE ` + moderation + ` LOGIN PASSWORD '` + password + `'`); err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(moderation, password)
+	moderationURL := u.String()
 	u.User = url.UserPassword(botExecutor, password)
 	botExecutorURL := u.String()
 
@@ -297,5 +320,5 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	u.User = url.UserPassword(worker, password)
 	workerURL := u.String()
 	u.User = url.UserPassword(role, password)
-	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, BotAdminURL: botAdminURL, BotExecutorURL: botExecutorURL, PacerURL: pacerURL, OutboundWorkerURL: outboundURL, Schema: schema, Migrate: migrate}
+	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, BotAdminURL: botAdminURL, BotExecutorURL: botExecutorURL, PacerURL: pacerURL, OutboundWorkerURL: outboundURL, ModerationWorkerURL: moderationURL, Schema: schema, Migrate: migrate}
 }
