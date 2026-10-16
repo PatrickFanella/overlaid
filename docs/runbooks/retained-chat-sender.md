@@ -74,3 +74,20 @@ A quota response in the first shared channel commits a 60-second account cooldow
 The second action must expire without a claim or another pacing charge. The first provider attempt must stay terminal without replay; the unrelated delivery retains the sole successful echo marker in its own tenant. All dispatch receipts and queue jobs must settle, and pacing permits must be released. The fixture checks exact OAuth subjects, broadcaster role lookup, selected transport credentials and a running ledger claim before each mocked send.
 
 This covers a finite three-tenant shared-cooldown/restart case. It does not establish natural sending after the cooldown window, shared-account saturation throughput, continuous-load fairness, moderation priority or live provider behavior. Broader load acceptance remains under #24.
+
+
+## Natural shared cooldown recovery and account-window saturation
+
+[Issue #149](https://git.subcult.tv/subculture-collective/overlaid/issues/149) extends the same selected shared-sender fixture with `TestRetainedSharedSenderNaturalRecoveryAndSaturation`; the earlier deadline-expiry case remains covered. A mocked quota response commits an eight-second shared account cooldown. The application closes and reconstructs while the original reply is queued, preserving its action ID, River job ID, deadline and cooldown. The independent broadcaster still completes its separate delivery.
+
+The recovery case selects the existing `unlimited` plan for its two fixture tenants to isolate global account pacing from tenant HTTP allowances. The free-plan expiry case keeps its ordinary limits. A diagnostic run with free-plan tenants reached the 120 HTTP calls per hour allowance during repeated fresh authorization; later actions failed closed before the account-window experiment could finish. This fixture does not establish free-plan burst capacity, and retry-related HTTP headroom remains a separate qualification item.
+
+The recovery case submits a finite burst of 24 shared replies across the two consenting tenants, including the original queued reply, with duplicate input for every source. All jobs drain through normal scheduling, database time and pacing. No test changes clocks, cooldowns or queue timestamps. The original quota action remains rejected and is never automatically replayed.
+
+Before each mocked shared send, the fixture observes an active committed pacing lease, database-clock cooldown eligibility and retained account charges. Charges are stored in integer microseconds; completion conservatively advances a charge, so the next permit observation captures the prior send's final retained time. Every retained rolling-window count must match the observed transport attempts and stay at or below 20 within 30 seconds. The fixture requires an actually full window and 25 total shared attempts (one quota response plus 24 successful replies), spanning at least one replenishment window.
+
+Both tenants must receive 12 successful replies with isolated echo markers. The original queued reply keeps its identity and deadline and gains one claim; the quota action keeps its rejected outcome. Exact dispatch receipt counts, terminal jobs, final bounded pacing state and released permits remain required.
+
+One uncached Go 1.26.0 race run on Kvant with the owned disposable PostgreSQL tmpfs fixture, October 16, 2026, completed the recovery case in 45.68 seconds. Its 25 shared charges spanned 43.25 seconds and the maximum observed window usage was 20. These are finite local observations, not portable latency or throughput thresholds.
+
+This proves natural cooldown and rolling-window recovery for one finite two-channel shared burst plus an independent broadcaster. It does not establish continuous hostile-load fairness, thousand-channel delivery throughput, moderation priority, every provider failure mode or live Twitch behavior. Broader acceptance remains under #24.
