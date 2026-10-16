@@ -28,8 +28,8 @@ Use [getting started](getting-started.md) for a fresh installation. Read [curren
 
 ## Explicit retained moderation
 
-- [Moderation consumer](moderation-consumer.md), [source admission](moderation-admission.md), and [automatic-rule routing/handoff](moderation-routing.md).
+- [Moderation consumer](moderation-consumer.md), [source admission](moderation-admission.md), [operator occurrences](manual-moderation-sources.md), and [automatic-rule routing/handoff](moderation-routing.md).
 - [Contract](moderation-contract.md), [ledger](platform-moderation.md), [queue](moderation-queue.md), [executor](moderation-executor.md), and [worker](moderation-worker.md).
 - [Provider authorization](twitch-moderation-authorization.md), [typed transport](twitch-moderation.md), [pacing](moderation-pacing.md), and [priority qualification](moderation-priority.md).
 
-The retained moderation consumer still has no environment switch or default startup registration. Operator/batch occurrences, asynchronous owner status and guarded configured activation remain unfinished. The linked procedures distinguish explicit fixtures from deployable startup paths.
+The retained moderation consumer still has no environment switch or default startup registration. Operator/batch store admission is implemented; HTTP/UI wiring, asynchronous owner status and guarded configured activation remain unfinished. The linked procedures distinguish explicit fixtures from deployable startup paths.
