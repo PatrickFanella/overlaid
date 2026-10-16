@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { activeNewsroomClaim, demoNewsroom, downloadShowNotes, emptyNewsroom, newsroomRequest, orderedNewsroomItems, showNotes, type NewsroomDocument, type NewsroomItem, type NewsroomProviders, type NewsroomSettings } from '../../lib/newsroom';
+import { announceNewsroom, announcementStorageKey, clearAnnouncementIntent, hasAnnouncementIntent, type AnnouncementKind } from '../../lib/newsroomAnnouncement';
 import { NewsroomQueuePanel } from './NewsroomQueuePanel';
 import { NewsroomEvidence, NewsroomBundleCard, NewsroomBundles } from './NewsroomBundles';
 import { NewsroomActivity, NewsroomUsage, NewsroomPreparation } from './NewsroomPreparation';
@@ -43,6 +44,27 @@ function Newsroom() {
   const [selected, setSelected] = useState('');
   const [selectedItem,setSelectedItem] = useState<{item:NewsroomItem;revision:number}|null>(null);
   const [providers, setProviders] = useState<NewsroomProviders | null>(null);
+  const announcementScope = {baseUrl:apiBaseUrl,tenantId:account.activeTenantId || 'selfhost-file',actorId:account.accountId || '00000000-0000-4000-8000-000000000002'};
+  const announcementScopeRef = useRef('');
+  announcementScopeRef.current = announcementStorageKey(announcementScope,'current');
+  const [pendingAnnouncements,setPendingAnnouncements] = useState<AnnouncementKind[]>([]);
+  const [checkedAnnouncements,setCheckedAnnouncements] = useState(false);
+  const refreshAnnouncementIntents = useCallback(() => {
+    try { setPendingAnnouncements((['current','raffle'] as const).filter(kind=>hasAnnouncementIntent({baseUrl:apiBaseUrl,tenantId:account.activeTenantId || 'selfhost-file',actorId:account.accountId || '00000000-0000-4000-8000-000000000002'},kind,window.sessionStorage))); }
+    catch { setError('Saved announcement requests are unavailable. Check Twitch before starting another announcement.'); }
+  },[apiBaseUrl,account.activeTenantId,account.accountId]);
+  useEffect(()=>{setBusy(false);setMessage('');setError('');refreshAnnouncementIntents();setCheckedAnnouncements(false);},[refreshAnnouncementIntents]);
+  async function announce(kind:AnnouncementKind) {
+    if(demo) return;
+    const scopeKey=announcementScopeRef.current;
+    setBusy(true);setError('');setMessage('');
+    try {
+      const result=await announceNewsroom(announcementScope,kind,operatorSecret,window.sessionStorage);
+      if(announcementScopeRef.current===scopeKey) setMessage(result.message);
+    } catch(err) { if(announcementScopeRef.current===scopeKey) setError(String(err)); }
+    finally { if(announcementScopeRef.current===scopeKey) {setBusy(false);refreshAnnouncementIntents();setCheckedAnnouncements(false);} }
+  }
+
   const refresh = useCallback(async () => {
     if (demo) return;
     const result = await newsroomRequest<NewsroomDocument>('', 'GET', apiBaseUrl, operatorSecret);
@@ -78,7 +100,7 @@ function Newsroom() {
   async function providerAction(path: string, body: Record<string, unknown> = {}) {
     if (demo) return;
     setBusy(true); setError(''); setMessage('');
-    try { await newsroomRequest(path, 'POST', apiBaseUrl, operatorSecret, body); setMessage(path.endsWith('/enrich') ? 'Enrichment queued. The card updates when it finishes.' : path.endsWith('/discord') ? 'Show notes delivered to Discord.' : path === '/briefing' ? 'Queue briefing updated.' : path === '/playlist' ? 'Playlist imported.' : path.startsWith('/announce/') ? 'Posted in Twitch chat.' : 'Related coverage loaded.'); await refresh(); }
+    try { await newsroomRequest(path, 'POST', apiBaseUrl, operatorSecret, body); setMessage(path.endsWith('/enrich') ? 'Enrichment queued. The card updates when it finishes.' : path.endsWith('/discord') ? 'Show notes delivered to Discord.' : path === '/briefing' ? 'Queue briefing updated.' : path === '/playlist' ? 'Playlist imported.' : 'Related coverage loaded.'); await refresh(); }
     catch (err) { setError(String(err)); } finally { setBusy(false); }
   }
   async function tokenRequest(kind: string, shelfId: string, revoke: boolean) {
@@ -91,6 +113,11 @@ function Newsroom() {
     {demo ? <Notice>Demo workspace · sample links are separate from your saved queue.</Notice> : null}
     {error ? <Notice tone="bad" role="alert">{error}</Notice> : null}
     {message ? <Notice role="status">{message}</Notice> : null}
+    {pendingAnnouncements.length > 0 && !moderator ? <Panel title="Unresolved chat announcement" description="Keep this request until you have checked its receipt or Twitch chat. A missing receipt does not authorize another send.">
+      {pendingAnnouncements.map(kind=><div className="flex flex-wrap items-center gap-3" key={kind}><span>{kind==='current'?'Current source':'Raffle'} announcement</span><button className="desk-btn desk-btn--small" disabled={busy} onClick={()=>{void announce(kind);}}>Check receipt</button><button className="desk-btn desk-btn--small desk-btn--ghost" disabled={busy || !checkedAnnouncements} onClick={()=>{try {clearAnnouncementIntent(announcementScope,kind,window.sessionStorage);refreshAnnouncementIntents();setCheckedAnnouncements(false);} catch {setError('The saved announcement request could not be cleared.');}}}>Clear unresolved request</button></div>)}
+      <Check label="I checked Twitch chat before clearing this request" checked={checkedAnnouncements} onChange={setCheckedAnnouncements} />
+    </Panel> : null}
+
     <div className="desk-newsroom-tabs" role="group" aria-label="Newsroom views">
       {(['deck', 'shows', 'bundles', 'activity', 'shelves', 'notes', 'audience', 'settings'] as Tab[]).filter((t) => !moderator || t !== 'settings').map((t) => <button key={t} className={`desk-btn ${tab === t ? 'desk-btn--primary' : 'desk-btn--ghost'}`} aria-pressed={tab === t} onClick={() => setTab(t)}>{({ activity:'Moderator activity', bundles:'Story bundles', shows:'Shows and recordings', deck: 'Reaction deck', shelves: 'Shelves', notes: 'Show notes', audience: 'Questions and raffle', settings: 'Newsroom settings' })[t]}</button>)}
     </div>
@@ -110,14 +137,14 @@ function Newsroom() {
           <details className="desk-disclosure"><summary>Rejected links ({doc.items.filter((i) => i.status === 'rejected').length})</summary>{doc.items.filter((i) => i.status === 'rejected').map((i) => <LinkRow key={i.id} item={i} onSelect={() => setSelected(i.id)}><button className="desk-btn desk-btn--small" disabled={busy} onClick={() => { void command('approve', { id: i.id }); }}>Restore</button>{!moderator ? <DeleteLink item={i} disabled={busy} command={command} /> : null}</LinkRow>)}</details>
         </div>
         <Panel title="Reaction card" kicker={focused && doc.currentId === focused.id ? 'On desk' : 'Preview'}>
-          {focused ? <ReactionCard key={focused.id} item={focused} doc={doc} command={command} busy={busy} moderator={moderator} actor={actor} owner={owner} providers={providers} providerAction={providerAction} /> : <Empty>Select a submitted link to inspect it before approval.</Empty>}
+          {focused ? <ReactionCard key={focused.id} item={focused} doc={doc} command={command} busy={busy} moderator={moderator} actor={actor} owner={owner} providers={providers} providerAction={providerAction} announce={()=>announce('current')} /> : <Empty>Select a submitted link to inspect it before approval.</Empty>}
         </Panel>
       </div>
     </> : null}
     {tab === 'bundles' ? <NewsroomBundles doc={doc} command={command} busy={busy} curate={!moderator} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} demo={demo}/> : null}
     {tab === 'activity' ? <NewsroomActivity apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} demo={demo}/> : null}
     {tab === 'shows' ? <NewsroomBroadcasts doc={doc} command={command} busy={busy} owner={owner} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} demo={demo} /> : null}
-    {tab === 'audience' ? <NewsroomAudience doc={doc} command={command} busy={busy} moderator={moderator} announce={() => providerAction('/announce/raffle')} /> : null}
+    {tab === 'audience' ? <NewsroomAudience doc={doc} command={command} busy={busy} moderator={moderator} announce={() => announce('raffle')} /> : null}
     {tab === 'shelves' ? <Shelves doc={doc} command={command} busy={busy} moderator={moderator} tokenRequest={tokenRequest} /> : null}
     {tab === 'notes' ? <Notes doc={doc} sessionId={session?.current?.id ?? ''} command={command} busy={busy} moderator={moderator} discord={providers?.discord ?? false} deliver={(sessionId) => providerAction('/notes/discord', { sessionId, confirm: true })} /> : null}
     {tab === 'settings' && !moderator ? <>{owner?<NewsroomUsage command={command} busy={busy} doc={doc} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} demo={demo}/>:null}<NewsroomQuickLinks doc={doc} command={command} busy={busy}/><NewsroomSettingsPanel tokenRequest={tokenRequest}  settings={doc.settings} providers={providers} command={command} busy={busy} demo={demo} saveKeys={async (keys) => { setBusy(true); setError(''); try { const p = await newsroomRequest<NewsroomProviders>('/providers', 'PUT', apiBaseUrl, operatorSecret, keys); setProviders(p); setMessage('Provider credentials saved.'); } catch (err) { setError(String(err)); } finally { setBusy(false); } }} /></> : null}
@@ -130,7 +157,7 @@ function SubmitLink({ command, disabled }: { command: Command; disabled: boolean
   return <form className="desk-newsroom-submit" onSubmit={(e) => { void submit(e); }}><Field label="Submit a link"><input className="desk-input" type="url" required placeholder="https://…" value={url} onChange={(e) => setURL(e.target.value)} maxLength={4096} /></Field><Field label="Title (optional)"><input className="desk-input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} /></Field><Field label="Submitted by"><input className="desk-input" value={submittedBy} onChange={(e) => setSubmittedBy(e.target.value)} maxLength={100} placeholder="Your name or chat handle" /></Field><button className="desk-btn" type="submit" disabled={disabled}>Add to triage</button></form>;
 }
 
-function ReactionCard({ item, doc, command, busy, moderator, actor, owner, providers, providerAction }: { item: NewsroomItem; doc: NewsroomDocument; command: Command; busy: boolean; moderator: boolean; actor:string;owner:boolean; providers: NewsroomProviders | null; providerAction: (path: string) => Promise<void> }) {
+function ReactionCard({ item, doc, command, busy, moderator, actor, owner, providers, providerAction, announce }: { item: NewsroomItem; doc: NewsroomDocument; command: Command; busy: boolean; moderator: boolean; actor:string;owner:boolean; providers: NewsroomProviders | null; providerAction: (path: string) => Promise<void>; announce:()=>Promise<void> }) {
   const review = activeNewsroomClaim(item);
   const claimedElsewhere = !!review && review.actorId !== actor;
   const draft = useNewsroomCardDraft(item, command, item.status === 'played' || claimedElsewhere);
@@ -162,7 +189,7 @@ const enriched = item.enrichment;
       <Field label="Overlay / chat title" hint="Leave blank to use the source title. Show notes keep the source title."><input className="desk-input" value={displayTitle} onChange={(e) => setDisplayTitle(e.target.value)} maxLength={200} /></Field><button className="desk-btn" disabled={busy || moderator} onClick={() => { void command('display-title', {id:item.id,displayTitle}); }}>Save broadcast title</button>
     {!moderator ? <><div className="flex flex-wrap gap-2"><button className="desk-btn desk-btn--small" disabled={busy || !['approved', 'played'].includes(item.status) || item.processing?.state === 'running'} onClick={() => { void providerAction(`/items/${item.id}/enrich`); }}>Enrich / retry</button><button className="desk-btn desk-btn--small desk-btn--ghost" disabled={busy || !providers?.brave} onClick={() => { void providerAction(`/items/${item.id}/coverage`); }}>Find related coverage</button></div>
       {enriched?.coverage?.length ? <ul className="grid gap-2">{enriched.coverage.map((c) => <li key={c.url}><a href={c.url} target="_blank" rel="noreferrer">{c.title} ↗</a></li>)}</ul> : null}
-      {item.status === 'approved' ? <div className="flex flex-wrap gap-2"><button className="desk-btn" disabled={busy || doc.currentId === item.id} onClick={() => { void command('focus', { id: item.id }); }}>Put on desk</button><button className="desk-btn desk-btn--ghost" disabled={busy || doc.currentId !== item.id} onClick={() => { void providerAction('/announce/current'); }}>Post source to Twitch chat</button><button className="desk-btn desk-btn--primary" disabled={busy || doc.currentId !== item.id} onClick={() => { void draft.flush().then((saved) => { if (saved) void command('play', { id: item.id, expectedEditorialRevision:draft.revision() }); }); }}>Mark played</button>{doc.currentId === item.id ? <button className="desk-btn desk-btn--ghost" disabled={busy} onClick={() => { void command('stop'); }}>Clear desk</button> : null}</div> : null}
+      {item.status === 'approved' ? <div className="flex flex-wrap gap-2"><button className="desk-btn" disabled={busy || doc.currentId === item.id} onClick={() => { void command('focus', { id: item.id }); }}>Put on desk</button><button className="desk-btn desk-btn--ghost" disabled={busy || doc.currentId !== item.id} onClick={() => { void announce(); }}>Post source to Twitch chat</button><button className="desk-btn desk-btn--primary" disabled={busy || doc.currentId !== item.id} onClick={() => { void draft.flush().then((saved) => { if (saved) void command('play', { id: item.id, expectedEditorialRevision:draft.revision() }); }); }}>Mark played</button>{doc.currentId === item.id ? <button className="desk-btn desk-btn--ghost" disabled={busy} onClick={() => { void command('stop'); }}>Clear desk</button> : null}</div> : null}
       {item.status !== 'played' ? <div className="flex flex-wrap gap-2"><select className="desk-input" aria-label="Destination shelf" value={shelf} onChange={(e) => setShelf(e.target.value)}><option value="">Choose a shelf…</option>{doc.shelves.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select><button className="desk-btn" disabled={busy || !shelf} onClick={() => { void command('shelve', { id: item.id, shelfId: shelf }); }}>Save for later</button></div> : null}
     </> : null}
   </div>;
