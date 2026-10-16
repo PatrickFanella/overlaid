@@ -69,73 +69,132 @@ func validText(v string, max int, empty bool) bool {
 	return utf8.ValidString(v) && !strings.ContainsRune(v, 0) && utf8.RuneCountInString(v) <= max && (empty || strings.TrimSpace(v) != "")
 }
 
-// Admit returns the stable action ID. A duplicate is a no-op only when its
-// immutable text/reply payload matches. Admission shares the tenant plan lock.
+// Admission contains only the stable action identity and whether it was new.
+type Admission struct {
+	ActionID string
+	Created  bool
+}
+
+// Admit uses the same atomic path as a retained command's reply batch.
 func (s *Store) Admit(ctx context.Context, r Request) (string, bool, error) {
-	if !validHash(r.EventID) || !validText(r.ConnectionID, 256, false) || !validText(r.Key, 128, false) || !validText(r.Text, 500, false) || !validText(r.ReplyToID, 256, true) {
-		return "", false, ErrInvalid
-	}
-	id, fingerprint := identity(s.db.TenantID(), r)
-	tx, err := s.db.BeginTx(ctx, nil)
+	admitted, err := s.AdmitBatch(ctx, []Request{r})
 	if err != nil {
 		return "", false, err
+	}
+	return admitted[0].ActionID, admitted[0].Created, nil
+}
+
+// AdmitBatch commits at most sixteen same-source actions and their payload-free
+// jobs together. A conflict or failed enqueue rolls back every new action. It
+// neither executes a command nor grants provider effect permission.
+func (s *Store) AdmitBatch(ctx context.Context, requests []Request) ([]Admission, error) {
+	if len(requests) == 0 || len(requests) > 16 {
+		return nil, ErrInvalid
+	}
+	results := make([]Admission, len(requests))
+	fingerprints := make([]string, len(requests))
+	seen := map[string]bool{}
+	for i, r := range requests {
+		if !validHash(r.EventID) || !validText(r.ConnectionID, 256, false) || !validText(r.Key, 128, false) || !validText(r.Text, 500, false) || !validText(r.ReplyToID, 256, true) || r.EventID != requests[0].EventID || r.ConnectionID != requests[0].ConnectionID {
+			return nil, ErrInvalid
+		}
+		id, fingerprint := identity(s.db.TenantID(), r)
+		if seen[id] {
+			return nil, ErrInvalid
+		}
+		seen[id] = true
+		results[i].ActionID = id
+		fingerprints[i] = fingerprint
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	var raw []byte
 	if err = tx.QueryRowContext(ctx, `SELECT p.limits FROM tenants t JOIN plans p ON p.id=t.plan_id WHERE t.id=$1 FOR UPDATE OF t`, s.db.TenantID()).Scan(&raw); err != nil {
-		return "", false, err
+		return nil, err
 	}
-	var existing string
-	err = tx.QueryRowContext(ctx, `SELECT payload_hash FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1`, id).Scan(&existing)
-	if err == nil {
-		if existing != fingerprint {
-			return "", false, ErrConflict
+	fresh := 0
+	for i, result := range results {
+		var existing string
+		err = tx.QueryRowContext(ctx, `SELECT payload_hash FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1`, result.ActionID).Scan(&existing)
+		if err == nil {
+			if existing != fingerprints[i] {
+				return nil, ErrConflict
+			}
+			continue
 		}
-		return id, false, tx.Commit()
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		results[i].Created = true
+		fresh++
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return "", false, err
+	if fresh == 0 {
+		if err = tx.Commit(); err != nil {
+			return nil, err
+		}
+		return results, nil
 	}
 	var channel string
 	var deadline time.Time
-	err = tx.QueryRowContext(ctx, `SELECT e.channel_id,e.occurred_at+interval '2 minutes' FROM normalized_chat_events e JOIN platform_connections c ON c.tenant_id=e.tenant_id AND c.provider=e.platform AND c.provider_user_id=e.channel_id WHERE e.tenant_id=$1 AND e.id=$2 AND e.connection_id=$3 AND e.platform='twitch' AND c.revoked_at IS NULL AND e.occurred_at+interval '2 minutes'>now() FOR SHARE OF c`, s.db.TenantID(), r.EventID, r.ConnectionID).Scan(&channel, &deadline)
+	source := requests[0]
+	err = tx.QueryRowContext(ctx, `SELECT e.channel_id,e.occurred_at+interval '2 minutes' FROM normalized_chat_events e JOIN platform_connections c ON c.tenant_id=e.tenant_id AND c.provider=e.platform AND c.provider_user_id=e.channel_id WHERE e.tenant_id=$1 AND e.id=$2 AND e.connection_id=$3 AND e.platform='twitch' AND c.revoked_at IS NULL FOR SHARE OF c`, s.db.TenantID(), source.EventID, source.ConnectionID).Scan(&channel, &deadline)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, ErrInvalid
+		return nil, ErrInvalid
 	}
 	if err != nil {
-		return "", false, err
+		return nil, err
+	}
+	// Both the tenant admission lock and connection binding lock may contend.
+	// Transaction-start now() cannot qualify the original deadline after waiting.
+	var alive bool
+	if err = tx.QueryRowContext(ctx, `SELECT $1::timestamptz>clock_timestamp()`, deadline).Scan(&alive); err != nil {
+		return nil, err
+	}
+	if !alive {
+		return nil, ErrInvalid
 	}
 	limits := map[string]int64{}
 	if json.Unmarshal(raw, &limits) != nil {
-		return "", false, ErrInvalid
+		return nil, ErrInvalid
 	}
 	limit, ok := limits["storedEvents"]
 	if !ok || limit < -1 {
-		return "", false, ErrInvalid
+		return nil, ErrInvalid
 	}
 	if limit == -1 || limit > 10000 {
 		limit = 10000
 	}
 	var total, perEvent int64
-	err = tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER(WHERE event_id=$1) FROM (SELECT event_id FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ UNION ALL SELECT event_id FROM platform_moderation_actions WHERE /*tenant:platform_moderation_actions*/) actions`, r.EventID).Scan(&total, &perEvent)
+	err = tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER(WHERE event_id=$1) FROM (SELECT event_id FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ UNION ALL SELECT event_id FROM platform_moderation_actions WHERE /*tenant:platform_moderation_actions*/) actions`, source.EventID).Scan(&total, &perEvent)
 	if err != nil {
-		return "", false, err
+		return nil, err
 	}
-	if total >= limit || perEvent >= 16 {
-		return "", false, tenantdb.ErrLimit
+	if total+int64(fresh) > limit || perEvent+int64(fresh) > 16 {
+		return nil, tenantdb.ErrLimit
 	}
-	capability := "chat.send"
-	if r.ReplyToID != "" {
-		capability = "chat.reply"
+	for i, r := range requests {
+		if !results[i].Created {
+			continue
+		}
+		capability := "chat.send"
+		if r.ReplyToID != "" {
+			capability = "chat.reply"
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO platform_outbound_actions(id,event_id,connection_id,action_key,channel_id,message,reply_to_id,capability,payload_hash,deadline) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, results[i].ActionID, r.EventID, r.ConnectionID, r.Key, channel, r.Text, r.ReplyToID, capability, fingerprints[i], deadline)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.EnqueueChatSend(ctx, results[i].ActionID); err != nil {
+			return nil, err
+		}
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO platform_outbound_actions(id,event_id,connection_id,action_key,channel_id,message,reply_to_id,capability,payload_hash,deadline) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, r.EventID, r.ConnectionID, r.Key, channel, r.Text, r.ReplyToID, capability, fingerprint, deadline)
-	if err != nil {
-		return "", false, err
+	if err = tx.Commit(); err != nil {
+		return nil, err
 	}
-	if _, err = tx.EnqueueChatSend(ctx, id); err != nil {
-		return "", false, err
-	}
-	return id, true, tx.Commit()
+	return results, nil
 }
 
 // Claim is an internal execution capability. Never project it into an API,
