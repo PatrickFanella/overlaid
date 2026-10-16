@@ -418,7 +418,7 @@ func TestModerationLifecycleIsolationAndExport(t *testing.T) {
 
 func TestModerationMigrationRollbackAndStartupGate(t *testing.T) {
 	f, _, _ := fixture(t)
-	if _, err := f.Admin.Exec(`ALTER TABLE river_job DROP CONSTRAINT overlaid_moderation_job; DROP TABLE platform_moderation_actions; DROP INDEX normalized_chat_message; DELETE FROM overlaid_migrations WHERE name='0019_moderation_actions.sql'`); err != nil {
+	if _, err := f.Admin.Exec(`ALTER TABLE river_job DROP CONSTRAINT overlaid_moderation_job; DROP TABLE platform_moderation_actions; DROP TABLE platform_moderation_sources; DROP INDEX normalized_chat_message; DELETE FROM overlaid_migrations WHERE name IN('0019_moderation_actions.sql','0028_manual_moderation_sources.sql')`); err != nil {
 		t.Fatal(err)
 	}
 	if db, err := tenantdb.Open(f.RuntimeURL, tenantdb.BootstrapID); err == nil {
@@ -453,6 +453,13 @@ func TestModerationMigrationRollbackAndStartupGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err = f.Admin.Exec(`ALTER TABLE river_job ADD CONSTRAINT overlaid_moderation_job FOREIGN KEY(overlaid_moderation_tenant_id,overlaid_moderation_action_id) REFERENCES platform_moderation_actions(tenant_id,id) ON DELETE CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	manualMigration, err := os.ReadFile("../../../migrations/0028_manual_moderation_sources.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.Admin.Exec(strings.ReplaceAll(string(manualMigration), "overlaid_runtime", u.User.Username())); err != nil {
 		t.Fatal(err)
 	}
 

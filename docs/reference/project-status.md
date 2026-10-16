@@ -1,6 +1,6 @@
 # Current capabilities and limits
 
-Reviewed against main through PR #170 on October 16, 2026. This page is a capability snapshot for readers evaluating Over-Laid. The [remaining-work roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) defines delivery order and acceptance gates; dated QA reports record observations from their named environments.
+Reviewed against main through PR #172 and the #173 operator-source implementation on October 16, 2026. This page is a capability snapshot for readers evaluating Over-Laid. The [remaining-work roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) defines delivery order and acceptance gates; dated QA reports record observations from their named environments.
 
 ## Implemented product workflows
 
@@ -28,7 +28,7 @@ Managed runtime capacity defaults to 100 and can explicitly select 1–1000. Fin
 | Bot custody and selection | Tenant-owned OAuth, service-administrator custody, explicit publication/delegation and selected-identity checks are implemented. Credentials alone do not grant sending permission or establish a Twitch Chat Bot badge. |
 | Retained moderation | Contracts, atomic ledger/jobs, separate pacing/worker roles, typed transport, fresh authorization, priority/fairness, lifecycle ownership and actual automatic/radiation source binding are implemented. Consumer construction is explicit internal code; no moderation environment switch or default startup registration exists. |
 
-An explicitly installed moderation consumer drains direct effects before ownership and refuses unbound dashboard/batch fallback even while prepared or stopped. Automatic/radiation admission records queue acceptance separately from provider delivery. Durable authorized operator/batch occurrences, owner-facing asynchronous status and persisted activation/downgrade guards remain before configured moderation startup. See [routing](../runbooks/moderation-routing.md) and [consumer ownership](../runbooks/moderation-consumer.md).
+An explicitly installed moderation consumer drains direct effects before ownership and refuses unbound dashboard/batch fallback even while prepared or stopped. Automatic/radiation admission records queue acceptance separately from provider delivery. The [operator-source store](../runbooks/manual-moderation-sources.md) provides durable single/batch identities and atomic actions/jobs. Operator HTTP/UI wiring, owner-facing asynchronous status and persisted activation/downgrade guards remain before configured moderation startup. See [routing](../runbooks/moderation-routing.md) and [consumer ownership](../runbooks/moderation-consumer.md).
 
 The retained ledgers use durable pre-effect claims and preserve uncertainty without automatic replay. Readiness, a pacing report or queue admission is not effect authorization or proof of delivery. Finite shared-cooldown, uneven-arrival and mixed moderation/chat fixtures support the implemented boundaries; broader hostile-load and full thousand-channel delivery acceptance remain open.
 

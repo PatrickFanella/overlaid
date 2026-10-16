@@ -260,24 +260,25 @@ func (s *Store) RecoverExpired(ctx context.Context, limit int) (int64, error) {
 }
 
 type Receipt struct {
-	ActionID     string               `json:"actionId"`
-	EventID      string               `json:"eventId"`
-	ConnectionID string               `json:"connectionId"`
-	Capability   platform.Capability  `json:"capability"`
-	State        string               `json:"state"`
-	Code         string               `json:"code"`
-	Failure      platform.FailureKind `json:"failure,omitempty"`
-	RetryAfter   time.Duration        `json:"retryAfter,omitempty"`
-	CreatedAt    time.Time            `json:"createdAt"`
-	StartedAt    *time.Time           `json:"startedAt,omitempty"`
-	FinishedAt   *time.Time           `json:"finishedAt,omitempty"`
+	ManualSourceID string               `json:"manualSourceId,omitempty"`
+	ActionID       string               `json:"actionId"`
+	EventID        string               `json:"eventId"`
+	ConnectionID   string               `json:"connectionId"`
+	Capability     platform.Capability  `json:"capability"`
+	State          string               `json:"state"`
+	Code           string               `json:"code"`
+	Failure        platform.FailureKind `json:"failure,omitempty"`
+	RetryAfter     time.Duration        `json:"retryAfter,omitempty"`
+	CreatedAt      time.Time            `json:"createdAt"`
+	StartedAt      *time.Time           `json:"startedAt,omitempty"`
+	FinishedAt     *time.Time           `json:"finishedAt,omitempty"`
 }
 
 func (s *Store) Receipts(ctx context.Context, limit int) ([]Receipt, error) {
 	if limit < 1 || limit > 100 {
 		return nil, ErrInvalid
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,event_id,connection_id,capability,state,code,failure,retry_after_ns,created_at,started_at,finished_at FROM platform_moderation_actions WHERE /*tenant:platform_moderation_actions*/ ORDER BY created_at DESC,id LIMIT $1`, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,coalesce(event_id,''),coalesce(manual_source_id,''),connection_id,capability,state,code,failure,retry_after_ns,created_at,started_at,finished_at FROM platform_moderation_actions WHERE /*tenant:platform_moderation_actions*/ ORDER BY created_at DESC,id LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +286,7 @@ func (s *Store) Receipts(ctx context.Context, limit int) ([]Receipt, error) {
 	result := []Receipt{}
 	for rows.Next() {
 		var r Receipt
-		if err = rows.Scan(&r.ActionID, &r.EventID, &r.ConnectionID, &r.Capability, &r.State, &r.Code, &r.Failure, &r.RetryAfter, &r.CreatedAt, &r.StartedAt, &r.FinishedAt); err != nil {
+		if err = rows.Scan(&r.ActionID, &r.EventID, &r.ManualSourceID, &r.ConnectionID, &r.Capability, &r.State, &r.Code, &r.Failure, &r.RetryAfter, &r.CreatedAt, &r.StartedAt, &r.FinishedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, r)
