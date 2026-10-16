@@ -93,6 +93,9 @@ func Open(databaseURL, tenantID string) (*DB, error) {
 		err = raw.QueryRowContext(ctx, `SELECT count(*)=2 FROM pg_constraint WHERE conrelid='river_job'::regclass AND contype='f' AND convalidated AND ((confrelid='platform_outbound_actions'::regclass AND conname='overlaid_outbound_job') OR (confrelid='platform_moderation_actions'::regclass AND conname='overlaid_moderation_job'))`).Scan(&migrated)
 	}
 	if err == nil && migrated {
+		err = raw.QueryRowContext(ctx, `SELECT count(*)=1 FROM pg_constraint WHERE conrelid='river_job'::regclass AND conname='overlaid_moderation_priority' AND contype='c' AND convalidated AND pg_get_expr(conbin,conrelid)='((kind <> ''overlaid_moderation''::text) OR (priority = 1))'`).Scan(&migrated)
+	}
+	if err == nil && migrated {
 		err = raw.QueryRowContext(ctx, `SELECT position('episode:' in pg_get_functiondef('resolve_newsroom_capability(text,text)'::regprocedure))>0`).Scan(&migrated)
 	}
 	if err != nil || !migrated {

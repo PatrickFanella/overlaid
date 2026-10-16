@@ -82,7 +82,7 @@ func (t *Tx) EnqueueModeration(ctx context.Context, actionID string) (int64, err
 	if err != nil {
 		return 0, err
 	}
-	result, err := client.InsertTx(ctx, t.raw, platform.ModerationArgs{TenantID: t.db.tenant, ActionID: actionID, Deadline: deadline.UTC().Unix()}, &river.InsertOpts{Queue: "moderation_outbound", MaxAttempts: 3, Priority: 4})
+	result, err := client.InsertTx(ctx, t.raw, platform.ModerationArgs{TenantID: t.db.tenant, ActionID: actionID, Deadline: deadline.UTC().Unix()}, &river.InsertOpts{Queue: "moderation_outbound", MaxAttempts: 3, Priority: 1})
 	if err != nil {
 		return 0, err
 	}

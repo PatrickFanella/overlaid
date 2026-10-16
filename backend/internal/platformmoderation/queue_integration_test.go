@@ -64,14 +64,14 @@ func TestModerationAtomicQueueRollbackAndArguments(t *testing.T) {
 	}
 	var fields map[string]json.RawMessage
 	var args platform.ModerationArgs
-	if json.Unmarshal(raw, &fields) != nil || json.Unmarshal(raw, &args) != nil || len(fields) != 3 || fields["tenant_id"] == nil || fields["action_id"] == nil || fields["deadline"] == nil || args.ActionID != id || args.TenantID != a.TenantID() || args.Deadline != i.Deadline().Unix() || queue != "moderation_outbound" || attempts != 3 || priority != 4 {
+	if json.Unmarshal(raw, &fields) != nil || json.Unmarshal(raw, &args) != nil || len(fields) != 3 || fields["tenant_id"] == nil || fields["action_id"] == nil || fields["deadline"] == nil || args.ActionID != id || args.TenantID != a.TenantID() || args.Deadline != i.Deadline().Unix() || queue != "moderation_outbound" || attempts != 3 || priority != 1 {
 		t.Fatalf("invalid job projection %s", raw)
 	}
 	if _, fresh, err := s.Admit(t.Context(), i); err != nil || fresh {
 		t.Fatal("duplicate re-enqueued", err)
 	}
 	moderationJobs(t, a, 1)
-	for _, change := range []string{`args=args||'{"reason":"private"}'::jsonb`, `args=NULL`, `args=jsonb_set(args,'{deadline}','1.5')`, `args=jsonb_set(args,'{action_id}','"` + strings.Repeat("0", 64) + `"')`, `args=jsonb_set(args,'{tenant_id}','"` + b.TenantID() + `"')`, `queue='chat_outbound'`, `priority=1`, `max_attempts=10`} {
+	for _, change := range []string{`args=args||'{"reason":"private"}'::jsonb`, `args=NULL`, `args=jsonb_set(args,'{deadline}','1.5')`, `args=jsonb_set(args,'{action_id}','"` + strings.Repeat("0", 64) + `"')`, `args=jsonb_set(args,'{tenant_id}','"` + b.TenantID() + `"')`, `queue='chat_outbound'`, `priority=4`, `max_attempts=10`} {
 		if _, err := a.ExecContext(t.Context(), `UPDATE river_job SET `+change+` WHERE kind='overlaid_moderation'`); err == nil {
 			t.Fatal("unsafe mutation accepted", change)
 		}
@@ -263,7 +263,7 @@ func TestModerationQueueUpgradeOnlyPending(t *testing.T) {
 	if _, err = f.Admin.Exec(`UPDATE platform_moderation_actions SET deadline=now()-interval '1 second' WHERE id=$1`, expired); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.Admin.Exec(`DELETE FROM river_job WHERE kind='overlaid_moderation'; DROP POLICY moderation_worker_dispatch ON river_job; ALTER TABLE river_job DROP CONSTRAINT overlaid_moderation_args; ALTER TABLE river_job DROP COLUMN overlaid_moderation_tenant_id CASCADE; ALTER TABLE river_job DROP COLUMN overlaid_moderation_action_id CASCADE; CREATE POLICY tenant_isolation ON river_job USING(false) WITH CHECK(false); DELETE FROM overlaid_migrations WHERE name='0020_moderation_queue.sql'`); err != nil {
+	if _, err = f.Admin.Exec(`DELETE FROM river_job WHERE kind='overlaid_moderation'; DROP POLICY moderation_worker_dispatch ON river_job; ALTER TABLE river_job DROP CONSTRAINT overlaid_moderation_args; ALTER TABLE river_job DROP CONSTRAINT overlaid_moderation_priority; ALTER TABLE river_job DROP COLUMN overlaid_moderation_tenant_id CASCADE; ALTER TABLE river_job DROP COLUMN overlaid_moderation_action_id CASCADE; CREATE POLICY tenant_isolation ON river_job USING(false) WITH CHECK(false); DELETE FROM overlaid_migrations WHERE name IN('0020_moderation_queue.sql','0022_moderation_priority.sql')`); err != nil {
 		t.Fatal(err)
 	}
 	if db, err := tenantdb.Open(f.RuntimeURL, a.TenantID()); err == nil {
@@ -301,6 +301,23 @@ func TestModerationQueueUpgradeOnlyPending(t *testing.T) {
 	if _, err = f.Admin.Exec(text); err != nil {
 		t.Fatal(err)
 	}
+	// Prove the historical catch-up is idempotent before installing the new
+	// priority contract. The new binary cannot open this intermediate schema.
+	catchup := text[strings.Index(text, "INSERT INTO river_job"):strings.Index(text, "INSERT INTO overlaid_migrations")]
+	if _, err = f.Admin.Exec(catchup); err != nil {
+		t.Fatal(err)
+	}
+	if db, err := tenantdb.Open(f.RuntimeURL, a.TenantID()); err == nil {
+		_ = db.Close()
+		t.Fatal("pre-priority schema accepted")
+	}
+	priority, err := os.ReadFile("../../../migrations/0022_moderation_priority.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.Admin.Exec(string(priority)); err != nil {
+		t.Fatal(err)
+	}
 	reopened, err := tenantdb.Open(f.RuntimeURL, a.TenantID())
 	if err != nil {
 		t.Fatal(err)
@@ -314,9 +331,8 @@ func TestModerationQueueUpgradeOnlyPending(t *testing.T) {
 	if err = reopened.QueryRowContext(t.Context(), `SELECT id,overlaid_moderation_action_id,(args->>'deadline')::bigint,scheduled_at FROM river_job WHERE kind='overlaid_moderation'`).Scan(&jobID, &id, &deadline, &scheduled); err != nil || id != pending || deadline != e.OccurredAt.Add(2*time.Minute).Unix() {
 		t.Fatal("unsafe catch-up", err)
 	}
-	catchup := text[strings.Index(text, "INSERT INTO river_job"):strings.Index(text, "INSERT INTO overlaid_migrations")]
-	if _, err = f.Admin.Exec(catchup); err != nil {
-		t.Fatal(err)
+	if _, err = f.Admin.Exec(catchup); err == nil {
+		t.Fatal("old priority-four writer accepted after migration")
 	}
 	moderationJobs(t, reopened, 1)
 	var same bool
