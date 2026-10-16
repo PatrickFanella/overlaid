@@ -195,7 +195,7 @@ func TestSharedModerationTransportProgressesDuringRetainedChat(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			executor, err := platformmoderation.NewExecutor(t.Context(), app.store.Product, pacer, adapter.AuthorizeModeration)
+			executor, err := platformmoderation.NewExecutorWithGate(t.Context(), app.store.Product, pacer, app.moderationAuthorize(adapter.AuthorizeModeration), app.moderationAttemptGate)
 			if err != nil {
 				t.Fatal(err)
 			}

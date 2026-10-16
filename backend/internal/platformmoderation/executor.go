@@ -15,11 +15,17 @@ import (
 var errExecutionStore = errors.New("moderation execution storage unavailable")
 var errExecutionAuth = errors.New("moderation authorization unavailable")
 var errExecutionPacing = errors.New("moderation pacing unavailable")
+var errExecutionGate = errors.New("moderation attempt gate unavailable")
+
+// AttemptGate binds an attempt to its owner's lifecycle before its one-use
+// claim. It grants no permission and must not acquire chat's echo mutex.
+type AttemptGate func(context.Context, Target, context.CancelFunc) (release func(), err error)
 
 type Executor struct {
 	product   *tenantdb.DB
 	pacer     *moderationpacing.Store
 	authorize Authorize
+	gate      AttemptGate
 }
 
 // NewExecutor constructs no worker and opens no pool. Execution is not wired
@@ -40,6 +46,46 @@ func NewExecutor(ctx context.Context, product *tenantdb.DB, pacer *moderationpac
 		return nil, errors.New("moderation product and pacing database must match")
 	}
 	return &Executor{product: product, pacer: pacer, authorize: authorize}, nil
+}
+
+// NewExecutorWithGate adds explicit lifecycle binding; it registers no worker.
+func NewExecutorWithGate(ctx context.Context, product *tenantdb.DB, pacer *moderationpacing.Store, authorize Authorize, gate AttemptGate) (*Executor, error) {
+	if gate == nil {
+		return nil, ErrInvalid
+	}
+	e, err := NewExecutor(ctx, product, pacer, authorize)
+	if err != nil {
+		return nil, err
+	}
+	e.gate = gate
+	return e, nil
+}
+
+func enterAttemptGate(ctx context.Context, gate AttemptGate, target Target, cancel context.CancelFunc) (release func(), err error) {
+	defer func() {
+		if recover() != nil {
+			release = nil
+			err = errExecutionGate
+		}
+	}()
+	release, err = gate(ctx, target, cancel)
+	if err != nil || release == nil {
+		if release != nil {
+			_ = leaveAttemptGate(release)
+		}
+		return nil, errExecutionGate
+	}
+	return release, nil
+}
+
+func leaveAttemptGate(release func()) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errExecutionGate
+		}
+	}()
+	release()
+	return nil
 }
 
 type Execution struct {
@@ -143,6 +189,20 @@ func (e *Executor) Execute(ctx context.Context, args platform.ModerationArgs) (r
 	}
 	attemptCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
+	if e.gate != nil {
+		release, gateErr := enterAttemptGate(attemptCtx, e.gate, t, cancel)
+		if gateErr != nil {
+			return result, gateErr
+		}
+		defer func() {
+			if releaseErr := leaveAttemptGate(release); releaseErr != nil {
+				err = errors.Join(err, releaseErr)
+			}
+		}()
+		if attemptCtx.Err() != nil {
+			return result, errExecutionGate
+		}
+	}
 	claim, started, startErr := store.Start(attemptCtx, t.Action.ActionID)
 	if startErr != nil {
 		return result, errExecutionStore
