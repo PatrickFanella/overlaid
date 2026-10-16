@@ -82,6 +82,11 @@ func (w *moderationWorkflow) executeTwitchModerationAction(ctx context.Context, 
 	if action == "" {
 		return botModerationActionResponse{}, errors.New("moderation action is required")
 	}
+	ctx, release, err := s.directModeration(ctx)
+	if err != nil {
+		return botModerationActionResponse{}, err
+	}
+	defer release()
 	token, err := s.requireTwitchHelixToken(ctx, errTwitchModerationUnavailable, errTwitchModerationMissingScope, "")
 	if err != nil {
 		return botModerationActionResponse{}, err
@@ -159,6 +164,11 @@ func (w *moderationWorkflow) executeNuke(ctx context.Context, request botNukeDry
 	if err := w.validateNukeRadiationRequest(request); err != nil {
 		return botNukeExecuteResponse{}, err
 	}
+	ctx, release, err := s.directModeration(ctx)
+	if err != nil {
+		return botNukeExecuteResponse{}, err
+	}
+	defer release()
 	matches, err := w.planNukeDryRun(request)
 	if err != nil {
 		return botNukeExecuteResponse{}, err
@@ -211,15 +221,27 @@ func (w *moderationWorkflow) rollbackNukeRadiation(ctx context.Context, ruleID s
 	return rule, nil
 }
 
-func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, event events.Event) {
+func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, event events.Event) error {
 	s, err := w.serverOrErr()
 	if err != nil || s.botStore == nil || event.Type != events.EventTypeChatMessage {
-		return
+		return nil
+	}
+	var owner *moderationConsumer
+	if s.moderationRoute != nil {
+		var release func()
+		ctx, owner, release, err = s.moderationRoute(ctx)
+		if err != nil {
+			return err
+		}
+		defer release()
 	}
 	rules, err := s.botStore.ListModerationRules(ctx)
 	if err != nil {
 		log.Printf("failed to load moderation rules for enforcement: %v", err)
-		return
+		if owner != nil {
+			return errModerationController
+		}
+		return nil
 	}
 	enforced := []bot.ModerationRule{}
 	for _, rule := range rules {
@@ -228,15 +250,18 @@ func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, even
 		}
 	}
 	if len(enforced) == 0 {
-		return
+		return nil
 	}
 	matches, err := bot.MatchModerationRules(enforced, event.Message, event.Title)
 	if err != nil {
 		log.Printf("moderation rule match failed: %v", err)
-		return
+		if owner != nil {
+			return errModerationController
+		}
+		return nil
 	}
 	if len(matches) == 0 {
-		return
+		return nil
 	}
 	matches = bot.ApplyModerationExemptions(matches, moderationRoleForEvent(event))
 	var match bot.ModerationMatch
@@ -248,22 +273,31 @@ func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, even
 		}
 	}
 	if !found {
-		return
+		return nil
 	}
 	request := botModerationActionRequest{Action: match.Action, DurationSeconds: match.TimeoutSeconds, TargetUserID: twitchEventString(event, "chatter_user_id"), TargetUserLogin: event.Title, MessageID: twitchMessageIDFromEvent(event), Reason: firstNonEmptyString(match.Reason, "moderation rule: "+match.RuleName)}
 	if request.Action == "flag" {
 		w.recordModerationEnforcementAudit(ctx, event, match, request, "allowed", "moderation_flag")
-		return
+		return nil
 	}
 	if request.Action == "timeout" && request.DurationSeconds == 0 {
 		request.DurationSeconds = 60
 	}
+	if owner != nil {
+		if err := s.admitModerationRule(ctx, owner, event, match, request); err != nil {
+			w.recordModerationEnforcementAudit(ctx, event, match, request, "failed", "moderation_admission_failed")
+			return err
+		}
+		w.recordModerationEnforcementAudit(ctx, event, match, request, "allowed", "moderation_queued")
+		return nil
+	}
 	if _, err := s.executeTwitchModerationAction(ctx, request); err != nil {
 		log.Printf("moderation enforcement failed rule=%s action=%s: %v", match.RuleName, match.Action, err)
 		w.recordModerationEnforcementAudit(ctx, event, match, request, "failed", err.Error())
-		return
+		return nil
 	}
 	w.recordModerationEnforcementAudit(ctx, event, match, request, "allowed", "moderation_rule:"+match.RuleName)
+	return nil
 }
 
 func (w *moderationWorkflow) planNukeDryRun(request botNukeDryRunRequest) ([]botNukeDryRunMatch, error) {

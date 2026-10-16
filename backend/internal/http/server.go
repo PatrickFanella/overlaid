@@ -29,6 +29,7 @@ import (
 )
 
 type Server struct {
+	moderationRoute           func(context.Context) (context.Context, *moderationConsumer, func(), error)
 	platformIngest            *platformingest.Store
 	retainedReplies           *registryReplyAdmission
 	chatReady                 func() bool

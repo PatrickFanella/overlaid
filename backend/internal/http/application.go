@@ -40,6 +40,7 @@ type Application struct {
 	sendGates         map[string]*tenantSendGate
 	outbound          *outboundChat
 	moderation        *moderationConsumer
+	moderationRouting sync.RWMutex
 	chatControl       *chatController
 	chatWorker        *river.Client[*sql.Tx]
 	chatWorkerStarted bool
@@ -306,6 +307,7 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	s.tenantContext = child
 	s.chatReady = a.chatReady
 	s.chatFence = a.checkChatController
+	s.moderationRoute = a.moderationRoute
 	if a.config.TwitchChatSendMode == "retained" {
 		s.retainedReplies, err = newRegistryReplyAdmission(scope)
 		if err != nil {

@@ -569,7 +569,9 @@ func (s *Server) publishEventSubContext(ctx context.Context, event events.Event,
 		return publicationErr
 	}
 	// Persist the chat event before queuing moderation audit foreign keys.
-	s.enforceModerationForEvent(ctx, event)
+	if err := s.enforceModerationForEvent(ctx, event); err != nil {
+		return err
+	}
 	if event.Type == events.EventTypeCommand && boolData(event.Data, "newsroomRequest") {
 		if synchronousNewsroom {
 			return s.completeNewsroomRequest(ctx, event)

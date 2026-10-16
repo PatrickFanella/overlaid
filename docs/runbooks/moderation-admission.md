@@ -1,6 +1,6 @@
 # Explicit retained-source moderation admission
 
-Tracking: [#167](https://git.subcult.tv/subculture-collective/overlaid/issues/167), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This adds an explicit writer to the [application-owned consumer](moderation-consumer.md). No route, environment setting, default startup registration or existing workflow selects it yet.
+Tracking: [#167](https://git.subcult.tv/subculture-collective/overlaid/issues/167), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This adds an explicit writer to the [application-owned consumer](moderation-consumer.md). [Automatic/radiation routing](moderation-routing.md) selects it only when an explicit consumer is installed. No environment setting or default startup registration is added.
 
 `moderationConsumer.admit` requires a ready consumer and the exact current tenant runtime. Its caller supplies a retained source ID, an exact action key and the existing private moderation request. It reads the source envelope through an immutable tenant scope; it accepts no caller-supplied source envelope, broadcaster, sender credential, action ID or deadline. Application, consumer, tenant and caller cancellation bound the operation, with a five-second admission budget. Replaced runtimes, hosted bootstrap access and unready owners fail closed. Preparation alone cannot admit work and a refused call does not activate or cancel a prepared consumer.
 
@@ -16,12 +16,12 @@ The October 16 source inventory follows every non-test call to `executeTwitchMod
 | --- | --- | --- |
 | Dashboard `/api/bot/moderation/action` | `twitch_moderation.go` calls the central workflow directly | A durable authorized operator occurrence and stable retry identity; the request currently has no canonical chat source. |
 | Dashboard nuke execution | `moderationWorkflow.executeNuke` calls the same boundary for up to 50 history matches | A durable batch occurrence and per-target keys, bounded admission and queued-status reporting. Existing history lookback can exceed the chat source's two-minute deadline. |
-| Automatic enforced rules | `moderationWorkflow.enforceModerationForEvent` calls the central boundary for its first non-exempt match | The actual retained dispatch source and a stable rule/occurrence key. Flag-only matches remain audit-only. |
-| Nuke radiation enforcement | The saved temporary rule uses the same automatic enforcement path | The actual retained source plus the saved radiation rule identity; disable/expiry must retain their existing behavior. |
+| Automatic enforced rules | With an explicit owner, the first non-exempt match uses retained admission; otherwise it uses the central direct boundary | The actual retained dispatch source and saved rule key are bound by #169. Flag-only matches remain audit-only. |
+| Nuke radiation enforcement | The saved temporary rule uses the same automatic enforcement path | #169 binds the retained source and saved radiation rule; disable/expiry prevents future matches. |
 
 The three low-level Helix helpers are called only by the central workflow in this inventory. Rule configuration, dry-run matching and radiation rollback do not send moderation effects. Recheck these call sites when cutover starts rather than treating this inventory as a permanent guarantee.
 
-The next units must define durable operator/batch source admission without fabricating a chat event or renewing an old source deadline; bind automatic rules to the existing dispatcher; expose pending/terminal moderation status separately from synchronous acceptance; and then compose opt-in startup with persisted compatibility/downgrade guards. All effect paths must select the retained boundary together when enabled. Admission or execution failures must never fall back to direct broadcaster transport. Default legacy behavior remains unchanged until that coordinated cutover is implemented and qualified.
+The next units must define durable operator/batch source admission without fabricating a chat event or renewing an old source deadline; expose pending/terminal moderation status separately from synchronous acceptance; and then compose opt-in startup with persisted compatibility/downgrade guards. Explicit ownership already refuses unbound direct/dashboard/batch effects, including nuke execution before radiation creation. All effect paths must select the retained boundary together when enabled. Admission or execution failures must never fall back to direct broadcaster transport. Default legacy behavior remains unchanged until that coordinated cutover is implemented and qualified.
 
 ## Verification
 
