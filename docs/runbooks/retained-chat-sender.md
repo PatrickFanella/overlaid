@@ -91,3 +91,18 @@ Both tenants must receive 12 successful replies with isolated echo markers. The 
 One uncached Go 1.26.0 race run on Kvant with the owned disposable PostgreSQL tmpfs fixture, October 16, 2026, completed the recovery case in 45.68 seconds. Its 25 shared charges spanned 43.25 seconds and the maximum observed window usage was 20. These are finite local observations, not portable latency or throughput thresholds.
 
 This proves natural cooldown and rolling-window recovery for one finite two-channel shared burst plus an independent broadcaster. It does not establish continuous hostile-load fairness, thousand-channel delivery throughput, moderation priority, every provider failure mode or live Twitch behavior. Broader acceptance remains under #24.
+
+
+## Avoiding provider work during known pacing waits
+
+[Issue #151](https://git.subcult.tv/subculture-collective/overlaid/issues/151) adds a read-only pacing hint to explicit retained chat sending. Before spending provider HTTP calls, the adapter reads local selected-sender metadata, entitlement and current shared consent/publication. It does not read credentials, refresh tokens or check provider roles. The executor inspects the existing pacing pool without creating rows, pruning state, reserving slots or changing fair turns.
+
+Known account, cooldown, clock, channel or in-flight waits defer the same pending job for at most one second per inspection, still bounded by the original ledger/job deadline. The short cadence preserves River's available-job snooze path and prompt expiry, while blocked polls no longer spend provider HTTP allowance. Fair-admission readiness remains for the real AcquireFair call; an unqualified fair turn alone cannot keep the hint in a deferral loop.
+
+A hint is neither authorization nor a permit. Clear or stale metadata still leads through fresh provider subject/scope/role checks, real atomic pacing admission, a ledger claim and fresh post-claim authorization. A changed selected sender is paced using the real authorization result. Metadata/inspection failures remain fixed preparation failures without a permit or claim; explicit local denial retains terminal authorization handling. Active invalid shared selections never fall back to a broadcaster. Existing controller/role/startup/cancellation guards wrap the hint as well.
+
+The natural 24-reply shared burst now runs with ordinary free-plan tenants and checks each tenant's maximum retained hourly HTTP usage against the unchanged 120 calls per hour allowance, including runs that cross an hour boundary. The prior unlimited-plan fixture and free-plan exhaustion diagnostic remain historical evidence above; they do not describe the optimized path's allowance consumption. The fixture also checks zero moderator lookups while the original shared cooldown is known to block sending, plus the existing exact transport, rolling-window, duplicate, echo, deadline and terminal-job properties.
+
+A focused uncached Go 1.26.0 race run on Kvant, October 16, 2026, completed all 24 shared replies with 90 and 66 HTTP reservations for the two free-plan tenants. Its 25 shared charges spanned 44.04 seconds, reached the full window of 20 and retained natural replenishment. These are finite local observations, not portable throughput or allowance guarantees.
+
+Actual allowance exhaustion still fails closed. Distinguishing that local limit from provider authorization failures in retained receipts/UI remains separate work, as do continuous-load headroom, moderation priority and live-provider acceptance. No provider authorization cache, allowance increase, new pool or production migration is introduced.

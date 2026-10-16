@@ -193,3 +193,29 @@ func TestSharedRefreshAndDatabaseIdentity(t *testing.T) {
 		t.Fatal("missing service pool accepted", err)
 	}
 }
+
+func TestSharedPacingSenderRequiresCurrentPublicationAndConsent(t *testing.T) {
+	for _, change := range []string{"unpublish", "consent"} {
+		t.Run(change, func(t *testing.T) {
+			x := newSharedFixture(t)
+			sender, err := x.adapter.PacingSender(t.Context(), x.target)
+			if err != nil || sender != "999" || x.p.validations != 0 || x.p.roles != 0 || x.p.sends != 0 {
+				t.Fatal("shared hint contacted provider or changed identity", sender, err)
+			}
+			if change == "unpublish" {
+				_, err = x.admin.PublishMetadata(t.Context(), x.account.ID, x.account.Revision, x.catalog.Revision, false)
+			} else {
+				_, err = x.store.GrantSharedBot(t.Context(), x.target.TenantID, owner, "456", x.account.ID, x.account.Revision, x.catalog.Revision, x.delegation.Revision, []platform.Capability{"chat.send"})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := x.adapter.PacingSender(t.Context(), x.target); !errors.Is(err, platformoutbound.ErrDenied) {
+				t.Fatal("stale shared hint used fallback", err)
+			}
+			if x.p.validations != 0 || x.p.roles != 0 || x.p.sends != 0 {
+				t.Fatal("revoked shared hint contacted provider")
+			}
+		})
+	}
+}

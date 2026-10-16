@@ -484,3 +484,29 @@ func TestSelectionScopeCancellationAndUnexpectedExpiry(t *testing.T) {
 		t.Fatal("unbounded cancellation", err)
 	}
 }
+
+func TestPacingSenderIsMetadataOnlyAndDoesNotAuthorize(t *testing.T) {
+	for _, own := range []bool{false, true} {
+		t.Run(map[bool]string{false: "broadcaster", true: "own-bot"}[own], func(t *testing.T) {
+			x := newFixture(t, own)
+			sender, err := x.adapter.PacingSender(t.Context(), x.target)
+			want := "456"
+			if own {
+				want = "123"
+			}
+			if err != nil || sender != want || x.p.validations != 0 || x.p.roles != 0 || x.p.refreshes != 0 || x.p.sends != 0 {
+				t.Fatal("metadata hint contacted provider", sender, err, x.p)
+			}
+			x.p.mode = "wrong-subject"
+			if _, err := x.adapter.Authorize(t.Context(), x.target); !errors.Is(err, platformoutbound.ErrDenied) || x.p.validations == 0 {
+				t.Fatal("hint bypassed fresh provider authorization", err)
+			}
+			if err := x.store.RevokeConnection(t.Context(), x.target.TenantID, owner, "twitch"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := x.adapter.PacingSender(t.Context(), x.target); !errors.Is(err, platformoutbound.ErrDenied) {
+				t.Fatal("revoked local selection accepted", err)
+			}
+		})
+	}
+}

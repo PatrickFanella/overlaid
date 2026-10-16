@@ -195,13 +195,6 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 	}
 	gamma := accountFixture{id: owner, tenant: tenant.ID}
 	accounts := []accountFixture{alpha, beta, gamma}
-	if recoverAndDrain {
-		// Isolate the shared account budget from the separate tenant HTTP allowance.
-		// The free-plan expiry case above retains its normal limits.
-		if _, err := f.Admin.Exec(`UPDATE tenants SET plan_id='unlimited' WHERE id IN($1,$2)`, alpha.tenant, beta.tenant); err != nil {
-			t.Fatal(err)
-		}
-	}
 	channels := []string{"123", "456", "789"}
 	for index, account := range accounts {
 		channel := channels[index]
@@ -409,13 +402,16 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 		if err := f.Admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM river_job j JOIN platform_outbound_actions a ON a.tenant_id=j.overlaid_outbound_tenant_id AND a.id=j.overlaid_action_id WHERE a.tenant_id=$1 AND a.state='pending' AND a.started_at IS NULL AND j.state IN('available','scheduled') AND coalesce((j.metadata->>'snoozes')::int,0)>=1 AND j.scheduled_at<=to_timestamp($2)+interval '1 second')`, beta.tenant, originalDeadline.Unix()).Scan(&snoozed); err != nil {
 			t.Fatal(err)
 		}
-		if snoozed && betaRoles.Load() > 0 {
+		if snoozed {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("second tenant did not reach shared pacing denial and durable snooze", snoozed, betaRoles.Load())
+			t.Fatal("second tenant did not reach a durable pacing deferral", snoozed, betaRoles.Load())
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	if betaRoles.Load() != 0 {
+		t.Fatal("known cooldown spent provider role lookups", betaRoles.Load())
 	}
 	var actionID string
 	var jobID int64
@@ -541,7 +537,11 @@ func qualifyRetainedSharedCooldown(t *testing.T, recoverAndDrain bool) {
 		if err := f.Admin.QueryRow(`SELECT count(*) FROM platform_outbound_actions WHERE tenant_id=$1 AND state='rejected'`, alpha.tenant).Scan(&rejected); err != nil || rejected != 1 {
 			t.Fatal("original shared quota action changed outcome", rejected, err)
 		}
-		t.Logf("shared_attempts=%d successful_shared_replies=24 max_account_window_used=%d charged_span=%s", len(observedShared), maxSharedUsed, observedShared[len(observedShared)-1].Sub(observedShared[0]))
+		var alphaHTTP, betaHTTP int
+		if err := f.Admin.QueryRow(`SELECT coalesce(max(used) FILTER(WHERE tenant_id=$1),0),coalesce(max(used) FILTER(WHERE tenant_id=$2),0) FROM tenant_usage WHERE tenant_id IN($1,$2) AND kind='http'`, alpha.tenant, beta.tenant).Scan(&alphaHTTP, &betaHTTP); err != nil || alphaHTTP <= 0 || betaHTTP <= 0 || alphaHTTP > 120 || betaHTTP > 120 {
+			t.Fatal("free-plan headroom was not preserved", alphaHTTP, betaHTTP, err)
+		}
+		t.Logf("shared_attempts=%d successful_shared_replies=24 max_account_window_used=%d charged_span=%s alpha_http_peak=%d beta_http_peak=%d", len(observedShared), maxSharedUsed, observedShared[len(observedShared)-1].Sub(observedShared[0]), alphaHTTP, betaHTTP)
 	} else if len(observedShared) != 1 {
 		t.Fatal("expired shared action charged another attempt", len(observedShared))
 	}
