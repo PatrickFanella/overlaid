@@ -24,6 +24,7 @@ type TenantFixture struct {
 	PacerURL            string
 	OutboundWorkerURL   string
 	ModerationWorkerURL string
+	ModerationPacerURL  string
 	Schema              string
 	Migrate             func()
 }
@@ -61,6 +62,7 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	pacer := "tenant_pacer_" + suffix
 	outbound := "tenant_outbound_" + suffix
 	moderation := "tenant_moderation_" + suffix
+	moderationPacer := "tenant_modpacer_" + suffix
 	botExecutor := "tenant_bot_executor_" + suffix
 	password := hex.EncodeToString(nonce[:]) + "-fixture"
 	if _, err = admin.Exec(`CREATE SCHEMA ` + schema + `; CREATE ROLE ` + role + ` LOGIN PASSWORD '` + password + `' NOSUPERUSER NOBYPASSRLS;`); err != nil {
@@ -125,6 +127,15 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 			t.Error(err)
 		} else if executorExists {
 			if _, err := admin.Exec(`DROP OWNED BY ` + botExecutor + `; DROP ROLE ` + botExecutor); err != nil {
+				t.Error(err)
+			}
+		}
+
+		var moderationPacerExists bool
+		if err := admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)`, moderationPacer).Scan(&moderationPacerExists); err != nil {
+			t.Error(err)
+		} else if moderationPacerExists {
+			if _, err = admin.Exec(`DROP OWNED BY ` + moderationPacer + `; DROP ROLE ` + moderationPacer); err != nil {
 				t.Error(err)
 			}
 		}
@@ -293,6 +304,18 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(`ALTER ROLE ` + moderation + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}
+	rawModerationPacing, err := os.ReadFile(filepath.Join(root, "0021_moderation_pacing.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.NewReplacer("overlaid_moderation_pacer", moderationPacer, "overlaid_moderation_worker", moderation, "overlaid_runtime", role, "overlaid_worker", worker, "overlaid_outbound_worker", outbound, "overlaid_pacer", pacer, "overlaid_bot_admin", botAdmin, "overlaid_bot_executor", botExecutor).Replace(string(rawModerationPacing))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(`ALTER ROLE ` + moderationPacer + ` LOGIN PASSWORD '` + password + `'`); err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(moderationPacer, password)
+	moderationPacerURL := u.String()
 	u.User = url.UserPassword(moderation, password)
 	moderationURL := u.String()
 	u.User = url.UserPassword(botExecutor, password)
@@ -320,5 +343,5 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	u.User = url.UserPassword(worker, password)
 	workerURL := u.String()
 	u.User = url.UserPassword(role, password)
-	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, BotAdminURL: botAdminURL, BotExecutorURL: botExecutorURL, PacerURL: pacerURL, OutboundWorkerURL: outboundURL, ModerationWorkerURL: moderationURL, Schema: schema, Migrate: migrate}
+	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, BotAdminURL: botAdminURL, BotExecutorURL: botExecutorURL, PacerURL: pacerURL, OutboundWorkerURL: outboundURL, ModerationWorkerURL: moderationURL, ModerationPacerURL: moderationPacerURL, Schema: schema, Migrate: migrate}
 }

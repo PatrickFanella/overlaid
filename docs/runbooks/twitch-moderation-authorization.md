@@ -12,7 +12,7 @@ Delete requires `moderator:manage:chat_messages`; timeout/ban/unban require `mod
 
 ## Invocation fence
 
-Authorization returns moderator ID, binding fingerprint, a capability report and an exact-action callback. The callback captures identity/binding metadata rather than the initially resolved token. It refuses changes to action ID, channel, operation, target, message, reason or timeout duration. The future executor must still compare identity/binding and capability before and after its durable claim.
+Authorization returns the validated configured client ID, moderator ID, binding fingerprint, a capability report and an exact-action callback. The callback captures identity/binding metadata rather than the initially resolved token. It refuses changes to action ID, channel, operation, target, message, reason or timeout duration. The future executor must still compare client/moderator/binding and capability before and after its durable claim.
 
 Invocation freshly resolves and validates credentials, required scope, role, entitlement and shared consent again, compares identity/binding, reserves effect usage, and checks the current local selection immediately before [one bounded transport attempt](twitch-moderation.md). No database lock is held across the effect. Provider authorization and local snapshots can change afterward; this does not create an atomic transaction spanning Twitch and the database.
 
@@ -24,4 +24,4 @@ This callback is not one-use storage. Calling it does not acquire endpoint capac
 
 Disposable PostgreSQL and synthetic HTTP fixtures cover all four operations through broadcaster, own-bot and shared-bot identities; exact scopes and payloads; fresh role/grant checks; independent consent/publication withdrawal; binding cycles; broadcaster reauthorization; plan denial; bounded provider failures; cancellation/expiry; and refresh across an already authorized callback. Existing chat tests run alongside the moderation cases. No real Twitch effects or credentials are used.
 
-Run `make verify` and `bash scripts/ci-postgres.sh`, including both uncached race suites. No migration or persistent-data rollback is introduced. Keep this callback unregistered until moderation endpoint pacing, fenced executor completion, the dedicated worker, priority arbitration and opt-in registry integration are implemented. Live acceptance remains under #39.
+Run `make verify` and `bash scripts/ci-postgres.sh`, including both uncached race suites. No migration or persistent-data rollback is introduced. Keep this callback unregistered until [moderation endpoint pacing](moderation-pacing.md), fenced executor completion, the dedicated worker, priority arbitration and opt-in registry integration are implemented. Live acceptance remains under #39.

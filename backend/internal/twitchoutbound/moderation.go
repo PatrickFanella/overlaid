@@ -45,7 +45,7 @@ func (a *Adapter) AuthorizeModeration(ctx context.Context, t platformmoderation.
 	}
 	moderatorID, binding := first.credential.UserID, first.selection.Binding
 	gates := platform.CapabilityGates{Supported: true, Granted: true, RoleAllowed: true, StateAllowed: true, Entitled: true}
-	return platformmoderation.Authorization{ModeratorID: moderatorID, Binding: binding,
+	return platformmoderation.Authorization{ClientID: a.config.ClientID, ModeratorID: moderatorID, Binding: binding,
 		Capabilities: platform.EvaluateCapabilities(map[platform.Capability]platform.CapabilityGates{t.Action.Capability: gates}),
 		Attempt: func(attemptCtx context.Context, action platform.ModerationAction) (platform.ModerationReceipt, error) {
 			rejected := platform.ModerationReceipt{ActionID: action.ActionID, Status: platform.Rejected, Failure: platform.Unauthorized}

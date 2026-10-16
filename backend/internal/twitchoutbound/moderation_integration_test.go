@@ -54,7 +54,7 @@ func TestModerationAuthorizationSelectedIdentities(t *testing.T) {
 					t.Fatal("authorization failed", err)
 				}
 				want := map[string]string{"broadcaster": "456", "own": "123", "shared": "999"}[mode]
-				if auth.ModeratorID != want || !auth.Capabilities.Check(cap).Available || auth.Capabilities.Check("chat.send").Available {
+				if auth.ClientID != "client" || auth.ModeratorID != want || !auth.Capabilities.Check(cap).Available || auth.Capabilities.Check("chat.send").Available {
 					t.Fatal("wrong moderator identity")
 				}
 				r, err := auth.Attempt(t.Context(), target.Action)

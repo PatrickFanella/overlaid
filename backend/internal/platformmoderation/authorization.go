@@ -23,9 +23,9 @@ type Target struct {
 // future fenced executor. It grants neither a pacing permit nor a ledger claim.
 // The executor must compare identity/binding before and after its durable claim.
 type Authorization struct {
-	ModeratorID, Binding string
-	Capabilities         platform.CapabilityReport
-	Attempt              func(context.Context, platform.ModerationAction) (platform.ModerationReceipt, error)
+	ClientID, ModeratorID, Binding string
+	Capabilities                   platform.CapabilityReport
+	Attempt                        func(context.Context, platform.ModerationAction) (platform.ModerationReceipt, error)
 }
 
 type Authorize func(context.Context, Target) (Authorization, error)
