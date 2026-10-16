@@ -110,7 +110,7 @@ Before starting the next unit, refresh the checkout, issue/PR state and relevant
 
 ## First work to start
 
-1. P2.1 shared-vault execution is merged in [PR #86](https://git.subcult.tv/subculture-collective/overlaid/pulls/86), closing #85; see the [shared execution runbook](../../runbooks/shared-bot-execution.md). P2.2 is in progress: visibility (#87 / PR #88) and the moderation contract (#89 / PR #91) are merged. The retained moderation ledger (#93 / PR #94) is merged. Atomic scheduling and restricted leasing (#95 / PR #96) are merged; the handler, provider execution and priority arbitration remain unfinished.
+1. P2.1 shared-vault execution is merged in [PR #86](https://git.subcult.tv/subculture-collective/overlaid/pulls/86), closing #85; see the [shared execution runbook](../../runbooks/shared-bot-execution.md). P2.2 is in progress: visibility (#87 / PR #88) and the moderation contract (#89 / PR #91) are merged. The retained moderation ledger (#93 / PR #94) is merged. Atomic scheduling and restricted leasing (#95 / PR #96), typed transport (#97 / PR #98), selected identity authorization (#99 / PR #100), moderation pacing (#101 / PR #102) and the fenced executor (#103 / PR #104) are merged. The explicit moderation worker is tracked under #105; mixed-priority arbitration and opt-in registry integration remain unfinished.
 2. Prepare the Phase 3 bounded plan under #25 using the existing accepted engine/variable decisions. Engine contract work may proceed while P2.4–P2.6 or external reviews wait.
 3. Keep #23's registration checklist and #39/#40's controlled-session prerequisites visible; do not perform live effects or request secrets in public issue text.
 
@@ -150,3 +150,8 @@ The merged P2.1 revision `de6a449` has a hosted race-test failure in the existin
 ## P2.2 fenced moderation execution — #103
 
 [Issue #103](https://git.subcult.tv/subculture-collective/overlaid/issues/103) adds the [explicit moderation executor](../../runbooks/moderation-executor.md) after merged pacing PR #102. It validates private ledger input and original deadlines, checks authorization before pacing and after a committed claim, compares exact client/moderator/binding/capability, and invokes one bounded callback. Typed moderation normalization, detached completion and durable future-action cooldowns preserve no replay after any claim, including uncertain delivery or lost bookkeeping. No worker or startup path is registered. The dedicated River client/worker, mixed-priority arbitration and opt-in registry integration remain next; live provider qualification stays separate.
+
+
+## P2.2 restricted moderation worker — #105
+
+[Issue #105](https://git.subcult.tv/subculture-collective/overlaid/issues/105) adds the [explicit moderation River worker](../../runbooks/moderation-worker.md) after merged executor PR #104. The restricted pool leases only moderation jobs and the executor scopes each action to its tenant. Preparation retries and snoozes stay within original deadlines; every claimed/terminal result cancels or completes without replay, even when persistence returns an error. No pool or worker is registered at startup. Deterministic mixed-priority arbitration and opt-in registry integration remain next; live provider qualification stays separate.
