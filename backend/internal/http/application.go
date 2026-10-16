@@ -23,6 +23,7 @@ const bootstrapAccount = "00000000-0000-4000-8000-000000000002"
 const sessionCookie = "overlaid_session"
 const csrfCookie = "overlaid_csrf"
 const oauthCookie = "overlaid_oauth"
+const maxTenantRuntimes = 100
 
 type tenantTrustKey struct{}
 type tenantTrust struct {
@@ -56,6 +57,8 @@ type Application struct {
 	sweepRan          bool
 	sweepAt           time.Time
 	sessionRequests   map[string]map[string]context.CancelFunc
+
+	runtimeCapacityBlocked bool
 }
 
 func NewApplication(cfg config.Config) (*Application, error) {
@@ -246,7 +249,8 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	if r, ok := a.runtimes[id]; ok {
 		return r.server, nil
 	}
-	if len(a.runtimes) >= 100 {
+	if len(a.runtimes) >= maxTenantRuntimes {
+		a.runtimeCapacityBlocked = true
 		return nil, errors.New("active tenant runtime capacity reached")
 	}
 	scope, err := a.store.Product.Scoped(id)
@@ -295,6 +299,7 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 		a.retainRuntimeSendGateLocked(id, s)
 	}
 	a.runtimes[id] = tenantRuntime{server: s, cancel: cancel}
+	a.runtimeCapacityBlocked = false
 	s.StartBackground(child)
 	return s, nil
 }
@@ -305,6 +310,9 @@ func (a *Application) invalidate(id string) {
 		r.cancel()
 		a.releaseSendGateLocked(id, r.server.chatSendGate)
 		delete(a.runtimes, id)
+	}
+	if len(a.runtimes) < maxTenantRuntimes {
+		a.runtimeCapacityBlocked = false
 	}
 	delete(a.overlayKeys, id)
 }
@@ -536,6 +544,7 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	failed := a.sweepError || !a.sweepRan || time.Since(a.sweepAt) > 3*time.Minute
 	count := len(a.runtimes)
+	capacityBlocked := a.runtimeCapacityBlocked && count >= maxTenantRuntimes
 	a.mu.Unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -561,6 +570,12 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 		status = "degraded"
 	}
 	checks := []map[string]string{{"name": "process", "status": "ok"}, {"name": "tenant_storage", "status": storage}, {"name": "retention_worker", "status": worker}, {"name": "access_policy", "status": access}}
+	runtimes := "ok"
+	if capacityBlocked {
+		runtimes = "degraded"
+		status = "degraded"
+	}
+	checks = append(checks, map[string]string{"name": "tenant_runtimes", "status": runtimes})
 	if a.chatControl != nil {
 		chat := "ok"
 		if !a.chatReady() {
