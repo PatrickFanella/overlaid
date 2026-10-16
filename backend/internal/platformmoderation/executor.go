@@ -110,7 +110,7 @@ func (e *Executor) Execute(ctx context.Context, args platform.ModerationArgs) (r
 	if authErr != nil {
 		return result, errExecutionAuth
 	}
-	d, paceErr := e.pacer.Acquire(ctx, first.ClientID, first.ModeratorID, t.Action.ChannelID)
+	d, paceErr := e.pacer.AcquireFair(ctx, first.ClientID, first.ModeratorID, t.Action.ChannelID, moderationpacing.FairRequest{TenantID: t.TenantID, ActionID: t.Action.ActionID, Deadline: t.Deadline})
 	if paceErr != nil {
 		return result, errExecutionPacing
 	}
@@ -123,7 +123,13 @@ func (e *Executor) Execute(ctx context.Context, args platform.ModerationArgs) (r
 	}
 	var retryAfter time.Duration
 	defer func() {
-		if e.pacer.Complete(ctx, d.Permit, retryAfter) != nil {
+		var completionErr error
+		if result.Done {
+			completionErr = e.pacer.Complete(ctx, d.Permit, retryAfter)
+		} else {
+			completionErr = e.pacer.CompleteUnclaimed(ctx, d.Permit)
+		}
+		if completionErr != nil {
 			err = errors.Join(err, errExecutionPacing)
 		}
 	}()

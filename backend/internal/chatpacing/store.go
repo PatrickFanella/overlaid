@@ -96,7 +96,7 @@ func (s *Store) Acquire(ctx context.Context, sender, channel string) (Decision, 
 // AcquireFair registers retained work and grants only the selected tenant turn.
 // A granted action cannot acquire another permit while its deadline is retained.
 func (s *Store) AcquireFair(ctx context.Context, sender, channel string, r FairRequest) (Decision, error) {
-	if !r.valid() {
+	if !r.Valid() {
 		return Decision{}, ErrInvalid
 	}
 	return s.acquire(ctx, sender, channel, &r)
@@ -160,7 +160,7 @@ func (s *Store) acquire(ctx context.Context, sender, channel string, request *Fa
 			return Decision{}, ErrFairRequired
 		}
 	} else {
-		action, err = fair.register(now, *request, channelKey)
+		action, err = fair.Register(now, *request, channelKey)
 		if err != nil {
 			return Decision{}, err
 		}
@@ -190,9 +190,9 @@ func (s *Store) acquire(ctx context.Context, sender, channel string, request *Fa
 		if readErr != nil || rowsErr != nil || closeErr != nil {
 			return Decision{}, errors.Join(readErr, rowsErr, closeErr)
 		}
-		eligible := !ready.After(now) && fair.winner(now, channels) == action
+		eligible := !ready.After(now) && fair.Winner(now, channels) == action
 		if eligible {
-			if err = fair.grant(now, action); err != nil {
+			if err = fair.Grant(now, action); err != nil {
 				return Decision{}, err
 			}
 		}

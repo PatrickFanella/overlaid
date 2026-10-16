@@ -15,6 +15,8 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"git.subcult.tv/PatrickFanella/over-laid/internal/permitturns"
 )
 
 var (
@@ -47,7 +49,7 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 	err = db.QueryRowContext(ctx, `SELECT
  EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR has_schema_privilege(r.oid,current_schema(),'CREATE') OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relowner=r.oid))),
  EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,pg_roles r WHERE n.nspname=current_schema() AND c.relkind IN('r','p') AND c.relname<>'moderation_pacing_buckets' AND (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')),
- (SELECT count(*)=1 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity AND has_table_privilege(current_user,c.oid,'SELECT') AND has_table_privilege(current_user,c.oid,'INSERT') AND has_table_privilege(current_user,c.oid,'UPDATE') AND has_table_privilege(current_user,c.oid,'DELETE') AND NOT EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND has_table_privilege(r.oid,c.oid,'TRUNCATE,REFERENCES,TRIGGER')) AND (SELECT count(*)=1 AND bool_and(p.polname='pacer_only' AND p.polcmd='*' AND p.polpermissive AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles) AND pg_get_expr(p.polqual,p.polrelid)='true' AND pg_get_expr(p.polwithcheck,p.polrelid)='true' AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE pg_has_role(current_user,role_id,'MEMBER'))) FROM pg_policy p WHERE p.polrelid=c.oid)) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname='moderation_pacing_buckets')`).Scan(&unsafe, &private, &ready)
+ EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('moderation_pacing_buckets') AND attname='fair_state' AND atttypid='jsonb'::regtype AND attnotnull AND NOT attisdropped) AND (SELECT count(*)=1 AND bool_and(c.relrowsecurity AND c.relforcerowsecurity AND has_table_privilege(current_user,c.oid,'SELECT') AND has_table_privilege(current_user,c.oid,'INSERT') AND has_table_privilege(current_user,c.oid,'UPDATE') AND has_table_privilege(current_user,c.oid,'DELETE') AND NOT EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND has_table_privilege(r.oid,c.oid,'TRUNCATE,REFERENCES,TRIGGER')) AND (SELECT count(*)=1 AND bool_and(p.polname='pacer_only' AND p.polcmd='*' AND p.polpermissive AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles) AND pg_get_expr(p.polqual,p.polrelid)='true' AND pg_get_expr(p.polwithcheck,p.polrelid)='true' AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE pg_has_role(current_user,role_id,'MEMBER'))) FROM pg_policy p WHERE p.polrelid=c.oid)) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname='moderation_pacing_buckets')`).Scan(&unsafe, &private, &ready)
 	if err != nil || unsafe || private || !ready {
 		_ = db.Close()
 		return nil, errors.New("separate restricted moderation pacing role and exact forced RLS required")
@@ -85,6 +87,7 @@ func valid(s string, numeric bool) bool {
 // before acquisition, so contention or a database-clock offset cannot extend it.
 type Permit struct {
 	sender, channel, token string
+	client, action         string
 	until                  time.Time
 }
 
@@ -104,11 +107,23 @@ func lock(ctx context.Context, tx *sql.Tx) error {
 // Acquire books no future slots. All four moderation operations share sender
 // (client+moderator) and channel (client+broadcaster) spacing and in-flight fences.
 func (s *Store) Acquire(ctx context.Context, client, moderator, channel string) (Decision, error) {
+	return s.acquire(ctx, client, moderator, channel, nil)
+}
+
+// AcquireFair selects a tenant turn whose sender and channel are both eligible.
+func (s *Store) AcquireFair(ctx context.Context, client, moderator, channel string, r FairRequest) (Decision, error) {
+	if !r.Valid() {
+		return Decision{}, ErrInvalid
+	}
+	return s.acquire(ctx, client, moderator, channel, &r)
+}
+func (s *Store) acquire(ctx context.Context, client, moderator, channel string, request *FairRequest) (Decision, error) {
 	started := time.Now()
 	if !valid(client, false) || !valid(moderator, true) || !valid(channel, true) {
 		return Decision{}, ErrInvalid
 	}
 	sender, channelKey := keys(client, moderator, channel)
+	clientKey := clientHash(client)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Decision{}, err
@@ -120,13 +135,13 @@ func (s *Store) Acquire(ctx context.Context, client, moderator, channel string) 
 	if _, err = tx.ExecContext(ctx, `DELETE FROM moderation_pacing_buckets WHERE updated_at<clock_timestamp()-interval '1 day' AND next_at<=clock_timestamp() AND (lease_until IS NULL OR lease_until<=clock_timestamp())`); err != nil {
 		return Decision{}, err
 	}
-	var senders, channels int
-	var hasSender, hasChannel bool
-	err = tx.QueryRowContext(ctx, `SELECT count(*) FILTER(WHERE kind='sender'),count(*) FILTER(WHERE kind='channel'),coalesce(bool_or(kind='sender' AND key=$1),false),coalesce(bool_or(kind='channel' AND key=$2),false) FROM moderation_pacing_buckets`, sender, channelKey).Scan(&senders, &channels, &hasSender, &hasChannel)
+	var senders, channels, clients int
+	var hasSender, hasChannel, hasClient bool
+	err = tx.QueryRowContext(ctx, `SELECT count(*) FILTER(WHERE kind='sender'),count(*) FILTER(WHERE kind='channel'),count(*) FILTER(WHERE kind='client'),coalesce(bool_or(kind='sender' AND key=$1),false),coalesce(bool_or(kind='channel' AND key=$2),false),coalesce(bool_or(kind='client' AND key=$3),false) FROM moderation_pacing_buckets`, sender, channelKey, clientKey).Scan(&senders, &channels, &clients, &hasSender, &hasChannel, &hasClient)
 	if err != nil {
 		return Decision{}, err
 	}
-	if !hasSender && senders >= 1024 || !hasChannel && channels >= 10000 {
+	if !hasSender && senders >= 1024 || !hasChannel && channels >= 10000 || request != nil && !hasClient && clients >= 1024 {
 		return Decision{}, ErrCapacity
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO moderation_pacing_buckets(kind,key) VALUES('sender',$1),('channel',$2) ON CONFLICT DO NOTHING`, sender, channelKey); err != nil {
@@ -139,14 +154,18 @@ func (s *Store) Acquire(ctx context.Context, client, moderator, channel string) 
 	if err != nil {
 		return Decision{}, err
 	}
-	if ready.After(now) {
-		return Decision{RetryAt: ready}, tx.Commit()
+	action, eligible, retry, err := admitFair(ctx, tx, clientKey, sender+":"+channelKey, request, ready, now)
+	if err != nil {
+		return Decision{}, err
+	}
+	if !eligible {
+		return Decision{RetryAt: retry}, tx.Commit()
 	}
 	var nonce [32]byte
 	if _, err = rand.Read(nonce[:]); err != nil {
 		return Decision{}, err
 	}
-	p := Permit{sender: sender, channel: channelKey, token: hex.EncodeToString(nonce[:]), until: started.Add(leaseDuration)}
+	p := Permit{sender: sender, channel: channelKey, token: hex.EncodeToString(nonce[:]), until: started.Add(leaseDuration), client: clientKey, action: action}
 	if _, err = tx.ExecContext(ctx, `UPDATE moderation_pacing_buckets SET next_at=$1,lease_hash=$2,lease_until=$3,updated_at=$4 WHERE (kind='sender' AND key=$5) OR (kind='channel' AND key=$6)`, now.Add(spacing), digest([]byte(p.token)), now.Add(leaseDuration), now, sender, channelKey); err != nil {
 		return Decision{}, err
 	}
@@ -159,6 +178,15 @@ func (s *Store) Acquire(ctx context.Context, client, moderator, channel string) 
 // Complete is detached and bounded. Neither cancellation nor a zero cooldown
 // refunds booked spacing. Only the exact current permit can clear both fences.
 func (s *Store) Complete(ctx context.Context, p Permit, retryAfter time.Duration) error {
+	return s.complete(ctx, p, retryAfter, false)
+}
+
+// CompleteUnclaimed releases only this action's fair marker before a ledger
+// claim. Budgets and turns stay charged; the caller must recheck its ledger.
+func (s *Store) CompleteUnclaimed(ctx context.Context, p Permit) error {
+	return s.complete(ctx, p, 0, true)
+}
+func (s *Store) complete(ctx context.Context, p Permit, retryAfter time.Duration, unclaimed bool) error {
 	if len(p.sender) != 64 || len(p.channel) != 64 || len(p.token) != 64 || retryAfter < 0 || retryAfter > 24*time.Hour {
 		return ErrFence
 	}
@@ -183,6 +211,30 @@ func (s *Store) Complete(ctx context.Context, p Permit, retryAfter time.Duration
 	var now time.Time
 	if err = tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 		return err
+	}
+	if unclaimed && p.action != "" {
+		var raw []byte
+		if err = tx.QueryRowContext(ctx, `SELECT fair_state FROM moderation_pacing_buckets WHERE kind='client' AND key=$1`, p.client).Scan(&raw); err != nil {
+			return err
+		}
+		state, decodeErr := permitturns.Decode(raw)
+		if decodeErr != nil {
+			return decodeErr
+		}
+		kept := state.Waiters[:0]
+		for _, w := range state.Waiters {
+			if w.Action != p.action {
+				kept = append(kept, w)
+			}
+		}
+		state.Waiters = kept
+		raw, err = json.Marshal(state)
+		if err != nil {
+			return ErrFairState
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE moderation_pacing_buckets SET fair_state=$1,updated_at=$2 WHERE kind='client' AND key=$3`, raw, now, p.client); err != nil {
+			return err
+		}
 	}
 	if retryAfter < spacing {
 		retryAfter = spacing

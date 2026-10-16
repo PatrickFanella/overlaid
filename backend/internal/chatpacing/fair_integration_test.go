@@ -277,3 +277,7 @@ func TestFairGrantRollbackAndUnclaimedRetry(t *testing.T) {
 		t.Fatal("completed action replayed", err)
 	}
 }
+
+func fairRequest(tenant, action int, deadline time.Time) FairRequest {
+	return FairRequest{TenantID: fmt.Sprintf("%08x-0000-0000-0000-000000000001", tenant), ActionID: fmt.Sprintf("%064x", action), Deadline: deadline}
+}
