@@ -32,18 +32,23 @@ const WaitLimit = 256
 const TenantLimit = 128
 const Horizon = 2 * time.Minute
 
+// ActiveLease bounds selection by a caller that stops retrying. It is not a
+// provider permit or a future budget reservation.
+const ActiveLease = 3 * time.Second
+
 type Tenant struct {
 	Key   string    `json:"key"`
 	Turn  int64     `json:"turn"`
 	Until time.Time `json:"until"`
 }
 type Waiter struct {
-	Action   string    `json:"action"`
-	Tenant   string    `json:"tenant"`
-	Channel  string    `json:"channel"`
-	Deadline time.Time `json:"deadline"`
-	Ticket   int64     `json:"ticket"`
-	Granted  bool      `json:"granted"`
+	Action      string    `json:"action"`
+	Tenant      string    `json:"tenant"`
+	Channel     string    `json:"channel"`
+	Deadline    time.Time `json:"deadline"`
+	Ticket      int64     `json:"ticket"`
+	Granted     bool      `json:"granted"`
+	ActiveUntil time.Time `json:"active_until"`
 }
 type State struct {
 	Version int      `json:"version"`
@@ -81,7 +86,7 @@ func Decode(raw []byte) (State, error) {
 	}
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
-	if d.Decode(&s) != nil || d.Decode(new(any)) != io.EOF || s.Version != 1 || s.Counter < 0 || len(s.Tenants) > TenantLimit || len(s.Waiters) > WaitLimit {
+	if d.Decode(&s) != nil || d.Decode(new(any)) != io.EOF || (s.Version != 1 && s.Version != 2) || s.Counter < 0 || len(s.Tenants) > TenantLimit || len(s.Waiters) > WaitLimit {
 		return State{}, ErrState
 	}
 	tenants := map[string]bool{}
@@ -94,7 +99,7 @@ func Decode(raw []byte) (State, error) {
 	actions := map[string]bool{}
 	tickets := map[int64]bool{}
 	for _, w := range s.Waiters {
-		if !hashID(w.Action) || !validResource(w.Channel) || !tenants[w.Tenant] || actions[w.Action] || w.Ticket <= 0 || w.Ticket > s.Counter || tickets[w.Ticket] || w.Deadline.IsZero() {
+		if !hashID(w.Action) || !validResource(w.Channel) || !tenants[w.Tenant] || actions[w.Action] || w.Ticket <= 0 || w.Ticket > s.Counter || tickets[w.Ticket] || w.Deadline.IsZero() || w.ActiveUntil.After(w.Deadline) || s.Version == 1 && !w.ActiveUntil.IsZero() {
 			return State{}, ErrState
 		}
 		actions[w.Action] = true
@@ -134,10 +139,14 @@ func (s *State) Register(now time.Time, r Request, channel string) (string, erro
 	tenant, action := Keys(r)
 	// Compare existing identity before pruning: an expired original request cannot
 	// be renewed at the boundary while its old row is still retained.
-	for _, w := range s.Waiters {
+	for i, w := range s.Waiters {
 		if w.Action == action {
 			if w.Tenant != tenant || w.Channel != channel || !w.Deadline.Equal(r.Deadline) {
 				return "", ErrInvalid
+			}
+			s.Version = 2
+			if !w.Granted {
+				s.Waiters[i].ActiveUntil = activeUntil(now, r.Deadline)
 			}
 			s.Prune(now)
 			return action, nil
@@ -163,8 +172,8 @@ func (s *State) Register(now time.Time, r Request, channel string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	s.Version = 1
-	s.Waiters = append(s.Waiters, Waiter{Action: action, Tenant: tenant, Channel: channel, Deadline: r.Deadline.UTC(), Ticket: ticket})
+	s.Version = 2
+	s.Waiters = append(s.Waiters, Waiter{Action: action, Tenant: tenant, Channel: channel, Deadline: r.Deadline.UTC(), Ticket: ticket, ActiveUntil: activeUntil(now, r.Deadline)})
 	return action, nil
 }
 
@@ -179,7 +188,7 @@ func (s *State) Winner(now time.Time, channels map[string]time.Time) string {
 	for i := range s.Waiters {
 		w := &s.Waiters[i]
 		next, ok := channels[w.Channel]
-		if w.Granted || !w.Deadline.After(now) || !ok || next.After(now) {
+		if w.Granted || !w.ActiveUntil.After(now) || !w.Deadline.After(now) || !ok || next.After(now) {
 			continue
 		}
 		if best == nil || turns[w.Tenant] < turns[best.Tenant] || turns[w.Tenant] == turns[best.Tenant] && w.Ticket < best.Ticket {
@@ -221,4 +230,12 @@ func validResource(s string) bool {
 	}
 	a, b, ok := strings.Cut(s, ":")
 	return ok && hashID(a) && hashID(b)
+}
+
+func activeUntil(now, deadline time.Time) time.Time {
+	until := now.Add(ActiveLease)
+	if deadline.Before(until) {
+		until = deadline
+	}
+	return until.UTC()
 }

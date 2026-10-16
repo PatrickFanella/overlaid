@@ -169,6 +169,7 @@ func TestFairPermitsDeadlineConflictCancellationAndCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 	state.Waiters[0].Deadline = now.Add(-time.Second)
+	state.Waiters[0].ActiveUntil = state.Waiters[0].Deadline
 	raw, _ = json.Marshal(state)
 	if _, err = f.Admin.Exec(`UPDATE chat_pacing_accounts SET fair_state=$1`, raw); err != nil {
 		t.Fatal(err)
@@ -205,7 +206,7 @@ func TestFairPermitsRequireMigrationAndRejectMalformedState(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	if _, err = f.Admin.Exec(`INSERT INTO chat_pacing_accounts(account_key,fair_state) VALUES($1,'{"version":2}')`, func() string { a, _ := keys("123", "456"); return a }()); err != nil {
+	if _, err = f.Admin.Exec(`INSERT INTO chat_pacing_accounts(account_key,fair_state) VALUES($1,'{"version":3}')`, func() string { a, _ := keys("123", "456"); return a }()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.AcquireFair(t.Context(), "123", "456", fairRequest(1, 1, time.Now().Add(time.Minute))); !errors.Is(err, ErrFairState) {
@@ -280,4 +281,64 @@ func TestFairGrantRollbackAndUnclaimedRetry(t *testing.T) {
 
 func fairRequest(tenant, action int, deadline time.Time) FairRequest {
 	return FairRequest{TenantID: fmt.Sprintf("%08x-0000-0000-0000-000000000001", tenant), ActionID: fmt.Sprintf("%064x", action), Deadline: deadline}
+}
+
+func TestMissingFairCallerDoesNotHoldChatTurnUntilActionExpiry(t *testing.T) {
+	f := testpostgres.NewTenantFixture(t, "")
+	s, err := Open(t.Context(), f.PacerURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	busy, err := s.Acquire(t.Context(), "123", "456")
+	if err != nil || !busy.Granted {
+		t.Fatal(err)
+	}
+	deadline := time.Now().UTC().Add(time.Minute)
+	a := fairRequest(1, 1, deadline)
+	b := fairRequest(2, 2, deadline)
+	for i, r := range []FairRequest{a, b} {
+		if _, err = s.AcquireFair(t.Context(), "123", fmt.Sprint(111+i), r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var raw []byte
+	if err = f.Admin.QueryRow(`SELECT fair_state FROM chat_pacing_accounts`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	state, err := decodeFair(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket := state.Waiters[0].Ticket
+	state.Waiters[0].ActiveUntil = time.Now().Add(-time.Second)
+	raw, _ = json.Marshal(state)
+	if _, err = f.Admin.Exec(`UPDATE chat_pacing_accounts SET fair_state=$1`, raw); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Complete(t.Context(), busy.Permit, 0); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.AcquireFair(t.Context(), "123", "112", b)
+	if err != nil || !d.Granted {
+		t.Fatal("missing caller stalled active tenant", err)
+	}
+	if err = s.Complete(t.Context(), d.Permit, 0); err != nil {
+		t.Fatal(err)
+	}
+	d, err = s.AcquireFair(t.Context(), "123", "111", a)
+	if err != nil || !d.Granted {
+		t.Fatal("rejoining caller lost turn", err)
+	}
+	if err = f.Admin.QueryRow(`SELECT fair_state FROM chat_pacing_accounts`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	state, err = decodeFair(raw)
+	if err != nil || state.Waiters[0].Ticket != ticket || !state.Waiters[0].Deadline.Equal(deadline) {
+		t.Fatal("rejoin changed original identity", err)
+	}
+	var charged int
+	if err = f.Admin.QueryRow(`SELECT jsonb_array_length(attempts) FROM chat_pacing_accounts`).Scan(&charged); err != nil || charged != 3 {
+		t.Fatal("caller lease refunded or charged a reservation", charged, err)
+	}
 }
