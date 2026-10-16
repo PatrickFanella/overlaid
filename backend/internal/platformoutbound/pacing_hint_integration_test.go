@@ -3,6 +3,7 @@ package platformoutbound
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -76,11 +77,16 @@ func TestPacingHintFailureAndCooldownAreUnclaimed(t *testing.T) {
 }
 
 func TestPacingHintCannotAuthorizeOrSelectTheActualSender(t *testing.T) {
-	for _, deny := range []bool{true, false} {
-		t.Run(map[bool]string{true: "denied", false: "changed-sender"}[deny], func(t *testing.T) {
+	for _, mode := range []string{"hint-denied", "hint-changed-sender", "prepared-denied", "prepared-changed-sender"} {
+		t.Run(mode, func(t *testing.T) {
+			deny := mode == "hint-denied" || mode == "prepared-denied"
+			construct := NewExecutorWithPacingHint
+			if mode == "prepared-denied" || mode == "prepared-changed-sender" {
+				construct = NewExecutorWithFairPreparation
+			}
 			_, db, pacer, args := executorFixture(t)
 			var calls, sends atomic.Int32
-			e, err := NewExecutorWithPacingHint(t.Context(), db, pacer, func(context.Context, Target) (Authorization, error) {
+			e, err := construct(t.Context(), db, pacer, func(context.Context, Target) (Authorization, error) {
 				calls.Add(1)
 				if deny {
 					return Authorization{}, ErrDenied
@@ -148,5 +154,35 @@ func TestPacingHintRetryPolicy(t *testing.T) {
 				t.Fatal(got)
 			}
 		})
+	}
+}
+
+func TestFairPreparationDefersBeforeAuthorization(t *testing.T) {
+	f, db, pacer, args := executorFixture(t)
+	first := chatpacing.FairRequest{TenantID: "00000002-0000-0000-0000-000000000001", ActionID: strings.Repeat("f", 64), Deadline: time.Now().Add(time.Minute)}
+	if retry, err := pacer.PrepareFair(t.Context(), "123", "789", first); err != nil || !retry.IsZero() {
+		t.Fatal(retry, err)
+	}
+	var calls atomic.Int32
+	executor, err := NewExecutorWithFairPreparation(t.Context(), db, pacer, func(context.Context, Target) (Authorization, error) { calls.Add(1); return Authorization{}, ErrDenied }, func(context.Context, Target, context.CancelFunc) (func(), error) {
+		t.Error("preparation reached send gate")
+		return func() {}, nil
+	}, func(context.Context, Target) (string, error) { return "123", nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		result, err := executor.Execute(t.Context(), args)
+		if err != nil || result.Done || result.RetryAt.IsZero() || time.Until(result.RetryAt) > time.Second || calls.Load() != 0 {
+			t.Fatal("fair wait spent provider authorization", result, calls.Load(), err)
+		}
+	}
+	var charged, leased int
+	if err := f.Admin.QueryRow(`SELECT jsonb_array_length(attempts),CASE WHEN lease_until IS NULL THEN 0 ELSE 1 END FROM chat_pacing_accounts`).Scan(&charged, &leased); err != nil || charged != 0 || leased != 0 {
+		t.Fatal("fair wait reserved capacity", charged, leased, err)
+	}
+	var pending bool
+	if err := db.QueryRowContext(t.Context(), `SELECT state='pending' AND started_at IS NULL FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1`, args.ActionID).Scan(&pending); err != nil || !pending {
+		t.Fatal("fair wait acquired claim", pending, err)
 	}
 }

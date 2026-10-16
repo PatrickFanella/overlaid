@@ -51,11 +51,12 @@ type PacingIdentity func(context.Context, Target) (string, error)
 type SendGate func(context.Context, Target, context.CancelFunc) (release func(), err error)
 
 type Executor struct {
-	product   *tenantdb.DB
-	pacer     *chatpacing.Store
-	authorize Authorize
-	identify  PacingIdentity
-	sendGate  SendGate
+	product     *tenantdb.DB
+	pacer       *chatpacing.Store
+	authorize   Authorize
+	identify    PacingIdentity
+	prepareFair bool
+	sendGate    SendGate
 }
 
 // NewExecutor constructs no worker and opens no pool. Execution is not wired
@@ -107,6 +108,17 @@ func NewExecutorWithPacingHint(ctx context.Context, product *tenantdb.DB, pacer 
 	return executor, nil
 }
 
+// NewExecutorWithFairPreparation adds bounded waiting-turn preparation to the
+// read-only hint. It grants no permit/claim and never replaces provider auth.
+func NewExecutorWithFairPreparation(ctx context.Context, product *tenantdb.DB, pacer *chatpacing.Store, authorize Authorize, gate SendGate, identify PacingIdentity) (*Executor, error) {
+	executor, err := NewExecutorWithPacingHint(ctx, product, pacer, authorize, gate, identify)
+	if err != nil {
+		return nil, err
+	}
+	executor.prepareFair = true
+	return executor, nil
+}
+
 func (e *Executor) pacingHint(ctx context.Context, t Target) (retry time.Time, err error) {
 	if e.identify == nil {
 		return time.Time{}, nil
@@ -137,7 +149,17 @@ func (e *Executor) pacingHint(ctx context.Context, t Target) (retry time.Time, e
 	if err != nil {
 		return time.Time{}, errExecutionPacing
 	}
-	return pacingRetry(report), nil
+	if retry := pacingRetry(report); !retry.IsZero() {
+		return retry, nil
+	}
+	if e.prepareFair {
+		retry, err := e.pacer.PrepareFair(ctx, sender, t.ChannelID, chatpacing.FairRequest{TenantID: t.TenantID, ActionID: t.ActionID, Deadline: t.Deadline})
+		if err != nil {
+			return time.Time{}, errExecutionPacing
+		}
+		return retry, nil
+	}
+	return time.Time{}, nil
 }
 
 // Recheck all known waits within one second. This preserves River's short

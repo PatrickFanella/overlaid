@@ -106,7 +106,7 @@ type Decision struct {
 // Acquire books no future slots: a denied request leaves the existing budget
 // intact. This lets a later priority-aware scheduler choose moderation first.
 func (s *Store) Acquire(ctx context.Context, sender, channel string) (Decision, error) {
-	return s.acquire(ctx, sender, channel, nil)
+	return s.acquire(ctx, sender, channel, nil, false)
 }
 
 // AcquireFair registers retained work and grants only the selected tenant turn.
@@ -115,9 +115,21 @@ func (s *Store) AcquireFair(ctx context.Context, sender, channel string, r FairR
 	if !r.Valid() {
 		return Decision{}, ErrInvalid
 	}
-	return s.acquire(ctx, sender, channel, &r)
+	return s.acquire(ctx, sender, channel, &r, false)
 }
-func (s *Store) acquire(ctx context.Context, sender, channel string, request *FairRequest) (Decision, error) {
+
+// PrepareFair registers/refreshes a bounded waiting-caller turn, without granting
+// a permit or charging a budget. A zero RetryAt means only that this turn was
+// eligible at observation time. AcquireFair remains authoritative after auth.
+func (s *Store) PrepareFair(ctx context.Context, sender, channel string, r FairRequest) (retry time.Time, err error) {
+	if !r.Valid() {
+		return time.Time{}, ErrInvalid
+	}
+	d, err := s.acquire(ctx, sender, channel, &r, true)
+	return d.RetryAt, err
+}
+
+func (s *Store) acquire(ctx context.Context, sender, channel string, request *FairRequest, prepare bool) (Decision, error) {
 	acquisitionStarted := time.Now()
 	if !validID(sender) || !validID(channel) {
 		return Decision{}, ErrInvalid
@@ -207,7 +219,7 @@ func (s *Store) acquire(ctx context.Context, sender, channel string, request *Fa
 			return Decision{}, errors.Join(readErr, rowsErr, closeErr)
 		}
 		eligible := !ready.After(now) && fair.Winner(now, channels) == action
-		if eligible {
+		if eligible && !prepare {
 			if err = fair.Grant(now, action); err != nil {
 				return Decision{}, err
 			}
@@ -230,6 +242,9 @@ func (s *Store) acquire(ctx context.Context, sender, channel string, request *Fa
 				retry = request.Deadline
 			}
 			return Decision{RetryAt: retry}, tx.Commit()
+		}
+		if prepare {
+			return Decision{}, tx.Commit()
 		}
 	} else if ready.After(now) {
 		return Decision{RetryAt: ready}, tx.Commit()

@@ -342,3 +342,72 @@ func TestMissingFairCallerDoesNotHoldChatTurnUntilActionExpiry(t *testing.T) {
 		t.Fatal("caller lease refunded or charged a reservation", charged, err)
 	}
 }
+
+func TestPrepareFairRegistersWithoutPermitAndKeepsIdentity(t *testing.T) {
+	f := testpostgres.NewTenantFixture(t, "")
+	s, err := Open(t.Context(), f.PacerURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	deadline := time.Now().UTC().Add(time.Minute)
+	a, b := fairRequest(1, 1, deadline), fairRequest(2, 2, deadline)
+	if _, err := f.Admin.Exec(`CREATE FUNCTION reject_fair_preparation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'private preparation failure'; END $$; CREATE TRIGGER reject_fair_preparation BEFORE UPDATE ON chat_pacing_accounts FOR EACH ROW EXECUTE FUNCTION reject_fair_preparation()`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PrepareFair(t.Context(), "123", "456", a); err == nil {
+		t.Fatal("failed preparation was accepted")
+	}
+	var rows int
+	if err := f.Admin.QueryRow(`SELECT (SELECT count(*) FROM chat_pacing_accounts)+(SELECT count(*) FROM chat_pacing_channels)`).Scan(&rows); err != nil || rows != 0 {
+		t.Fatal("failed preparation left partial pacing state", rows, err)
+	}
+	if _, err := f.Admin.Exec(`DROP TRIGGER reject_fair_preparation ON chat_pacing_accounts; DROP FUNCTION reject_fair_preparation()`); err != nil {
+		t.Fatal(err)
+	}
+	if retry, err := s.PrepareFair(t.Context(), "123", "456", a); err != nil || !retry.IsZero() {
+		t.Fatal("eligible preparation", retry, err)
+	}
+	if retry, err := s.PrepareFair(t.Context(), "123", "789", b); err != nil || retry.IsZero() || time.Until(retry) > time.Second {
+		t.Fatal("unqualified preparation", retry, err)
+	}
+	var before []byte
+	if err := f.Admin.QueryRow(`SELECT fair_state FROM chat_pacing_accounts`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if retry, err := s.PrepareFair(t.Context(), "123", "456", a); err != nil || !retry.IsZero() {
+		t.Fatal(retry, err)
+	}
+	var after []byte
+	var charged, leased int
+	if err := f.Admin.QueryRow(`SELECT fair_state,jsonb_array_length(attempts),CASE WHEN lease_until IS NULL THEN 0 ELSE 1 END FROM chat_pacing_accounts`).Scan(&after, &charged, &leased); err != nil {
+		t.Fatal(err)
+	}
+	old, _ := decodeFair(before)
+	current, err := decodeFair(after)
+	if err != nil || charged != 0 || leased != 0 || len(current.Waiters) != 2 || current.Counter != old.Counter || current.Waiters[0].Ticket != old.Waiters[0].Ticket || !current.Waiters[0].Deadline.Equal(deadline) || current.Waiters[0].Granted || !current.Waiters[0].ActiveUntil.After(time.Now()) {
+		t.Fatal("preparation changed grant/budget/identity", current, charged, leased, err)
+	}
+	changed := a
+	changed.Deadline = deadline.Add(time.Second)
+	if _, err := s.PrepareFair(t.Context(), "123", "456", changed); err == nil {
+		t.Fatal("preparation changed original deadline")
+	}
+	if _, err := s.PrepareFair(t.Context(), "123", "999", a); err == nil {
+		t.Fatal("preparation changed channel")
+	}
+	grant, err := s.AcquireFair(t.Context(), "123", "456", a)
+	if err != nil || !grant.Granted {
+		t.Fatal("preparation stole actual permit", grant, err)
+	}
+	if err := s.Complete(t.Context(), grant.Permit, 0); err != nil {
+		t.Fatal(err)
+	}
+	if retry, err := s.PrepareFair(t.Context(), "123", "456", a); err != nil || retry.IsZero() {
+		t.Fatal("granted action became eligible for replay", retry, err)
+	}
+	var attempts int
+	if err := f.Admin.QueryRow(`SELECT jsonb_array_length(attempts) FROM chat_pacing_accounts`).Scan(&attempts); err != nil || attempts != 1 {
+		t.Fatal("preparation charged/refunded permit", attempts, err)
+	}
+}
