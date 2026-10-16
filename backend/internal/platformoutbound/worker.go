@@ -9,7 +9,6 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platformqueue"
 	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver/riverdatabasesql"
 )
 
 // Worker connects River leasing to the durable executor. It is not registered
@@ -33,13 +32,13 @@ func NewClient(ctx context.Context, service *sql.DB, executor *Executor) (*river
 	if err != nil {
 		return nil, err
 	}
-	schema, err := platformqueue.Validate(ctx, service, executor.product, "overlaid_chat_send")
+	driver, schema, err := platformqueue.NewFairDriver(ctx, service, executor.product, "overlaid_chat_send")
 	if err != nil {
 		return nil, err
 	}
 	workers := river.NewWorkers()
 	river.AddWorker(workers, w)
-	return river.NewClient(riverdatabasesql.New(service), &river.Config{
+	return river.NewClient(driver, &river.Config{
 		Schema: schema, PollOnly: true, Workers: workers,
 		Queues: map[string]river.QueueConfig{"chat_outbound": {MaxWorkers: 4}},
 		// Allow the executor's thirty seconds plus detached echo/ledger/pacing writes.

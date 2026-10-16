@@ -15,3 +15,8 @@ Upstream SHA-256 values:
 - `007_notification_outbox_sqlite_jsonb_and_sql_cleanup.up.sql`: `47ec8031b88e69004de2def5bc3109d969f71ee4c33a1e7dac2fb8c9dd19182d`
 
 The production Go modules `river` and `riverdatabasesql` are also pinned to v0.47.0. Future River upgrades must review both the driver and migrations; do not regenerate or silently replace a migration already applied to a deployment.
+
+
+## Tenant-fair outbound adapter
+
+`backend/internal/platformqueue/fair.go` adapts the v0.47.0 `JobGetAvailable` running-state, attempt, attempted_at and bounded attempted_by bookkeeping from `riverdriver/riverdatabasesql/internal/dbsqlc/river_job.sql.go`, retaining MPL-2.0 in the derived file. The pinned source file SHA-256 is `74b6d7358fde641861a59ccf3d7b588bea6025895946e6522a076b724a563c01`; source commit remains `48c0036dcb12b1e2bb65c355593388bb7ff9926e`. The adapter adds canonical tenant rounds, a monotonic retained turn, bounded short transactions and fixed errors, and reuses the original driver's full row decoder. Other driver methods and ingest dispatch are unchanged. [The fair-leasing runbook](../../runbooks/tenant-fair-leasing.md) records compatibility and verification limits. Future River upgrades must review this adaptation explicitly.
