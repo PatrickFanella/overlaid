@@ -145,3 +145,8 @@ The merged P2.1 revision `de6a449` has a hosted race-test failure in the existin
 ## P2.2 durable moderation pacing — #101
 
 [Issue #101](https://git.subcult.tv/subculture-collective/overlaid/issues/101) adds [isolated moderation sender/channel admission](../../runbooks/moderation-pacing.md) after merged authorization PR #100. Hashed client/moderator and client/broadcaster keys coordinate conservative spacing, fenced in-flight leases and durable cooldowns across tenants. The fresh authorization result exposes its validated client ID for the future executor's pacing namespace. No pool or executor is activated. Fenced moderation execution, the dedicated worker, mixed-priority arbitration and opt-in registry integration remain unfinished.
+
+
+## P2.2 fenced moderation execution — #103
+
+[Issue #103](https://git.subcult.tv/subculture-collective/overlaid/issues/103) adds the [explicit moderation executor](../../runbooks/moderation-executor.md) after merged pacing PR #102. It validates private ledger input and original deadlines, checks authorization before pacing and after a committed claim, compares exact client/moderator/binding/capability, and invokes one bounded callback. Typed moderation normalization, detached completion and durable future-action cooldowns preserve no replay after any claim, including uncertain delivery or lost bookkeeping. No worker or startup path is registered. The dedicated River client/worker, mixed-priority arbitration and opt-in registry integration remain next; live provider qualification stays separate.

@@ -2,11 +2,13 @@ package twitchoutbound
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"git.subcult.tv/PatrickFanella/over-laid/internal/moderationpacing"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platformmoderation"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenancy"
@@ -224,5 +226,61 @@ func TestModerationRefreshPreservesAuthorizedBinding(t *testing.T) {
 				t.Fatal("refresh changed binding", err)
 			}
 		})
+	}
+}
+
+// Exercise the composed ledger/pacer/real authorization/transport path using
+// only the fixture transport; no Twitch request or startup worker is involved.
+func TestModerationExecutorSelectedTransport(t *testing.T) {
+	for _, mode := range []string{"broadcaster", "own", "shared"} {
+		for _, cap := range []platform.Capability{"message.delete", "user.timeout", "user.ban", "user.unban"} {
+			t.Run(mode+"/"+string(cap), func(t *testing.T) {
+				x, _, target := moderationFixture(t, mode, cap)
+				var raw []byte
+				if err := x.f.Admin.QueryRow(`SELECT envelope FROM normalized_chat_events LIMIT 1`).Scan(&raw); err != nil {
+					t.Fatal(err)
+				}
+				var source platform.ChatEvent
+				if err := json.Unmarshal(raw, &source); err != nil {
+					t.Fatal(err)
+				}
+				input := target.Action
+				input.ActionID = ""
+				intent, err := platform.NewTwitchModerationIntent(source, "executor", input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ledger, err := platformmoderation.New(x.store.Product)
+				if err != nil {
+					t.Fatal(err)
+				}
+				id, created, err := ledger.Admit(t.Context(), intent)
+				if err != nil || !created {
+					t.Fatal("admission", created, err)
+				}
+				pacer, err := moderationpacing.Open(t.Context(), x.f.ModerationPacerURL)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = pacer.Close() }()
+				executor, err := platformmoderation.NewExecutor(t.Context(), x.store.Product, pacer, x.adapter.AuthorizeModeration)
+				if err != nil {
+					t.Fatal(err)
+				}
+				args := platform.ModerationArgs{TenantID: target.TenantID, ActionID: id, Deadline: intent.Deadline().Unix()}
+				r, err := executor.Execute(t.Context(), args)
+				want := map[string]string{"broadcaster": "456", "own": "123", "shared": "999"}[mode]
+				if err != nil || !r.Done || r.Status != platform.Delivered || x.p.moderations != 1 || x.p.sends != 0 || x.p.sentSender != want {
+					t.Fatal("composed attempt", r, err)
+				}
+				if _, err = executor.Execute(t.Context(), args); err != nil || x.p.moderations != 1 {
+					t.Fatal("composed replay", err)
+				}
+				rows, err := ledger.Receipts(t.Context(), 10)
+				if err != nil || len(rows) != 1 || rows[0].State != "delivered" {
+					t.Fatal("completion", err)
+				}
+			})
+		}
 	}
 }

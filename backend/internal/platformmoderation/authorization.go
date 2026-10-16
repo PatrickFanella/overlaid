@@ -20,7 +20,7 @@ type Target struct {
 }
 
 // Authorization supplies one selected identity and exact-action callback to a
-// future fenced executor. It grants neither a pacing permit nor a ledger claim.
+// fenced executor. It grants neither a pacing permit nor a ledger claim.
 // The executor must compare identity/binding before and after its durable claim.
 type Authorization struct {
 	ClientID, ModeratorID, Binding string

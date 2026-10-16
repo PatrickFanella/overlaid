@@ -1,10 +1,10 @@
 # Twitch moderation authorization
 
-Tracking: [#99](https://git.subcult.tv/subculture-collective/overlaid/issues/99), part of P2.2 under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24), following merged transport PR #98. `twitchoutbound.Adapter.AuthorizeModeration` is a trusted callback for a future moderation executor. It adds no startup client, endpoint pacer, ledger execution or existing-workflow cutover.
+Tracking: [#99](https://git.subcult.tv/subculture-collective/overlaid/issues/99), part of P2.2 under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24), following merged transport PR #98. `twitchoutbound.Adapter.AuthorizeModeration` is a trusted callback for the [explicit moderation executor](moderation-executor.md). It adds no startup client, endpoint pacer, ledger execution or existing-workflow cutover.
 
 ## Identity and consent
 
-The callback takes private `platformmoderation.Target` input: tenant, connection, original deadline and exact moderation action. The future executor must derive these fields from the retained ledger and compare the job deadline with the original ledger deadline. This helper does not read or claim that ledger. Do not put the target, action reason or callback into jobs, exports or logs.
+The callback takes private `platformmoderation.Target` input: tenant, connection, original deadline and exact moderation action. The executor derives these fields from the retained ledger and compares the job deadline with the original ledger deadline. This helper does not read or claim that ledger. Do not put the target, action reason or callback into jobs, exports or logs.
 
 Credential resolution uses the same custody helper as chat sending. The current selection chooses the broadcaster, explicitly bound own bot, or published shared bot; an unavailable selected identity never falls back. OAuth validation checks the configured client and exact selected subject on every authorization. Refresh uses the existing tenant/account locks and vault boundaries; a refresh-only update retains selection revisions.
 
@@ -24,4 +24,4 @@ This callback is not one-use storage. Calling it does not acquire endpoint capac
 
 Disposable PostgreSQL and synthetic HTTP fixtures cover all four operations through broadcaster, own-bot and shared-bot identities; exact scopes and payloads; fresh role/grant checks; independent consent/publication withdrawal; binding cycles; broadcaster reauthorization; plan denial; bounded provider failures; cancellation/expiry; and refresh across an already authorized callback. Existing chat tests run alongside the moderation cases. No real Twitch effects or credentials are used.
 
-Run `make verify` and `bash scripts/ci-postgres.sh`, including both uncached race suites. No migration or persistent-data rollback is introduced. Keep this callback unregistered until [moderation endpoint pacing](moderation-pacing.md), fenced executor completion, the dedicated worker, priority arbitration and opt-in registry integration are implemented. Live acceptance remains under #39.
+Run `make verify` and `bash scripts/ci-postgres.sh`, including both uncached race suites. No migration or persistent-data rollback is introduced. The [moderation pacer](moderation-pacing.md) and [fenced executor](moderation-executor.md) are implemented without startup registration. Keep the execution path unregistered until the dedicated worker, priority arbitration and opt-in registry integration are implemented. Live acceptance remains under #39.
