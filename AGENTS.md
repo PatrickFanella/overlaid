@@ -60,7 +60,7 @@ Tenant-owned bot accounts use separate vault ciphertext and explicit broadcaster
 - Managed PostgreSQL uses immutable `tenantdb.DB` scopes, explicit predicates and forced RLS. Runtime roles must not own application tables or bypass RLS. Migrations use separate administrator credentials.
 - Account cookies and CSRF authorize hosted requests; global operator headers only authorize the self-host bootstrap tenant. Never forward an operator secret in overlay URLs.
 - Provider tokens use the versioned AES-GCM keyring; overlay/webhook credentials are hashed. Preserve legacy files for rollback after one-time import.
-- The CI PostgreSQL fixture script runs `make verify` and the full Go race suite. Keep test schemas and roles disposable and independent.
+- The CI PostgreSQL fixture script runs `make verify` and the full Go race suite. Keep test schemas and roles disposable and independent. Its default data directory is a bounded 2 GiB tmpfs; use `OVERLAID_CI_POSTGRES_STORAGE=volume` for a disk-backed comparison. Keep PostgreSQL durability settings enabled and remove only fixture-owned containers and anonymous volumes during cleanup. These tests do not prove power-loss durability.
 
 ## Operations conventions
 
