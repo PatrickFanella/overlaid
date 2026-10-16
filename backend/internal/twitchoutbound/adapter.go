@@ -131,6 +131,9 @@ func (a *Adapter) Authorize(ctx context.Context, t platformoutbound.Target) (pla
 		// lock over a provider effect. Twitch enforces its token/channel rules;
 		// the product moderator policy was checked by the fresh authorization.
 		if err := a.reserve(sendCtx, db); err != nil {
+			if errors.Is(err, platformoutbound.ErrPlanLimit) {
+				rejected.Failure = platform.PlanLimited
+			}
 			return rejected, err
 		}
 		if err := a.current(sendCtx, t, selection.Binding); err != nil {
@@ -231,7 +234,8 @@ func selectionError(err error) error {
 func (a *Adapter) reserve(ctx context.Context, db *tenantdb.DB) error {
 	if err := db.ReserveHTTP(ctx); err != nil {
 		if errors.Is(err, tenantdb.ErrLimit) {
-			return platformoutbound.ErrDenied
+			// Retain ErrDenied compatibility for the separate, unregistered moderation path.
+			return errors.Join(platformoutbound.ErrPlanLimit, platformoutbound.ErrDenied)
 		}
 		return errUnavailable
 	}

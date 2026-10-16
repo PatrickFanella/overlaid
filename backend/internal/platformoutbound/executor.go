@@ -14,6 +14,9 @@ import (
 )
 
 var ErrDenied = errors.New("outbound authorization denied")
+
+// ErrPlanLimit identifies confirmed local allowance exhaustion, never a provider quota.
+var ErrPlanLimit = errors.New("outbound tenant allowance reached")
 var errExecutionStore = errors.New("outbound execution storage unavailable")
 var errExecutionAuth = errors.New("outbound authorization unavailable")
 var errExecutionPacing = errors.New("outbound pacing unavailable")
@@ -121,6 +124,9 @@ func (e *Executor) pacingHint(ctx context.Context, t Target) (retry time.Time, e
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	sender, err := e.identify(ctx, t)
+	if errors.Is(err, ErrPlanLimit) {
+		return time.Time{}, ErrPlanLimit
+	}
 	if errors.Is(err, ErrDenied) {
 		return time.Time{}, ErrDenied
 	}
@@ -224,6 +230,9 @@ func (e *Executor) Execute(ctx context.Context, args platform.ChatSendArgs) (res
 		return reject(ctx, store, t, platform.Permanent)
 	}
 	if retry, hintErr := e.pacingHint(ctx, t); hintErr != nil {
+		if errors.Is(hintErr, ErrPlanLimit) {
+			return reject(ctx, store, t, platform.PlanLimited)
+		}
 		if errors.Is(hintErr, ErrDenied) {
 			return reject(ctx, store, t, platform.Unauthorized)
 		}
@@ -239,6 +248,9 @@ func (e *Executor) Execute(ctx context.Context, args platform.ChatSendArgs) (res
 	authCtx, stop := context.WithDeadline(ctx, authDeadline)
 	first, authErr := e.authorized(authCtx, t)
 	stop()
+	if errors.Is(authErr, ErrPlanLimit) {
+		return reject(ctx, store, t, platform.PlanLimited)
+	}
 	if errors.Is(authErr, ErrDenied) {
 		return reject(ctx, store, t, platform.Unauthorized)
 	}
@@ -299,6 +311,8 @@ func (e *Executor) Execute(ctx context.Context, args platform.ChatSendArgs) (res
 	r := platform.Receipt{ActionID: t.ActionID, Status: platform.Rejected, Failure: platform.Permanent}
 	second, authErr := e.authorized(attemptCtx, t)
 	switch {
+	case errors.Is(authErr, ErrPlanLimit):
+		r.Failure = platform.PlanLimited
 	case errors.Is(authErr, ErrDenied) || authErr == nil && (second.SenderID != first.SenderID || second.Binding != first.Binding):
 		r.Failure = platform.Unauthorized
 	case authErr != nil:
@@ -351,6 +365,9 @@ func (e *Executor) authorized(ctx context.Context, t Target) (a Authorization, e
 	}()
 	a, err = e.authorize(ctx, t)
 	if err != nil {
+		if errors.Is(err, ErrPlanLimit) {
+			return Authorization{}, ErrPlanLimit
+		}
 		if errors.Is(err, ErrDenied) {
 			return Authorization{}, ErrDenied
 		}

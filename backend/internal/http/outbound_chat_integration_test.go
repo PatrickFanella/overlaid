@@ -57,6 +57,76 @@ func waitOutboundState(t *testing.T, app *Application, tenant string, want int, 
 	t.Fatal("outbound state did not settle", state, want, summary, jobs, receipts, "controller", app.chatReady(), "sender", app.outboundReady())
 }
 
+func TestRetainedSenderTenantHTTPAllowanceIsTerminal(t *testing.T) {
+	old, alpha, _, f := applicationFixture(t)
+	controllerToken(t, old, alpha)
+	s, err := old.runtime(t.Context(), alpha.tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.commandsRegistry().SaveCommand(t.Context(), bot.Command{Name: "budget", Action: "ticker", Enabled: true, RoleRequired: "viewer", ResponseMode: "chat", Response: "Allowance fixture"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Admin.Exec(`INSERT INTO tenant_usage(tenant_id,kind,window_start,used) VALUES($1,'http',date_trunc('hour',clock_timestamp()),120) ON CONFLICT(tenant_id,kind,window_start) DO UPDATE SET used=120`, alpha.tenant); err != nil {
+		t.Fatal(err)
+	}
+	cfg := retainedSenderConfig(old.config, f)
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	previous := twitchHTTPClient
+	defer func() { twitchHTTPClient = previous }()
+	var sends atomic.Int32
+	twitchHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host+r.URL.Path == "id.twitch.tv/oauth2/validate" {
+			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"client_id":"fixture-client","user_id":"123","login":"fixture","scopes":["user:read:chat","user:write:chat"],"expires_in":3600}`))}, nil
+		}
+		sends.Add(1)
+		return nil, errors.New("unexpected provider effect after local exhaustion")
+	})}
+	app, err := NewApplication(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = app.Close() }()
+	s, err = app.runtime(t.Context(), alpha.tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := s.ingestRetainedChat(t.Context(), packet("123", "budget-source", "budget-delivery", "!budget"), twitch.Token{UserID: "123"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitOutboundState(t, app, alpha.tenant, 1, "rejected")
+	if err := app.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var actions, limited, charged, cooled, permits, runnable int
+	if err := f.Admin.QueryRow(`SELECT count(*),count(*) FILTER(WHERE failure='plan_limited' AND retry_after_ns=0) FROM platform_outbound_actions`).Scan(&actions, &limited); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Admin.QueryRow(`SELECT coalesce(sum(jsonb_array_length(attempts)),0),count(*) FILTER(WHERE blocked_until>clock_timestamp()),count(*) FILTER(WHERE lease_until IS NOT NULL) FROM chat_pacing_accounts`).Scan(&charged, &cooled, &permits); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Admin.QueryRow(`SELECT count(*) FROM river_job WHERE state NOT IN ('completed','cancelled','discarded')`).Scan(&runnable); err != nil {
+		t.Fatal(err)
+	}
+	if actions != 1 || limited != 1 || charged != 1 || cooled != 0 || permits != 0 || runnable != 0 || sends.Load() != 0 {
+		t.Fatal("local exhaustion changed delivery or pacing", actions, limited, charged, cooled, permits, runnable, sends.Load())
+	}
+	restarted, err := NewApplication(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if sends.Load() != 0 {
+		t.Fatal("terminal local rejection replayed on restart")
+	}
+}
+
 func TestRetainedSenderStartupRejectionRegistryManualAndRestart(t *testing.T) {
 	old, alpha, _, f := applicationFixture(t)
 	controllerToken(t, old, alpha)
@@ -544,5 +614,30 @@ func testRetainedEarlyEcho(t *testing.T, invalidate bool) {
 	var counters int
 	if err := db.QueryRowContext(t.Context(), `SELECT count(*) FROM bot_counters WHERE name='hype'`).Scan(&counters); err != nil || counters != 0 || sends.Load() != 1 {
 		t.Fatal("early echo became a command or replay", counters, sends.Load(), err)
+	}
+}
+
+func TestRetainedSenderRequiresPlanLimitReceiptSchema(t *testing.T) {
+	old, _, _, f := applicationFixture(t)
+	cfg := retainedSenderConfig(old.config, f)
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Admin.Exec(`ALTER TABLE platform_outbound_actions DROP CONSTRAINT platform_outbound_actions_failure_check; ALTER TABLE platform_outbound_actions ADD CONSTRAINT platform_outbound_actions_failure_check CHECK(failure IN ('','retryable','unauthorized','unsupported','quota_limited','permanent'))`); err != nil {
+		t.Fatal(err)
+	}
+	if app, err := NewApplication(cfg); err == nil {
+		_ = app.Close()
+		t.Fatal("retained sender accepted old receipt schema")
+	}
+	if _, err := f.Admin.Exec(`ALTER TABLE platform_outbound_actions DROP CONSTRAINT platform_outbound_actions_failure_check; ALTER TABLE platform_outbound_actions ADD CONSTRAINT platform_outbound_actions_failure_check CHECK(failure IN ('','retryable','unauthorized','unsupported','quota_limited','permanent','plan_limited'))`); err != nil {
+		t.Fatal(err)
+	}
+	app, err := NewApplication(cfg)
+	if err != nil {
+		t.Fatal("compatible schema did not recover startup", err)
+	}
+	if err := app.Close(); err != nil {
+		t.Fatal(err)
 	}
 }

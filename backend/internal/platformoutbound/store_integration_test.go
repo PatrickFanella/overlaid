@@ -357,6 +357,17 @@ func TestRejectedReceiptsPlanChangesAndFailedStart(t *testing.T) {
 	if err != nil || !start {
 		t.Fatal(start, err)
 	}
+	// A local allowance failure has no provider retry hint and cannot describe
+	// delivery or uncertainty. Invalid completion must leave the claim usable.
+	for _, invalid := range []platform.Receipt{
+		{ActionID: id, Status: platform.Rejected, Failure: platform.PlanLimited, RetryAfter: time.Second},
+		{ActionID: id, Status: platform.Delivered, Failure: platform.PlanLimited, ProviderMessageID: "invalid"},
+		{ActionID: id, Status: platform.Uncertain, Failure: platform.PlanLimited},
+	} {
+		if err := s.Finish(t.Context(), c, invalid); !errors.Is(err, ErrInvalid) {
+			t.Fatal("contradictory local allowance receipt accepted", invalid, err)
+		}
+	}
 	if err = s.Finish(t.Context(), c, platform.Receipt{ActionID: id, Status: platform.Rejected, Failure: platform.QuotaLimited, RetryAfter: 42 * time.Second}); err != nil {
 		t.Fatal(err)
 	}
