@@ -46,6 +46,14 @@ There is no retained moderation environment switch. Its explicitly constructed c
 
 `VITE_API_BASE_URL` is a build-time value for the web image. If unset, the browser API helper derives an API origin using the browser host and port 8080; overlay URLs may override it with `apiBaseUrl`. Changing the frontend's environment after the static image has been built does not rewrite that image.
 
+The default Twitch channel-connection scope list matches the API, Compose and `.env.example`:
+
+```env
+TWITCH_SCOPES="user:read:chat user:write:chat channel:read:redemptions channel:manage:redemptions channel:read:subscriptions bits:read moderator:read:followers moderator:manage:chat_messages moderator:manage:banned_users"
+```
+
+These are requested permissions, not proof of an authorized token or current bot role. Reauthorize the channel after changing scopes. `make config-contract-check` checks this reference against the API defaults without Go's test cache; `make test` and `make verify` include that check because these files live outside the backend Go module.
+
 ## Local now-playing
 
 For a native API with session-bus access:
