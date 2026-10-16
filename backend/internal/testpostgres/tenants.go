@@ -314,6 +314,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(`ALTER ROLE ` + moderationPacer + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}
+	rawModerationPriority, err := os.ReadFile(filepath.Join(root, "0022_moderation_priority.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(string(rawModerationPriority)); err != nil {
+		t.Fatal(err)
+	}
 	u.User = url.UserPassword(moderationPacer, password)
 	moderationPacerURL := u.String()
 	u.User = url.UserPassword(moderation, password)
