@@ -92,6 +92,32 @@ type Execution struct {
 	Status  platform.DeliveryStatus
 }
 
+func (e *Executor) expirePendingJob(ctx context.Context, args platform.ChatSendArgs) error {
+	if !tenantdb.ValidID(args.TenantID) || args.TenantID != strings.ToLower(args.TenantID) || !validHash(args.ActionID) || args.Deadline <= 0 || args.Deadline > 999999999999 {
+		return ErrInvalid
+	}
+	db, err := e.product.Scoped(args.TenantID)
+	if err != nil {
+		return ErrInvalid
+	}
+	finish, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	_, err = db.ExecContext(finish, `UPDATE platform_outbound_actions SET state='rejected',code='expired',failure='permanent',finished_at=clock_timestamp()
+ WHERE /*tenant:platform_outbound_actions*/ AND id=$1 AND state='pending'
+ AND floor(extract(epoch FROM deadline))::bigint=$2 AND to_timestamp($2)<=clock_timestamp()`, args.ActionID, args.Deadline)
+	if err != nil {
+		return errExecutionStore
+	}
+	// A missing or already-started action cannot gain permission from this job.
+	// Fail bookkeeping if DB time has not reached the bound or identity drifted.
+	var pending bool
+	err = db.QueryRowContext(finish, `SELECT EXISTS(SELECT 1 FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1 AND state='pending')`, args.ActionID).Scan(&pending)
+	if err != nil || pending {
+		return errExecutionStore
+	}
+	return nil
+}
+
 func (s *Store) target(ctx context.Context, id string) (Target, string, error) {
 	t := Target{TenantID: s.db.TenantID(), ActionID: id}
 	var state string
