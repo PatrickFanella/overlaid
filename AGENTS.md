@@ -40,7 +40,7 @@ Tenant-owned bot accounts use separate vault ciphertext and explicit broadcaster
 
 `platform.NewTwitchModerationIntent` defines versioned, source-scoped moderation identity and immutable payload fingerprints for delete/timeout/ban/unban. Preserve exact field validation, source-derived deadlines, separate moderation receipts and fail-closed uncertainty normalization. The contract grants no effect permission; durable moderation admission/jobs/claims, provider authorization and priority arbitration remain separate work. Never route moderation receipts through the chat-message completion validator.
 
-`platformmoderation` retains typed moderation follow-ups under forced RLS. Preserve canonical retained-source reconstruction, exact conflict fingerprints, shared chat/moderation plan and per-source bounds, target-message binding, hashed one-use claims, database-clock deadline checks, detached completion and terminal recovery. Source/target viewer deletion and retention must cascade private input; exports contain metadata only. The store schedules no jobs and grants no effect permission. Moderation receipts must never use the chat completion validator, and no moderation worker is registered at startup.
+`platformmoderation` retains typed moderation follow-ups under forced RLS. Preserve canonical retained-source reconstruction, exact conflict fingerprints, shared chat/moderation plan and per-source bounds, target-message binding, hashed one-use claims, database-clock deadline checks, detached completion and terminal recovery. Source/target viewer deletion and retention must cascade private input; exports contain metadata only. New moderation actions and payload-free `ModerationArgs` jobs commit together through `tenantdb.Tx.EnqueueModeration`. Preserve original ledger deadlines, one job per action, pending-only migration catch-up and the separate `overlaid_moderation_worker` role. All three leasing roles must reject combined reachable memberships and exact-policy drift; tenant context must not expose another job kind. No moderation client, worker, pool or provider executor is registered at startup. Scheduling grants no effect permission. Moderation receipts must never use the chat completion validator, and no moderation worker is registered at startup.
 
 ## Newsroom conventions
 
@@ -60,7 +60,7 @@ Tenant-owned bot accounts use separate vault ciphertext and explicit broadcaster
 - Managed PostgreSQL uses immutable `tenantdb.DB` scopes, explicit predicates and forced RLS. Runtime roles must not own application tables or bypass RLS. Migrations use separate administrator credentials.
 - Account cookies and CSRF authorize hosted requests; global operator headers only authorize the self-host bootstrap tenant. Never forward an operator secret in overlay URLs.
 - Provider tokens use the versioned AES-GCM keyring; overlay/webhook credentials are hashed. Preserve legacy files for rollback after one-time import.
-- The CI PostgreSQL fixture script runs `make verify` and the full Go race suite. Keep test schemas and roles disposable and independent.
+- The CI PostgreSQL fixture script runs `make verify` and the full Go race suite. Keep test schemas and roles disposable and independent. Its default data directory is a bounded 2 GiB tmpfs; use `OVERLAID_CI_POSTGRES_STORAGE=volume` for a disk-backed comparison. Keep PostgreSQL durability settings enabled and remove only fixture-owned containers and anonymous volumes during cleanup. These tests do not prove power-loss durability.
 
 ## Operations conventions
 

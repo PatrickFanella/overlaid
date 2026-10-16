@@ -1,13 +1,28 @@
 #!/usr/bin/env bash
 # Own one disposable database for the entire verification run; never use app data.
 set -euo pipefail
+# CI checks transaction/role/worker behavior, not power-loss durability. Avoid
+# coupling their bounded deadlines to the shared runner's block-device latency.
+# Keep a disk-backed option for storage-sensitive qualification.
+fixture_storage_args=()
+case "${OVERLAID_CI_POSTGRES_STORAGE:-memory}" in
+  memory) fixture_storage_args=(--tmpfs "/var/lib/postgresql/data:rw,nosuid,noexec,size=2g") ;;
+  volume) ;;
+  *) echo "OVERLAID_CI_POSTGRES_STORAGE must be memory or volume" >&2; exit 2 ;;
+esac
 fixture_name="overlaid-ci-${GITHUB_RUN_ID:-local}-$$"
 fixture_password="fixture-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-trap 'docker rm -f "$fixture_name" >/dev/null 2>&1 || true' EXIT
-docker run -d --name "$fixture_name" --label overlaid.fixture=ci \
+cleanup_fixture() {
+  local result=$?
+  # An otherwise green run must not hide a failed cleanup and leak fixture data.
+  if ! docker rm -fv "$fixture_name" >/dev/null; then result=1; fi
+  exit "$result"
+}
+trap cleanup_fixture EXIT
+docker run -d --name "$fixture_name" --label overlaid.fixture=ci "${fixture_storage_args[@]}" \
   -e POSTGRES_PASSWORD="$fixture_password" -e POSTGRES_DB=overlaid_ci \
   -p 0:5432 docker.io/library/postgres:17 >/dev/null
-for attempt in {1..60}; do
+for ((attempt=0; attempt<60; attempt++)); do
   if docker exec "$fixture_name" pg_isready -U postgres -d overlaid_ci >/dev/null 2>&1; then break; fi
   sleep 1
 done

@@ -58,7 +58,9 @@ func snapshotOutbound(db *sql.DB) outboundDiagnostics {
  count(*) FILTER(WHERE cardinality(pg_blocking_pids(pid))>0)
  FROM pg_stat_activity WHERE datname=current_database() AND usename=current_user`).Scan(
 		&d.ActiveSessions, &d.LockWaits, &d.IOWaits, &d.BlockedSessions) == nil
-	d.JobRead = db.QueryRowContext(ctx, `SELECT state,attempt,max_attempts,cardinality(errors),
+	// River stores the absence of attempts as a NULL error array. Count that
+	// as zero so scanning an otherwise valid job does not stop at this field.
+	d.JobRead = db.QueryRowContext(ctx, `SELECT state,attempt,max_attempts,coalesce(cardinality(errors),0),
  floor(extract(epoch FROM scheduled_at-clock_timestamp())*1000)::bigint,
  floor(((args->>'deadline')::bigint-extract(epoch FROM clock_timestamp()))*1000)::bigint
  FROM river_job WHERE kind='overlaid_chat_send'`).Scan(
@@ -95,6 +97,12 @@ func TestOutboundDiagnosticsMetadataAndBlockedQuery(t *testing.T) {
 	var role string
 	if err := service.QueryRowContext(t.Context(), `SELECT current_user`).Scan(&role); err != nil {
 		t.Fatal(err)
+	}
+	// Newly inserted and snoozed jobs have no error entries. Their metadata
+	// must remain readable before any provider error has been recorded.
+	fresh := snapshotOutbound(service)
+	if !fresh.JobRead || fresh.ErrorCount != 0 || fresh.DeadlineInMS <= 0 {
+		t.Fatalf("missing fresh job metadata: %+v", fresh)
 	}
 	// Provider text deliberately lives in a field the diagnostic query must
 	// count without projecting. The source text already contains private input.

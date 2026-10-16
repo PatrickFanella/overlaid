@@ -127,8 +127,8 @@ func TestModerationAdmissionClaimsAndReceipts(t *testing.T) {
 		t.Fatal("caller renewed retained deadline", err)
 	}
 	var jobs int
-	if err = f.Admin.QueryRow(`SELECT count(*) FROM river_job`).Scan(&jobs); err != nil || jobs != 1 {
-		t.Fatal("moderation scheduled a job", jobs, err)
+	if err = f.Admin.QueryRow(`SELECT count(*) FROM river_job WHERE kind='overlaid_moderation'`).Scan(&jobs); err != nil || jobs != 1 {
+		t.Fatal("moderation job count", jobs, err)
 	}
 	claims := make(chan Claim, 24)
 	for range 24 {
@@ -403,7 +403,7 @@ func TestModerationLifecycleIsolationAndExport(t *testing.T) {
 	if err = f.Admin.QueryRow(`SELECT count(*) FROM platform_moderation_actions`).Scan(&count); err != nil || count != 0 {
 		t.Fatal("tenant actions retained", count, err)
 	}
-	for _, dsn := range []string{f.WorkerURL, f.OutboundWorkerURL, f.BotAdminURL, f.BotExecutorURL, f.PacerURL} {
+	for _, dsn := range []string{f.WorkerURL, f.OutboundWorkerURL, f.ModerationWorkerURL, f.BotAdminURL, f.BotExecutorURL, f.PacerURL} {
 		pool, err := sql.Open("pgx", dsn)
 		if err != nil {
 			t.Fatal(err)
@@ -418,7 +418,7 @@ func TestModerationLifecycleIsolationAndExport(t *testing.T) {
 
 func TestModerationMigrationRollbackAndStartupGate(t *testing.T) {
 	f, _, _ := fixture(t)
-	if _, err := f.Admin.Exec(`DROP TABLE platform_moderation_actions; DROP INDEX normalized_chat_message; DELETE FROM overlaid_migrations WHERE name='0019_moderation_actions.sql'`); err != nil {
+	if _, err := f.Admin.Exec(`ALTER TABLE river_job DROP CONSTRAINT overlaid_moderation_job; DROP TABLE platform_moderation_actions; DROP INDEX normalized_chat_message; DELETE FROM overlaid_migrations WHERE name='0019_moderation_actions.sql'`); err != nil {
 		t.Fatal(err)
 	}
 	if db, err := tenantdb.Open(f.RuntimeURL, tenantdb.BootstrapID); err == nil {
@@ -452,6 +452,10 @@ func TestModerationMigrationRollbackAndStartupGate(t *testing.T) {
 	if _, err = f.Admin.Exec(text); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = f.Admin.Exec(`ALTER TABLE river_job ADD CONSTRAINT overlaid_moderation_job FOREIGN KEY(overlaid_moderation_tenant_id,overlaid_moderation_action_id) REFERENCES platform_moderation_actions(tenant_id,id) ON DELETE CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+
 	db, err := tenantdb.Open(f.RuntimeURL, tenantdb.BootstrapID)
 	if err != nil {
 		t.Fatal(err)

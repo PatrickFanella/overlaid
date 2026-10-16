@@ -24,7 +24,7 @@ Account sessions use HTTP-only cookies, expire after 24 hours and support sign-o
 
 The free, paid and unlimited plan rows control commands, timers, API variables, hourly outbound calls, stored events and future media capacity. Operators change assignments with `bin/overlaid-admin --tenant <UUID> --plan <free|paid|unlimited>` using a private `OVERLAID_ADMIN_DATABASE_URL`; the transaction records an audit receipt. Changes take effect without deployment, preserve configuration on downgrade, and block execution above caps. Billing and media uploads remain later work. Self-host stays unlimited, with a hard 250000-event safety bound and provider limits.
 
-`make verify` remains required. `bash scripts/ci-postgres.sh` owns a fresh disposable PostgreSQL container, runs that command and the full Go race suite, then removes only its fixture. The hosted CI workflow uses this path; a local pass is separate from hosted check status. See the [Phase 1 implementation plan](docs/superpowers/plans/2026-10-13-phase-1-tenancy.md) and [homelab deployment runbook](docs/runbooks/homelab-phase-1.md).
+`make verify` remains required. `bash scripts/ci-postgres.sh` owns a fresh disposable PostgreSQL container, runs that command and the full Go race suite, then removes only its fixture. The fixture uses a bounded 2 GiB tmpfs by default; `OVERLAID_CI_POSTGRES_STORAGE=volume bash scripts/ci-postgres.sh` uses disk-backed storage for comparison. PostgreSQL durability settings remain enabled, but these disposable checks do not qualify power-loss durability. Cleanup removes the owned container and its anonymous volumes. The hosted CI workflow uses this path; a local pass is separate from hosted check status. See the [Phase 1 implementation plan](docs/superpowers/plans/2026-10-13-phase-1-tenancy.md) and [homelab deployment runbook](docs/runbooks/homelab-phase-1.md).
 
 ## Quick start
 
@@ -42,7 +42,7 @@ The [retained platform ingestion store](docs/runbooks/platform-ingest.md) persis
 
 The [read-only pacing probe](docs/runbooks/pacing-inspection.md) reports account headroom, blocking reasons and original-deadline risk without reserving a permit. `make build` includes `overlaid-pacing-probe`; it uses an explicit private restricted connection and adds no application startup pool.
 
-The [retained moderation contract](docs/runbooks/moderation-contract.md) validates scoped delete/timeout/ban/unban intents and moderation-specific receipts. The [moderation ledger](docs/runbooks/platform-moderation.md) adds scoped admission, shared chat/moderation allowances, one-use claims and metadata-only lifecycle handling. Moderation scheduling, provider authorization/transport, priority arbitration and activation remain separate work.
+The [retained moderation contract](docs/runbooks/moderation-contract.md) validates scoped delete/timeout/ban/unban intents and moderation-specific receipts. The [moderation ledger](docs/runbooks/platform-moderation.md) adds scoped admission, shared chat/moderation allowances, one-use claims and metadata-only lifecycle handling. The [moderation queue](docs/runbooks/moderation-queue.md) adds atomic payload-free jobs and a separate leasing role. A moderation handler, provider authorization/transport, endpoint pacing, priority arbitration and activation remain separate work.
 
 ## Overlay MVP
 

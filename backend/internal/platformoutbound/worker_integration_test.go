@@ -246,6 +246,10 @@ func TestOutboundRiverPacingSnoozeAndRestart(t *testing.T) {
 	if attempt != 0 || maxAttempts != 3 || scheduled.After(time.Unix(args.Deadline, 0).Add(100*time.Millisecond)) || receiptFor(t, product).State != "pending" || sends.Load() != 0 {
 		t.Fatal("snooze consumed attempt or claim", attempt, maxAttempts, scheduled)
 	}
+	diagnostic := snapshotOutbound(service)
+	if !diagnostic.JobRead || diagnostic.ErrorCount != 0 || diagnostic.DeadlineInMS <= 0 {
+		t.Fatalf("unreadable snoozed job metadata: %+v", diagnostic)
+	}
 	if err = pacer.Complete(t.Context(), permit.Permit, 0); err != nil {
 		t.Fatal(err)
 	}

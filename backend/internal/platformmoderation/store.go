@@ -1,5 +1,5 @@
 // Package platformmoderation retains typed moderation actions and one-use
-// pre-effect fences. It grants no effect permission and schedules no jobs.
+// pre-effect fences. It atomically schedules jobs but grants no effect permission.
 package platformmoderation
 
 import (
@@ -126,6 +126,9 @@ func (s *Store) Admit(ctx context.Context, intent platform.ModerationIntent) (st
 	}
 	if count != 1 {
 		return "", false, ErrInvalid
+	}
+	if _, err = tx.EnqueueModeration(ctx, a.ActionID); err != nil {
+		return "", false, err
 	}
 	return a.ActionID, true, tx.Commit()
 }
