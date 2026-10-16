@@ -91,72 +91,11 @@ func (a *Adapter) Authorize(ctx context.Context, t platformoutbound.Target) (pla
 	if !tenantdb.ValidID(t.TenantID) || !validUser(t.ChannelID) || t.ConnectionID != "twitch:"+t.ChannelID || (t.Capability != "chat.send" && t.Capability != "chat.reply") || !t.Deadline.After(time.Now()) {
 		return platformoutbound.Authorization{}, platformoutbound.ErrDenied
 	}
-	db, err := a.entitled(ctx, t.TenantID)
+	resolved, err := a.resolveSender(ctx, t, "user:write:chat")
 	if err != nil {
 		return platformoutbound.Authorization{}, err
 	}
-	selection, err := a.store.ChatSenderSelection(ctx, t.TenantID, t.ChannelID)
-	if err != nil {
-		return platformoutbound.Authorization{}, selectionError(err)
-	}
-	if selection.Shared && a.shared == nil || !validUser(selection.SenderID) {
-		return platformoutbound.Authorization{}, platformoutbound.ErrDenied
-	}
-	broadcaster, err := a.broadcaster(ctx, t.TenantID, t.ChannelID)
-	if err != nil {
-		return platformoutbound.Authorization{}, err
-	}
-	sender := broadcaster
-	if selection.Shared {
-		if err = a.consent(ctx, t, selection); err != nil {
-			return platformoutbound.Authorization{}, err
-		}
-		var validationErr error
-		sender, err = a.shared.Resolve(ctx, a.keys, selection.SharedBotID, selection.GrantRevision, selection.CatalogRevision, func(c tenancy.BotCredential) (tenancy.BotCredential, error) {
-			updated, e := a.credential(ctx, c, selection.SenderID)
-			validationErr = e
-			return updated, e
-		})
-		if validationErr != nil {
-			return platformoutbound.Authorization{}, validationErr
-		}
-		if err != nil {
-			return platformoutbound.Authorization{}, selectionError(err)
-		}
-		if !slices.Contains(sender.Scopes, "user:bot") {
-			return platformoutbound.Authorization{}, platformoutbound.ErrDenied
-		}
-	} else if selection.BotAccountID != "" {
-		var validationErr error
-		sender, err = a.store.ResolveBoundBotAccount(ctx, a.keys, t.TenantID, t.ChannelID, selection.BotAccountID, func(c tenancy.BotCredential) (tenancy.BotCredential, error) {
-			updated, e := a.credential(ctx, c, selection.SenderID)
-			validationErr = e
-			return updated, e
-		})
-		if validationErr != nil {
-			return platformoutbound.Authorization{}, validationErr
-		}
-		if err != nil {
-			return platformoutbound.Authorization{}, selectionError(err)
-		}
-	}
-	if !slices.Contains(sender.Scopes, "user:write:chat") {
-		return platformoutbound.Authorization{}, platformoutbound.ErrDenied
-	}
-	if sender.UserID != t.ChannelID {
-		if !slices.Contains(broadcaster.Scopes, "moderation:read") && !slices.Contains(broadcaster.Scopes, "channel:manage:moderators") {
-			return platformoutbound.Authorization{}, platformoutbound.ErrDenied
-		}
-		if err = a.reserve(ctx, db); err != nil {
-			return platformoutbound.Authorization{}, err
-		}
-		if err = a.moderator(ctx, broadcaster, t.ChannelID, sender.UserID); err != nil {
-			return platformoutbound.Authorization{}, err
-		}
-	}
-	if err = a.current(ctx, t, selection.Binding); err != nil {
-		return platformoutbound.Authorization{}, err
-	}
+	db, selection, sender := resolved.db, resolved.selection, resolved.credential
 	gates := platform.CapabilityGates{Supported: true, Granted: true, RoleAllowed: true, StateAllowed: true, Entitled: true}
 	return platformoutbound.Authorization{SenderID: sender.UserID, Binding: selection.Binding, Capabilities: platform.EvaluateCapabilities(map[platform.Capability]platform.CapabilityGates{"chat.send": gates, "chat.reply": gates}), Send: func(sendCtx context.Context, m platform.OutboundMessage) (platform.Receipt, error) {
 		rejected := platform.Receipt{ActionID: m.ActionID, Status: platform.Rejected, Failure: platform.Unauthorized}
@@ -177,6 +116,85 @@ func (a *Adapter) Authorize(ctx context.Context, t platformoutbound.Target) (pla
 		}
 		return twitchsend.SendUserMessage(sendCtx, a.client, a.config.ClientID, sender.AccessToken, sender.UserID, m)
 	}}, nil
+}
+
+// resolvedSender contains private credentials; it must never enter jobs or logs.
+type resolvedSender struct {
+	db         *tenantdb.DB
+	selection  tenancy.ChatSender
+	credential tenancy.BotCredential
+}
+
+// resolveSender shares custody/refresh/consent policy, but each caller fixes its
+// required scope after validating its own supported effect capability.
+func (a *Adapter) resolveSender(ctx context.Context, t platformoutbound.Target, scope string) (resolvedSender, error) {
+	db, err := a.entitled(ctx, t.TenantID)
+	if err != nil {
+		return resolvedSender{}, err
+	}
+	selection, err := a.store.ChatSenderSelection(ctx, t.TenantID, t.ChannelID)
+	if err != nil {
+		return resolvedSender{}, selectionError(err)
+	}
+	if selection.Shared && a.shared == nil || !validUser(selection.SenderID) {
+		return resolvedSender{}, platformoutbound.ErrDenied
+	}
+	broadcaster, err := a.broadcaster(ctx, t.TenantID, t.ChannelID)
+	if err != nil {
+		return resolvedSender{}, err
+	}
+	sender := broadcaster
+	if selection.Shared {
+		if err = a.consent(ctx, t, selection); err != nil {
+			return resolvedSender{}, err
+		}
+		var validationErr error
+		sender, err = a.shared.Resolve(ctx, a.keys, selection.SharedBotID, selection.GrantRevision, selection.CatalogRevision, func(c tenancy.BotCredential) (tenancy.BotCredential, error) {
+			updated, e := a.credential(ctx, c, selection.SenderID)
+			validationErr = e
+			return updated, e
+		})
+		if validationErr != nil {
+			return resolvedSender{}, validationErr
+		}
+		if err != nil {
+			return resolvedSender{}, selectionError(err)
+		}
+		if !slices.Contains(sender.Scopes, "user:bot") {
+			return resolvedSender{}, platformoutbound.ErrDenied
+		}
+	} else if selection.BotAccountID != "" {
+		var validationErr error
+		sender, err = a.store.ResolveBoundBotAccount(ctx, a.keys, t.TenantID, t.ChannelID, selection.BotAccountID, func(c tenancy.BotCredential) (tenancy.BotCredential, error) {
+			updated, e := a.credential(ctx, c, selection.SenderID)
+			validationErr = e
+			return updated, e
+		})
+		if validationErr != nil {
+			return resolvedSender{}, validationErr
+		}
+		if err != nil {
+			return resolvedSender{}, selectionError(err)
+		}
+	}
+	if !slices.Contains(sender.Scopes, scope) {
+		return resolvedSender{}, platformoutbound.ErrDenied
+	}
+	if sender.UserID != t.ChannelID {
+		if !slices.Contains(broadcaster.Scopes, "moderation:read") && !slices.Contains(broadcaster.Scopes, "channel:manage:moderators") {
+			return resolvedSender{}, platformoutbound.ErrDenied
+		}
+		if err = a.reserve(ctx, db); err != nil {
+			return resolvedSender{}, err
+		}
+		if err = a.moderator(ctx, broadcaster, t.ChannelID, sender.UserID); err != nil {
+			return resolvedSender{}, err
+		}
+	}
+	if err = a.current(ctx, t, selection.Binding); err != nil {
+		return resolvedSender{}, err
+	}
+	return resolvedSender{db: db, selection: selection, credential: sender}, nil
 }
 
 func selectionError(err error) error {

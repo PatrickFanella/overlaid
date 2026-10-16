@@ -28,6 +28,7 @@ type provider struct {
 	mode                                 string
 	moderator                            bool
 	sends, validations, refreshes, roles int
+	moderations                          int
 	scopes                               map[string][]string
 	sentSender, sentChannel              string
 }
@@ -121,6 +122,26 @@ func (p *provider) RoundTrip(r *http.Request) (*http.Response, error) {
 		p.sentSender = body.SenderID
 		p.sentChannel = body.ChannelID
 		return response(200, `{"data":[{"message_id":"sent-fixture","is_sent":true}]}`), nil
+	case "api.twitch.tv/helix/moderation/chat", "api.twitch.tv/helix/moderation/bans":
+		p.moderations++
+		p.sentSender, p.sentChannel = r.URL.Query().Get("moderator_id"), r.URL.Query().Get("broadcaster_id")
+		prefix := map[string]string{"456": "host", "123": "bot", "999": "shared"}[p.sentSender]
+		if prefix == "" || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer "+prefix) || p.sentChannel != "456" {
+			return response(401, `{"message":"PRIVATE wrong credential"}`), nil
+		}
+		if r.Method == http.MethodDelete {
+			return response(204, ""), nil
+		}
+		var body struct {
+			Data struct {
+				UserID string `json:"user_id"`
+			} `json:"data"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil {
+			return response(400, ""), nil
+		}
+		raw, _ := json.Marshal(map[string]any{"data": []any{map[string]string{"broadcaster_id": p.sentChannel, "moderator_id": p.sentSender, "user_id": body.Data.UserID}}})
+		return response(200, string(raw)), nil
 	default:
 		return nil, errors.New("unexpected provider request")
 	}

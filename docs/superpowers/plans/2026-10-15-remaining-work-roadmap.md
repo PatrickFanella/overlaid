@@ -137,3 +137,7 @@ The merged P2.1 revision `de6a449` has a hosted race-test failure in the existin
 ## P2.2 typed moderation transport — #97
 
 [Issue #97](https://git.subcult.tv/subculture-collective/overlaid/issues/97) adds an unregistered [single-attempt Twitch moderation transport](../../runbooks/twitch-moderation.md) after merged scheduling PR #96. It maps delete/timeout/ban/unban to typed moderation receipts, preserves cancellation and original request bounds, refuses redirects/replayable bodies, and treats ambiguous results as uncertain. Fresh subject/scope/role/consent authorization, endpoint pacing, ledger execution, the dedicated moderation worker, mixed-priority arbitration and opt-in registry integration remain unfinished. This transport does not activate moderation effects or complete P2.2.
+
+## P2.2 moderation authorization — #99
+
+[Issue #99](https://git.subcult.tv/subculture-collective/overlaid/issues/99) adds [fresh selected-identity moderation authorization](../../runbooks/twitch-moderation-authorization.md) after merged transport PR #98. Broadcaster, own and shared bots use the existing custody/refresh boundary with moderation-specific scopes and exact shared capability consent. Invocation rechecks identity, binding, role, scope, plan and consent, and binds the exact private action. This callback is not a pacing permit or one-use ledger fence. Endpoint pacing, fenced moderation execution, the dedicated worker, mixed-priority arbitration and opt-in registry integration remain unfinished.
