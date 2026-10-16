@@ -1,10 +1,25 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestTenantRuntimeLimitConfiguration(t *testing.T) {
+	for _, test := range []struct {
+		input string
+		want  int
+	}{{"", 100}, {"1000", 1000}, {"1", 1}, {"0", -1}, {"invalid", -1}, {"-1", -1}, {"1001", 1001}} {
+		t.Run(fmt.Sprintf("input-%s", test.input), func(t *testing.T) {
+			t.Setenv("TENANT_RUNTIME_LIMIT", test.input)
+			if got := Load().TenantRuntimeLimit; got != test.want {
+				t.Fatal("runtime limit parse", got, test.want)
+			}
+		})
+	}
+}
 
 func TestTwitchScopeDefaultsMatchDeployment(t *testing.T) {
 	t.Setenv("TWITCH_SCOPES", "")

@@ -16,6 +16,7 @@ type Config struct {
 	NewsroomDiscordWebhook    string
 	NewsroomAIModel           string
 	DeploymentMode            string
+	TenantRuntimeLimit        int
 	VaultKeys                 string
 	VaultActiveKey            string
 	ProductName               string
@@ -63,6 +64,7 @@ func Load() Config {
 		NewsroomAIModel:           env("NEWSROOM_AI_MODEL", "claude-haiku-4-5-20251001"),
 		NewsroomFile:              env("NEWSROOM_FILE", "/data/newsroom.json"),
 		DeploymentMode:            env("DEPLOYMENT_MODE", "selfhost"),
+		TenantRuntimeLimit:        runtimeLimit(),
 		VaultKeys:                 env("VAULT_KEYS", ""),
 		VaultActiveKey:            env("VAULT_ACTIVE_KEY", "v1"),
 		ProductName:               env("PRODUCT_NAME", "overlaid"),
@@ -99,6 +101,18 @@ func Load() Config {
 		MPRISPlayerPriority:       envSplit("MPRIS_PLAYER_PRIORITY", []string{"Feishin", "mpv", "cliamp", "ferrosonic", "playerctld", "vivaldi"}),
 		MPRISPollInterval:         envDuration("MPRIS_POLL_INTERVAL", 2*time.Second),
 	}
+}
+
+func runtimeLimit() int {
+	raw := strings.TrimSpace(os.Getenv("TENANT_RUNTIME_LIMIT"))
+	if raw == "" {
+		return 100
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit == 0 {
+		return -1 // Keep invalid explicit input distinct from a zero-value Config.
+	}
+	return limit
 }
 
 func env(key, fallback string) string {

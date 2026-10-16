@@ -23,7 +23,8 @@ const bootstrapAccount = "00000000-0000-4000-8000-000000000002"
 const sessionCookie = "overlaid_session"
 const csrfCookie = "overlaid_csrf"
 const oauthCookie = "overlaid_oauth"
-const maxTenantRuntimes = 100
+const defaultTenantRuntimeLimit = 100
+const maxTenantRuntimeLimit = 1000
 
 type tenantTrustKey struct{}
 type tenantTrust struct {
@@ -62,6 +63,12 @@ type Application struct {
 }
 
 func NewApplication(cfg config.Config) (*Application, error) {
+	if cfg.TenantRuntimeLimit == 0 {
+		cfg.TenantRuntimeLimit = defaultTenantRuntimeLimit
+	}
+	if cfg.TenantRuntimeLimit < 1 || cfg.TenantRuntimeLimit > maxTenantRuntimeLimit {
+		return nil, errors.New("TENANT_RUNTIME_LIMIT must be between 1 and 1000")
+	}
 	if cfg.TwitchChatDispatchMode == "" {
 		cfg.TwitchChatDispatchMode = "legacy"
 	}
@@ -249,7 +256,7 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	if r, ok := a.runtimes[id]; ok {
 		return r.server, nil
 	}
-	if len(a.runtimes) >= maxTenantRuntimes {
+	if len(a.runtimes) >= a.config.TenantRuntimeLimit {
 		a.runtimeCapacityBlocked = true
 		return nil, errors.New("active tenant runtime capacity reached")
 	}
@@ -311,7 +318,7 @@ func (a *Application) invalidate(id string) {
 		a.releaseSendGateLocked(id, r.server.chatSendGate)
 		delete(a.runtimes, id)
 	}
-	if len(a.runtimes) < maxTenantRuntimes {
+	if len(a.runtimes) < a.config.TenantRuntimeLimit {
 		a.runtimeCapacityBlocked = false
 	}
 	delete(a.overlayKeys, id)
@@ -544,7 +551,7 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	failed := a.sweepError || !a.sweepRan || time.Since(a.sweepAt) > 3*time.Minute
 	count := len(a.runtimes)
-	capacityBlocked := a.runtimeCapacityBlocked && count >= maxTenantRuntimes
+	capacityBlocked := a.runtimeCapacityBlocked && count >= a.config.TenantRuntimeLimit
 	a.mu.Unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -592,7 +599,7 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		checks = append(checks, map[string]string{"name": "chat_outbound", "status": outbound})
 	}
-	writeJSON(w, map[string]any{"status": status, "checks": checks, "productName": a.config.ProductName, "deploymentMode": a.config.DeploymentMode, "activeRuntimes": count})
+	writeJSON(w, map[string]any{"status": status, "checks": checks, "productName": a.config.ProductName, "deploymentMode": a.config.DeploymentMode, "activeRuntimes": count, "runtimeLimit": a.config.TenantRuntimeLimit})
 }
 func controlError(w http.ResponseWriter, err error) {
 	if errors.Is(err, tenancy.ErrDenied) || errors.Is(err, sql.ErrNoRows) {
