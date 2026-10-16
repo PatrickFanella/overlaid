@@ -83,7 +83,7 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[platform.ChatSendArgs]
 	}
 	deadline := time.Unix(job.Args.Deadline, 0)
 	if !deadline.After(time.Now()) {
-		return river.JobCancel(errors.New("outbound_deadline_elapsed"))
+		return w.expire(ctx, job.Args)
 	}
 	if err != nil {
 		return errors.New("outbound_prepare_unavailable")
@@ -103,9 +103,19 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[platform.ChatSendArgs]
 	}
 	delay := time.Until(retry)
 	if delay <= 0 {
-		return river.JobCancel(errors.New("outbound_deadline_elapsed"))
+		return w.expire(ctx, job.Args)
 	}
 	return river.JobSnooze(delay)
+}
+
+// Job deadlines are conservative whole-second bounds. Terminalize the pending
+// ledger too, even when its original timestamp still has a fractional second.
+// This bookkeeping never takes a send claim or changes an existing claim.
+func (w *Worker) expire(ctx context.Context, args platform.ChatSendArgs) error {
+	if err := w.executor.expirePendingJob(ctx, args); err != nil {
+		return errors.New("outbound_expiry_bookkeeping_unavailable")
+	}
+	return river.JobCancel(errors.New("outbound_deadline_elapsed"))
 }
 
 // NextRetry bounds infrastructure retries; it never extends an action's life.
