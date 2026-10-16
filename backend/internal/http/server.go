@@ -30,6 +30,7 @@ import (
 
 type Server struct {
 	platformIngest            *platformingest.Store
+	retainedReplies           *registryReplyAdmission
 	chatReady                 func() bool
 	retainedChatGate          chan struct{}
 	chatSendGate              chan struct{}

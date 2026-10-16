@@ -65,6 +65,9 @@ func (s *Server) sendTwitchChatMessage(ctx context.Context, message string) (str
 }
 
 func (s *Server) sendTwitchChatAction(ctx context.Context, actionID, message string) (string, error) {
+	if s.retainedReplies != nil {
+		return "", s.collectRegistryReply(ctx, actionID, message)
+	}
 	if s.chatSendGate != nil {
 		release, err := acquireGate(ctx, s.chatSendGate)
 		if err != nil {
