@@ -73,6 +73,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/bot/moderation/rules", s.requireOperator(s.botModerationRuleSave))
 	s.mux.HandleFunc("DELETE /api/bot/moderation/rules/{id}", s.requireOperator(s.botModerationRuleDelete))
 	s.mux.HandleFunc("POST /api/bot/moderation/dry-run", s.requireOperator(s.botModerationDryRun))
+	s.mux.HandleFunc("GET /api/bot/moderation/action", s.requireOperator(s.botModerationPreview))
 	s.mux.HandleFunc("POST /api/bot/moderation/action", s.requireOperator(s.botModerationAction))
 	s.mux.HandleFunc("POST /api/bot/moderation/nuke/dry-run", s.requireOperator(s.botModerationNukeDryRun))
 	s.mux.HandleFunc("POST /api/bot/moderation/nuke/execute", s.requireOperator(s.botModerationNukeExecute))

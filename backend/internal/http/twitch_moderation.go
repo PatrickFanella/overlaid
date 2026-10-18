@@ -11,6 +11,12 @@ import (
 const twitchModerationEndpoint = "https://api.twitch.tv/helix/moderation"
 
 type botModerationActionRequest struct {
+	Mode            string `json:"mode,omitempty"`
+	TenantID        string `json:"tenantId,omitempty"`
+	ActorID         string `json:"actorId,omitempty"`
+	ConnectionID    string `json:"connectionId,omitempty"`
+	RequestKey      string `json:"requestKey,omitempty"`
+	Retry           bool   `json:"retry,omitempty"`
 	Action          string `json:"action"`
 	TargetUserID    string `json:"targetUserId"`
 	TargetUserLogin string `json:"targetUserLogin"`
@@ -26,8 +32,12 @@ type botModerationActionResponse struct {
 }
 
 func (s *Server) botModerationAction(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	var request botModerationActionRequest
 	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if s.operatorModerationAction(w, r, request) {
 		return
 	}
 	result, err := s.executeTwitchModerationAction(r.Context(), request)

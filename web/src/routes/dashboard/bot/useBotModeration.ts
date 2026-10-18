@@ -1,16 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  deleteBotModerationRule, dryRunBotModeration, dryRunBotNuke, executeBotModerationAction,
+  deleteBotModerationRule, dryRunBotModeration, dryRunBotNuke,
   executeBotNuke, fetchBotModerationRules, rollbackBotNukeRadiation, saveBotModerationRule,
   type BotModerationActionResponse, type BotModerationDryRunResponse, type BotModerationRule,
   type BotModerationRulesResponse, type BotNukeDryRunResponse, type BotNukeExecuteResponse,
 } from '../../../lib/api';
+import { useAccount } from '../accountSession';
+import { clearModerationIntent, hasModerationIntent, moderationIntentKey, runModerationIntent } from '../../../lib/moderationIntent';
 import { defaultModerationAction, defaultModerationDraft, defaultModerationTest, defaultNukeDraft, type NukeDraft } from './types';
 
 type Operation = 'save' | 'delete' | 'dry-run' | 'action' | 'nuke-plan' | 'nuke-execute' | 'nuke-rollback';
 function message(error: unknown) { return error instanceof Error ? error.message : 'Moderation operation unavailable'; }
 
 export function useBotModeration(apiBaseUrl: string, operatorSecret: string, onChange: () => Promise<void>) {
+  const { account } = useAccount();
+  const scope = {baseUrl:apiBaseUrl, tenantId:account.activeTenantId || 'selfhost-file', actorId:account.accountId || '00000000-0000-4000-8000-000000000002'};
+  const scopeKey = moderationIntentKey(scope);
+  const [unresolvedAction, setUnresolvedAction] = useState(false);
+  const [checkedAction, setCheckedAction] = useState(false);
   const [rules, setRules] = useState<BotModerationRulesResponse | null>(null);
   const [draft, setDraft] = useState(defaultModerationDraft);
   const [test, setTest] = useState(defaultModerationTest);
@@ -34,14 +41,17 @@ export function useBotModeration(apiBaseUrl: string, operatorSecret: string, onC
     busy.current = false;
     setRules(null); setLoading(true); setPending(null); setError(''); setResult(''); setNukeError('');
     setDraft(defaultModerationDraft); setTest(defaultModerationTest); setDryRun(null);
-    setActionDraft(defaultModerationAction); setActionResult(null);
+    setActionDraft(defaultModerationAction); setActionResult(null); setCheckedAction(false);
+    try { setUnresolvedAction(hasModerationIntent(scope, window.sessionStorage)); }
+    catch { setUnresolvedAction(true); setError('Saved moderation requests are unavailable. Check Twitch before starting another action.'); }
     setNukeDraft(defaultNukeDraft); setNukeResult(null); setNukeExecuteResult(null); setNukeRollbackResult('');
     void fetchBotModerationRules(apiBaseUrl, operatorSecret).then(
       (loaded) => { if (current === generation.current) { setRules(loaded); setLoading(false); } },
       (failure: unknown) => { if (current === generation.current) { setRules({ rules: [], loadError: message(failure) }); setLoading(false); } },
     );
     return () => { generation.current += 1; };
-  }, [apiBaseUrl, operatorSecret]);
+  // scopeKey includes API, workspace and account identity.
+  }, [apiBaseUrl, operatorSecret, scopeKey]);
 
   function updateRule(rule: BotModerationRule) {
     setRules((previous) => ({ ...previous, rules: [...(previous?.rules ?? []).filter((item) => item.id !== rule.id), rule].sort((a, b) => a.name.localeCompare(b.name)) }));
@@ -85,7 +95,12 @@ export function useBotModeration(apiBaseUrl: string, operatorSecret: string, onC
 
   return {
     rules, draft, test, dryRun, actionDraft, actionResult, nukeDraft, nukeResult, nukeExecuteResult, nukeRollbackResult,
-    loading, pending, error, result, nukeError,
+    loading, pending, error, result, nukeError, unresolvedAction, checkedAction,
+    onClearAction: () => {
+      if (busy.current || !checkedAction) return;
+      try { clearModerationIntent(scope, window.sessionStorage); setUnresolvedAction(false); setCheckedAction(false); setActionResult(null); }
+      catch { setError('The saved moderation request could not be cleared.'); }
+    },
     onDraftChange: setDraft,
     onEdit: (rule: BotModerationRule) => {
       if (busy.current) return;
@@ -97,7 +112,7 @@ export function useBotModeration(apiBaseUrl: string, operatorSecret: string, onC
       });
     },
     onTestChange: (next: typeof test) => { if (!busy.current) { setTest(next); setDryRun(null); } },
-    onActionChange: (next: typeof actionDraft) => { if (!busy.current) { setActionDraft(next); setActionResult(null); } },
+    onActionChange: (next: typeof actionDraft) => { if (!busy.current && !unresolvedAction) { setActionDraft(next); setActionResult(null); } },
     onNukeDraftChange,
     onSave: () => {
       if (loading || busy.current) return;
@@ -116,7 +131,18 @@ export function useBotModeration(apiBaseUrl: string, operatorSecret: string, onC
     onAction: () => {
       if (busy.current) return;
       setActionResult(null);
-      return perform('action', () => executeBotModerationAction(actionDraft, apiBaseUrl, operatorSecret), setActionResult, true);
+      const actionGeneration = generation.current;
+      return perform('action', async () => {
+        try { return await runModerationIntent(scope, actionDraft, operatorSecret, window.sessionStorage); }
+        finally {
+          // perform's generation fence also protects scope changes during await.
+          if (generation.current === actionGeneration) {
+            setCheckedAction(true);
+            try { setUnresolvedAction(hasModerationIntent(scope, window.sessionStorage)); }
+            catch { setUnresolvedAction(true); }
+          }
+        }
+      }, setActionResult, true);
     },
     onNukeDryRun: () => {
       if (busy.current) return;

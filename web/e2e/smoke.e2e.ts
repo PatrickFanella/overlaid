@@ -854,13 +854,17 @@ test.describe('operator browser smoke', () => {
         await route.fulfill({ json: { matches: [{ ruleName: 'fixture_rule', action: 'flag' }] } });
         return;
       }
+      if (path.endsWith('/moderation/action') && method === 'GET') {
+        await route.fulfill({ json: {mode:'retained',tenantId:'selfhost-file',actorId:'00000000-0000-4000-8000-000000000002',connectionId:'twitch:123'} }); return;
+      }
       if (path.endsWith('/moderation/action')) {
         actions += 1;
         if (actions === 1) await route.fulfill({ status: 503, body: 'Twitch unavailable' });
         else {
           await actionReady;
           auditUnavailable = true;
-          await route.fulfill({ json: { action: 'timeout', result: 'failed', reason: 'missing_scope' } });
+          const sourceId='a'.repeat(64),actionId='b'.repeat(64);
+          await route.fulfill({ json: {mode:'retained',state:'rejected',queued:false,receipt:{sourceId,actionIds:[actionId],deadline:'2026-10-17T10:00:00Z',receipts:[{actionId,manualSourceId:sourceId,connectionId:'twitch:123',capability:'user.timeout',eventId:'',state:'rejected',code:'rejected',failure:'unauthorized'}]}} });
         }
         return;
       }
@@ -893,11 +897,11 @@ test.describe('operator browser smoke', () => {
     await expect(panel.getByLabel('Target user ID')).toHaveValue('fixture-user');
     await expect(page.getByText('dashboard · manual_action_failed')).toBeVisible();
     await expect(page.locator('#bot-nuke').getByRole('alert')).toHaveCount(0);
-    await panel.getByRole('button', { name: 'Run guarded action' }).click();
-    await expect(panel.getByRole('button', { name: 'Running…' })).toBeDisabled();
+    await panel.getByRole('button', { name: 'Check action status' }).click();
+    await expect(panel.getByRole('button', { name: 'Checking…' })).toBeDisabled();
     await expect(panel.getByLabel('Target user ID')).toBeDisabled();
     releaseAction();
-    const receipt = panel.getByText('timeout failed · missing_scope', { exact: true });
+    const receipt = panel.getByText('timeout rejected', { exact: true });
     await expect(receipt).toBeVisible();
     await expect(receipt).toHaveClass(/bad/);
     await expect(panel.getByRole('alert')).toContainText('Operation completed. Status/audit refresh failed:');

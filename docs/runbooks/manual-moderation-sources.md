@@ -1,6 +1,6 @@
 # Durable operator moderation occurrences
 
-Tracking: [#173](https://git.subcult.tv/subculture-collective/overlaid/issues/173), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). `platformmoderation.Store.AdmitManual` is an internal store boundary for authenticated single and batch moderation requests. HTTP admission, dashboard/nuke wiring, asynchronous owner status and configured startup remain unfinished. No default constructor opens a moderation pool or registers a worker.
+Tracking: [#173](https://git.subcult.tv/subculture-collective/overlaid/issues/173), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). `platformmoderation.Store.AdmitManual` is an internal store boundary for authenticated single and batch moderation requests. The [single-action HTTP/UI path](operator-moderation-requests.md) now uses this store and exposes queued/terminal status. Nuke-batch wiring and configured startup remain unfinished. No default constructor opens a moderation pool or registers a worker.
 
 ## Identity and admission
 
@@ -22,4 +22,4 @@ Sources belong to tenant membership and connection through cascading composite r
 
 `TestManualModeration*` covers concurrent duplicates, immutable conflicts, terminal no-replay, a 50-action batch, reordered retries, whole-batch job rollback, permission changes, connection/plan refusal, old retained delete targets, metadata exports, lifecycle cascades, tenant/role isolation, shared action bounds, a real River worker with synthetic transport, and additive migration rollback/compatibility. The full disposable PostgreSQL gate is `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh`.
 
-The [source-bound chat admission bridge](moderation-admission.md) and [routing owner](moderation-routing.md) remain separate callers. The next unit must bind authenticated operator HTTP requests and nuke planning to stable occurrences and expose queued/terminal status. It must preserve ownership refusal, avoid direct fallback, and coordinate all effect paths before any configured moderation activation. These fixtures establish neither live Twitch effects nor broader fairness/scale acceptance.
+The [source-bound chat admission bridge](moderation-admission.md) and [routing owner](moderation-routing.md) remain separate callers. The next unit must bind nuke planning and radiation mutations to stable batch occurrences. It must preserve ownership refusal, avoid direct fallback, and coordinate all effect paths before any configured moderation activation. These fixtures establish neither live Twitch effects nor broader fairness/scale acceptance.

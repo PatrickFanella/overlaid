@@ -27,7 +27,7 @@ export function BotModerationPanel({
   onSave, onEdit,
   onDelete,
   onDryRun,
-  onAction,
+  onAction, onClearAction, unresolvedAction, checkedAction,
   onNukeDryRun,
   onNukeExecute,
   onNukeRollback,
@@ -119,7 +119,8 @@ export function BotModerationPanel({
           </SubPanel>
 
           <SubPanel title="Manual Twitch moderation action">
-            <p className="desk-row__text">Requires Twitch moderation scopes. Use only after dry-run evidence. Failed and successful attempts are written to bot audit.</p>
+            <p className="desk-row__text">Requires Twitch moderation scopes. Use only after dry-run evidence. Queued acceptance is separate from Twitch delivery. Unresolved requests remain saved in this browser tab.</p>
+            <fieldset disabled={unresolvedAction} className="contents">
             <div className="grid gap-3 md:grid-cols-[9rem_1fr_1fr_8rem]">
               <Field label="Action">
                 <select className="desk-input" value={actionDraft.action} onChange={(event) => onActionChange({ ...actionDraft, action: event.target.value as ModerationActionDraft['action'] })}>
@@ -142,12 +143,16 @@ export function BotModerationPanel({
             <Field label="Reason">
               <input className="desk-input" value={actionDraft.reason} onChange={(event) => onActionChange({ ...actionDraft, reason: event.target.value })} placeholder="reason" />
             </Field>
+            </fieldset>
+            {unresolvedAction ? <p className="desk-note">A saved action is unresolved. Status checks use its original input. Check Twitch before clearing it; clearing does not cancel queued work.</p> : null}
             <div className="flex flex-wrap items-center gap-3">
               <button className="desk-btn desk-btn--danger" type="button" onClick={onAction}>
-                {pending === 'action' ? 'Running…' : 'Run guarded action'}
+                {pending === 'action' ? 'Checking…' : unresolvedAction ? 'Check action status' : 'Run guarded action'}
               </button>
-              {actionResult ? <Tag tone={actionResult.result === 'allowed' ? 'ok' : 'bad'}>{actionResult.action} {actionResult.result}{actionResult.reason ? ` · ${actionResult.reason}` : ''}</Tag> : null}
+              {unresolvedAction ? <button className="desk-btn desk-btn--ghost" type="button" disabled={!checkedAction} onClick={onClearAction}>I checked Twitch — clear saved request</button> : null}
+              {actionResult ? <Tag tone={actionResult.result === 'delivered' ? 'ok' : actionResult.result === 'pending' || actionResult.result === 'running' ? 'warn' : 'bad'}>{actionResult.action} {actionResult.result}</Tag> : null}
             </div>
+            {actionResult?.reason ? <p className="desk-note" role="status">{actionResult.reason}</p> : null}
           </SubPanel>
 
           {!loading && !rules?.loadError && items.length === 0 ? (

@@ -14,14 +14,14 @@ The October 16 source inventory follows every non-test call to `executeTwitchMod
 
 | Entry | Current effect boundary | Required retained binding |
 | --- | --- | --- |
-| Dashboard `/api/bot/moderation/action` | `twitch_moderation.go` calls the central workflow directly | A durable authorized operator occurrence and stable retry identity; the request currently has no canonical chat source. |
+| Dashboard `/api/bot/moderation/action` | Explicit owners use the single-action operator-source path; otherwise the central direct workflow remains | #175 binds trusted account/workspace/channel/mode, stable request identity and receipt-only status. |
 | Dashboard nuke execution | `moderationWorkflow.executeNuke` calls the same boundary for up to 50 history matches | A durable batch occurrence and per-target keys, bounded admission and queued-status reporting. Existing history lookback can exceed the chat source's two-minute deadline. |
 | Automatic enforced rules | With an explicit owner, the first non-exempt match uses retained admission; otherwise it uses the central direct boundary | The actual retained dispatch source and saved rule key are bound by #169. Flag-only matches remain audit-only. |
 | Nuke radiation enforcement | The saved temporary rule uses the same automatic enforcement path | #169 binds the retained source and saved radiation rule; disable/expiry prevents future matches. |
 
 The three low-level Helix helpers are called only by the central workflow in this inventory. Rule configuration, dry-run matching and radiation rollback do not send moderation effects. Recheck these call sites when cutover starts rather than treating this inventory as a permanent guarantee.
 
-The [operator-source store](manual-moderation-sources.md) now provides durable single/batch occurrences without fabricated chat events or renewed chat deadlines. The next units must wire authenticated HTTP and nuke planning to that store, expose pending/terminal moderation status separately from synchronous acceptance, and compose opt-in startup with persisted compatibility/downgrade guards. Explicit ownership already refuses unbound direct/dashboard/batch effects, including nuke execution before radiation creation. All effect paths must select the retained boundary together when enabled. Admission or execution failures must never fall back to direct broadcaster transport. Default legacy behavior remains unchanged until that coordinated cutover is implemented and qualified.
+The [operator-source store](manual-moderation-sources.md) now provides durable single/batch occurrences without fabricated chat events or renewed chat deadlines. The [single-action HTTP/UI path](operator-moderation-requests.md) now binds authenticated requests to that store and exposes pending/terminal status separately from synchronous acceptance. The next units must bind nuke planning/radiation and compose opt-in startup with persisted compatibility/downgrade guards. Explicit ownership already refuses unbound direct/dashboard/batch effects, including nuke execution before radiation creation. All effect paths must select the retained boundary together when enabled. Admission or execution failures must never fall back to direct broadcaster transport. Default legacy behavior remains unchanged until that coordinated cutover is implemented and qualified.
 
 ## Verification
 

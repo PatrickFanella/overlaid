@@ -20,7 +20,7 @@ With an installed owner, enforcement verifies the projection binding and calls r
 
 Successful admission records `moderation_queued` in the existing system/rule audit. This describes queue acceptance, not provider delivery. Provider outcome remains in the separate typed moderation ledger. An admission or bound-owner failure returns through publication to the retained dispatch handler, which records its fixed failure receipt. Chat/history publication may already have happened. The handler-start fence still forbids automatic replay, and no failed retained operation falls back to direct transport.
 
-Dashboard single actions and nuke batches remain unavailable while an explicit owner is installed until their HTTP/planning callers use the [durable operator-source store](manual-moderation-sources.md). Dry-run matching, rule configuration and radiation disable/rollback do not send effects and retain their current behavior. Operator/batch caller wiring, owner-facing asynchronous status, persisted compatibility/downgrade guards and configured all-path startup must be completed before production opt-in activation.
+Dashboard single actions use the [saved-request and receipt-only path](operator-moderation-requests.md) under an explicit owner. Nuke batches remain unavailable under that owner until their planning callers use the [durable operator-source store](manual-moderation-sources.md). Dry-run matching, rule configuration and radiation disable/rollback do not send effects and retain their current behavior. Nuke-batch caller wiring, persisted compatibility/downgrade guards and configured all-path startup must be completed before production opt-in activation.
 
 ## Verification
 
