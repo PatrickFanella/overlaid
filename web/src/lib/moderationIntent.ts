@@ -50,7 +50,7 @@ async function run(scope: Scope, payload: BotModerationActionPayload, secret: st
   }
   const response = object(await request('POST', { ...intent.payload, mode: intent.mode, tenantId: scope.tenantId, actorId: scope.actorId, connectionId: intent.connectionId, requestKey: intent.requestKey, retry: raw !== null }));
   if (intent.mode === 'direct') {
-    if (response.action !== intent.payload.action || response.result !== 'allowed') throw new Error(invalid);
+    if (response.action !== intent.payload.action || response.result !== 'accepted' || response.reason !== 'twitch_helix') throw new Error(invalid);
     storage.removeItem(key);
     return { action: intent.payload.action, result: 'delivered', reason: 'Twitch confirmed this action.' };
   }

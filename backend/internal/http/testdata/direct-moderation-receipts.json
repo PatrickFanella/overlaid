@@ -1,0 +1,22 @@
+{
+  "delete": {
+    "action": "delete",
+    "result": "accepted",
+    "reason": "twitch_helix"
+  },
+  "timeout": {
+    "action": "timeout",
+    "result": "accepted",
+    "reason": "twitch_helix"
+  },
+  "ban": {
+    "action": "ban",
+    "result": "accepted",
+    "reason": "twitch_helix"
+  },
+  "unban": {
+    "action": "unban",
+    "result": "accepted",
+    "reason": "twitch_helix"
+  }
+}
