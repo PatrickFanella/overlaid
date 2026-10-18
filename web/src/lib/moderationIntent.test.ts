@@ -1,3 +1,4 @@
+import directReceiptFixture from '../../../backend/internal/http/testdata/direct-moderation-receipts.json?raw';
 import { afterEach, expect, it, vi } from 'vitest';
 import { clearModerationIntent, hasModerationIntent, moderationIntentKey, runModerationIntent } from './moderationIntent';
 const scope = {baseUrl:'http://example.test',tenantId:'workspace-a',actorId:'actor-a'};
@@ -42,4 +43,19 @@ it('direct ambiguity cannot replay and explicit acknowledgment is required',asyn
 it('deduplicates concurrent clicks and preserves contradictory failures',async()=>{
  const saved=storage();const value=status('delivered');const fetch=vi.fn().mockResolvedValueOnce(response(preview)).mockResolvedValueOnce(response({...value,receipt:{...value.receipt,receipts:[{...value.receipt.receipts[0],failure:'unauthorized'}]}}));vi.stubGlobal('fetch',fetch);
  const first=runModerationIntent(scope,payload,'',saved),second=runModerationIntent(scope,payload,'',saved);expect(first).toBe(second);await expect(first).rejects.toThrow('could not be confirmed');expect(hasModerationIntent(scope,saved)).toBe(true);
+});
+
+it('recognizes actual direct HTTP receipts for all four actions and clears only confirmed work',async()=>{
+ const receipts=JSON.parse(directReceiptFixture) as Record<string,unknown>;
+ for(const action of ['delete','timeout','ban','unban'] as const) {
+  const saved=storage();const fetch=vi.fn().mockResolvedValueOnce(response({...preview,mode:'direct'})).mockResolvedValueOnce(response(receipts[action]));vi.stubGlobal('fetch',fetch);
+  const result=await runModerationIntent(scope,{...payload,action},'',saved);
+  expect(result.result).toBe('delivered');expect(result.action).toBe(action);expect(hasModerationIntent(scope,saved)).toBe(false);expect(fetch).toHaveBeenCalledTimes(2);
+ }
+});
+it('does not interpret audit labels, failed, queued, or wrong-action direct responses as completion',async()=>{
+ for(const value of [{action:'timeout',result:'allowed'},{action:'timeout',result:'failed'},{action:'timeout',result:'pending'},status('pending'),{action:'ban',result:'accepted',reason:'twitch_helix'},{action:'timeout',result:'accepted',reason:'queued'}]) {
+  const saved=storage();const fetch=vi.fn().mockResolvedValueOnce(response({...preview,mode:'direct'})).mockResolvedValueOnce(response(value));vi.stubGlobal('fetch',fetch);
+  await expect(runModerationIntent(scope,payload,'',saved)).rejects.toThrow('could not be confirmed');expect(hasModerationIntent(scope,saved)).toBe(true);
+ }
 });

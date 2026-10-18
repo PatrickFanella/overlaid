@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -19,6 +20,14 @@ import (
 )
 
 func TestManualModerationScopePayloadAndAuditContracts(t *testing.T) {
+	raw, err := os.ReadFile("testdata/direct-moderation-receipts.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipts map[string]botModerationActionResponse
+	if err := json.Unmarshal(raw, &receipts); err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		action, scope, method, path string
 		status                      int
@@ -104,6 +113,16 @@ func TestManualModerationScopePayloadAndAuditContracts(t *testing.T) {
 				}
 				if rec.Code != wantStatus {
 					t.Fatalf("status = %d, want %d: %s", rec.Code, wantStatus, rec.Body.String())
+				}
+				if outcome == "accepted" {
+					var actual botModerationActionResponse
+					if err := json.Unmarshal(rec.Body.Bytes(), &actual); err != nil {
+						t.Fatal(err)
+					}
+					expected, ok := receipts[tc.action]
+					if !ok || actual != expected {
+						t.Fatalf("direct HTTP receipt = %#v, shared browser fixture = %#v", actual, expected)
+					}
 				}
 				wantCalls := 1
 				if outcome == "operator_denied" || outcome == "missing_scope" {

@@ -833,6 +833,41 @@ test.describe('operator browser smoke', () => {
     expect(deletes).toBe(2);
   });
 
+  test('resolves confirmed direct moderation and clears its saved browser intent', async ({ page }) => {
+    const receipts = JSON.parse(await readFile(new URL('../../backend/internal/http/testdata/direct-moderation-receipts.json', import.meta.url), 'utf8'));
+    let attempts = 0;
+    await page.route('**/api/**', async route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/account') { await route.fulfill({status:404,body:'legacy fixture'}); return; }
+      if (path === '/api/bot/moderation/action') {
+        if (route.request().method() === 'GET') {
+          await route.fulfill({json:{mode:'direct',tenantId:'selfhost-file',actorId:'00000000-0000-4000-8000-000000000002',connectionId:'twitch:123'}}); return;
+        }
+        const body = route.request().postDataJSON();
+        expect(body.retry).toBe(false);
+        expect(body.action).toBe('timeout');
+        attempts++;
+        await route.fulfill({json:receipts.timeout}); return;
+      }
+      const responses: Record<string,unknown> = {status:{available:true,commandCount:0,timerCount:0,counterCount:0,quoteCount:0,auditCount:0},rules:{rules:[]},commands:{commands:[]},timers:{timers:[]},counters:{counters:[]},quotes:{quotes:[]},'api-variables':{variables:[]},audit:{events:[]}};
+      if (path.startsWith('/api/bot/')) { await route.fulfill({json:responses[path.split('/').at(-1)!] ?? {}}); return; }
+      await route.fulfill({status:503,body:'unrelated browser fixture'});
+    });
+    await page.goto('/dashboard/chat');
+    const panel=page.locator('#bot-moderation');
+    await panel.getByLabel('Target user ID').fill('777');
+    await panel.getByRole('button',{name:'Run guarded action'}).click();
+    await expect(panel.getByText('timeout delivered',{exact:true})).toBeVisible();
+    await expect(panel.getByRole('status')).toHaveText('Twitch confirmed this action.');
+    await expect(panel.getByRole('button',{name:'Run guarded action'})).toBeEnabled();
+    await expect(panel.getByRole('button',{name:'Check action status'})).toHaveCount(0);
+    expect(attempts).toBe(1);
+    await page.reload();
+    await expect(panel.getByRole('button',{name:'Run guarded action'})).toBeVisible();
+    await expect(panel.getByRole('button',{name:'Check action status'})).toHaveCount(0);
+    expect(attempts).toBe(1);
+  });
+
   test('keeps moderation drafts, clears stale dry runs, and displays failed action receipts accurately', async ({ page }) => {
     let releaseAction!: () => void;
     const actionReady = new Promise<void>((resolve) => { releaseAction = resolve; });

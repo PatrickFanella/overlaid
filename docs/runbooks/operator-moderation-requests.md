@@ -23,3 +23,9 @@ The form distinguishes queued acceptance from delivery and exposes an explicit a
 `moderationIntent.test.ts` covers saved-before-submit behavior, response loss/reload, receipt-only retries, malformed/uncertain results, concurrent clicks, browser storage failures, scope isolation and direct ambiguity. The existing Chromium moderation regression checks draft preservation, receipt-only resolution and visible rejected status. An isolated rendered-page check also covers pending status through reload and terminal delivery. These browser fixtures intercept API responses; they do not establish live provider behavior.
 
 Run `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` for the full local gate. Nuke previews must next bind their exact target set and radiation mutation to a stable batch occurrence before batch cutover. Default startup still installs no moderation consumer; broader fairness/scale and controlled live-provider acceptance remain under #24.
+
+## Direct receipt contract — #177
+
+Direct Helix success returns `{action, result: "accepted", reason: "twitch_helix"}` for delete, timeout, ban and unban. The browser resolves that exact response as a confirmed action and clears its saved intent. `allowed` is a bot-audit label and cannot confirm the HTTP result. Failed, queued, malformed or wrong-action responses remain unresolved; they cannot enable an automatic direct retry.
+
+The shared `backend/internal/http/testdata/direct-moderation-receipts.json` fixture is checked against actual synthetic-transport HTTP responses by `TestManualModerationScopePayloadAndAuditContracts` and consumed by the frontend intent tests and Chromium direct-action regression. This repairs [#177](https://git.subcult.tv/subculture-collective/overlaid/issues/177) without changing provider transport, retained admission or startup configuration.
