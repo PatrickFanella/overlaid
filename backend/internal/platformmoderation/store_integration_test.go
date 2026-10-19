@@ -418,7 +418,7 @@ func TestModerationLifecycleIsolationAndExport(t *testing.T) {
 
 func TestModerationMigrationRollbackAndStartupGate(t *testing.T) {
 	f, _, _ := fixture(t)
-	if _, err := f.Admin.Exec(`ALTER TABLE river_job DROP CONSTRAINT overlaid_moderation_job; DROP TABLE platform_moderation_actions; DROP TABLE platform_moderation_sources; DROP INDEX normalized_chat_message; DELETE FROM overlaid_migrations WHERE name IN('0019_moderation_actions.sql','0028_manual_moderation_sources.sql','0029_nuke_timeout_targets.sql')`); err != nil {
+	if _, err := f.Admin.Exec(`ALTER TABLE river_job DROP CONSTRAINT overlaid_moderation_job; DROP TABLE platform_moderation_actions; DROP TABLE platform_moderation_sources; DROP INDEX normalized_chat_message; DELETE FROM overlaid_migrations WHERE name IN('0019_moderation_actions.sql','0028_manual_moderation_sources.sql','0029_nuke_timeout_targets.sql','0030_radiation_only_sources.sql')`); err != nil {
 		t.Fatal(err)
 	}
 	if db, err := tenantdb.Open(f.RuntimeURL, tenantdb.BootstrapID); err == nil {
@@ -467,6 +467,13 @@ func TestModerationMigrationRollbackAndStartupGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := f.Admin.Exec(string(nukeMigration)); err != nil {
+		t.Fatal(err)
+	}
+	radiationMigration, err := os.ReadFile("../../../migrations/0030_radiation_only_sources.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Admin.Exec(string(radiationMigration)); err != nil {
 		t.Fatal(err)
 	}
 

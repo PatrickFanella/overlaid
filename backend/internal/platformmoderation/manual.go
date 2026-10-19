@@ -41,8 +41,9 @@ type ManualAdmission struct {
 }
 
 func manualIdentity(tenant string, r ManualRequest) (string, string, []ManualAction, error) {
+	radiationOnly := r.Kind == "radiation" && r.nuke != nil && r.nuke.options.RadiationMinutes > 0 && len(r.Actions) == 0
 	if !tenantdb.ValidID(r.ActorAccountID) || r.ActorAccountID != strings.ToLower(r.ActorAccountID) || !tenantdb.ValidID(r.RequestKey) || r.RequestKey != strings.ToLower(r.RequestKey) ||
-		(r.Kind != "single" && r.Kind != "batch") || len(r.Actions) < 1 || len(r.Actions) > 50 || r.Kind == "single" && len(r.Actions) != 1 {
+		(!radiationOnly && (r.Kind != "single" && r.Kind != "batch" || len(r.Actions) < 1)) || len(r.Actions) > 50 || r.Kind == "single" && len(r.Actions) != 1 {
 		return "", "", nil, ErrInvalid
 	}
 	actions := append([]ManualAction(nil), r.Actions...)
@@ -61,7 +62,7 @@ func manualIdentity(tenant string, r ManualRequest) (string, string, []ManualAct
 	}
 	if r.nuke != nil {
 		normalized, err := normalizeNukeOptions(r.nuke.options)
-		if err != nil || normalized != r.nuke.options || r.Kind != "batch" || r.nuke.observedAt.Year() < 1970 || r.nuke.observedAt.Year() > 9998 {
+		if err != nil || normalized != r.nuke.options || r.Kind != "batch" && !radiationOnly || r.nuke.observedAt.Year() < 1970 || r.nuke.observedAt.Year() > 9998 {
 			return "", "", nil, ErrInvalid
 		}
 		fields = append(fields, []any{"nuke-preview-v1", normalized, r.nuke.observedAt.UTC().Format(time.RFC3339Nano)})
