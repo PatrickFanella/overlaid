@@ -947,6 +947,64 @@ test.describe('operator browser smoke', () => {
     expect(actions).toBe(2);
   });
 
+  test('recovers the original retained nuke request through reload without re-admission', async ({ page }) => {
+    await page.addInitScript(() => sessionStorage.setItem('overlaid.operatorSecret.session.v1', 'operator-fixture'));
+    const projection = {mode:'retained',tenantId:'selfhost-file',actorId:'00000000-0000-4000-8000-000000000002',connectionId:'twitch:123'};
+    let requests = 0;
+    let original: Record<string,unknown>;
+    let plans = 0;
+    await page.route('**/api/bot/**', async route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/moderation/action')) return route.fulfill({json:projection});
+      if (path.endsWith('/nuke/preview')) {
+        plans++;
+        const payload = route.request().postDataJSON();
+        const now = Date.now();
+        return route.fulfill({json:{...projection,options:{...payload.options,durationSeconds:0},targets:[{eventId:'original-event',user:'fixture',message:'original frozen message'}],observedAt:new Date(now).toISOString(),expiresAt:new Date(now+120000).toISOString(),fingerprint:'c'.repeat(64),plan:'sealed-original-plan'}});
+      }
+      if (path.endsWith('/nuke/request')) {
+        requests++;
+        const payload = route.request().postDataJSON();
+        if (requests === 1) {
+          original = payload;
+          expect(payload.retry).toBe(false);
+          expect(payload.plan).toBe('sealed-original-plan');
+          return route.abort('failed');
+        }
+        expect(payload).toEqual({...original,retry:true});
+        if (requests === 2) return route.fulfill({status:409,body:'missing receipt stays unresolved'});
+        const sourceId='a'.repeat(64),actionId='b'.repeat(64);
+        return route.fulfill({json:{mode:'retained',queued:false,radiationOnly:false,receipt:{sourceId,actionIds:[actionId],created:false,createdAt:'2026-10-19T10:00:00Z',deadline:'2026-10-19T10:02:00Z',receipts:[{actionId,manualSourceId:sourceId,eventId:'',connectionId:'twitch:123',capability:'message.delete',state:'uncertain',code:'uncertain'}]}}});
+      }
+      const responses: Record<string,unknown> = {rules:{rules:[]},status:{available:true},commands:{commands:[]},timers:{timers:[]},counters:{counters:[]},quotes:{quotes:[]},'api-variables':{variables:[]},audit:{events:[]}};
+      return route.fulfill({json:responses[path.split('/').at(-1)!]??{}});
+    });
+    await page.goto('/dashboard/chat');
+    const panel=page.locator('#bot-nuke');
+    await panel.getByLabel('Pattern',{exact:true}).fill('spam');
+    await panel.getByRole('button',{name:'Plan nuke',exact:true}).click();
+    await expect(panel.getByText('original frozen message')).toBeVisible();
+    await page.reload();
+    await expect(panel.getByText('original frozen message')).toBeVisible();
+    await expect(panel.getByLabel('I reviewed this dry-run plan')).not.toBeChecked();
+    await panel.getByLabel('I reviewed this dry-run plan').check();
+    await panel.getByRole('button',{name:'Execute planned nuke',exact:true}).click();
+    await expect(panel.getByRole('button',{name:'Check nuke status',exact:true})).toBeVisible();
+    await page.reload();
+    await expect(panel.getByLabel('Pattern',{exact:true})).toBeDisabled();
+    await expect(panel.getByRole('button',{name:'Plan nuke',exact:true})).toBeDisabled();
+    await expect(panel.getByRole('button',{name:'I checked Twitch — clear saved nuke',exact:true})).toBeDisabled();
+    await panel.getByRole('button',{name:'Check nuke status',exact:true}).click();
+    await expect(panel.getByRole('alert')).toContainText('missing receipt');
+    await panel.getByRole('button',{name:'Check nuke status',exact:true}).click();
+    await expect(panel.getByRole('status')).toContainText('1 uncertain');
+    await expect(panel.getByRole('button',{name:'Plan nuke',exact:true})).toBeDisabled();
+    await panel.getByRole('button',{name:'I checked Twitch — clear saved nuke',exact:true}).click();
+    await expect(panel.getByRole('button',{name:'Plan nuke',exact:true})).toBeEnabled();
+    await expect(panel.getByText('original frozen message')).toHaveCount(0);
+    expect(plans).toBe(1);expect(requests).toBe(3);
+  });
+
   test('invalidates changed nuke plans, blocks duplicate execution, and retains execution and rollback receipts', async ({ page }) => {
     let releaseExecution!: () => void;
     const executionReady = new Promise<void>((resolve) => { releaseExecution = resolve; });
@@ -957,6 +1015,9 @@ test.describe('operator browser smoke', () => {
     const radiation = { id: 'radiation-1', name: 'nuke_window', enabled: true, enforce: true, pattern: 'spam two', matchTarget: 'message', regex: false, caseSensitive: false, action: 'delete', source: 'nuke_radiation', expiresAt: '2099-10-06T06:00:00Z' };
     await page.route('**/api/bot/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/moderation/action') && route.request().method() === 'GET') {
+        await route.fulfill({ json: {mode:'direct',tenantId:'selfhost-file',actorId:'00000000-0000-4000-8000-000000000002',connectionId:'twitch:123'} }); return;
+      }
       if (path.endsWith('/nuke/dry-run')) {
         plans += 1;
         const payload = route.request().postDataJSON();
@@ -1020,7 +1081,7 @@ test.describe('operator browser smoke', () => {
     await expect(panel.getByText(/execution interrupted; 2 not attempted/)).toBeVisible();
     await expect(panel.getByRole('alert')).toContainText('Operation completed. Status/audit refresh failed:');
     await expect(panel.getByRole('button', { name: 'Rollback window' })).toBeEnabled();
-    await expect(execute).toBeDisabled();
+    await expect(panel.getByRole('button', { name: 'Check nuke status' })).toBeEnabled();
     await panel.getByRole('button', { name: 'Rollback window' }).click();
     await expect(panel.getByText('Rollback: disabled nuke_window')).toBeVisible();
     await expect(panel.getByText(/Executed delete: 1\/1 succeeded/)).toBeVisible();

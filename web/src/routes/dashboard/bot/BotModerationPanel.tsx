@@ -28,6 +28,7 @@ export function BotModerationPanel({
   onDelete,
   onDryRun,
   onAction, onClearAction, unresolvedAction, checkedAction,
+  savedNuke, unresolvedNuke, checkedNuke, nukeOutcome, canReviewNuke, onClearNuke,
   onNukeDryRun,
   onNukeExecute,
   onNukeRollback,
@@ -36,7 +37,7 @@ export function BotModerationPanel({
   const busy = Boolean(pending);
   const items = rules?.rules ?? [];
   const canSave = draft.name.trim() !== '' && draft.pattern.trim() !== '';
-  const canExecuteNuke = Boolean(nukeResult && nukeResult.matches.length > 0 && nukeDraft.confirm);
+  const canExecuteNuke = Boolean(canReviewNuke && nukeDraft.confirm);
   const activeRadiationRules = items.filter((rule) => rule.enabled && rule.source === 'nuke_radiation' && (!rule.expiresAt || new Date(rule.expiresAt).getTime() > Date.now()));
   return (
     <>
@@ -196,6 +197,7 @@ export function BotModerationPanel({
         {nukeError ? <Notice tone="bad" role="alert">{nukeError}</Notice> : null}
         <fieldset disabled={busy} className="contents">
           <SubPanel title="1. Plan">
+            <fieldset disabled={unresolvedNuke} className="contents">
             <div className="grid gap-3 md:grid-cols-[1fr_8rem_8rem]">
               <Field label="Pattern">
                 <input className="desk-input desk-input--mono" value={nukeDraft.pattern} onChange={(event) => onNukeDraftChange({ ...nukeDraft, pattern: event.target.value, confirm: false })} placeholder="phrase or regex" />
@@ -203,7 +205,7 @@ export function BotModerationPanel({
               <Field label="Lookback minutes">
                 <input className="desk-input" type="number" min={1} max={360} value={nukeDraft.lookbackMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, lookbackMinutes: Number(event.target.value), confirm: false })} />
               </Field>
-              <Field label="Match limit">
+              <Field label="History scan limit">
                 <input className="desk-input" type="number" min={1} max={250} value={nukeDraft.limit} onChange={(event) => onNukeDraftChange({ ...nukeDraft, limit: Number(event.target.value), confirm: false })} />
               </Field>
             </div>
@@ -221,7 +223,7 @@ export function BotModerationPanel({
                 <input className="desk-input" type="number" min={0} max={120} value={nukeDraft.radiationMinutes} onChange={(event) => onNukeDraftChange({ ...nukeDraft, radiationMinutes: Number(event.target.value), confirm: false })} placeholder="radiation min" />
               </Field>
             </div>
-            <p className="desk-row__meta">Radiation minutes optionally enforces this pattern for future messages for up to 120 minutes. Future timeout radiation uses the standard 60-second timeout.</p>
+            <p className="desk-row__meta">Radiation minutes optionally enforces this pattern for future messages for up to 120 minutes. Retained timeout radiation uses the selected duration; direct mode uses 60 seconds.</p>
             <div className="flex flex-wrap items-center gap-3">
               <Check label="Regex" checked={nukeDraft.regex} onChange={(regex) => onNukeDraftChange({ ...nukeDraft, regex, confirm: false })} />
               <Check label="Case sensitive" checked={nukeDraft.caseSensitive} onChange={(caseSensitive) => onNukeDraftChange({ ...nukeDraft, caseSensitive, confirm: false })} />
@@ -229,12 +231,14 @@ export function BotModerationPanel({
                 {pending === 'nuke-plan' ? 'Planning…' : 'Plan nuke'}
               </button>
             </div>
+            </fieldset>
+            {savedNuke?.projection.mode === 'retained' ? <p className="desk-note">Frozen retained preview · expires {savedNuke.expiresAt}. At most 50 effects. Preview data and unresolved requests stay in this browser tab through reload.</p> : null}
             {nukeResult ? (
               <>
                 <p className="desk-row__text">Planned matches: {nukeResult.matches.length}</p>
                 {nukeResult.matches.length > 0 ? (
-                  <ul className="desk-rows">
-                    {nukeResult.matches.slice(0, 5).map((match) => (
+                  <ul className="desk-rows max-h-80 overflow-y-auto">
+                    {nukeResult.matches.map((match) => (
                       <li key={match.eventId} className="desk-row">
                         <div className="desk-row__line">
                           <span className="desk-row__title mono">{match.user}</span>
@@ -249,15 +253,22 @@ export function BotModerationPanel({
           </SubPanel>
 
           <SubPanel title="2. Review">
-            <fieldset disabled={!nukeResult?.matches.length} className="contents"><Check label="I reviewed this dry-run plan" checked={nukeDraft.confirm} onChange={(confirm) => onNukeDraftChange({ ...nukeDraft, confirm })} /></fieldset>
+            <fieldset disabled={!canReviewNuke || unresolvedNuke} className="contents"><Check label="I reviewed this dry-run plan" checked={nukeDraft.confirm} onChange={(confirm) => onNukeDraftChange({ ...nukeDraft, confirm })} /></fieldset>
           </SubPanel>
 
           <SubPanel title="3. Execute">
             <div>
-              <button className="desk-btn desk-btn--danger" type="button" disabled={!canExecuteNuke} onClick={onNukeExecute}>
-                {pending === 'nuke-execute' ? 'Executing…' : 'Execute planned nuke'}
+              <button className="desk-btn desk-btn--danger" type="button" disabled={!unresolvedNuke && !canExecuteNuke} onClick={onNukeExecute}>
+                {pending === 'nuke-execute' ? 'Executing…' : unresolvedNuke ? 'Check nuke status' : 'Execute planned nuke'}
               </button>
             </div>
+            {unresolvedNuke ? <p className="desk-note">This request remains saved. Status checks reuse its original preview and request key. Missing, uncertain or unavailable receipts cannot recreate work. Clearing does not cancel queued actions or disable radiation.</p> : null}
+            {unresolvedNuke ? <button className="desk-btn desk-btn--ghost" type="button" disabled={!checkedNuke} onClick={onClearNuke}>I checked Twitch — clear saved nuke</button> : null}
+            {nukeOutcome && !nukeOutcome.direct ? <Notice tone={nukeOutcome.queued ? 'warn' : nukeOutcome.states.every(s => s === 'delivered') ? 'ok' : 'warn'} role="status">
+              {nukeOutcome.radiationOnly ? 'Radiation configuration recorded; no message actions were queued.' : `Nuke status: ${['pending', 'running', 'delivered', 'rejected', 'uncertain'].map(state => `${nukeOutcome.states.filter(s => s === state).length} ${state}`).join(' · ')}`}
+              {nukeOutcome.queued ? ' Queued acceptance does not confirm Twitch delivery.' : ''}
+              {nukeOutcome.radiationRuleId ? ' Check Active radiation windows for current rule state; an old receipt does not prove it is enabled.' : ''}
+            </Notice> : null}
             {nukeExecuteResult ? (
               <Notice tone="warn">
                 Executed {nukeExecuteResult.action}: {nukeExecuteResult.succeeded}/{nukeExecuteResult.attempted} succeeded · {nukeExecuteResult.failed} failed
