@@ -141,7 +141,7 @@ func nukeEventHash(e platform.ChatEvent) string { raw, _ := json.Marshal(e); ret
 
 // PreviewNuke reads a bounded canonical chat snapshot using database time. It
 // creates no source, action, job, pacing row or radiation rule. Empty previews
-// are inspectable but cannot admit a radiation-only occurrence in this unit.
+// can admit only an explicitly requested radiation-only occurrence.
 func (s *Store) PreviewNuke(ctx context.Context, actor, connection string, options NukeOptions) (NukePlan, error) {
 	o, err := normalizeNukeOptions(options)
 	if err != nil || !tenantdb.ValidID(actor) || actor != strings.ToLower(actor) {
@@ -225,6 +225,9 @@ func (s *Store) PreviewNuke(ctx context.Context, actor, connection string, optio
 	}
 	if err = tx.Commit(); err != nil {
 		return NukePlan{}, err
+	}
+	if len(p.targets) == 0 && o.RadiationMinutes > 0 {
+		p.request.Kind = "radiation"
 	}
 	return p, nil
 }

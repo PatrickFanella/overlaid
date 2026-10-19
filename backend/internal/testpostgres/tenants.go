@@ -370,6 +370,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(string(rawNukeTargets)); err != nil {
 		t.Fatal(err)
 	}
+	rawRadiationSources, err := os.ReadFile(filepath.Join(root, "0030_radiation_only_sources.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(string(rawRadiationSources)); err != nil {
+		t.Fatal(err)
+	}
 	u.User = url.UserPassword(moderationPacer, password)
 	moderationPacerURL := u.String()
 	u.User = url.UserPassword(moderation, password)

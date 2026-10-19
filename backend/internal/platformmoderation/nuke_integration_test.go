@@ -107,12 +107,12 @@ func TestNukePreviewCanonicalSnapshotAndBounds(t *testing.T) {
 		if len(short.Targets()) != 3 {
 			t.Fatal("history bound", len(short.Targets()))
 		}
-		empty := nukePreview(t, s, NukeOptions{Pattern: "no match", RadiationMinutes: 5})
+		empty := nukePreview(t, s, NukeOptions{Pattern: "no match"})
 		if len(empty.Targets()) != 0 {
 			t.Fatal("empty preview")
 		}
 		if _, err := s.AdmitNuke(t.Context(), owner, nukeRequestKey, empty); !errors.Is(err, ErrInvalid) {
-			t.Fatal("radiation-only occurrence admitted", err)
+			t.Fatal("empty occurrence without radiation admitted", err)
 		}
 		manualModerationCounts(t, db, 0, 0)
 		nukeRuleCount(t, db, 0)
