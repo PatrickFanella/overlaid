@@ -53,3 +53,20 @@ func TestRetainedSenderConfigurationIsExplicit(t *testing.T) {
 		t.Fatal("explicit sender configuration not loaded")
 	}
 }
+
+func TestRetainedModerationConfigurationIsExplicit(t *testing.T) {
+	t.Setenv("TWITCH_MODERATION_MODE", "")
+	t.Setenv("PLATFORM_MODERATION_WORKER_DATABASE_URL", "")
+	t.Setenv("OVERLAID_MODERATION_PACING_DATABASE_URL", "")
+	defaults := Load()
+	if defaults.TwitchModerationMode != "legacy" || defaults.ModerationWorkerURL != "" || defaults.ModerationPacingURL != "" {
+		t.Fatal("moderation activated by default")
+	}
+	t.Setenv("TWITCH_MODERATION_MODE", "retained")
+	t.Setenv("PLATFORM_MODERATION_WORKER_DATABASE_URL", "queue-fixture")
+	t.Setenv("OVERLAID_MODERATION_PACING_DATABASE_URL", "pacing-fixture")
+	selected := Load()
+	if selected.TwitchModerationMode != "retained" || selected.ModerationWorkerURL != "queue-fixture" || selected.ModerationPacingURL != "pacing-fixture" {
+		t.Fatal("moderation configuration not loaded")
+	}
+}

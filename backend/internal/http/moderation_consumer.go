@@ -16,7 +16,8 @@ import (
 	"github.com/riverqueue/river"
 )
 
-// Explicit construction only. Default startup does not call prepareModeration.
+// Default startup installs no consumer. Explicit retained moderation startup
+// uses this same owner and its validated, separately owned queue/pacing pools.
 // Queue/pacing pools belong to this consumer; product/shared pools are borrowed
 // from the application and must outlive its workers and detached bookkeeping.
 type moderationConsumer struct {
@@ -145,7 +146,7 @@ func (b *moderationConsumer) start(ctx context.Context) error {
 }
 
 func (b *moderationConsumer) isReady() bool {
-	if !b.ready.Load() || b.ctx.Err() != nil || !b.app.outboundReady() {
+	if !b.ready.Load() || b.ctx.Err() != nil || !b.app.outboundReady() || !b.app.moderationLeasingReady() {
 		return false
 	}
 	select {

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
@@ -40,6 +41,7 @@ type Application struct {
 	sendGates         map[string]*tenantSendGate
 	outbound          *outboundChat
 	moderation        *moderationConsumer
+	moderationStarted atomic.Bool
 	moderationRouting sync.RWMutex
 	chatControl       *chatController
 	chatWorker        *river.Client[*sql.Tx]
@@ -88,6 +90,15 @@ func NewApplication(cfg config.Config) (*Application, error) {
 	}
 	if cfg.TwitchChatSendMode == "retained" && (cfg.TwitchChatDispatchMode != "retained" || strings.TrimSpace(cfg.OutboundWorkerDatabaseURL) == "" || strings.TrimSpace(cfg.PacingDatabaseURL) == "") {
 		return nil, errors.New("retained chat sending requires retained ingestion and separate outbound worker and pacing databases")
+	}
+	if cfg.TwitchModerationMode == "" {
+		cfg.TwitchModerationMode = "legacy"
+	}
+	if cfg.TwitchModerationMode != "legacy" && cfg.TwitchModerationMode != "retained" {
+		return nil, errors.New("TWITCH_MODERATION_MODE must be legacy or retained")
+	}
+	if cfg.TwitchModerationMode == "retained" && (cfg.TwitchChatSendMode != "retained" || strings.TrimSpace(cfg.ModerationWorkerURL) == "" || strings.TrimSpace(cfg.ModerationPacingURL) == "") {
+		return nil, errors.New("retained moderation requires retained chat sending and separate moderation worker and pacing databases")
 	}
 	if cfg.DeploymentMode != "selfhost" && cfg.DeploymentMode != "hosted" {
 		return nil, errors.New("DEPLOYMENT_MODE must be selfhost or hosted")

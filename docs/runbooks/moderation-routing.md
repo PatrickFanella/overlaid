@@ -1,6 +1,6 @@
 # Explicit retained moderation rule routing
 
-Tracking: [#169](https://git.subcult.tv/subculture-collective/overlaid/issues/169), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This binds automatic rules to the [retained-source admission bridge](moderation-admission.md) when an [explicit application-owned consumer](moderation-consumer.md) is installed. Default application startup still constructs no moderation consumer. There is no new environment setting or production activation.
+Tracking: [#169](https://git.subcult.tv/subculture-collective/overlaid/issues/169), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This binds automatic rules to the [retained-source admission bridge](moderation-admission.md) when an [explicit application-owned consumer](moderation-consumer.md) is installed. Default application startup still constructs no moderation consumer. The separate [configured opt-in](moderation-consumer.md#configured-opt-in) selects this owner; the routing helpers alone activate no installation.
 
 ## Direct-owner handoff
 
@@ -20,7 +20,7 @@ With an installed owner, enforcement verifies the projection binding and calls r
 
 Successful admission records `moderation_queued` in the existing system/rule audit. This describes queue acceptance, not provider delivery. Provider outcome remains in the separate typed moderation ledger. An admission or bound-owner failure returns through publication to the retained dispatch handler, which records its fixed failure receipt. Chat/history publication may already have happened. The handler-start fence still forbids automatic replay, and no failed retained operation falls back to direct transport.
 
-Dashboard single actions use the [saved-request and receipt-only path](operator-moderation-requests.md) under an explicit owner. Nuke batches remain unavailable under that owner until their planning callers use the [durable operator-source store](manual-moderation-sources.md). Dry-run matching, rule configuration and radiation disable/rollback do not send effects and retain their current behavior. Nuke-batch caller wiring, persisted compatibility/downgrade guards and configured all-path startup must be completed before production opt-in activation.
+Dashboard single actions use the [saved-request and receipt-only path](operator-moderation-requests.md) under an explicit owner. Nuke batches use [sealed previews and saved requests](nuke-preview-binding.md) backed by the durable operator-source store. Dry-run matching, rule configuration and radiation disable/rollback do not send effects and retain their current behavior. Configured all-path startup and persisted downgrade fences are described in the [consumer runbook](moderation-consumer.md#configured-opt-in). Live activation and provider qualification remain separate.
 
 ## Verification
 

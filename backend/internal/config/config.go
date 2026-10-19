@@ -43,6 +43,9 @@ type Config struct {
 	TwitchScopes              []string
 	TwitchEventSub            bool
 	TwitchChatSendMode        string
+	TwitchModerationMode      string
+	ModerationWorkerURL       string
+	ModerationPacingURL       string
 	OutboundWorkerDatabaseURL string
 	PacingDatabaseURL         string
 	BotExecutionDatabaseURL   string
@@ -91,6 +94,9 @@ func Load() Config {
 		TwitchScopes:              envList("TWITCH_SCOPES", []string{"user:read:chat", "user:write:chat", "channel:read:redemptions", "channel:manage:redemptions", "channel:read:subscriptions", "bits:read", "moderator:read:followers", "moderator:manage:chat_messages", "moderator:manage:banned_users"}),
 		TwitchEventSub:            envBool("TWITCH_EVENTSUB_ENABLED", true),
 		TwitchChatSendMode:        env("TWITCH_CHAT_SEND_MODE", "legacy"),
+		TwitchModerationMode:      env("TWITCH_MODERATION_MODE", "legacy"),
+		ModerationWorkerURL:       env("PLATFORM_MODERATION_WORKER_DATABASE_URL", ""),
+		ModerationPacingURL:       env("OVERLAID_MODERATION_PACING_DATABASE_URL", ""),
 		OutboundWorkerDatabaseURL: env("PLATFORM_OUTBOUND_WORKER_DATABASE_URL", ""),
 		PacingDatabaseURL:         env("OVERLAID_PACING_DATABASE_URL", ""),
 		BotExecutionDatabaseURL:   env("OVERLAID_BOT_EXECUTION_DATABASE_URL", ""),
