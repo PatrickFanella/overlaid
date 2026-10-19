@@ -32,4 +32,4 @@ The shared `backend/internal/http/testdata/direct-moderation-receipts.json` fixt
 
 ## Next batch boundary
 
-The [retained nuke preview/radiation store](nuke-preview-binding.md) now freezes canonical target sets and commits optional radiation atomically with batch work; zero-target radiation uses a distinct durable source without jobs. The sealed-plan persistence contract is available internally; HTTP/browser request routing, saved-request persistence, nuke status UI and guarded startup still need their dependent contracts; the installed owner continues to refuse the existing nuke endpoint.
+The [retained nuke preview/radiation store](nuke-preview-binding.md) now freezes canonical target sets and commits optional radiation atomically with batch work; zero-target radiation uses a distinct durable source without jobs. The [retained nuke HTTP contract](nuke-preview-binding.md#retained-http-contract) now connects sealed previews to atomic admission and lookup-only retries. Browser saved-request/status controls and guarded startup remain unfinished; the installed owner continues to refuse the legacy direct nuke execute endpoint.
