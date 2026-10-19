@@ -1,6 +1,6 @@
 # Retained nuke preview and atomic radiation admission
 
-Tracking: [#179](https://git.subcult.tv/subculture-collective/overlaid/issues/179) and [#181](https://git.subcult.tv/subculture-collective/overlaid/issues/181), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This is the internal store boundary for retained nuke batches and zero-target radiation occurrences. It adds no HTTP routing or configured startup. Existing nuke execution still refuses an installed moderation owner before creating radiation. The [single-action HTTP path](operator-moderation-requests.md) is unchanged.
+Tracking: [#179](https://git.subcult.tv/subculture-collective/overlaid/issues/179), [#181](https://git.subcult.tv/subculture-collective/overlaid/issues/181) and [#183](https://git.subcult.tv/subculture-collective/overlaid/issues/183), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This is the internal store boundary for retained nuke batches and zero-target radiation occurrences. It adds no HTTP routing or configured startup. Existing nuke execution still refuses an installed moderation owner before creating radiation. The [single-action HTTP path](operator-moderation-requests.md) is unchanged.
 
 ## Preview snapshot
 
@@ -8,9 +8,19 @@ Tracking: [#179](https://git.subcult.tv/subculture-collective/overlaid/issues/17
 
 Targets are ordered by occurrence time and canonical event ID, newest first, and capped at 50 actions. Timeout previews select one target per user; deletes select one per message. Nonmatching, old, future and foreign-channel input is excluded. Retained row metadata must agree with its canonical envelope; PostgreSQL timestamps are compared at their stored microsecond precision. Preview creates no source, action, job, rule, permit or allowance reservation.
 
-`NukePlan` is an immutable in-process value. Its getters return option and target copies. The private binding covers tenant, actor, connection, normalized options, observed preview time, exact retained event IDs and complete envelope fingerprints. The fingerprint is a comparison value, not permission or proof of delivery. Plan serialization/rehydration for authenticated HTTP and browser persistence remains a dependent unit.
+`NukePlan` is an immutable in-process value. Its getters return option and target copies. The private binding covers tenant, actor, connection, normalized options, observed preview time, exact retained event IDs and complete envelope fingerprints. The fingerprint is a comparison value, not permission or proof of delivery. The sealed-plan contract below preserves this input across process restarts and browser request persistence. HTTP/browser routing remains a dependent unit.
 
 An empty preview with a positive radiation window can admit a `radiation` source and its normalized rule in one transaction. It creates no action, job, provider request or permit. A preview with neither targets nor radiation remains invalid for admission. Ordinary `single` and `batch` source kinds retain their 1–50 action bounds; callers cannot construct the private radiation binding through `AdmitManual`. The existing direct workflow is unchanged.
+
+## Sealed preview persistence
+
+`SealNukePlan` and `OpenNukePlan` use the existing versioned AES-256-GCM vault keyring with a distinct `retained-nuke-preview-v1` purpose. The trusted `NukePlanScope` binds the account, tenant, exact Twitch connection and current opaque `ChatSenderSelection.Binding`. A future HTTP caller must derive this scope from authenticated request and fresh connection metadata, never browser fields. The binding includes connection/sender generations; opening a token does not establish current role, consent or effect permission.
+
+The encrypted payload preserves normalized options, the original database preview time, exact ordered display targets, private actions/envelope fingerprints and the original payload fingerprint. Opening checks the versioned schema, target/action consistency and fingerprint. Unknown fields, trailing JSON, unsupported versions, changed scope/ciphertext and unavailable keys fail with the fixed `nuke preview unavailable` error. Encoded tokens are bounded at 512 KiB and plaintext at 256 KiB, with at most 50 targets/actions. Oversized previews fail closed.
+
+Retained key versions can open old tokens after active-key rotation. Removing an old key makes its saved previews unavailable; preserve unresolved requests and do not generate replacement request UUIDs. No process-local fallback key is created. The token belongs in the future account/workspace-scoped saved request and request body, not an overlay/share URL or audit log. It is neither a public capability nor an authorization token.
+
+Opening a plan performs no database/provider access, creates no rows and does not refresh its timestamp or expand its targets. Old previews remain openable for read-only `LookupNuke`; new `AdmitNuke` still checks the original preview lifetime using database time and fresh permission/connection/target state. HTTP endpoints, browser persistence/status and guarded startup do not select this codec yet.
 
 ## Atomic admission and retry
 
@@ -34,4 +44,6 @@ Apply the migrations with administrator credentials before using this binary, fo
 
 `TestNuke*` verifies bounded canonical snapshots, later arrivals, immutable getters, timeout deduplication, concurrent duplicates, fixed radiation duration/expiry, disabled/deleted-rule no-replay, target/connection/permission/plan refusal, whole-transaction job/rule rollback, post-lock expiry, lifecycle/export privacy and real River execution with synthetic transport. Schema fixtures cover transactional rollback, populated preexisting claim/job preservation and refusal of broadened or non-cascading constraints. Existing manual and chat migration tests restore the current schema before checking startup. `TestRadiation*` covers zero-target concurrency, late arrivals, source capacity, atomic rule rollback, permission/connection/freshness refusal, metadata-only empty receipts, lifecycle/retention and migration preservation/exact union guards.
 
-Run `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` for `make verify` and both uncached race suites against disposable PostgreSQL. HTTP plan serialization/persistence, nuke request/status UI and coordinated guarded startup remain unfinished. Broader fairness/scale and controlled live Twitch/OBS acceptance remain under #24.
+`TestNukePlan*` covers sealed round trips, private wrapper output, scope/tamper refusal, malformed authenticated schemas, size bounds, key rotation, concurrent nonce use and immutable restored targets. PostgreSQL cases exercise restored delete/timeout/radiation admission, late arrivals, exact duplicate status, permission loss and refusal to renew expired previews. The codec needs no migration or new pool.
+
+Run `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` for `make verify` and both uncached race suites against disposable PostgreSQL. HTTP/browser routing and saved-request persistence, nuke request/status UI and coordinated guarded startup remain unfinished. Broader fairness/scale and controlled live Twitch/OBS acceptance remain under #24.
