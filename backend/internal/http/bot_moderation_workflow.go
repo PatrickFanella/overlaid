@@ -11,6 +11,7 @@ import (
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/platformmoderation"
 )
 
 type moderationWorkflow struct {
@@ -246,6 +247,21 @@ func (w *moderationWorkflow) enforceModerationForEvent(ctx context.Context, even
 	enforced := []bot.ModerationRule{}
 	for _, rule := range rules {
 		if rule.Enabled && rule.Enforce {
+			if rule.Source == "nuke_radiation" {
+				occurred, received := event.CreatedAt, event.CreatedAt
+				if owner != nil {
+					source, ok := s.boundModerationSource(ctx, event)
+					if !ok {
+						return platformmoderation.ErrInvalid
+					}
+					occurred, received = source.occurredAt, source.receivedAt
+				}
+				// Both original clocks must be at or after the rule start.
+				// A delayed projection/handler must never renew old input.
+				if rule.CreatedAt.IsZero() || occurred.IsZero() || received.IsZero() || occurred.Before(rule.CreatedAt) || received.Before(rule.CreatedAt) {
+					continue
+				}
+			}
 			enforced = append(enforced, rule)
 		}
 	}

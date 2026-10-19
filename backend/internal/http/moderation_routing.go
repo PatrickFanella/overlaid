@@ -69,6 +69,7 @@ type moderationSource struct {
 	server                      *Server
 	id, eventID, channel, actor string
 	messageID, text             string
+	occurredAt, receivedAt      time.Time
 }
 
 func (s *Server) moderationSourceContext(ctx context.Context, source platform.ChatEvent, event events.Event) context.Context {
@@ -76,14 +77,22 @@ func (s *Server) moderationSourceContext(ctx context.Context, source platform.Ch
 		return ctx
 	}
 	return context.WithValue(ctx, moderationSourceKey{}, moderationSource{server: s, id: source.ID, eventID: event.ID,
-		channel: source.Chat.Channel.ID, actor: source.Chat.Actor.ID, messageID: source.Chat.MessageID, text: source.Chat.Text})
+		channel: source.Chat.Channel.ID, actor: source.Chat.Actor.ID, messageID: source.Chat.MessageID, text: source.Chat.Text, occurredAt: source.OccurredAt, receivedAt: source.ReceivedAt})
 }
 
-func (s *Server) admitModerationRule(ctx context.Context, owner *moderationConsumer, event events.Event, match bot.ModerationMatch, request botModerationActionRequest) error {
+func (s *Server) boundModerationSource(ctx context.Context, event events.Event) (moderationSource, bool) {
 	source, ok := ctx.Value(moderationSourceKey{}).(moderationSource)
 	if !ok || source.server != s || source.eventID != event.ID || source.messageID != twitchMessageIDFromEvent(event) ||
 		source.actor != twitchEventString(event, "chatter_user_id") || source.channel != twitchEventString(event, "broadcaster_user_id") ||
-		source.text != event.Message || strings.TrimSpace(match.RuleID) == "" {
+		source.text != event.Message {
+		return moderationSource{}, false
+	}
+	return source, true
+}
+
+func (s *Server) admitModerationRule(ctx context.Context, owner *moderationConsumer, event events.Event, match bot.ModerationMatch, request botModerationActionRequest) error {
+	source, ok := s.boundModerationSource(ctx, event)
+	if !ok || strings.TrimSpace(match.RuleID) == "" {
 		return platformmoderation.ErrInvalid
 	}
 	_, _, err := owner.admit(ctx, s, source.id, "rule:"+match.RuleID, request)

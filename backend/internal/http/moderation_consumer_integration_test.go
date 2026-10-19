@@ -30,6 +30,7 @@ type moderationOwnerFixture struct {
 	attempts   atomic.Int32
 	onAttempt  func(*http.Request) (*http.Response, error)
 	onValidate func()
+	messageIDs map[string]bool
 }
 
 func ownedModerationFixture(t *testing.T, shared bool) *moderationOwnerFixture {
@@ -91,7 +92,11 @@ func ownedModerationFixture(t *testing.T, shared bool) *moderationOwnerFixture {
 			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"data":[{"user_id":"999"}]}`))}, nil
 		case "api.twitch.tv/helix/moderation/chat":
 			h.attempts.Add(1)
-			if r.Method != http.MethodDelete || r.URL.Query().Get("broadcaster_id") != "123" || r.URL.Query().Get("moderator_id") != subject || r.URL.Query().Get("message_id") != "owner-source" || r.Header.Get("Authorization") != "Bearer "+access {
+			expectedMessage := r.URL.Query().Get("message_id") == "owner-source"
+			if h.messageIDs != nil {
+				expectedMessage = h.messageIDs[r.URL.Query().Get("message_id")]
+			}
+			if r.Method != http.MethodDelete || r.URL.Query().Get("broadcaster_id") != "123" || r.URL.Query().Get("moderator_id") != subject || !expectedMessage || r.Header.Get("Authorization") != "Bearer "+access {
 				return nil, errors.New("unexpected owner moderation binding")
 			}
 			var claimed bool
