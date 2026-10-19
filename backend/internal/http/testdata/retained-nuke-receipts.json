@@ -1,0 +1,76 @@
+{
+  "mixed": {
+    "mode": "retained",
+    "queued": true,
+    "radiationOnly": false,
+    "receipt": {
+      "sourceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "actionIds": [
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        "3333333333333333333333333333333333333333333333333333333333333333",
+        "4444444444444444444444444444444444444444444444444444444444444444"
+      ],
+      "created": false,
+      "createdAt": "2026-10-19T10:00:00Z",
+      "deadline": "2026-10-19T10:02:00Z",
+      "receipts": [
+        {
+          "manualSourceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "actionId": "1111111111111111111111111111111111111111111111111111111111111111",
+          "eventId": "",
+          "connectionId": "twitch:123",
+          "capability": "user.timeout",
+          "state": "delivered",
+          "code": "delivered",
+          "createdAt": "2026-10-19T10:00:00Z"
+        },
+        {
+          "manualSourceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "actionId": "2222222222222222222222222222222222222222222222222222222222222222",
+          "eventId": "",
+          "connectionId": "twitch:123",
+          "capability": "user.timeout",
+          "state": "rejected",
+          "code": "rejected",
+          "createdAt": "2026-10-19T10:00:00Z",
+          "failure": "unauthorized"
+        },
+        {
+          "manualSourceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "actionId": "3333333333333333333333333333333333333333333333333333333333333333",
+          "eventId": "",
+          "connectionId": "twitch:123",
+          "capability": "user.timeout",
+          "state": "uncertain",
+          "code": "uncertain",
+          "createdAt": "2026-10-19T10:00:00Z"
+        },
+        {
+          "manualSourceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "actionId": "4444444444444444444444444444444444444444444444444444444444444444",
+          "eventId": "",
+          "connectionId": "twitch:123",
+          "capability": "user.timeout",
+          "state": "pending",
+          "code": "pending",
+          "createdAt": "2026-10-19T10:00:00Z"
+        }
+      ]
+    }
+  },
+  "radiation": {
+    "mode": "retained",
+    "queued": false,
+    "radiationOnly": true,
+    "receipt": {
+      "sourceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "actionIds": [],
+      "created": false,
+      "createdAt": "2026-10-19T10:00:00Z",
+      "deadline": "2026-10-19T10:02:00Z",
+      "receipts": [],
+      "radiationRuleId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  }
+}
