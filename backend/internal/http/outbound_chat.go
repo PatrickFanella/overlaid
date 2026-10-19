@@ -76,7 +76,7 @@ func (a *Application) prepareOutboundChat(ctx context.Context) error {
 }
 
 func (a *Application) outboundLeaseReady() bool {
-	return a.outbound != nil && a.outbound.ready.Load() && a.chatReady()
+	return a.outbound != nil && a.outbound.ready.Load() && a.chatReady() && a.moderationLeasingReady()
 }
 
 func (a *Application) outboundReady() bool {

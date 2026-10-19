@@ -82,8 +82,11 @@ func (a *Application) initChatDispatch() error {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return errors.New("chat sender mode unavailable")
 	}
-	if senderMode != "" && (senderMode != "retained-v1" || a.config.TwitchChatSendMode != "retained") {
-		return errors.New("retained chat sender guard blocks incompatible startup")
+	if err == nil && senderMode == "" {
+		return errors.New("chat sender mode unavailable")
+	}
+	if err := a.checkModerationStartupMode(ctx, senderMode); err != nil {
+		return err
 	}
 	if err := a.prepareOutboundChat(ctx); err != nil {
 		return err
@@ -98,7 +101,8 @@ func (a *Application) initChatDispatch() error {
 			return errors.New("chat mode persistence unavailable")
 		}
 		if a.outbound != nil {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO app_metadata(key,value) VALUES('chat_send_mode','retained-v1') ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_at=now()`); err != nil {
+			// Never demote an already persisted moderation compatibility fence.
+			if _, err := tx.ExecContext(ctx, `INSERT INTO app_metadata(key,value) VALUES('chat_send_mode','retained-v1') ON CONFLICT(tenant_id,key) DO NOTHING`); err != nil {
 				return errors.New("chat mode persistence unavailable")
 			}
 		}
@@ -129,6 +133,19 @@ func (a *Application) initChatDispatch() error {
 	}
 	if a.outbound != nil {
 		a.outbound.ready.Store(true)
+		if a.config.TwitchModerationMode == "retained" {
+			consumer, err := a.prepareModeration(ctx, a.config.ModerationWorkerURL, a.config.ModerationPacingURL)
+			if err != nil {
+				return errModerationController
+			}
+			if err := a.persistModerationStartupMode(ctx); err != nil {
+				return err
+			}
+			if err := consumer.start(ctx); err != nil {
+				return err
+			}
+			a.moderationStarted.Store(true)
+		}
 		close(a.outbound.started)
 	}
 	go func() {

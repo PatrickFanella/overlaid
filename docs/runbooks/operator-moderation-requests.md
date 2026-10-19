@@ -1,6 +1,6 @@
 # Single operator moderation requests
 
-Tracking: [#175](https://git.subcult.tv/subculture-collective/overlaid/issues/175), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This connects the Chat page's single-action form to the [durable operator-source store](manual-moderation-sources.md) when an explicit [moderation consumer](moderation-consumer.md) is installed. No environment switch or default moderation startup is introduced. Nuke batch planning/radiation and persisted activation/downgrade guards remain unfinished.
+Tracking: [#175](https://git.subcult.tv/subculture-collective/overlaid/issues/175), under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). This connects the Chat page's single-action form to the [durable operator-source store](manual-moderation-sources.md) when an explicit [moderation consumer](moderation-consumer.md) is installed. No environment switch or default moderation startup is introduced. Nuke planning/radiation uses the [saved preview contract](nuke-preview-binding.md), and [configured moderation startup](moderation-consumer.md#configured-opt-in) supplies persisted activation/downgrade guards.
 
 ## HTTP and identity
 
@@ -22,7 +22,7 @@ The form distinguishes queued acceptance from delivery and exposes an explicit a
 
 `moderationIntent.test.ts` covers saved-before-submit behavior, response loss/reload, receipt-only retries, malformed/uncertain results, concurrent clicks, browser storage failures, scope isolation and direct ambiguity. The existing Chromium moderation regression checks draft preservation, receipt-only resolution and visible rejected status. An isolated rendered-page check also covers pending status through reload and terminal delivery. These browser fixtures intercept API responses; they do not establish live provider behavior.
 
-Run `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` for the full local gate. Nuke previews must next bind their exact target set and radiation mutation to a stable batch occurrence before batch cutover. Default startup still installs no moderation consumer; broader fairness/scale and controlled live-provider acceptance remain under #24.
+Run `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` for the full local gate. Nuke previews now bind their exact target set and radiation mutation to a stable batch occurrence through the separate sealed-plan flow. Default startup still installs no moderation consumer; broader fairness/scale and controlled live-provider acceptance remain under #24.
 
 ## Direct receipt contract — #177
 
@@ -32,4 +32,4 @@ The shared `backend/internal/http/testdata/direct-moderation-receipts.json` fixt
 
 ## Next batch boundary
 
-The [retained nuke preview/radiation store](nuke-preview-binding.md) now freezes canonical target sets and commits optional radiation atomically with batch work; zero-target radiation uses a distinct durable source without jobs. The [retained nuke HTTP contract](nuke-preview-binding.md#retained-http-contract) now connects sealed previews to atomic admission and lookup-only retries. Browser saved-request/status controls and guarded startup remain unfinished; the installed owner continues to refuse the legacy direct nuke execute endpoint.
+The [retained nuke preview/radiation store](nuke-preview-binding.md) now freezes canonical target sets and commits optional radiation atomically with batch work; zero-target radiation uses a distinct durable source without jobs. The [retained nuke HTTP contract](nuke-preview-binding.md#retained-http-contract) now connects sealed previews to atomic admission and lookup-only retries. Browser saved-request/status controls and the configured moderation opt-in now use the same owner; the installed owner continues to refuse the legacy direct nuke execute endpoint.
