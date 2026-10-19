@@ -171,7 +171,7 @@ func (s *Store) PreviewNuke(ctx context.Context, actor, connection string, optio
 	if err = tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&observed); err != nil {
 		return NukePlan{}, err
 	}
-	p := NukePlan{tenant: s.db.TenantID(), request: ManualRequest{ActorAccountID: actor, RequestKey: "00000000-0000-4000-8000-000000000000", ConnectionID: connection, Kind: "batch", nuke: &nukeBinding{options: o, observedAt: observed}}, targets: []NukeTarget{}}
+	p := NukePlan{tenant: s.db.TenantID(), request: ManualRequest{ActorAccountID: actor, RequestKey: nukePlanRequestKey, ConnectionID: connection, Kind: "batch", nuke: &nukeBinding{options: o, observedAt: observed}}, targets: []NukeTarget{}}
 	rows, err := tx.QueryContext(ctx, `SELECT id,envelope,occurred_at,actor_id FROM normalized_chat_events WHERE /*tenant:normalized_chat_events*/ AND connection_id=$1 AND platform='twitch' AND channel_id=$2 AND occurred_at BETWEEN $3 AND $4 ORDER BY occurred_at DESC,id DESC LIMIT $5`, connection, channel, observed.Add(-time.Duration(o.LookbackMinutes)*time.Minute), observed, o.HistoryLimit)
 	if err != nil {
 		return NukePlan{}, err
