@@ -363,6 +363,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(strings.ReplaceAll(string(rawManualModeration), "overlaid_runtime", role)); err != nil {
 		t.Fatal(err)
 	}
+	rawNukeTargets, err := os.ReadFile(filepath.Join(root, "0029_nuke_timeout_targets.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(string(rawNukeTargets)); err != nil {
+		t.Fatal(err)
+	}
 	u.User = url.UserPassword(moderationPacer, password)
 	moderationPacerURL := u.String()
 	u.User = url.UserPassword(moderation, password)

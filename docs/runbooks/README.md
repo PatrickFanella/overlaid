@@ -28,7 +28,7 @@ Use [getting started](getting-started.md) for a fresh installation. Read [curren
 
 ## Explicit retained moderation
 
-- [Moderation consumer](moderation-consumer.md), [source admission](moderation-admission.md), [operator occurrences](manual-moderation-sources.md), [single-action requests/status](operator-moderation-requests.md), and [automatic-rule routing/handoff](moderation-routing.md).
+- [Moderation consumer](moderation-consumer.md), [source admission](moderation-admission.md), [operator occurrences](manual-moderation-sources.md), [single-action requests/status](operator-moderation-requests.md), [nuke preview/radiation store](nuke-preview-binding.md), and [automatic-rule routing/handoff](moderation-routing.md).
 - [Contract](moderation-contract.md), [ledger](platform-moderation.md), [queue](moderation-queue.md), [executor](moderation-executor.md), and [worker](moderation-worker.md).
 - [Provider authorization](twitch-moderation-authorization.md), [typed transport](twitch-moderation.md), [pacing](moderation-pacing.md), and [priority qualification](moderation-priority.md).
 

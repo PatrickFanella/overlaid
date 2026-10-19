@@ -29,3 +29,7 @@ Run `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` for the full local gate. 
 Direct Helix success returns `{action, result: "accepted", reason: "twitch_helix"}` for delete, timeout, ban and unban. The browser resolves that exact response as a confirmed action and clears its saved intent. `allowed` is a bot-audit label and cannot confirm the HTTP result. Failed, queued, malformed or wrong-action responses remain unresolved; they cannot enable an automatic direct retry.
 
 The shared `backend/internal/http/testdata/direct-moderation-receipts.json` fixture is checked against actual synthetic-transport HTTP responses by `TestManualModerationScopePayloadAndAuditContracts` and consumed by the frontend intent tests and Chromium direct-action regression. This repairs [#177](https://git.subcult.tv/subculture-collective/overlaid/issues/177) without changing provider transport, retained admission or startup configuration.
+
+## Next batch boundary
+
+The [retained nuke preview/radiation store](nuke-preview-binding.md) now freezes canonical nonempty target sets and commits optional radiation atomically with batch work. HTTP plan serialization/persistence, zero-target radiation, nuke status UI and guarded startup still need their dependent contracts; the installed owner continues to refuse the existing nuke endpoint.

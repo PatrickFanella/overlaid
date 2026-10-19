@@ -309,7 +309,7 @@ func TestManualModerationUpgradeRollbackAndGate(t *testing.T) {
 	if err := f.Admin.QueryRow(`SELECT jsonb_build_array(to_jsonb(a)-'manual_source_id',to_jsonb(j))::text FROM platform_moderation_actions a JOIN river_job j ON j.args->>'action_id'=a.id WHERE a.id=$1`, id).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.Admin.Exec(`ALTER TABLE platform_moderation_actions DROP COLUMN manual_source_id; ALTER TABLE platform_moderation_actions ALTER COLUMN event_id SET NOT NULL; DROP TABLE platform_moderation_sources; DELETE FROM overlaid_migrations WHERE name='0028_manual_moderation_sources.sql'`); err != nil {
+	if _, err := f.Admin.Exec(`ALTER TABLE platform_moderation_actions DROP COLUMN nuke_target_event_id; ALTER TABLE platform_moderation_actions DROP COLUMN manual_source_id; ALTER TABLE platform_moderation_actions ALTER COLUMN event_id SET NOT NULL; DROP TABLE platform_moderation_sources; DELETE FROM overlaid_migrations WHERE name IN('0028_manual_moderation_sources.sql','0029_nuke_timeout_targets.sql')`); err != nil {
 		t.Fatal(err)
 	}
 	if stale, err := tenantdb.Open(f.RuntimeURL, db.TenantID()); err == nil {
@@ -335,6 +335,13 @@ func TestManualModerationUpgradeRollbackAndGate(t *testing.T) {
 		t.Fatal("partial migration survived", err)
 	}
 	if _, err := f.Admin.Exec(text); err != nil {
+		t.Fatal(err)
+	}
+	nukeMigration, err := os.ReadFile("../../../migrations/0029_nuke_timeout_targets.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Admin.Exec(string(nukeMigration)); err != nil {
 		t.Fatal(err)
 	}
 	var after string

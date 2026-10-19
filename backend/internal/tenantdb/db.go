@@ -102,6 +102,9 @@ func Open(databaseURL, tenantID string) (*DB, error) {
 		err = raw.QueryRowContext(ctx, `SELECT count(*)=2 AND bool_and(convalidated) FROM pg_constraint WHERE conrelid='platform_moderation_actions'::regclass AND ((conname='platform_moderation_source_kind' AND contype='c' AND pg_get_expr(conbin,conrelid)='((event_id IS NULL) <> (manual_source_id IS NULL))') OR (conname='platform_moderation_manual_source' AND contype='f' AND confrelid='platform_moderation_sources'::regclass))`).Scan(&migrated)
 	}
 	if err == nil && migrated {
+		err = raw.QueryRowContext(ctx, `SELECT count(*)=2 AND bool_and(convalidated) FROM pg_constraint WHERE conrelid='platform_moderation_actions'::regclass AND ((conname='platform_moderation_nuke_target_kind' AND contype='c' AND pg_get_expr(conbin,conrelid)='((nuke_target_event_id IS NULL) OR ((manual_source_id IS NOT NULL) AND (capability = ''user.timeout''::text) AND (target_event_id IS NULL)))') OR (conname='platform_moderation_nuke_target' AND contype='f' AND pg_get_constraintdef(oid)='FOREIGN KEY (tenant_id, nuke_target_event_id, connection_id) REFERENCES normalized_chat_events(tenant_id, id, connection_id) ON DELETE CASCADE'))`).Scan(&migrated)
+	}
+	if err == nil && migrated {
 		err = raw.QueryRowContext(ctx, `SELECT position('episode:' in pg_get_functiondef('resolve_newsroom_capability(text,text)'::regprocedure))>0`).Scan(&migrated)
 	}
 	if err != nil || !migrated {

@@ -21,11 +21,13 @@ import (
 type ManualRequest struct {
 	ActorAccountID, RequestKey, ConnectionID, Kind string
 	Actions                                        []ManualAction
+	nuke                                           *nukeBinding
 }
 
 type ManualAction struct {
-	Key    string
-	Action platform.ModerationAction
+	Key                              string
+	Action                           platform.ModerationAction
+	targetEventID, targetFingerprint string
 }
 
 // ManualAdmission acknowledges durable queueing, not provider delivery. IDs
@@ -56,6 +58,25 @@ func manualIdentity(tenant string, r ManualRequest) (string, string, []ManualAct
 			return "", "", nil, ErrInvalid
 		}
 		fields = append(fields, []any{entry.Key, checked.ChannelID, checked.Capability, checked.UserID, checked.MessageID, checked.Reason, int64(checked.Duration)})
+	}
+	if r.nuke != nil {
+		normalized, err := normalizeNukeOptions(r.nuke.options)
+		if err != nil || normalized != r.nuke.options || r.Kind != "batch" || r.nuke.observedAt.Year() < 1970 || r.nuke.observedAt.Year() > 9998 {
+			return "", "", nil, ErrInvalid
+		}
+		fields = append(fields, []any{"nuke-preview-v1", normalized, r.nuke.observedAt.UTC().Format(time.RFC3339Nano)})
+		for _, entry := range actions {
+			if !validHash(entry.targetEventID) || !validHash(entry.targetFingerprint) || entry.Key != "target:"+entry.targetEventID {
+				return "", "", nil, ErrInvalid
+			}
+			fields = append(fields, []string{entry.targetEventID, entry.targetFingerprint})
+		}
+	} else {
+		for _, entry := range actions {
+			if entry.targetEventID != "" || entry.targetFingerprint != "" {
+				return "", "", nil, ErrInvalid
+			}
+		}
 	}
 	raw, _ := json.Marshal([]string{"manual-moderation-source-v1", tenant, r.ActorAccountID, r.RequestKey})
 	source := hash(string(raw))
@@ -146,8 +167,22 @@ func (s *Store) AdmitManual(ctx context.Context, request ManualRequest) (ManualA
 	if err != nil {
 		return ManualAdmission{}, err
 	}
-	targets, actors := make([]*string, len(actions)), make([]string, len(actions))
+	targets, nukeTargets, actors := make([]*string, len(actions)), make([]*string, len(actions)), make([]string, len(actions))
 	for i, entry := range actions {
+		if request.nuke != nil {
+			actor, err := validateNukeTarget(ctx, tx, s.db.TenantID(), request.ConnectionID, request.nuke, entry)
+			if err != nil {
+				return ManualAdmission{}, err
+			}
+			target := entry.targetEventID
+			actors[i] = actor
+			if entry.Action.Capability == "user.timeout" {
+				nukeTargets[i] = &target
+			} else {
+				targets[i] = &target
+			}
+			continue
+		}
 		actors[i] = entry.Action.UserID
 		if entry.Action.Capability == "message.delete" {
 			var target string
@@ -164,6 +199,9 @@ func (s *Store) AdmitManual(ctx context.Context, request ManualRequest) (ManualA
 	if err = tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&result.CreatedAt); err != nil {
 		return ManualAdmission{}, err
 	}
+	if request.nuke != nil && (result.CreatedAt.Before(request.nuke.observedAt) || !result.CreatedAt.Before(request.nuke.observedAt.Add(2*time.Minute))) {
+		return ManualAdmission{}, ErrInvalid
+	}
 	result.Deadline, result.Created = result.CreatedAt.Add(2*time.Minute), true
 	_, err = tx.ExecContext(ctx, `INSERT INTO platform_moderation_sources(id,actor_account_id,connection_id,channel_id,kind,payload_hash,action_count,created_at,deadline) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, source, request.ActorAccountID, request.ConnectionID, channel, request.Kind, fingerprint, len(actions), result.CreatedAt, result.Deadline)
 	if err != nil {
@@ -171,13 +209,16 @@ func (s *Store) AdmitManual(ctx context.Context, request ManualRequest) (ManualA
 	}
 	for i, entry := range actions {
 		a := entry.Action
-		_, err = tx.ExecContext(ctx, `INSERT INTO platform_moderation_actions(id,manual_source_id,connection_id,action_key,channel_id,capability,user_id,message_id,reason,duration_ns,target_event_id,target_actor_id,payload_hash,deadline) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, result.ActionIDs[i], source, request.ConnectionID, entry.Key, channel, a.Capability, a.UserID, a.MessageID, a.Reason, int64(a.Duration), targets[i], actors[i], fingerprint, result.Deadline)
+		_, err = tx.ExecContext(ctx, `INSERT INTO platform_moderation_actions(id,manual_source_id,connection_id,action_key,channel_id,capability,user_id,message_id,reason,duration_ns,target_event_id,target_actor_id,payload_hash,deadline,nuke_target_event_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, result.ActionIDs[i], source, request.ConnectionID, entry.Key, channel, a.Capability, a.UserID, a.MessageID, a.Reason, int64(a.Duration), targets[i], actors[i], fingerprint, result.Deadline, nukeTargets[i])
 		if err != nil {
 			return ManualAdmission{}, err
 		}
 		if _, err = tx.EnqueueModeration(ctx, result.ActionIDs[i]); err != nil {
 			return ManualAdmission{}, err
 		}
+	}
+	if err = insertNukeRadiation(ctx, tx, s.db.TenantID(), source, request.nuke, result.CreatedAt); err != nil {
+		return ManualAdmission{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return ManualAdmission{}, err
