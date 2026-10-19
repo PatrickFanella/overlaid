@@ -302,6 +302,6 @@ func insertNukeRadiation(ctx context.Context, tx *tenantdb.Tx, tenant, source st
 	if err != nil {
 		return ErrInvalid
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO bot_moderation_rules(id,name,enabled,enforce,pattern,match_target,case_sensitive,regex,action,reason,source,expires_at,exempt_role,timeout_seconds) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt, rule.ExemptRole, rule.TimeoutSeconds)
+	_, err = tx.ExecContext(ctx, `INSERT INTO bot_moderation_rules(id,name,enabled,enforce,pattern,match_target,case_sensitive,regex,action,reason,source,expires_at,exempt_role,timeout_seconds,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)`, rule.ID, rule.Name, rule.Enabled, rule.Enforce, rule.Pattern, rule.MatchTarget, rule.CaseSensitive, rule.Regex, rule.Action, rule.Reason, rule.Source, rule.ExpiresAt, rule.ExemptRole, rule.TimeoutSeconds, created)
 	return err
 }
