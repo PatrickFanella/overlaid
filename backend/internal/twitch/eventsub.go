@@ -200,9 +200,12 @@ type EventSubSession struct {
 }
 
 type EventSubSubscription struct {
-	Type    string `json:"type"`
-	Version string `json:"version"`
-	Status  string `json:"status"`
+	Type      string `json:"type"`
+	Version   string `json:"version"`
+	Status    string `json:"status"`
+	Condition struct {
+		BroadcasterUserID string `json:"broadcaster_user_id"`
+	} `json:"condition"`
 }
 
 func DefaultSubscriptions() []SubscriptionSpec {
