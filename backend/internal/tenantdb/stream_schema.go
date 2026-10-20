@@ -45,7 +45,7 @@ func validateStreamSchema(ctx context.Context, raw *sql.DB) error {
 	if err != nil || !indexed {
 		return invalid
 	}
-	for _, table := range []string{"normalized_stream_events", "platform_stream_payloads"} {
+	for _, table := range []string{"normalized_stream_events", "platform_stream_payloads", "platform_stream_dispatch_receipts"} {
 		var fenced bool
 		err := raw.QueryRowContext(ctx, `SELECT count(*)=1 AND bool_and(p.polname='tenant_isolation' AND p.polcmd='*' AND p.polpermissive AND cardinality(p.polroles)=1 AND NOT 0=ANY(p.polroles) AND pg_get_expr(p.polqual,p.polrelid)=$2 AND pg_get_expr(p.polwithcheck,p.polrelid)=$2) FROM pg_policy p WHERE p.polrelid=to_regclass($1) AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE CASE WHEN role_id=0 THEN true ELSE pg_has_role(current_user,role_id,'MEMBER') OR pg_has_role(session_user,role_id,'MEMBER') END)`, table, `(tenant_id = (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid)`).Scan(&fenced)
 		if err != nil || !fenced {

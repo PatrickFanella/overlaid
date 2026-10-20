@@ -346,7 +346,7 @@ func TestStreamMigrationPreservesChatAndFailsClosed(t *testing.T) {
 	if err := f.Admin.QueryRow(`SELECT jsonb_agg(to_jsonb(j) - ARRAY['overlaid_stream_tenant_id','overlaid_stream_event_id','overlaid_stream_connection_id','overlaid_stream_deadline'])::text FROM river_job j`).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.Admin.Exec(`ALTER TABLE river_job DROP COLUMN overlaid_stream_tenant_id CASCADE; ALTER TABLE river_job DROP COLUMN overlaid_stream_event_id CASCADE; ALTER TABLE river_job DROP COLUMN overlaid_stream_connection_id CASCADE; ALTER TABLE river_job DROP COLUMN overlaid_stream_deadline CASCADE; ALTER TABLE river_job DROP CONSTRAINT overlaid_stream_args; DROP TABLE platform_stream_payloads; DROP TABLE normalized_stream_events; DELETE FROM overlaid_migrations WHERE name='0031_stream_event_ingest.sql'`); err != nil {
+	if _, err := f.Admin.Exec(`DROP POLICY stream_worker_dispatch ON river_job; DROP TABLE platform_stream_dispatch_receipts; DELETE FROM overlaid_migrations WHERE name='0032_stream_dispatch.sql'; ALTER TABLE river_job DROP COLUMN overlaid_stream_tenant_id CASCADE; ALTER TABLE river_job DROP COLUMN overlaid_stream_event_id CASCADE; ALTER TABLE river_job DROP COLUMN overlaid_stream_connection_id CASCADE; ALTER TABLE river_job DROP COLUMN overlaid_stream_deadline CASCADE; ALTER TABLE river_job DROP CONSTRAINT overlaid_stream_args; DROP TABLE platform_stream_payloads; DROP TABLE normalized_stream_events; DELETE FROM overlaid_migrations WHERE name='0031_stream_event_ingest.sql'`); err != nil {
 		t.Fatal(err)
 	}
 	if db, err := tenantdb.Open(f.RuntimeURL, a.TenantID()); err == nil {
@@ -362,6 +362,14 @@ func TestStreamMigrationPreservesChatAndFailsClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err = f.Admin.Exec(strings.ReplaceAll(string(migration), "overlaid_runtime", u.User.Username())); err != nil {
+		t.Fatal(err)
+	}
+	rawDispatch, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "0032_stream_dispatch.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	streamURL, _ := url.Parse(f.StreamWorkerURL)
+	if _, err = f.Admin.Exec(strings.NewReplacer("overlaid_runtime", u.User.Username(), "overlaid_stream_worker", streamURL.User.Username()).Replace(string(rawDispatch))); err != nil {
 		t.Fatal(err)
 	}
 	if err = f.Admin.QueryRow(`SELECT jsonb_agg(to_jsonb(j) - ARRAY['overlaid_stream_tenant_id','overlaid_stream_event_id','overlaid_stream_connection_id','overlaid_stream_deadline'])::text FROM river_job j`).Scan(&after); err != nil || before != after {
