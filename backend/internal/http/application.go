@@ -17,6 +17,7 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenancy"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
 	"github.com/riverqueue/river"
 )
 
@@ -42,6 +43,8 @@ type Application struct {
 	outbound          *outboundChat
 	moderation        *moderationConsumer
 	stream            *streamConsumer
+	streamRouting     sync.RWMutex
+	streamStarted     chan struct{}
 	moderationStarted atomic.Bool
 	moderationRouting sync.RWMutex
 	chatControl       *chatController
@@ -83,6 +86,15 @@ func NewApplication(cfg config.Config) (*Application, error) {
 	if cfg.TwitchChatDispatchMode == "retained" && (cfg.DatabaseURL == "" || cfg.WorkerDatabaseURL == "") {
 		return nil, errors.New("retained chat requires product and separate worker databases")
 	}
+	if cfg.TwitchStreamDispatchMode == "" {
+		cfg.TwitchStreamDispatchMode = "legacy"
+	}
+	if cfg.TwitchStreamDispatchMode != "legacy" && cfg.TwitchStreamDispatchMode != "retained" {
+		return nil, errors.New("TWITCH_STREAM_DISPATCH_MODE must be legacy or retained")
+	}
+	if cfg.TwitchStreamDispatchMode == "retained" && (cfg.TwitchChatDispatchMode != "retained" || strings.TrimSpace(cfg.StreamWorkerDatabaseURL) == "") {
+		return nil, errors.New("retained stream dispatch requires retained chat ingestion and a separate stream worker database")
+	}
 	if cfg.TwitchChatSendMode == "" {
 		cfg.TwitchChatSendMode = "legacy"
 	}
@@ -106,6 +118,9 @@ func NewApplication(cfg config.Config) (*Application, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &Application{config: cfg, runtimes: map[string]tenantRuntime{}, overlayKeys: map[string]string{}, deleting: map[string]bool{}, sessionRequests: map[string]map[string]context.CancelFunc{}, ctx: ctx, cancel: cancel}
+	if cfg.TwitchStreamDispatchMode == "retained" {
+		a.streamStarted = make(chan struct{})
+	}
 	if cfg.DatabaseURL == "" {
 		if cfg.DeploymentMode == "hosted" {
 			cancel()
@@ -325,8 +340,13 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	child, cancel := context.WithCancel(a.ctx)
 	s.tenantContext = child
 	s.chatReady = a.chatReady
+	s.streamStarted = a.streamStarted
+	s.streamReadiness = a.streamLifecycleReady
 	s.chatFence = a.checkChatController
 	s.moderationRoute = a.moderationRoute
+	s.streamLifecycle = func(ctx context.Context, message twitch.EventSubMessage, token twitch.Token) error {
+		return a.routeStreamLifecycle(ctx, s, message, token)
+	}
 	if a.config.TwitchChatSendMode == "retained" {
 		s.retainedReplies, err = newRegistryReplyAdmission(scope)
 		if err != nil {

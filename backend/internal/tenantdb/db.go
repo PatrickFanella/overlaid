@@ -116,6 +116,9 @@ func Open(databaseURL, tenantID string) (*DB, error) {
 	if err == nil && migrated {
 		err = validateStreamDispatchSchema(ctx, raw)
 	}
+	if err == nil && migrated {
+		err = d.ValidateStreamMode(ctx)
+	}
 	if err != nil || !migrated {
 		_ = raw.Close()
 		return nil, errors.New("tenant schema migration and forced RLS required")

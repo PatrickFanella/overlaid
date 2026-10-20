@@ -30,6 +30,10 @@ func (s *Server) newsroomAutomation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if input.Enabled || input.Repair {
+			if s.streamReadiness != nil && s.streamReadiness(r.Context()) != nil {
+				http.Error(w, errRetainedStream.Error(), http.StatusConflict)
+				return
+			}
 			if s.newsroomTwitchClient == nil {
 				http.Error(w, "connect Twitch EventSub first", 409)
 				return
@@ -49,6 +53,9 @@ func (s *Server) newsroomAutomation(w http.ResponseWriter, r *http.Request) {
 	connected, registered := false, false
 	if s.newsroomTwitchClient != nil {
 		connected, registered = s.newsroomTwitchClient.LifecycleStatus()
+		if s.streamReadiness != nil && s.streamReadiness(r.Context()) != nil {
+			connected, registered = false, false
+		}
 		if r.Method == http.MethodGet && connected {
 			var err error
 			registered, err = s.newsroomTwitchClient.CheckLifecycle(r.Context())
@@ -61,6 +68,12 @@ func (s *Server) newsroomAutomation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"enabled": d.Automation.Enabled, "connected": connected, "registered": registered, "lastError": d.Automation.LastError})
 }
 func (s *Server) newsroomTwitchLifecycle(ctx context.Context, message twitch.EventSubMessage, token twitch.Token) error {
+	if s.streamLifecycle != nil {
+		return s.streamLifecycle(ctx, message, token)
+	}
+	return s.newsroomTwitchLifecycleDirect(ctx, message, token)
+}
+func (s *Server) newsroomTwitchLifecycleDirect(ctx context.Context, message twitch.EventSubMessage, token twitch.Token) error {
 	if s.newsroom == nil {
 		return nil
 	}
