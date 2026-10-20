@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,15 +13,13 @@ import (
 	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/bot"
-	"git.subcult.tv/PatrickFanella/over-laid/internal/moderationpacing"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platformmoderation"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenancy"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
-	"git.subcult.tv/PatrickFanella/over-laid/internal/twitchoutbound"
 )
 
-func TestSharedModerationTransportProgressesDuringRetainedChat(t *testing.T) {
+func TestConfiguredSharedModerationProgressesDuringRetainedChat(t *testing.T) {
 	for _, quota := range []bool{false, true} {
 		t.Run(map[bool]string{false: "delivered", true: "quota"}[quota], func(t *testing.T) {
 			old, alpha, beta, f := applicationFixture(t)
@@ -66,6 +62,9 @@ func TestSharedModerationTransportProgressesDuringRetainedChat(t *testing.T) {
 			}
 			cfg := retainedSenderConfig(old.config, f)
 			cfg.BotExecutionDatabaseURL = f.BotExecutorURL
+			cfg.TwitchModerationMode = "retained"
+			cfg.ModerationWorkerURL = f.ModerationWorkerURL
+			cfg.ModerationPacingURL = f.ModerationPacerURL
 			if err := old.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -133,7 +132,7 @@ func TestSharedModerationTransportProgressesDuringRetainedChat(t *testing.T) {
 					}
 					if quota {
 						out := respond(429, `{"message":"PRIVATE_PROVIDER_QUOTA_BODY"}`)
-						out.Header.Set("Retry-After", "20")
+						out.Header.Set("Retry-After", "60")
 						return out, nil
 					}
 					return respond(204, ""), nil
@@ -146,6 +145,9 @@ func TestSharedModerationTransportProgressesDuringRetainedChat(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { unblock(); _ = app.Close() }()
+			if app.moderation == nil || !app.moderation.isReady() || moderationOwnerCheck(t, app) != "ok" {
+				t.Fatal("configured moderation owner not ready")
+			}
 			ingest := func(index int, id, text string) {
 				t.Helper()
 				s, err := app.runtime(t.Context(), accounts[index].tenant)
@@ -181,42 +183,6 @@ func TestSharedModerationTransportProgressesDuringRetainedChat(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for i := range 2 {
-				if _, created, err := ledger.Admit(t.Context(), intent); err != nil || created != (i == 0) {
-					t.Fatal("moderation duplicate admission", created, err)
-				}
-			}
-			pacer, err := moderationpacing.Open(t.Context(), f.ModerationPacerURL)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() { _ = pacer.Close() }()
-			adapter, err := twitchoutbound.NewShared(t.Context(), app.store, app.keys, twitchoutbound.Config{ClientID: cfg.TwitchClientID, ClientSecret: cfg.TwitchClientSecret, Client: twitchHTTPClient}, app.outbound.shared)
-			if err != nil {
-				t.Fatal(err)
-			}
-			executor, err := platformmoderation.NewExecutorWithGate(t.Context(), app.store.Product, pacer, app.moderationAuthorize(adapter.AuthorizeModeration), app.moderationAttemptGate)
-			if err != nil {
-				t.Fatal(err)
-			}
-			service, err := sql.Open("pgx", f.ModerationWorkerURL)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() { _ = service.Close() }()
-			client, err := platformmoderation.NewClient(t.Context(), service, executor)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := client.Stop(ctx); err != nil {
-					t.Error(err)
-				}
-			}()
-			// The fixture owns this explicit moderation client. Application startup
-			// still constructs no moderation pool/worker or admission route.
 			ingest(0, "chat-0", "!mixed")
 			select {
 			case <-started:
@@ -226,9 +192,22 @@ func TestSharedModerationTransportProgressesDuringRetainedChat(t *testing.T) {
 			for i := 1; i < 16; i++ {
 				ingest(i%2, fmt.Sprintf("chat-%d", i), "!mixed")
 			}
-			if err := client.Start(t.Context()); err != nil {
-				t.Fatal(err)
+			// The production-configured owner is already running. Admit only
+			// after chat transport is held so its real queue/guard path must
+			// make progress concurrently, without borrowing chat's echo lock.
+			admit := func(expectedCreated bool) {
+				t.Helper()
+				server, err := app.runtime(t.Context(), beta.tenant)
+				if err != nil {
+					t.Fatal(err)
+				}
+				id, created, err := app.moderation.admit(t.Context(), server, source.ID, "fixture-delete", botModerationActionRequest{Action: "delete", MessageID: "moderation-target"})
+				if err != nil || created != expectedCreated || id != intent.Action().ActionID {
+					t.Fatal("configured moderation admission changed identity", id, created, err)
+				}
 			}
+			admit(true)
+			admit(false)
 			wantState, wantJob := "delivered", "completed"
 			if quota {
 				wantState, wantJob = "rejected", "cancelled"
@@ -258,7 +237,7 @@ func TestSharedModerationTransportProgressesDuringRetainedChat(t *testing.T) {
 			if err != nil || len(receipts) != 1 || receipts[0].State != wantState || receipts[0].ActionID != intent.Action().ActionID {
 				t.Fatal("moderation receipt missing", receipts, err)
 			}
-			if quota && (receipts[0].Failure != platform.QuotaLimited || receipts[0].RetryAfter != 20*time.Second) {
+			if quota && (receipts[0].Failure != platform.QuotaLimited || receipts[0].RetryAfter != 60*time.Second) {
 				t.Fatal("moderation quota receipt collapsed", receipts[0])
 			}
 			encoded, err := json.Marshal(receipts)
@@ -287,28 +266,36 @@ func TestSharedModerationTransportProgressesDuringRetainedChat(t *testing.T) {
 			for _, account := range accounts {
 				waitOutboundState(t, app, account.tenant, 8, "delivered")
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := client.Stop(ctx); err != nil {
-				cancel()
+			// Restart the entire configured owner/controller, preserving both
+			// pacing lanes and the already terminal original action/job.
+			if err := app.Close(); err != nil {
 				t.Fatal(err)
 			}
-			cancel()
-			restarted, err := platformmoderation.NewClient(t.Context(), service, executor)
+			pacingSnapshot := func() string {
+				t.Helper()
+				var raw string
+				if err := f.Admin.QueryRow(`SELECT jsonb_build_object('chat',(SELECT coalesce(jsonb_agg(to_jsonb(a) ORDER BY a.account_key),'[]'::jsonb) FROM chat_pacing_accounts a),'channels',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.account_key,c.channel_key),'[]'::jsonb) FROM chat_pacing_channels c),'moderation',(SELECT coalesce(jsonb_agg(to_jsonb(b) ORDER BY b.kind,b.key),'[]'::jsonb) FROM moderation_pacing_buckets b))::text`).Scan(&raw); err != nil {
+					t.Fatal(err)
+				}
+				return raw
+			}
+			before := pacingSnapshot()
+			restarted, err := NewApplication(cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := restarted.Start(t.Context()); err != nil {
-				t.Fatal(err)
+			app = restarted
+			if !app.moderation.isReady() || moderationOwnerCheck(t, app) != "ok" {
+				t.Fatal("restarted configured owner not ready")
 			}
-			ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-			if err := restarted.Stop(ctx); err != nil {
-				cancel()
-				t.Fatal(err)
+			if after := pacingSnapshot(); after != before {
+				t.Fatal("restart rewrote pacing/cooldown state")
 			}
-			cancel()
-			if id, created, err := ledger.Admit(t.Context(), intent); err != nil || created || id != intent.Action().ActionID {
-				t.Fatal("terminal moderation admission gained another effect", created, err)
+			var activeCooldown bool
+			if err := f.Admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM moderation_pacing_buckets WHERE next_at>clock_timestamp())`).Scan(&activeCooldown); err != nil || activeCooldown != quota {
+				t.Fatal("restart lost active moderation cooldown", activeCooldown, err)
 			}
+			admit(false)
 			var jobs, attempts int
 			var originalDeadline bool
 			if err := f.Admin.QueryRow(`SELECT count(*),coalesce(max(attempt),0),bool_and((args->>'deadline')::bigint=$1) FROM river_job WHERE kind='overlaid_moderation'`, intent.Deadline().Unix()).Scan(&jobs, &attempts, &originalDeadline); err != nil || jobs != 1 || attempts != 1 || !originalDeadline {
