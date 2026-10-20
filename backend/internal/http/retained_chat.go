@@ -57,7 +57,7 @@ func (a *Application) initChatDispatch() error {
 		}
 		a.chatWorker, err = platformdispatch.NewPreparedClient(ctx, pool, a.store.Product, a.handleRetainedChat, active, a.prepareRetainedChat)
 		if err != nil {
-			return errors.New("retained chat worker configuration invalid")
+			return retainedWorkerStartupError(ctx, err, false)
 		}
 	}
 	lease, err := pool.Conn(ctx)
@@ -368,4 +368,26 @@ func (s *Server) dispatchRetainedChat(ctx context.Context, event platform.ChatEv
 		return replies.admit(ctx)
 	}
 	return nil
+}
+
+// Startup errors identify the lane and preserve only safe standard context
+// causes. A driver error or arbitrary callback message must never reach output.
+func retainedWorkerStartupError(ctx context.Context, cause error, outbound bool) error {
+	message := "retained chat dispatch worker configuration invalid"
+	if outbound {
+		message = "retained chat outbound worker configuration invalid"
+	}
+	fixed := errors.New(message)
+	known := ctx.Err()
+	if known == nil {
+		if errors.Is(cause, context.Canceled) {
+			known = context.Canceled
+		} else if errors.Is(cause, context.DeadlineExceeded) {
+			known = context.DeadlineExceeded
+		}
+	}
+	if known != nil {
+		return errors.Join(fixed, known)
+	}
+	return fixed
 }

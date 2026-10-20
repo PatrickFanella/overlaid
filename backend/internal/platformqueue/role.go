@@ -52,15 +52,32 @@ func Validate(ctx context.Context, service *sql.DB, product *tenantdb.DB, kind s
  FROM pg_policy p WHERE p.polrelid=c.oid AND EXISTS(SELECT 1 FROM unnest(p.polroles) role_id WHERE CASE WHEN role_id=0 THEN true ELSE EXISTS(SELECT 1 FROM reachable r WHERE r.oid=role_id) END))
  FROM tables c WHERE c.relname='river_job')`, policy, "(kind = '"+kind+"'::text)").Scan(&unsafe, &private, &ready, &fenced)
 	if err != nil || unsafe || private || !ready || !fenced {
-		return "", errors.New("separate restricted queue role and exact job policy required")
+		return "", validationFailure(ctx, errors.New("separate restricted queue role and exact job policy required"), err)
 	}
 	const identity = `SELECT current_database(),current_schema(),coalesce(inet_server_addr()::text,'local'),coalesce(inet_server_port(),0)::text`
 	var serviceID, productID [4]string
 	if err = service.QueryRowContext(ctx, identity).Scan(&serviceID[0], &serviceID[1], &serviceID[2], &serviceID[3]); err != nil {
-		return "", errors.New("queue database unavailable")
+		return "", validationFailure(ctx, errors.New("queue database unavailable"), err)
 	}
 	if err = product.QueryRowContext(ctx, identity).Scan(&productID[0], &productID[1], &productID[2], &productID[3]); err != nil || serviceID != productID {
-		return "", errors.New("queue and product database must match")
+		return "", validationFailure(ctx, errors.New("queue and product database must match"), err)
 	}
 	return serviceID[1], nil
+}
+
+// Only standard context identity crosses the redaction boundary. Driver errors,
+// SQL and connection details are intentionally discarded.
+func validationFailure(ctx context.Context, category, cause error) error {
+	known := ctx.Err()
+	if known == nil {
+		if errors.Is(cause, context.Canceled) {
+			known = context.Canceled
+		} else if errors.Is(cause, context.DeadlineExceeded) {
+			known = context.DeadlineExceeded
+		}
+	}
+	if known != nil {
+		return errors.Join(category, known)
+	}
+	return category
 }

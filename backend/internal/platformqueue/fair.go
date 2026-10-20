@@ -40,7 +40,7 @@ func NewFairDriver(ctx context.Context, service *sql.DB, product *tenantdb.DB, k
 	var ready bool
 	err = service.QueryRowContext(ctx, `SELECT count(*)=1 AND coalesce(bool_and(s.seqtypid='int8'::regtype AND s.seqincrement=1 AND s.seqstart=1 AND s.seqcache=1 AND s.seqmin=1 AND s.seqmax=999999999999999999 AND NOT s.seqcycle AND has_sequence_privilege(current_user,c.oid,'USAGE') AND has_sequence_privilege(current_user,c.oid,'SELECT') AND NOT EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND has_sequence_privilege(r.oid,c.oid,'UPDATE'))),false) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_sequence s ON s.seqrelid=c.oid WHERE n.nspname=current_schema() AND c.relname='overlaid_queue_turn_seq'`).Scan(&ready)
 	if err != nil || !ready {
-		return nil, "", ErrFairLeasing
+		return nil, "", validationFailure(ctx, ErrFairLeasing, err)
 	}
 	return &fairDriver{Driver: riverdatabasesql.New(service), service: service, kind: kind, queue: queue, schema: schema}, schema, nil
 }
