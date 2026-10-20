@@ -46,7 +46,7 @@ func (a *Application) prepareOutboundChat(ctx context.Context) error {
 	}
 	b.pool, err = sql.Open("pgx", a.config.OutboundWorkerDatabaseURL)
 	if err != nil {
-		return errors.New("retained chat worker configuration invalid")
+		return retainedWorkerStartupError(ctx, err, true)
 	}
 	b.pool.SetMaxOpenConns(16)
 	b.pool.SetMaxIdleConns(4)
@@ -70,7 +70,7 @@ func (a *Application) prepareOutboundChat(ctx context.Context) error {
 	}
 	b.worker, err = platformoutbound.NewControlledClient(ctx, b.pool, executor, a.outboundLeaseReady)
 	if err != nil {
-		return errors.New("retained chat worker configuration invalid")
+		return retainedWorkerStartupError(ctx, err, true)
 	}
 	return a.validateOutboundChat(ctx)
 }
