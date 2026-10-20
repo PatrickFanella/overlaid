@@ -36,3 +36,5 @@ Use [getting started](getting-started.md) for a fresh installation. Read [curren
 Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in with separate worker/pacing credentials, retained chat prerequisites, a closed startup lease barrier and persisted downgrade guards. Saved single-action and nuke HTTP/UI workflows are implemented. Legacy remains the default; the linked procedures distinguish finite fixtures from live provider and broader load acceptance.
 
 - [Retained channel-update subscriptions](channel-update-subscriptions.md): selected stream-set repair, reconnect, historical metadata and editorial isolation.
+
+- [Explicit conduit inspection](conduit-inspection.md): validated app-token reads of one selected conduit; no credential custody, provider writes or startup activation.
