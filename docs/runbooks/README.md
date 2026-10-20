@@ -44,3 +44,4 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Service app custody](service-app-custody.md): separate administrative encryption, revision checks, local revocation and metadata-only receipts; no execution resolver or startup caller.
 
 - [Custodied conduit inspection](custodied-conduit-inspection.md): separate token-column-only role, exact app revision, read-only transaction and revocation fencing.
+- [Native conduit inspection CLI](conduit-inspection-cli.md): exact app/client/revision/conduit selection, private execution configuration and one bounded metadata report.
