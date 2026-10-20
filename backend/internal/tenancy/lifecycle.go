@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_stream_dispatch_receipts", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -152,6 +152,9 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 		}
 		if table == "platform_moderation_actions" {
 			query = `SELECT jsonb_build_object('actionId',id,'eventId',event_id,'manualSourceId',manual_source_id,'connectionId',connection_id,'capability',capability,'state',state,'code',code,'failure',failure,'retryAfter',retry_after_ns,'createdAt',created_at,'startedAt',started_at,'finishedAt',finished_at) FROM platform_moderation_actions WHERE /*tenant:platform_moderation_actions*/ LIMIT 250001`
+		}
+		if table == "platform_stream_dispatch_receipts" {
+			query = `SELECT jsonb_build_object('eventId',event_id,'connectionId',connection_id,'state',state,'code',code,'startedAt',started_at,'finishedAt',finished_at) FROM platform_stream_dispatch_receipts WHERE /*tenant:platform_stream_dispatch_receipts*/ LIMIT 250001`
 		}
 		if table == "platform_dispatch_receipts" {
 			query = `SELECT jsonb_build_object('eventId',event_id,'connectionId',connection_id,'state',state,'code',code,'startedAt',started_at,'finishedAt',finished_at) FROM platform_dispatch_receipts WHERE /*tenant:platform_dispatch_receipts*/ LIMIT 250001`

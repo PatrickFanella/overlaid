@@ -22,6 +22,8 @@ func Validate(ctx context.Context, service *sql.DB, product *tenantdb.DB, kind s
 		policy = "outbound_worker_dispatch"
 	case "overlaid_moderation":
 		policy = "moderation_worker_dispatch"
+	case "overlaid_stream_dispatch":
+		policy = "stream_worker_dispatch"
 	default:
 		return "", errors.New("invalid queue role kind")
 	}

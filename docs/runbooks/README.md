@@ -21,7 +21,7 @@ Use [getting started](getting-started.md) for a fresh installation. Read [curren
 
 - [Bot onboarding](bot-onboarding.md), [tenant-owned bots](bot-accounts.md), [service bot administration](service-bot-admin.md), and [shared delegation](shared-bot-delegation.md).
 - [Retained Twitch dispatch](retained-twitch-chat.md) and [retained chat sender](retained-chat-sender.md): explicit activation, roles, readiness and rollback.
-- [Normalized stream-event contracts](normalized-twitch-stream-events.md) and [retained stream admission](retained-stream-events.md): typed online/offline and channel updates, atomic private storage/jobs and tenant lifecycle; consumer activation remains separate.
+- [Normalized stream-event contracts](normalized-twitch-stream-events.md) and [retained stream admission](retained-stream-events.md): typed online/offline and channel updates, atomic private storage/jobs and tenant lifecycle. The [fenced stream consumer](stream-dispatch.md) provides explicit controlled leasing and handler receipts; application/subscription activation remains separate.
 - [Platform ingestion](platform-ingest.md), [dispatch](platform-dispatch.md), [outbound ledger](platform-outbound.md), and [outbound worker](outbound-worker.md).
 - [Manual announcements](manual-announcement-intents.md), [registry reply collection](registry-reply-collection.md), and [saved-command admission](registry-admission-binding.md).
 - [Runtime capacity](runtime-capacity.md), [chat pacing](chat-pacing.md), [read-only pacing inspection](pacing-inspection.md), and [tenant-fair leasing](tenant-fair-leasing.md).

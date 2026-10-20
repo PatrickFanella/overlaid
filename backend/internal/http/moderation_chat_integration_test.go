@@ -119,6 +119,18 @@ func TestConfiguredSharedModerationProgressesDuringRetainedChat(t *testing.T) {
 							return nil, r.Context().Err()
 						}
 					}
+					if !quota && n > 1 {
+						// Fifteen sequential successful sends take at least 31.5s.
+						// Exercise progress beyond the former aggregate 30s
+						// cutoff without coupling it to the quota cooldown's lifetime.
+						delay := time.NewTimer(2100 * time.Millisecond)
+						defer delay.Stop()
+						select {
+						case <-delay.C:
+						case <-r.Context().Done():
+							return nil, r.Context().Err()
+						}
+					}
 					return respond(200, fmt.Sprintf(`{"data":[{"message_id":"mixed-chat-%d","is_sent":true}]}`, n)), nil
 				case "api.twitch.tv/helix/moderation/chat":
 					modCalls.Add(1)
@@ -249,17 +261,35 @@ func TestConfiguredSharedModerationProgressesDuringRetainedChat(t *testing.T) {
 				t.Fatal("moderation cooldown crossed budgets", chatBlocked, modBlocked, err)
 			}
 			unblock()
-			drainDeadline := time.Now().Add(30 * time.Second)
+			// Poll-only leasing, short snoozes and fair admission can each add
+			// a scheduling interval between sends. Require continued progress,
+			// not an aggregate throughput that the production policy does not
+			// promise, while retaining the immutable source deadline.
+			drainStarted := time.Now()
+			progressDeadline := drainStarted.Add(30 * time.Second)
+			lastDelivered := 0
 			for {
 				var delivered, failed int
 				if err := f.Admin.QueryRow(`SELECT count(*) FILTER(WHERE state='delivered'),count(*) FILTER(WHERE state IN('rejected','uncertain')) FROM platform_outbound_actions`).Scan(&delivered, &failed); err != nil || failed != 0 {
 					t.Fatal("chat drain failed", delivered, failed, err)
 				}
 				if delivered == 16 {
+					t.Log("chat drain completed", "elapsed", time.Since(drainStarted))
 					break
 				}
-				if time.Now().After(drainDeadline) {
-					t.Fatal("chat did not drain independently of moderation quota", delivered)
+				if delivered > lastDelivered {
+					lastDelivered = delivered
+					progressDeadline = time.Now().Add(30 * time.Second)
+				}
+				if time.Now().After(progressDeadline) || !time.Now().Before(intent.Deadline()) {
+					var metadata string
+					diagnosticErr := f.Admin.QueryRow(`SELECT jsonb_build_object(
+      'ledger',(SELECT coalesce(jsonb_agg(x),'[]'::jsonb) FROM (SELECT state,code,failure,count(*) AS count FROM platform_outbound_actions GROUP BY state,code,failure) x),
+      'jobs',(SELECT coalesce(jsonb_agg(x),'[]'::jsonb) FROM (SELECT kind,state,attempt,count(*) AS count,min(extract(epoch FROM scheduled_at-clock_timestamp()))::int AS scheduled_in_seconds,max(coalesce(cardinality(errors),0)) AS error_count,max(coalesce((metadata->>'snoozes')::int,0)) AS snoozes,max(CASE WHEN errors[cardinality(errors)]->>'error' IN('outbound_prepare_unavailable','outbound_expiry_bookkeeping_unavailable','outbound_invalid_job','outbound_bookkeeping_failed','outbound_deadline_elapsed','outbound_terminal','outbound_invalid_result','dispatch_runtime_unavailable','dispatch_prepare_unavailable','handler_failed','handler_cancelled') THEN errors[cardinality(errors)]->>'error' ELSE 'redacted_or_none' END) AS last_error FROM river_job GROUP BY kind,state,attempt) x),
+      'dispatch',(SELECT coalesce(jsonb_agg(x),'[]'::jsonb) FROM (SELECT state,code,count(*) AS count FROM platform_dispatch_receipts GROUP BY state,code) x),
+      'pacing',(SELECT coalesce(jsonb_agg(x),'[]'::jsonb) FROM (SELECT jsonb_array_length(attempts) AS charged,extract(epoch FROM clock_timestamp()-to_timestamp((attempts->>-1)::numeric/1000000))::int AS last_charge_age_seconds,(SELECT max(gap)/1000000.0 FROM (SELECT value::bigint-lag(value::bigint) OVER(ORDER BY ord) AS gap FROM jsonb_array_elements_text(attempts) WITH ORDINALITY a(value,ord)) gaps) AS max_charge_gap_seconds,lease_until>clock_timestamp() AS leased,extract(epoch FROM lease_until-clock_timestamp())::int AS lease_seconds,(SELECT count(*) FROM jsonb_array_elements(fair_state->'waiters') w WHERE NOT (w->>'granted')::boolean) AS waiting,(SELECT count(*) FROM jsonb_array_elements(fair_state->'waiters') w WHERE NOT (w->>'granted')::boolean AND (w->>'active_until')::timestamptz>clock_timestamp()) AS active_waiting,(SELECT max(extract(epoch FROM next_at-clock_timestamp()))::int FROM chat_pacing_channels) AS channel_wait_seconds FROM chat_pacing_accounts) x))::text`).Scan(&metadata)
+					t.Log("mixed drain metadata", metadata, diagnosticErr, "controller_ready", app.chatReady(), "sender_ready", app.outboundLeaseReady())
+					t.Fatal("chat drain stopped progressing or exceeded original deadline", delivered)
 				}
 				time.Sleep(20 * time.Millisecond)
 			}
