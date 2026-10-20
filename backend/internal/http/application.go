@@ -41,6 +41,7 @@ type Application struct {
 	sendGates         map[string]*tenantSendGate
 	outbound          *outboundChat
 	moderation        *moderationConsumer
+	stream            *streamConsumer
 	moderationStarted atomic.Bool
 	moderationRouting sync.RWMutex
 	chatControl       *chatController
@@ -152,6 +153,7 @@ func (a *Application) Close() error {
 	a.cancel()
 	a.mu.Lock()
 	moderation := a.moderation
+	stream := a.stream
 	a.mu.Unlock()
 	var result error
 	if a.chatControl != nil {
@@ -160,6 +162,12 @@ func (a *Application) Close() error {
 	stopCtx, stopWorkers := context.WithTimeout(context.Background(), 50*time.Second)
 	if a.outbound != nil {
 		a.outbound.ready.Store(false)
+	}
+	if stream != nil {
+		if err := stream.close(stopCtx); err != nil {
+			stopWorkers()
+			return err
+		}
 	}
 	if moderation != nil {
 		if err := moderation.close(stopCtx); err != nil {
@@ -576,6 +584,7 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 	count := len(a.runtimes)
 	capacityBlocked := a.runtimeCapacityBlocked && count >= a.config.TenantRuntimeLimit
 	moderation := a.moderation
+	stream := a.stream
 	a.mu.Unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -622,6 +631,14 @@ func (a *Application) publicStatus(w http.ResponseWriter, r *http.Request) {
 			status = "degraded"
 		}
 		checks = append(checks, map[string]string{"name": "chat_outbound", "status": outbound})
+	}
+	if stream != nil {
+		check := "ok"
+		if !stream.isReady() {
+			check = "degraded"
+			status = "degraded"
+		}
+		checks = append(checks, map[string]string{"name": "stream_dispatch", "status": check})
 	}
 	if moderation != nil {
 		check := "ok"
