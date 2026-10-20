@@ -1,6 +1,6 @@
 # Normalized Twitch stream events
 
-[Issue #195](https://git.subcult.tv/subculture-collective/overlaid/issues/195), under Phase 2's P2.4, adds an explicit codec for three event kinds. This is a typed input boundary for future retained ingestion. It does not add subscriptions, database rows, jobs, a dispatcher or an application startup caller. Existing Newsroom stream lifecycle handling continues on its authenticated WebSocket.
+[Issue #195](https://git.subcult.tv/subculture-collective/overlaid/issues/195), under Phase 2's P2.4, adds an explicit codec for three event kinds. This is a typed input boundary for future retained ingestion. That contract unit adds no subscriptions, database rows, jobs, dispatcher or application startup caller. The subsequent [retained admission unit](retained-stream-events.md) adds separate event/payload storage and atomic follow-up jobs; it also leaves subscription and consumer activation unregistered. Existing Newsroom stream lifecycle handling continues on its authenticated WebSocket.
 
 | EventSub type/version | Normalized kind | Typed content | Capability mapping |
 | --- | --- | --- | --- |
@@ -30,4 +30,4 @@ Local bounds are 1024 UTF-8 bytes for each scope/native identity and channel ide
 
 `make verify` includes native-shaped synthetic fixtures, stable redelivery identity, scope/kind isolation, broadcaster/condition drift, version/type/timestamp failures, bounded text/labels, exact empty metadata and exclusion of private extensions. Focused race checks use `go test -race -count=1 ./internal/platform ./internal/twitch` from `backend/`. They contact no provider.
 
-Before enabling any additional subscription or retained consumer, implement and test durable uniqueness/conflict handling, active connection binding, raw-payload bounds, tenant RLS, exports, retention and cascading lifecycle deletion for these kinds. Conduit reconciliation must preserve one dispatch owner and keep the current transport recoverable. The [roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) tracks those separate acceptance gates; this codec does not satisfy them.
+The [retained admission store](retained-stream-events.md) now supplies durable uniqueness/conflict handling, active connection binding, raw-payload bounds, tenant RLS, exports, retention and cascading lifecycle deletion. Before enabling additional subscriptions, qualify the separate fenced consumer, coordinated dispatch/subscription ownership and downgrade guards. Conduit reconciliation must preserve one dispatch owner and keep the current transport recoverable. The [roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) tracks those separate acceptance gates; this codec does not satisfy them.

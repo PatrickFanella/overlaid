@@ -1,6 +1,6 @@
 # Current capabilities and limits
 
-Reviewed against main through PR #194 and the #195 stream-event contract work on October 19, 2026. This page is a capability snapshot for readers evaluating Over-Laid. The [remaining-work roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) defines delivery order and acceptance gates; dated QA reports record observations from their named environments.
+Reviewed against main through PR #196 and the #197 retained stream-admission work on October 19, 2026. This page is a capability snapshot for readers evaluating Over-Laid. The [remaining-work roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) defines delivery order and acceptance gates; dated QA reports record observations from their named environments.
 
 ## Implemented product workflows
 
@@ -32,7 +32,7 @@ An explicitly installed moderation consumer drains direct effects before ownersh
 
 The retained ledgers use durable pre-effect claims and preserve uncertainty without automatic replay. Readiness, a pacing report or queue admission is not effect authorization or proof of delivery. Finite shared-cooldown, uneven-arrival and configured-owner mixed moderation/chat fixtures support the implemented boundaries. The configured mixed case checks typed moderation progress during held chat, natural drain, whole-application restart with unchanged pacing state and no replay; broader hostile-load and full thousand-channel delivery acceptance remain open.
 
-The [normalized stream-event boundary](../runbooks/normalized-twitch-stream-events.md) defines typed online/offline and channel-update inputs with exact provider versions, broadcaster binding and `stream.read` mappings. It has no retained storage or startup consumer; durable admission and lifecycle isolation must pass before additional subscription activation.
+The [normalized stream-event boundary](../runbooks/normalized-twitch-stream-events.md) defines typed online/offline and channel-update inputs with exact provider versions, broadcaster binding and `stream.read` mappings. The [retained admission store](../runbooks/retained-stream-events.md) adds atomic private storage/jobs, conflict detection, shared chat/stream storage limits and tenant lifecycle checks. It has no stream worker, subscription registration or startup consumer; fenced execution and coordinated cutover remain prerequisites to activation.
 
 ## Roadmap and release qualification
 
