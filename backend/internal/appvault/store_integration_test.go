@@ -270,6 +270,7 @@ func TestCustodyRoleIsolationAndDrift(t *testing.T) {
 		}
 	})
 	for name, statement := range map[string]string{
+		"grant option":     "GRANT SELECT(secret_ciphertext) ON service_app_credentials TO %s WITH GRANT OPTION",
 		"client write":     "GRANT UPDATE(client_id) ON service_app_credentials TO %s",
 		"receipt spoof":    "GRANT INSERT(principal) ON service_app_credential_audit TO %s",
 		"truncate":         "GRANT TRUNCATE ON service_app_credentials TO %s",
