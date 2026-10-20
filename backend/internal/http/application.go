@@ -15,6 +15,7 @@ import (
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/config"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/events"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/platformingest"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenancy"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitch"
@@ -342,6 +343,9 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	s.chatReady = a.chatReady
 	s.streamStarted = a.streamStarted
 	s.streamReadiness = a.streamLifecycleReady
+	s.streamObservations = func(ctx context.Context) (platformingest.StreamObservations, error) {
+		return a.readStreamObservations(ctx, s)
+	}
 	s.chatFence = a.checkChatController
 	s.moderationRoute = a.moderationRoute
 	s.streamLifecycle = func(ctx context.Context, message twitch.EventSubMessage, token twitch.Token) error {

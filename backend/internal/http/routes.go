@@ -39,6 +39,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/auth/twitch/login-url", s.requireOperator(s.twitchLoginURL))
 	s.mux.HandleFunc("GET /api/auth/twitch/callback", s.twitchCallback)
 	s.mux.HandleFunc("GET /api/auth/twitch/status", s.twitchStatus)
+	s.mux.HandleFunc("GET /api/twitch/stream-observations", s.requireOperator(s.retainedStreamObservations))
 	s.mux.HandleFunc("GET /api/twitch/interactions", s.requireOperator(s.twitchInteractions))
 	s.mux.HandleFunc("PUT /api/twitch/interactions", s.requireOperator(s.putTwitchInteractions))
 	s.mux.HandleFunc("GET /api/twitch/rewards", s.requireOperator(s.twitchRewards))
