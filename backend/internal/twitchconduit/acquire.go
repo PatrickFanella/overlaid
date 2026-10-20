@@ -2,6 +2,8 @@ package twitchconduit
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
@@ -44,6 +46,7 @@ type AppAuthorizer struct {
 type AppCredential struct {
 	clientID               string
 	readToken              func() string
+	bindsSecret            func(string) bool
 	validatedAt, expiresAt time.Time
 }
 
@@ -64,6 +67,16 @@ func (c *AppCredential) UnmarshalJSON([]byte) error {
 		*c = AppCredential{}
 	}
 	return ErrUnauthorized
+}
+
+// BindsClientSecret proves the supplied secret was the source of this explicit
+// acquisition. It returns no fingerprint and grants no custody/effect permission.
+func (c AppCredential) BindsClientSecret(secret string) bool {
+	return c.bindsSecret != nil && c.bindsSecret(secret)
+}
+
+func secretBinding(clientID, secret string) [32]byte {
+	return sha256.Sum256([]byte("overlaid:twitch:app-secret:v1\x00" + clientID + "\x00" + secret))
 }
 
 // Token is an explicit plaintext accessor for trusted custody/inspection. Fresh
@@ -233,6 +246,11 @@ func (a *AppAuthorizer) Acquire(caller context.Context) (result Acquisition, err
 		return uncertain(ErrUnauthorized)
 	}
 	token := issued.Token
-	credential := AppCredential{clientID: a.clientID, readToken: func() string { return token }, validatedAt: time.Now(), expiresAt: until}
+	clientID := a.clientID
+	binding := secretBinding(clientID, secret)
+	credential := AppCredential{clientID: clientID, readToken: func() string { return token }, bindsSecret: func(candidate string) bool {
+		other := secretBinding(clientID, candidate)
+		return subtle.ConstantTimeCompare(binding[:], other[:]) == 1
+	}, validatedAt: time.Now(), expiresAt: until}
 	return Acquisition{Outcome: AcquisitionIssued, Credential: &credential}, nil
 }

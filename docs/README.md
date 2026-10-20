@@ -14,6 +14,7 @@ Start with the [project README](../README.md) for the product overview and [curr
 
 - [Runbook index](runbooks/README.md): grouped links for setup, stream operation, accounts and retained execution.
 - [Preflight](runbooks/live-stream-preflight.md) and [live QA](runbooks/live-qa.md): prepare and rehearse before a stream.
+- [Service app custody](runbooks/service-app-custody.md): separate administrative app credentials, role isolation, keys and rollback boundaries.
 - [Tenancy and recovery](runbooks/tenancy-and-recovery.md): database roles, migrations, vault keys, sessions and lifecycle.
 - [Packaging and backups](runbooks/production-packaging.md), [recovery](runbooks/production-recovery.md), and [monitoring](runbooks/uptime-monitoring.md).
 

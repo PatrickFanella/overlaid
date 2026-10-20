@@ -42,6 +42,14 @@ func TestAcquireAppCredentialValidatedPrivateAndInspectorComposition(t *testing.
 	if err != nil || result.Outcome != AcquisitionIssued || result.Credential == nil {
 		t.Fatal(result, err)
 	}
+	if !result.Credential.BindsClientSecret("PRIVATE+CLIENT/&=SECRET") || result.Credential.BindsClientSecret("other-secret") {
+		t.Fatal("acquisition secret binding lost")
+	}
+	a.clientID = "changed-after-acquisition"
+	if !result.Credential.BindsClientSecret("PRIVATE+CLIENT/&=SECRET") {
+		t.Fatal("credential retained mutable authorizer identity")
+	}
+	a.clientID = "client"
 	metadata := result.Credential.Metadata()
 	if metadata.ClientID != "client" || metadata.ValidatedAt.Before(started) || metadata.ExpiresAt.After(time.Now().Add(120*time.Second)) || metadata.ExpiresAt.Before(started.Add(110*time.Second)) {
 		t.Fatal("nonconservative lifetime", metadata)
