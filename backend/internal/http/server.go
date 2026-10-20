@@ -423,7 +423,8 @@ func (s *Server) StartBackground(ctx context.Context) {
 	}
 
 	client := twitch.Client{
-		Lifecycle: s.newsroomTwitchLifecycle,
+		Lifecycle:              s.newsroomTwitchLifecycle,
+		RetainedChannelUpdates: s.streamLifecycle != nil && s.config.TwitchStreamDispatchMode == "retained",
 		LifecycleWanted: func() bool {
 			if s.newsroom == nil || s.streamReadiness != nil && s.streamReadiness(ctx) != nil {
 				return false

@@ -57,7 +57,7 @@ func (b *streamConsumer) ingest(ctx context.Context, server *Server, message twi
 	if !b.app.ownsStreamRuntime(server.tenantID, server) || b.guard(bound) != nil {
 		return errRetainedStream
 	}
-	if message.Payload.Subscription.Type != "stream.online" && message.Payload.Subscription.Type != "stream.offline" {
+	if message.Payload.Subscription.Type != "stream.online" && message.Payload.Subscription.Type != "stream.offline" && message.Payload.Subscription.Type != "channel.update" {
 		return errRetainedStream
 	}
 	event, err := twitch.NormalizeStreamNotification(platform.Connection{TenantID: server.tenantID, ID: "twitch:" + token.UserID, Platform: "twitch"}, token.UserID, message, time.Now().UTC())

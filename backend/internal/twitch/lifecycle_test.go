@@ -26,7 +26,7 @@ func TestLifecycleSubscriptionsRegisterPairAndRepairOnlyOwnedPair(t *testing.T) 
 		switch r.Method {
 		case "GET":
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"data":[{"id":"owned-online","type":"stream.online","status":"enabled","condition":{"broadcaster_user_id":"owner"},"transport":{"session_id":"socket"}},{"id":"owned-offline","type":"stream.offline","status":"enabled","condition":{"broadcaster_user_id":"owner"},"transport":{"session_id":"socket"}},{"id":"chat","type":"channel.chat.message","condition":{"broadcaster_user_id":"owner"},"transport":{"session_id":"socket"}},{"id":"other","type":"stream.online","condition":{"broadcaster_user_id":"other"},"transport":{"session_id":"socket"}},{"id":"other-session","type":"stream.offline","condition":{"broadcaster_user_id":"owner"},"transport":{"session_id":"other-socket"}}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"id":"owned-online","type":"stream.online","version":"1","status":"enabled","condition":{"broadcaster_user_id":"owner"},"transport":{"session_id":"socket"}},{"id":"owned-offline","type":"stream.offline","version":"1","status":"enabled","condition":{"broadcaster_user_id":"owner"},"transport":{"session_id":"socket"}},{"id":"chat","type":"channel.chat.message","condition":{"broadcaster_user_id":"owner"},"transport":{"session_id":"socket"}},{"id":"other","type":"stream.online","condition":{"broadcaster_user_id":"other"},"transport":{"session_id":"socket"}},{"id":"other-session","type":"stream.offline","condition":{"broadcaster_user_id":"owner"},"transport":{"session_id":"other-socket"}}]}`))
 		case "DELETE":
 			deleted = append(deleted, r.URL.Query().Get("id"))
 			w.WriteHeader(204)
