@@ -33,3 +33,23 @@ The migration is additive and does not rewrite tenant data, select a transport o
 ## Verification
 
 The disposable PostgreSQL fixtures use synthetic credentials and HTTP transports. They check source-secret binding, field/revision/client/app/purpose encryption, key replacement, ciphertext clearing, metadata privacy, fixed receipt fields, concurrent revision conflicts, receipt rollback, eight-record capacity, 1,000-receipt retention, role isolation and schema/grant drift. A blocked administrative lock proves post-wait expiry and grant checks. Full qualification uses `make verify` and `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh`, including uncached application and River races. These checks do not prove production migration, durable storage after power loss, live provider permission or conduit activation.
+
+## Native administrative CLI
+
+[Issue #218](https://git.subcult.tv/subculture-collective/overlaid/issues/218) adds the native `overlaid-app-admin` binary to `make build`. It uses only the private `OVERLAID_APP_ADMIN_DATABASE_URL`, supplied through the operator's environment/private secret delivery. Provision the restricted app-admin login described above. Do not pass a DSN on the command line, reuse another database role or put credentials in shell history. The API container does not include or start this operator binary.
+
+```sh
+bin/overlaid-app-admin --help
+bin/overlaid-app-admin --version
+bin/overlaid-app-admin list
+bin/overlaid-app-admin receipts --app APP_UUID --limit 20
+bin/overlaid-app-admin revoke --app APP_UUID --revision CURRENT_REVISION
+```
+
+Replace the placeholders with the immutable app UUID and currently observed positive revision from `list`. The command rejects duplicate, mixed, missing and positional arguments before opening a pool. Help/version work without a database or provider configuration. Subcommand help includes examples. No keyring, client secret or token is read by this CLI; it cannot install, acquire, refresh, export plaintext or activate an app.
+
+Successful stdout is one JSON object: `{"accounts":[...]}`, `{"receipts":[...]}` or `{"account":{...}}`, using the fixed custody metadata fields above. Empty collections serialize as arrays. Receipts default to twenty, with a limit of 1..1000. A missing or pruned receipt query returns an empty array, which proves neither that an operation never committed nor that a credential is active. Use current account metadata as well. Reading history does not create a missing app or credential.
+
+Revocation requires the exact record and revision. A stale/missing record refuses; a matching already-revoked revision returns its existing metadata without another receipt. Clearing local ciphertext does not call Twitch or terminate credentials already held elsewhere. The command makes one store call and never retries. Database work shares a five-second context, shortened by caller cancellation; trusted output/cleanup must cooperate, and a blocked output sink can delay process completion. Close the pool before emitting successful JSON. Output failure can leave partial stdout. Output or close failure can follow a committed revocation, so inspect the original record and receipts before deciding on another explicit action. Do not replace the app ID or advance the expected revision merely because output was lost.
+
+Exit codes are 0 for success, 1 for operational refusal/unavailability/unresolved outcome, 2 for invalid arguments or missing private DSN, and 130 for interruption. Diagnostics go to stderr and omit raw arguments, driver errors, DSNs and credentials. There is no automatic retry or success output after a reported operational error. Removing/stopping the binary rolls back this tool without changing stored records or required keys; default application startup is unchanged.
