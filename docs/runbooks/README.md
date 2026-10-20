@@ -42,3 +42,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Explicit app-token acquisition](app-token-acquisition.md): one bounded issuance attempt and app validation, with redacted ephemeral credentials and explicit uncertainty before custody.
 
 - [Service app custody](service-app-custody.md): separate administrative encryption, revision checks, local revocation and metadata-only receipts; no execution resolver or startup caller.
+
+- [Custodied conduit inspection](custodied-conduit-inspection.md): separate token-column-only role, exact app revision, read-only transaction and revocation fencing.

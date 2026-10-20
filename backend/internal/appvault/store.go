@@ -1,5 +1,6 @@
-// Package appvault provides administrative custody for service app credentials.
-// It exposes no plaintext resolver, tenant API or runtime execution permission.
+// Package appvault provides separate administrative custody and explicit
+// read-only conduit inspection for service app credentials. It exposes no
+// plaintext resolver, tenant API or startup execution permission.
 package appvault
 
 import (
