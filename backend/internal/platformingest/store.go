@@ -98,7 +98,7 @@ func (s *Store) IngestChat(ctx context.Context, event platform.ChatEvent, native
 		limit = 250000
 	}
 	var count int64
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM normalized_chat_events WHERE /*tenant:normalized_chat_events*/`).Scan(&count); err != nil {
+	if err = tx.QueryRowContext(ctx, retainedEventCount).Scan(&count); err != nil {
 		return false, err
 	}
 	if count >= limit {
