@@ -70,13 +70,7 @@ func NewInspector(config Config) (*Inspector, error) {
 	if !atom(config.ClientID, 128) || !atom(config.ConduitID, 128) || config.Token == nil {
 		return nil, ErrInvalid
 	}
-	client := &http.Client{Timeout: inspectionTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if config.HTTPClient != nil {
-		client.Transport = config.HTTPClient.Transport
-		if config.HTTPClient.Timeout > 0 && config.HTTPClient.Timeout < client.Timeout {
-			client.Timeout = config.HTTPClient.Timeout
-		}
-	}
+	client := providerClient(config.HTTPClient)
 	return &Inspector{clientID: config.ClientID, conduitID: config.ConduitID, token: config.Token, http: client}, nil
 }
 
@@ -273,6 +267,12 @@ func (i *Inspector) get(ctx context.Context, endpoint, token string, budget *int
 }
 
 func (i *Inspector) validate(ctx context.Context, token string, budget *int) error {
+	_, err := i.validateUntil(ctx, token, budget)
+	return err
+}
+
+func (i *Inspector) validateUntil(ctx context.Context, token string, budget *int) (time.Time, error) {
+	requested := time.Now()
 	var response struct {
 		ClientID string  `json:"client_id"`
 		Login    *string `json:"login"`
@@ -281,25 +281,25 @@ func (i *Inspector) validate(ctx context.Context, token string, budget *int) err
 	}
 	var fields map[string]json.RawMessage
 	if err := i.get(ctx, validateURL, token, budget, &fields); err != nil {
-		return err
+		return time.Time{}, err
 	}
 	for key := range fields {
 		switch key {
 		case "client_id", "login", "user_id", "expires_in", "scopes":
 		default:
-			return ErrInvalid
+			return time.Time{}, ErrInvalid
 		}
 	}
 	raw, _ := json.Marshal(fields)
 	if json.Unmarshal(raw, &response) != nil {
-		return ErrInvalid
+		return time.Time{}, ErrInvalid
 	}
 	// Twitch documents null user identity for app tokens; omitted fields are
 	// also accepted. Even an explicitly empty string is a user-shaped response.
-	if response.ClientID != i.clientID || response.Login != nil || response.UserID != nil || response.Expires < 30 {
-		return ErrUnauthorized
+	if response.ClientID != i.clientID || response.Login != nil || response.UserID != nil || !validLifetime(response.Expires) {
+		return time.Time{}, ErrUnauthorized
 	}
-	return nil
+	return requested.Add(time.Duration(response.Expires) * time.Second), nil
 }
 
 func (i *Inspector) selected(ctx context.Context, token string, budget *int) (int, error) {

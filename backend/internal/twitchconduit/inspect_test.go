@@ -21,10 +21,10 @@ type roundTrip func(*http.Request) (*http.Response, error)
 func (fn roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return fn(r) }
 
 type fixture struct {
-	mu                      sync.Mutex
-	validates, lists, pages int
-	respond                 func(*http.Request, int) (int, string)
-	tokenCalls              atomic.Int32
+	mu                             sync.Mutex
+	validates, lists, pages, posts int
+	respond                        func(*http.Request, int) (int, string)
+	tokenCalls                     atomic.Int32
 }
 
 func inspectorFixture(t *testing.T, respond func(*http.Request, int) (int, string)) (*Inspector, *fixture) {
@@ -33,11 +33,20 @@ func inspectorFixture(t *testing.T, respond func(*http.Request, int) (int, strin
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer PRIVATE-TOKEN" {
+		if r.URL.Path != "/oauth2/token" && (r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer PRIVATE-TOKEN") {
 			t.Error("unexpected method or credentials")
 		}
 		n := 0
 		switch r.URL.Path {
+		case "/oauth2/token":
+			f.posts++
+			n = f.posts
+			if r.Method != http.MethodPost || r.URL.RawQuery != "" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" || r.Header.Get("Idempotency-Key") != "" || r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+				t.Error("invalid credential transport")
+			}
+			if r.ParseForm() != nil || len(r.PostForm) != 3 || r.PostForm.Get("client_id") != "client" || r.PostForm.Get("client_secret") != "PRIVATE+CLIENT/&=SECRET" || r.PostForm.Get("grant_type") != "client_credentials" {
+				t.Error("invalid credential form")
+			}
 		case "/oauth2/validate":
 			f.validates++
 			n = f.validates
@@ -76,6 +85,9 @@ func inspectorFixture(t *testing.T, respond func(*http.Request, int) (int, strin
 		if r.URL.Host == "api.twitch.tv" && r.Header.Get("Client-Id") != "client" {
 			t.Error("client identity missing")
 		}
+		if r.URL.Path == "/oauth2/token" && r.GetBody != nil {
+			t.Error("credential POST permits body replay")
+		}
 		cloned := r.Clone(r.Context())
 		u := *r.URL
 		u.Scheme = target.Scheme
@@ -98,6 +110,8 @@ func inspectorFixture(t *testing.T, respond func(*http.Request, int) (int, strin
 
 func defaultResponse(r *http.Request, n int) (int, string) {
 	switch r.URL.Path {
+	case "/oauth2/token":
+		return 200, `{"access_token":"PRIVATE-TOKEN","expires_in":3600,"token_type":"bearer"}`
 	case "/oauth2/validate":
 		return 200, `{"client_id":"client","login":null,"user_id":null,"scopes":null,"expires_in":3600}`
 	case "/helix/eventsub/conduits":
