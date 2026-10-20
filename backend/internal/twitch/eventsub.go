@@ -143,27 +143,28 @@ func sanitizeDiagnosticMessage(message string) string {
 }
 
 type Client struct {
-	ChatIngest          func(context.Context, EventSubMessage, Token) error
-	LifecycleWanted     func() bool
-	Lifecycle           func(context.Context, EventSubMessage, Token) error
-	lifecycleMu         sync.Mutex
-	lifecycleSession    string
-	lifecycleToken      Token
-	lifecycleRegistered bool
-	channelPoints       channelPointProcessor
-	ClientID            string
-	WebSocketURL        string
-	SubscriptionURL     string
-	TokenProvider       TokenProvider
-	CommandProcessor    *CommandProcessor
-	IgnoreChatMessage   func(string) bool
-	InteractionRules    func() interactions.Rules
-	Publish             Publisher
-	Diagnostics         *DiagnosticsStore
-	HTTPClient          *http.Client
-	Dialer              *websocket.Dialer
-	Now                 func() time.Time
-	SubscriptionPlan    []SubscriptionSpec
+	ChatIngest             func(context.Context, EventSubMessage, Token) error
+	RetainedChannelUpdates bool // Immutable: retained-mode channel.update v2 on the lifecycle socket.
+	LifecycleWanted        func() bool
+	Lifecycle              func(context.Context, EventSubMessage, Token) error
+	lifecycleMu            sync.Mutex
+	lifecycleSession       string
+	lifecycleToken         Token
+	lifecycleRegistered    bool
+	channelPoints          channelPointProcessor
+	ClientID               string
+	WebSocketURL           string
+	SubscriptionURL        string
+	TokenProvider          TokenProvider
+	CommandProcessor       *CommandProcessor
+	IgnoreChatMessage      func(string) bool
+	InteractionRules       func() interactions.Rules
+	Publish                Publisher
+	Diagnostics            *DiagnosticsStore
+	HTTPClient             *http.Client
+	Dialer                 *websocket.Dialer
+	Now                    func() time.Time
+	SubscriptionPlan       []SubscriptionSpec
 }
 
 type SubscriptionSpec struct {
@@ -387,7 +388,7 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 			}
 			return c.runSessionWithGrace(ctx, token, url)
 		case "notification":
-			if c.Lifecycle != nil && (message.Payload.Subscription.Type == "stream.online" || message.Payload.Subscription.Type == "stream.offline") {
+			if c.Lifecycle != nil && c.lifecycleKind(message.Payload.Subscription.Type) {
 				if stringValue(message.Payload.Event, "broadcaster_user_id") != token.UserID {
 					continue
 				}
@@ -424,6 +425,11 @@ func (c *Client) runSession(ctx context.Context, token Token, wsURL string, crea
 				c.Publish(event)
 			}
 		case "revocation":
+			if c.lifecycleKind(message.Payload.Subscription.Type) && message.Payload.Subscription.Condition.BroadcasterUserID == token.UserID {
+				c.lifecycleMu.Lock()
+				c.lifecycleRegistered = false
+				c.lifecycleMu.Unlock()
+			}
 			log.Printf("Twitch EventSub subscription revoked type=%s status=%s", message.Payload.Subscription.Type, message.Payload.Subscription.Status)
 		}
 	}

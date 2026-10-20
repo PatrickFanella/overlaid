@@ -11,13 +11,38 @@ import (
 )
 
 type lifecycleSubscription struct {
-	ID, Type, Status string
-	Condition        struct {
+	ID, Type, Status, Version string
+	Condition                 struct {
 		Broadcaster string `json:"broadcaster_user_id"`
 	}
 	Transport struct {
 		Session string `json:"session_id"`
 	}
+}
+
+// lifecycleSpecs is fixed by client construction. Retained channel observations
+// share the existing authenticated socket; legacy clients retain their pair.
+func (c *Client) lifecycleSpecs() []SubscriptionSpec {
+	specs := []SubscriptionSpec{}
+	for _, kind := range []string{"stream.online", "stream.offline"} {
+		specs = append(specs, SubscriptionSpec{Type: kind, Version: "1"})
+	}
+	if c.RetainedChannelUpdates {
+		specs = append(specs, SubscriptionSpec{Type: "channel.update", Version: "2"})
+	}
+	for i := range specs {
+		specs[i].Condition = func(token Token) map[string]string { return map[string]string{"broadcaster_user_id": token.UserID} }
+	}
+	return specs
+}
+
+func (c *Client) lifecycleKind(kind string) bool {
+	for _, spec := range c.lifecycleSpecs() {
+		if spec.Type == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) LifecycleStatus() (bool, bool) {
@@ -82,8 +107,8 @@ func (c *Client) lifecycleSubscriptions(ctx context.Context) ([]lifecycleSubscri
 	return nil, errors.New("Twitch subscription lookup exceeded its page limit")
 }
 
-// Repair touches only lifecycle subscriptions for this authenticated WebSocket
-// session and broadcaster. Chat and other session subscriptions remain intact.
+// Repair touches only the selected stream types for this authenticated WebSocket
+// session and broadcaster, including obsolete versions. Other types stay intact.
 func (c *Client) EnsureLifecycle(ctx context.Context, repair bool) error {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -93,6 +118,7 @@ func (c *Client) EnsureLifecycle(ctx context.Context, repair bool) error {
 		return errors.New("Twitch EventSub is not connected")
 	}
 	if err := c.refreshLifecycleToken(ctx); err != nil {
+		c.lifecycleRegistered = false
 		return err
 	}
 	if c.lifecycleRegistered && !repair {
@@ -105,7 +131,7 @@ func (c *Client) EnsureLifecycle(ctx context.Context, repair bool) error {
 			return err
 		}
 		for _, sub := range subscriptions {
-			if (sub.Type == "stream.online" || sub.Type == "stream.offline") && sub.Condition.Broadcaster == c.lifecycleToken.UserID && sub.Transport.Session == c.lifecycleSession {
+			if c.lifecycleKind(sub.Type) && sub.Condition.Broadcaster == c.lifecycleToken.UserID && sub.Transport.Session == c.lifecycleSession {
 				req, _ := http.NewRequestWithContext(ctx, "DELETE", c.subscriptionURL()+"?id="+url.QueryEscape(sub.ID), nil)
 				req.Header.Set("Authorization", "Bearer "+c.lifecycleToken.AccessToken)
 				req.Header.Set("Client-Id", c.ClientID)
@@ -120,11 +146,10 @@ func (c *Client) EnsureLifecycle(ctx context.Context, repair bool) error {
 			}
 		}
 	}
-	for _, kind := range []string{"stream.online", "stream.offline"} {
-		spec := SubscriptionSpec{Type: kind, Version: "1", Condition: func(token Token) map[string]string { return map[string]string{"broadcaster_user_id": token.UserID} }}
+	for _, spec := range c.lifecycleSpecs() {
 		if err := c.createSubscription(ctx, c.lifecycleToken, c.lifecycleSession, spec); err != nil {
 			c.lifecycleRegistered = false
-			return errors.New("Twitch lifecycle subscription failed; repair the pair before enabling")
+			return errors.New("twitch stream subscription failed; repair the set before enabling")
 		}
 	}
 	c.lifecycleRegistered = true
@@ -135,6 +160,7 @@ func (c *Client) CheckLifecycle(ctx context.Context) (bool, error) {
 	defer cancel()
 	c.lifecycleMu.Lock()
 	defer c.lifecycleMu.Unlock()
+	c.lifecycleRegistered = false
 	if c.lifecycleSession == "" {
 		return false, nil
 	}
@@ -145,12 +171,21 @@ func (c *Client) CheckLifecycle(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	found := map[string]bool{}
+	found := map[string]int{}
 	for _, sub := range subscriptions {
 		if sub.Condition.Broadcaster == c.lifecycleToken.UserID && sub.Transport.Session == c.lifecycleSession && sub.Status == "enabled" {
-			found[sub.Type] = true
+			for _, spec := range c.lifecycleSpecs() {
+				if sub.Type == spec.Type && sub.Version == spec.Version {
+					found[sub.Type]++
+				}
+			}
 		}
 	}
-	c.lifecycleRegistered = found["stream.online"] && found["stream.offline"]
+	c.lifecycleRegistered = true
+	for _, spec := range c.lifecycleSpecs() {
+		if found[spec.Type] != 1 {
+			c.lifecycleRegistered = false
+		}
+	}
 	return c.lifecycleRegistered, nil
 }
