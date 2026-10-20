@@ -29,6 +29,7 @@ import (
 )
 
 type Server struct {
+	streamObservations        func(context.Context) (platformingest.StreamObservations, error)
 	streamStarted             <-chan struct{}
 	streamReadiness           func(context.Context) error
 	streamLifecycle           func(context.Context, twitch.EventSubMessage, twitch.Token) error
