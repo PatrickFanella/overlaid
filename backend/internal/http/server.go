@@ -29,6 +29,9 @@ import (
 )
 
 type Server struct {
+	streamStarted             <-chan struct{}
+	streamReadiness           func(context.Context) error
+	streamLifecycle           func(context.Context, twitch.EventSubMessage, twitch.Token) error
 	moderationRoute           func(context.Context) (context.Context, *moderationConsumer, func(), error)
 	platformIngest            *platformingest.Store
 	retainedReplies           *registryReplyAdmission
@@ -421,7 +424,7 @@ func (s *Server) StartBackground(ctx context.Context) {
 	client := twitch.Client{
 		Lifecycle: s.newsroomTwitchLifecycle,
 		LifecycleWanted: func() bool {
-			if s.newsroom == nil {
+			if s.newsroom == nil || s.streamReadiness != nil && s.streamReadiness(ctx) != nil {
 				return false
 			}
 			d, err := s.newsroom.Get(ctx)
@@ -457,6 +460,13 @@ func (s *Server) StartBackground(ctx context.Context) {
 
 	s.newsroomTwitchClient = &client
 	go func() {
+		if s.streamStarted != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.streamStarted:
+			}
+		}
 		log.Printf("Twitch EventSub background worker enabled")
 		if s.credentialStore == nil {
 			client.Run(ctx)

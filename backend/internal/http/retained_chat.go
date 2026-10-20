@@ -51,7 +51,7 @@ func (a *Application) initChatDispatch() error {
 	pool.SetMaxIdleConns(4)
 	a.chatControl = &chatController{pool: pool, checks: make(chan struct{}, 1)}
 	if retained {
-		active := a.chatReady
+		active := func() bool { return a.chatReady() && a.streamLeasingReady() }
 		if a.config.TwitchChatSendMode == "retained" {
 			active = a.outboundLeaseReady
 		}
@@ -68,6 +68,9 @@ func (a *Application) initChatDispatch() error {
 	var acquired bool
 	if err = lease.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(`+chatControllerKey+`)`).Scan(&acquired); err != nil || !acquired {
 		return errors.New("another chat controller is active")
+	}
+	if err := a.checkStreamStartupMode(ctx); err != nil {
+		return err
 	}
 	var mode string
 	err = a.store.Product.QueryRowContext(ctx, `SELECT value FROM app_metadata WHERE /*tenant:app_metadata*/ AND key='chat_dispatch_mode'`).Scan(&mode)
@@ -97,6 +100,11 @@ func (a *Application) initChatDispatch() error {
 			return errors.New("chat mode persistence unavailable")
 		}
 		defer func() { _ = tx.Rollback() }()
+		if a.config.TwitchStreamDispatchMode == "retained" {
+			if _, err := tx.ExecContext(ctx, `SELECT set_config('app.stream_dispatch_mode','retained-v1',true)`); err != nil {
+				return errRetainedStream
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO app_metadata(key,value) VALUES('chat_dispatch_mode','retained') ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_at=now()`); err != nil {
 			return errors.New("chat mode persistence unavailable")
 		}
@@ -147,6 +155,19 @@ func (a *Application) initChatDispatch() error {
 			a.moderationStarted.Store(true)
 		}
 		close(a.outbound.started)
+	}
+	if a.config.TwitchStreamDispatchMode == "retained" {
+		consumer, err := a.prepareStream(ctx, a.config.StreamWorkerDatabaseURL)
+		if err != nil {
+			return errRetainedStream
+		}
+		if err := a.persistStreamStartupMode(ctx); err != nil {
+			return err
+		}
+		if err := consumer.start(ctx); err != nil {
+			return err
+		}
+		close(a.streamStarted)
 	}
 	go func() {
 		ticker := time.NewTicker(time.Second)

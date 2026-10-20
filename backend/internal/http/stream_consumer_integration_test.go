@@ -156,7 +156,7 @@ func TestOwnedStreamConsumerPreparationGuards(t *testing.T) {
 }
 
 func TestOwnedStreamConsumerIdleDriftAndSavedCallbacks(t *testing.T) {
-	for _, mode := range []string{"queue-policy", "column-grant", "controller", "worker", "capabilities", "handler", "caller-canceled"} {
+	for _, mode := range []string{"queue-policy", "column-grant", "mode-trigger", "mode-function", "controller", "worker", "capabilities", "handler", "caller-canceled"} {
 		t.Run(mode, func(t *testing.T) {
 			app, alpha, _, f, _ := ownedStreamFixture(t)
 			consumer, err := app.prepareStream(t.Context(), f.StreamWorkerURL)
@@ -179,6 +179,10 @@ func TestOwnedStreamConsumerIdleDriftAndSavedCallbacks(t *testing.T) {
 			case "column-grant":
 				u, _ := url.Parse(f.StreamWorkerURL)
 				_, err = f.Admin.Exec(`GRANT SELECT(provider_user_id) ON platform_connections TO ` + u.User.Username())
+			case "mode-trigger":
+				_, err = f.Admin.Exec(`ALTER TABLE app_metadata DISABLE TRIGGER retained_stream_mode`)
+			case "mode-function":
+				_, err = f.Admin.Exec(`ALTER FUNCTION fence_stream_dispatch_mode() SECURITY DEFINER`)
 			case "controller":
 				unlockChatController(t, app)
 			case "worker":

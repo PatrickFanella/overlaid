@@ -70,3 +70,18 @@ func TestRetainedModerationConfigurationIsExplicit(t *testing.T) {
 		t.Fatal("moderation configuration not loaded")
 	}
 }
+
+func TestRetainedStreamConfigurationIsExplicit(t *testing.T) {
+	t.Setenv("TWITCH_STREAM_DISPATCH_MODE", "")
+	t.Setenv("PLATFORM_STREAM_WORKER_DATABASE_URL", "")
+	defaults := Load()
+	if defaults.TwitchStreamDispatchMode != "legacy" || defaults.StreamWorkerDatabaseURL != "" {
+		t.Fatal("stream consumer activated by default")
+	}
+	t.Setenv("TWITCH_STREAM_DISPATCH_MODE", "retained")
+	t.Setenv("PLATFORM_STREAM_WORKER_DATABASE_URL", "stream-fixture")
+	selected := Load()
+	if selected.TwitchStreamDispatchMode != "retained" || selected.StreamWorkerDatabaseURL != "stream-fixture" {
+		t.Fatal("stream configuration not loaded")
+	}
+}

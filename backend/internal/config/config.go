@@ -50,6 +50,8 @@ type Config struct {
 	PacingDatabaseURL         string
 	BotExecutionDatabaseURL   string
 	TwitchChatDispatchMode    string
+	TwitchStreamDispatchMode  string
+	StreamWorkerDatabaseURL   string
 	WorkerDatabaseURL         string
 	MPRISEnabled              bool
 	MPRISPlayer               string
@@ -101,6 +103,8 @@ func Load() Config {
 		PacingDatabaseURL:         env("OVERLAID_PACING_DATABASE_URL", ""),
 		BotExecutionDatabaseURL:   env("OVERLAID_BOT_EXECUTION_DATABASE_URL", ""),
 		TwitchChatDispatchMode:    env("TWITCH_CHAT_DISPATCH_MODE", "legacy"),
+		TwitchStreamDispatchMode:  env("TWITCH_STREAM_DISPATCH_MODE", "legacy"),
+		StreamWorkerDatabaseURL:   env("PLATFORM_STREAM_WORKER_DATABASE_URL", ""),
 		WorkerDatabaseURL:         env("PLATFORM_WORKER_DATABASE_URL", ""),
 		MPRISEnabled:              envBool("MPRIS_ENABLED", false),
 		MPRISPlayer:               env("MPRIS_PLAYER", ""),

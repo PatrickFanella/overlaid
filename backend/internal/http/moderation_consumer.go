@@ -90,7 +90,7 @@ func (a *Application) prepareModeration(ctx context.Context, queueURL, pacingURL
 	if err != nil {
 		return nil, errModerationController
 	}
-	b.worker, err = platformmoderation.NewControlledClient(ctx, b.pool, executor, b.isReady)
+	b.worker, err = platformmoderation.NewControlledClient(ctx, b.pool, executor, func() bool { return b.isReady() && a.streamLeasingReady() })
 	if err != nil || b.validate(ctx) != nil || ctx.Err() != nil {
 		return nil, errModerationController
 	}

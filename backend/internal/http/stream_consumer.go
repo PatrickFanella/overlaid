@@ -26,6 +26,7 @@ type streamConsumer struct {
 	ready          atomic.Bool
 	lifecycle      chan struct{}
 	workerStarted  bool
+	installed      bool
 	monitorDone    chan struct{}
 	monitorStarted bool
 }
@@ -35,11 +36,15 @@ func (a *Application) prepareStream(ctx context.Context, queueURL string) (_ *st
 	defer stop()
 	ctx, cancel := context.WithTimeout(owned, 10*time.Second)
 	defer cancel()
+	release, err := acquireModerationRoute(ctx, a.streamRouting.TryLock, a.streamRouting.Unlock)
+	if err != nil {
+		return nil, errRetainedStream
+	}
+	defer release()
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	// Until the routing cutover is installed, refuse any application that can
-	// also start the legacy EventSub lifecycle callback.
-	if ctx.Err() != nil || a.ctx.Err() != nil || a.store == nil || a.stream != nil || a.config.TwitchEventSub || a.config.TwitchChatDispatchMode != "retained" || strings.TrimSpace(queueURL) == "" || a.checkChatController(ctx) != nil {
+	// EventSub is allowed only with the coordinated retained routing contract.
+	if ctx.Err() != nil || a.ctx.Err() != nil || a.store == nil || a.stream != nil || a.config.TwitchEventSub && a.config.TwitchStreamDispatchMode != "retained" || a.config.TwitchChatDispatchMode != "retained" || strings.TrimSpace(queueURL) == "" || a.checkChatController(ctx) != nil {
 		return nil, errRetainedStream
 	}
 	b := &streamConsumer{app: a, lifecycle: make(chan struct{}, 1), monitorDone: make(chan struct{})}
@@ -61,6 +66,7 @@ func (a *Application) prepareStream(ctx context.Context, queueURL string) (_ *st
 	if err != nil || b.validate(ctx) != nil || ctx.Err() != nil {
 		return nil, errRetainedStream
 	}
+	b.installed = true
 	a.stream = b
 	return b, nil
 }
@@ -79,7 +85,7 @@ func (b *streamConsumer) start(ctx context.Context) error {
 	if b.workerStarted || b.ctx.Err() != nil {
 		return errRetainedStream
 	}
-	if b.app.checkChatController(startup) != nil || b.validate(startup) != nil {
+	if b.app.checkChatController(startup) != nil || b.validate(startup) != nil || !b.app.streamModeCurrent(startup) {
 		b.fail()
 		return errRetainedStream
 	}
@@ -127,6 +133,9 @@ func (b *streamConsumer) isReady() bool {
 func (b *streamConsumer) validate(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	if b.app.store.Product.ValidateStreamMode(ctx) != nil {
+		return errRetainedStream
+	}
 	if _, err := platformqueue.Validate(ctx, b.pool, b.app.store.Product, "overlaid_stream_dispatch"); err != nil {
 		return errRetainedStream
 	}
@@ -146,7 +155,7 @@ func (b *streamConsumer) guard(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if !b.isReady() || b.app.checkChatController(ctx) != nil || b.validate(ctx) != nil {
+	if !b.isReady() || b.app.checkChatController(ctx) != nil || b.validate(ctx) != nil || !b.app.streamModeCurrent(ctx) {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -221,6 +230,13 @@ func (b *streamConsumer) close(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+	}
+	if b.installed {
+		release, err := acquireModerationRoute(ctx, b.app.streamRouting.TryLock, b.app.streamRouting.Unlock)
+		if err != nil {
+			return err
+		}
+		defer release()
 	}
 	var result error
 	if b.pool != nil {

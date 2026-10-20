@@ -401,6 +401,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(strings.NewReplacer("overlaid_runtime", role, "overlaid_stream_worker", streamWorker).Replace(string(rawStreamDispatch))); err != nil {
 		t.Fatal(err)
 	}
+	rawStreamRouting, err := os.ReadFile(filepath.Join(root, "0033_stream_routing.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(string(rawStreamRouting)); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = owner.Exec(`ALTER ROLE ` + streamWorker + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}

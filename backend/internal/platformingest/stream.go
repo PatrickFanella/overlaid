@@ -15,8 +15,9 @@ import (
 var ErrConflict = errors.New("retained platform event conflicts with original input")
 
 // IngestStream atomically retains one typed stream event, its optional private
-// native payload and one separate follow-up job. No current worker leases this
-// kind. A duplicate never replaces content, creates another job or renews time.
+// native payload and one separate follow-up job. Only the explicitly selected
+// stream consumer leases this kind. A duplicate never replaces content, creates
+// another job or renews time.
 func (s *Store) IngestStream(ctx context.Context, event platform.StreamEvent, native json.RawMessage) (bool, error) {
 	canonical, err := platform.NewStreamEvent(platform.Connection{TenantID: event.TenantID, ID: event.ConnectionID, Platform: event.Platform}, event.NativeEventID, event.Kind, event.OccurredAt, event.ReceivedAt, event.Channel, event.Online, event.Offline, event.Update)
 	if err != nil || event.TenantID != s.db.TenantID() || event.Platform != "twitch" {
