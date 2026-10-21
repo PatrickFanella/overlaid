@@ -52,3 +52,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Native conduit inspection CLI](conduit-inspection-cli.md): exact app/client/revision/conduit selection, private execution configuration and one bounded metadata report.
 - [Durable service-app issuance](service-app-issuance.md): database-generated intents, one-use claims, atomic custody installation and retained uncertainty.
 - [Native app issuance](native-app-issuance.md): explicit prepare/execute steps, dedicated private configuration, original request IDs and no automatic retry.
+
+- [One-attempt WebSocket conduit shard assignment](conduit-shard-assignment.md)
