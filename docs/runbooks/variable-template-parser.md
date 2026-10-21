@@ -6,7 +6,7 @@
 
 `Parse(source, 2)` returns a private `Template` snapshot or a `Diagnostic`. Other syntax versions are refused. The original source is retained, including whitespace and escapes; `Parts()` returns a deep copy of its syntax tree. An explicitly parsed empty template is valid; the zero snapshot reports syntax version zero and is invalid.
 
-Template parts are literal text or calls. Named calls preserve their spelling, such as `$(user)`, `$(api:weather)` or `$(nowPlaying.title)`. Identifiers use ASCII letters followed by letters, digits, underscores, dots, dashes or colons. The parser does not decide whether a name is supported. In particular, parsing `eval` or `urlfetch` is only recognizing text; it opens no evaluator or network path. The future renderer must use a typed allowlist and visible unknown-name diagnostics.
+Template parts are literal text or calls. Named calls preserve their spelling, such as `$(user)`, `$(api:weather)` or `$(nowPlaying.title)`. Identifiers use ASCII letters followed by letters, digits, underscores, dots, dashes or colons. The parser does not decide whether a name is supported. The separate [captured renderer](variable-template-rendering.md) applies a data-only allowlist. In particular, parsing `eval` or `urlfetch` is only recognizing text; it opens no evaluator or network path. The future renderer must use a typed allowlist and visible unknown-name diagnostics.
 
 Calls contain whitespace-separated bare, quoted or nested-call arguments. Either quote style can contain nested calls. A backslash represents the following Unicode character literally; a trailing backslash is an error. Unicode whitespace separates arguments. A quote at the beginning of an argument opens a quoted argument; quotes within an already-started bare token remain literal characters. Unescaped parentheses cannot occur in bare text. Adjacent bare/quoted/call arguments require whitespace; concatenate literal/call parts inside one quoted argument instead. Outside calls, braces, quotes and ordinary parentheses remain literal text. An escaped `$(` opener stays literal and is never reparsed.
 
@@ -34,7 +34,7 @@ After parsing, a snapshot supports concurrent reads; changing nested slices, cal
 
 ## Remaining gates
 
-V1b still needs pure bounded rendering with captured values/clock/seed, typed name resolution, lazy fallback, no output reparse, 100 resolution steps, an 8 KiB output limit and the ordinary render deadline. V2 owns the bounded tenant/syntax/source cache and syntax-aware conversion preview. No existing template is upgraded automatically. SQL versions/run admission, complete preset resolution, current authorization and retained effect claims remain separate from parsing. Eval remains disabled until its process and OS isolation are qualified; no in-process fallback is added.
+V1b now supplies [pure bounded rendering from captured values](variable-template-rendering.md), including clock/seed inputs, a data-only allowlist, lazy fallback, no output reparse and render budgets. It opens no live resolver or application consumer. V2 owns the bounded tenant/syntax/source cache and syntax-aware conversion preview. No existing template is upgraded automatically. SQL versions/run admission, complete preset resolution, current authorization and retained effect claims remain separate from parsing. Eval remains disabled until its process and OS isolation are qualified; no in-process fallback is added.
 
 ## Verification
 
