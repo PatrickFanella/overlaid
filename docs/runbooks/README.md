@@ -54,3 +54,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Native app issuance](native-app-issuance.md): explicit prepare/execute steps, dedicated private configuration, original request IDs and no automatic retry.
 
 - [One-attempt WebSocket conduit shard assignment](conduit-shard-assignment.md)
+
+- [Durable conduit shard assignment ledger](conduit-assignment-ledger.md): original session fingerprints, one-use claims and retained uncertainty under a separate metadata-only role.
