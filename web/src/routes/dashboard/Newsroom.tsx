@@ -5,6 +5,7 @@ import { NewsroomQueuePanel } from './NewsroomQueuePanel';
 import { NewsroomEvidence, NewsroomBundleCard, NewsroomBundles } from './NewsroomBundles';
 import { NewsroomActivity, NewsroomUsage, NewsroomPreparation } from './NewsroomPreparation';
 import { NewsroomBroadcasts } from './NewsroomBroadcasts';
+import { NewsroomStreamObservations } from './NewsroomStreamObservations';
 import { LinkRow } from './NewsroomRows';
 import { NewsroomReviewControls } from './NewsroomReviewControls';
 import { useNewsroomCardDraft } from './useNewsroomCardDraft';
@@ -143,7 +144,7 @@ function Newsroom() {
     </> : null}
     {tab === 'bundles' ? <NewsroomBundles doc={doc} command={command} busy={busy} curate={!moderator} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} demo={demo}/> : null}
     {tab === 'activity' ? <NewsroomActivity apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} demo={demo}/> : null}
-    {tab === 'shows' ? <NewsroomBroadcasts doc={doc} command={command} busy={busy} owner={owner} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} demo={demo} /> : null}
+    {tab === 'shows' ? <div className="grid gap-4"><NewsroomStreamObservations apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} scopeKey={JSON.stringify([account.accountId || 'operator', account.activeTenantId || 'selfhost-file'])} demo={demo} /><NewsroomBroadcasts doc={doc} command={command} busy={busy} owner={owner} apiBaseUrl={apiBaseUrl} operatorSecret={operatorSecret} demo={demo} /></div> : null}
     {tab === 'audience' ? <NewsroomAudience doc={doc} command={command} busy={busy} moderator={moderator} announce={() => announce('raffle')} /> : null}
     {tab === 'shelves' ? <Shelves doc={doc} command={command} busy={busy} moderator={moderator} tokenRequest={tokenRequest} /> : null}
     {tab === 'notes' ? <Notes doc={doc} sessionId={session?.current?.id ?? ''} command={command} busy={busy} moderator={moderator} discord={providers?.discord ?? false} deliver={(sessionId) => providerAction('/notes/discord', { sessionId, confirm: true })} /> : null}

@@ -7,6 +7,7 @@ type CredentialOptions = {
 };
 
 type RequestJSONOptions = CredentialOptions & {
+  signal?: AbortSignal;
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: Record<string, unknown>;
   errorLabel: string;
@@ -29,6 +30,7 @@ export async function requestJSON<T>(path: string, options: RequestJSONOptions &
     method: options.method,
     credentials: 'include',
     headers,
+    ...(options.signal ? { signal: options.signal } : {}),
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
   });
 

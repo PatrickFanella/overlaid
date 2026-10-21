@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -196,9 +197,23 @@ func TestConfiguredSharedModerationProgressesDuringRetainedChat(t *testing.T) {
 				t.Fatal(err)
 			}
 			ingest(0, "chat-0", "!mixed")
+			// Initial dispatch, outbound polling and fresh shared authorization
+			// precede the held request. They have no five-second latency contract.
+			// Use the existing outbound integration wait bound; the strict
+			// moderation-during-held-chat assertion below remains unchanged.
+			initialStarted := time.Now()
 			select {
 			case <-started:
-			case <-time.After(5 * time.Second):
+				t.Log("initial chat transport started", "elapsed", time.Since(initialStarted))
+			case <-time.After(15 * time.Second):
+				var metadata string
+				diagnosticCtx, cancelDiagnostic := context.WithTimeout(t.Context(), 5*time.Second)
+				diagnosticErr := f.Admin.QueryRowContext(diagnosticCtx, `SELECT jsonb_build_object(
+      'jobs',(SELECT coalesce(jsonb_agg(x),'[]'::jsonb) FROM (SELECT kind,state,attempt,count(*) AS count,min(extract(epoch FROM scheduled_at-clock_timestamp()))::int AS scheduled_in_seconds FROM river_job GROUP BY kind,state,attempt) x),
+      'actions',(SELECT coalesce(jsonb_agg(x),'[]'::jsonb) FROM (SELECT state,count(*) AS count FROM platform_outbound_actions GROUP BY state) x),
+      'dispatch_receipts',(SELECT coalesce(jsonb_agg(x),'[]'::jsonb) FROM (SELECT state,code,count(*) AS count FROM platform_dispatch_receipts GROUP BY state,code) x))::text`).Scan(&metadata)
+				cancelDiagnostic()
+				t.Log("mixed initial metadata", metadata, diagnosticErr, "controller_ready", app.chatReady(), "sender_ready", app.outboundLeaseReady())
 				t.Fatal("chat transport never started")
 			}
 			for i := 1; i < 16; i++ {
