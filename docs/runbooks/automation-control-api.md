@@ -16,6 +16,8 @@ Bodies are limited to 65,536 bytes for the whole JSON request, with unknown fiel
 
 | Operation | JSON request fields | Result |
 | --- | --- | --- |
+| `list` | `{}` | `automations` array of automation/current-version IDs, current document digest, version count, pointer update time and current version creation time. Ordered by automation ID. |
+| `list-versions` | `automationId` | Automation/current-version IDs and `versions` array of version ID, document digest and original creation time. Ordered by creation time descending, then version ID descending. |
 | `validate` | `document` | `validation: structure_only`, automation/version IDs, canonical digest and declared capabilities. No publication or preset lookup. |
 | `publish` | `document`, `expectedCurrentVersionId` | Atomic version publication with IDs, document/graph digests, original version creation time and `unchanged`. Empty expected ID is create-only. |
 | `select` | `automationId`, `versionId`, `expectedCurrentVersionId` | Explicit retained-pointer selection and fixed metadata publication result. |
@@ -28,13 +30,19 @@ Bodies are limited to 65,536 bytes for the whole JSON request, with unknown fiel
 
 Modes must be explicitly `reproduce` or `current_config`; execute/missing/unknown modes refuse. Rehearsal returns camel-case transport step metadata and `opaqueArguments` on private proposals. Saved trace `document` preserves the existing canonical format-1 field names, including its versioned step fields. The returned digest identifies that stored canonical document; the outer response is not a signed execution receipt.
 
+[Issue #294](https://git.subcult.tv/subculture-collective/overlaid/issues/294) adds bounded discovery. `list` returns at most 100 automations, with `automationId`, `currentVersionId`, `digest`, `versionCount`, `updatedAt` and `versionCreatedAt` per item. `list-versions` returns at most 32 versions, each with `versionId`, `digest` and `createdAt`. An empty workspace returns `{"automations":[]}`. Missing or foreign automation IDs return 404; malformed IDs return 400. Retained data exceeding either catalogue bound returns a fixed capacity failure without partial results or pruning. There is no cursor or search filter because these whole catalogues are bounded by the existing publication limits.
+
+Discovery rechecks configure permission under the tenant lock and returns metadata only, without loading document bodies, arguments, actors, source requests or trace contents. Pointer and count reads share the publication/selection tenant fence. Selecting an older version changes the current pointer and its update time; it preserves immutable version creation order. Metadata digests identify documents, not complete graphs or provider authorization. Use `load` with the discovered IDs to retrieve and validate the exact pinned graph before editing or rehearsal. Catalogue results can become stale after the request; publication/selection still require the exact expected current version.
+
+These reads use the existing account/CSRF/session/app lifetime and repeated role/schema checks, with a ten-second store bound inside the fifteen-second request bound. They remain available without writer ownership and do not mutate audit, cooldown, configuration, run or trace state. They add no pool or schema change. Run and trace history discovery and a graphical desk remain separate work.
+
 An admitted run uses the [existing operator contract](operator-automation-admission.md): schema-2 dashboard trigger, explicit policy, empty captured facts, zero per-stream limit and fixed original database deadline. Admission may charge the declared cooldown and retained metadata capacity. Structural validation and reads do not perform those reservations. Missing fact gates stay unavailable; neither a successful admission nor a proposed rehearsal establishes current provider permission.
 
 The [source-bound rehearsal](retained-operator-rehearsal.md) uses original database time, empty facts and format-defined seed zero. Current-config mode keeps the original input while identifying the newer graph. Arguments remain authored, unrendered text. [Trace persistence](operator-rehearsal-traces.md) saves fixed metadata only. Duplicate admission/save operations return original identities and timestamps under their existing retry rules; publication/select semantics likewise remain those of the immutable version store.
 
 ## Example workflow
 
-Use the authenticated account API to find the intended workspace and current session/CSRF state. Keep a fresh automation UUID and version UUID for an authored document; existing versions require a new version UUID and exact expected current pointer. This structural example proposes a chat action without executing it:
+Use the authenticated account API to find the intended workspace and current session/CSRF state. Call `list` with `{}` to discover saved automations, then `list-versions` with a returned automation ID and `load` with an explicitly selected version. Keep a fresh automation UUID and version UUID for a new authored document; existing versions require a new version UUID and exact expected current pointer. This structural example proposes a chat action without executing it:
 
 ```json
 {
@@ -63,3 +71,5 @@ Business failures use fixed JSON `error` codes. Invalid document/request input i
 Apply the existing migrations through 0042 before starting the current managed binary. No new migration, startup mode, secret, pool or worker is added by the HTTP boundary. Stores continue their exact role/schema and transaction checks on each operation. Binary rollback can remove these routes while retaining all immutable configuration, run markers, cooldown charges and traces; never replay saved proposals through a legacy path.
 
 Disposable HTTP/store races exercise publish/admit/rehearse/save/load, duplicate and stale-version handling, scoped private outputs, no delivery jobs/runtimes, strict bodies, Origin/CSRF/cookie/role/tenant boundaries, controller loss, and cancellation of a tenant-lock-waiting write by logout or shutdown. File-mode and fixed-error checks remain separate. Run `make verify`, new-diff lint and the full disposable PostgreSQL gate before merge. No dashboard browser, deployment, merged-main CI, provider delivery or Phase #25 completion is established by these tests.
+
+Catalogue fixtures additionally cover empty results, deterministic timestamp ties, older current selection, load-by-discovered-ID, metadata allowlists, exact/overflow bounds, cross-tenant isolation, configure/revoked membership, grant drift, canceled lock waits and unchanged persisted state. HTTP discovery is exercised after actual controller ownership loss; it still creates no jobs or tenant runtimes.

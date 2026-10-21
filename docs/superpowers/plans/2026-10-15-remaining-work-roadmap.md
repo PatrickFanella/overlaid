@@ -544,3 +544,8 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Phase 3 first metadata transport: account/session automation API
 
 [Issue #292](https://git.subcult.tv/subculture-collective/overlaid/issues/292) exposes [workspace metadata operations](../../runbooks/automation-control-api.md) through account-cookie/CSRF/configure-bound routes, with session/app cancellation, actual managed-writer ownership checks and fixed private errors. Existing version/admission/rehearsal/trace guards remain authoritative. Bootstrap/overlay/operator headers cannot authorize this boundary; no graphical editor, effect worker, provider adapter, second command dispatcher or migration cutover is selected. Provider/variable capture, richer context, effects/continuations, UI and Phase acceptance remain unfinished.
+
+
+## Bounded automation discovery
+
+[Issue #294](https://git.subcult.tv/subculture-collective/overlaid/issues/294) follows merged [PR #293](https://git.subcult.tv/subculture-collective/overlaid/pulls/293) with configure-only automation/version discovery through the existing [metadata API](../../runbooks/automation-control-api.md). Tenant-fenced reads return deterministic, bounded ID/digest/current-pointer/time/count projections and refuse overflow without partial results. They expose no authored bodies, actors, source inputs or trace contents, and remain independent of writer ownership. Existing pinned-graph loading and expected-pointer publication/selection remain authoritative after discovery. A graphical editor, retained run/trace history desk, richer capture, effects and source migration remain unfinished. The [decision trail](2026-10-21-automation-discovery-decisions.tsv) records this boundary.

@@ -200,12 +200,19 @@ func TestAutomationControlAuthenticationScopeAndStrictInput(t *testing.T) {
 	automationControlObject(t, automationControlPost(t, app, a, a.tenant, "validate", map[string]any{"document": d}), 503)
 }
 func TestAutomationControlSessionAndApplicationCancellation(t *testing.T) {
-	for _, reason := range []string{"logout", "shutdown"} {
-		t.Run(reason, func(t *testing.T) {
+	for _, test := range []struct{ reason, operation string }{{"logout", "publish"}, {"shutdown", "publish"}, {"logout", "list"}, {"shutdown", "list"}, {"logout", "list-versions"}, {"shutdown", "list-versions"}} {
+		t.Run(test.reason+"/"+test.operation, func(t *testing.T) {
 			app, a, _, f := applicationFixture(t)
 			ctx := t.Context()
 			d := automationControlDocument(a.tenant, 10200)
-			raw, _ := json.Marshal(map[string]any{"document": d})
+			body := map[string]any{}
+			switch test.operation {
+			case "publish":
+				body["document"] = d
+			case "list-versions":
+				body["automationId"] = d.AutomationID
+			}
+			raw, _ := json.Marshal(body)
 			held, err := f.Admin.BeginTx(ctx, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -216,7 +223,7 @@ func TestAutomationControlSessionAndApplicationCancellation(t *testing.T) {
 			}
 			result := make(chan *httptest.ResponseRecorder, 1)
 			go func() {
-				result <- executeApplication(app, accountRequest("POST", "/api/tenants/"+a.tenant+"/automations/publish", string(raw), a))
+				result <- executeApplication(app, accountRequest("POST", "/api/tenants/"+a.tenant+"/automations/"+test.operation, string(raw), a))
 			}()
 			deadline := time.NewTimer(3 * time.Second)
 			defer deadline.Stop()
@@ -224,7 +231,7 @@ func TestAutomationControlSessionAndApplicationCancellation(t *testing.T) {
 			defer ticker.Stop()
 			for {
 				var waiting bool
-				if err = f.Admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%SELECT id FROM tenants WHERE id=%FOR UPDATE%')`).Scan(&waiting); err != nil {
+				if err = f.Admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%SELECT id FROM tenants WHERE id=%FOR %')`).Scan(&waiting); err != nil {
 					t.Fatal(err)
 				}
 				if waiting {
@@ -232,11 +239,11 @@ func TestAutomationControlSessionAndApplicationCancellation(t *testing.T) {
 				}
 				select {
 				case <-deadline.C:
-					t.Fatal("publish never reached tenant fence")
+					t.Fatal("request never reached tenant fence")
 				case <-ticker.C:
 				}
 			}
-			if reason == "logout" {
+			if test.reason == "logout" {
 				if w := executeApplication(app, accountRequest("POST", "/api/account/logout", `{}`, a)); w.Code != 204 {
 					t.Fatal("logout", w.Code, w.Body.String())
 				}
