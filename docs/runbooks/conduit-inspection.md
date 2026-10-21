@@ -39,3 +39,5 @@ Run `make verify`, uncached `go test -race -count=1 -cover ./internal/twitchcond
 Next add app-token custody and durable conduit ownership, then one-use mutation/uncertainty receipts, shard sessions and tenant subscription reconciliation. Preserve the current transport until a coordinated single-owner cutover is qualified. Operator grants, live migration/recovery and broad load/onboarding acceptance remain under the [roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) and #24.
 
 The explicit [custodied inspection boundary](custodied-conduit-inspection.md) composes this inspector with a separate token-column-only role, exact stored app binding and read-only administrative lock. It adds no startup caller or conduit mutation permission.
+
+The separate [creation transport](conduit-creation.md) validates app identity around one explicit non-replayable POST. It has no application caller or durable ownership; the inspector remains read-only.
