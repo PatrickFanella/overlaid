@@ -1,0 +1,7 @@
+ts	phase	decision	reason	evidence	result
+2026-10-21T14:59:25.707029+00:00	scope	Keep V2a cache separate from conversion preview	Reuse immutable parsed templates without changing syntax or selection	Phase 3 plan; issue #272	No application imports or startup constructor
+2026-10-21T14:59:25.707039+00:00	concurrency	Serialize bounded parse and purge	Avoid stale insertion and unbounded generation tombstones	4KiB source; 256 nodes; max256 entries	Concurrent parse/purge race passed
+2026-10-21T14:59:25.707041+00:00	retention	Bound entries globally and per tenant; retain no negative results	Bound source/AST and tenant bookkeeping without storing captured data	256 global;32 tenant; parser structural limits	LRU and fuzz invariants passed
+2026-10-21T14:59:25.707043+00:00	verification	Fix De Morgan lint expression without semantic change	Staticcheck QF1001	/tmp/overlaid-cache-lint.log	Final lint zero issues
+2026-10-21T14:59:25.707044+00:00	verification	Run full disposable concurrency gate	Mutable shared cache requires repository concurrency qualification	/tmp/overlaid-template-cache-full.log	Running; not yet a passing result
+2026-10-21T14:59:25.707045+00:00	verification	Run focused race and bounded fuzz	Check immutable results and concurrent eviction/purge	/tmp/overlaid-cache-race-final.log; /tmp/overlaid-cache-fuzz.log	Race pass1.118s98.3percent;829373 fuzz executions pass15.031s

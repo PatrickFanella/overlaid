@@ -1,5 +1,5 @@
 // Package variables parses and renders bounded templates from captured input.
-// It has no live resolver, cache, provider access or application registration.
+// It has no live resolver, provider access or application registration.
 package variables
 
 import (

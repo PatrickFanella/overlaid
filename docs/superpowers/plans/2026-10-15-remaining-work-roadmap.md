@@ -500,3 +500,7 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Captured-only variable rendering — #270
 
 [Issue #270](https://git.subcult.tv/subculture-collective/overlaid/issues/270) implements V1b after merged #269: [bounded rendering from immutable supplied snapshots](../../runbooks/variable-template-rendering.md), with exact captured invocation matching, explicit unavailable values, typed arity, lazy positional fallback and literal unreparsed results. Clock and seed are supplied; no live resolver or function callback is available. Resolution/output/deadline/cancellation boundaries expose fixed metadata and no partial terminal output. Current syntax-1 behavior and dispatchers remain unchanged. V2 cache/conversion, E2 admission, authenticated retained context/replay, live adapters and migration remain open.
+
+### Phase 3 V2a: parsed-template cache
+
+[Issue #272](https://git.subcult.tv/subculture-collective/overlaid/issues/272) adds the explicit [tenant-scoped parsed-template cache](../../runbooks/variable-template-cache.md). Successful syntax-2 ASTs use fixed global/per-tenant LRU limits and serialized parse/purge; captured values and rendered results are excluded. No application caller is registered. V2b conversion preview, E2 stored admission, trace/replay, migration and Phase 3 acceptance remain open.
