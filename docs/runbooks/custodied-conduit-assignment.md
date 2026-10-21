@@ -20,7 +20,7 @@ The creation revision is historical and independent of the selected current cred
 
 Acquire is local and must not fetch credentials, call providers or reenter custody. Lock order is custody, live-session lease, assignment ledger. The callback and cleanup must honor cancellation and protect private input. The lease is held across the committed claim and bounded provider operation. A failed acquisition must return any necessary cleanup; the API invokes it even alongside an error. Missing release, callback errors/panics and stale scope fail before claim. Raw callback details are replaced by fixed errors; standard cancellation identity survives.
 
-Cleanup runs at most once. It is released before final completion; cleanup panic or final drift records uncertainty rather than accepting a partial provider acknowledgement. Dependency pools must remain available after lease release until the API returns. This unit defines and tests the trusted boundary; it supplies no real WebSocket owner or runtime implementation.
+Cleanup runs at most once. It is released before final completion; cleanup panic or final drift records uncertainty rather than accepting a partial provider acknowledgement. Dependency pools must remain available after lease release until the API returns. The explicit [initial session owner](owned-conduit-session.md) now supplies this local guard. Its constructor remains unregistered; coordinated runtime/startup integration is unfinished.
 
 ## One committed attempt
 
