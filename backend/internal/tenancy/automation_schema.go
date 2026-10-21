@@ -50,8 +50,9 @@ func automationSchemaError(ctx context.Context) error {
 }
 
 var automationConstraints = map[string]struct{ table, definition string }{
+	"engine_version_schema":                            {"engine_automation_versions", `CHECK ((((document)::jsonb @> '{"schemaVersion": 1}'::jsonb) OR ((document)::jsonb @> '{"schemaVersion": 2}'::jsonb)))`},
 	"engine_version_bytes":                             {"engine_automation_versions", "CHECK (((octet_length(document) >= 1) AND (octet_length(document) <= 65536)))"},
-	"engine_version_header":                            {"engine_automation_versions", "CHECK (((document)::jsonb @> jsonb_build_object('schemaVersion', 1, 'tenantId', (tenant_id)::text, 'automationId', (automation_id)::text, 'versionId', (id)::text)))"},
+	"engine_version_header":                            {"engine_automation_versions", "CHECK (((document)::jsonb @> jsonb_build_object('tenantId', (tenant_id)::text, 'automationId', (automation_id)::text, 'versionId', (id)::text)))"},
 	"engine_version_digest":                            {"engine_automation_versions", "CHECK ((digest = encode(digest(((convert_to('overlaid.engine.document.v1'::text, 'UTF8'::name) || decode('00'::text, 'hex'::text)) || convert_to(document, 'UTF8'::name)), 'sha256'::text), 'hex'::text)))"},
 	"engine_automations_tenant_id_fkey":                {"engine_automations", "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE"},
 	"engine_automation_versions_actor_account_id_fkey": {"engine_automation_versions", "FOREIGN KEY (actor_account_id) REFERENCES accounts(id) ON DELETE SET NULL"},

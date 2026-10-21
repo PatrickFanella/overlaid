@@ -1,16 +1,16 @@
 # Versioned engine document contract
 
-[Issue #266](https://git.subcult.tv/subculture-collective/overlaid/issues/266) implements E1 of the [Phase 3 plan](../superpowers/plans/2026-10-21-phase-3-engine-and-variables.md) in `backend/internal/engine`. This is a pure structural contract. The application does not import or activate it. Existing commands, Newsroom actions, timers, rewards and quick actions retain their current dispatchers.
+[Issue #266](https://git.subcult.tv/subculture-collective/overlaid/issues/266) implements E1 of the [Phase 3 plan](../superpowers/plans/2026-10-21-phase-3-engine-and-variables.md) in `backend/internal/engine`. This is a pure structural contract. The explicit managed version store uses it; no startup/run/effect caller is activated. Existing commands, Newsroom actions, timers, rewards and quick actions retain their current dispatchers.
 
 ## Validate and retain a snapshot
 
 `Validate(Document)` checks typed input and returns `Validated`, which owns private canonical JSON bytes. `Parse([]byte)` also rejects unknown or duplicate JSON object fields (including Go JSON case-fold aliases), trailing input, invalid raw UTF-8, excessive JSON nesting and oversized input. Errors are the fixed `engine_document_invalid`; they contain no submitted text. The zero `Validated` value is invalid.
 
-Schema version 1 contains canonical lowercase nonzero UUIDs for tenant, automation and version; a stable trigger ID/kind; capability declarations from the existing platform registry; typed field predicates, restriction groups and a node graph with one root. Field names are bounded symbols and operators are `eq`, `neq`, `exists`, `gte` or `lte`. The contract does not resolve those symbols against a live event or evaluate predicates. Empty all/any/none groups are representable; their evaluation semantics remain those of ADR 0005. Permission and entitlement checks will be mandatory outside these groups.
+Schema version 1 contains canonical lowercase nonzero UUIDs for tenant, automation and version; a stable trigger ID/kind; capability declarations from the existing platform registry; typed field predicates, restriction groups and a node graph with one root. Field names are bounded symbols and operators are `eq`, `neq`, `exists`, `gte` or `lte`. The structural contract does not resolve those symbols against a live event. Separate [captured predicate reports](engine-predicate-reports.md) evaluate supplied typed facts. Empty all/any/none groups are representable; their evaluation semantics remain those of ADR 0005. Permission and entitlement checks will be mandatory outside these groups.
 
 Node IDs share a document-wide namespace with the trigger, filter, group and predicate IDs. IDs use one to 64 lowercase ASCII letters, digits, underscores, dots, colons or dashes, starting with a letter. Dangling references, cycles, unreachable nodes and duplicate IDs are refused. Node-array order and capability declaration order are normalized; ordered children, restrictions, predicates and arguments retain their order.
 
-Supported structural node kinds are sequential, all, weighted random, condition, switch, loop, delay, stop, set output, pinned preset and action. Nonzero configuration belonging to another kind is rejected. Conditions refer to restriction groups; switch children correspond to the listed conditions followed by a required default. An action must name a declared capability. A declaration, including a request for parallel work, grants no permission and selects no provider adapter. Actual predicate, control-flow and action evaluation is future work.
+Supported structural node kinds are sequential, all, weighted random, condition, switch, loop, delay, stop, set output, pinned preset and action. Nonzero configuration belonging to another kind is rejected. Conditions refer to restriction groups; switch children correspond to the listed conditions followed by a required default. An action must name a declared capability. A declaration, including a request for parallel work, grants no permission and selects no provider adapter. Control-flow and action execution remain future work.
 
 ## Bounds and unresolved presets
 
@@ -26,7 +26,7 @@ A preset reference must specify the same tenant and a nonzero automation/version
 
 ## Digest and run identity
 
-`Digest()` is a SHA-256 of the canonical schema-1 document under the `overlaid.engine.document.v1` domain. `RunID` hashes a fixed-order JSON tuple under `overlaid.engine.run.v1`, binding tenant, canonical occurrence ID, automation ID, version ID, document digest and mode. Occurrence IDs are 64 lowercase hexadecimal characters supplied by a future trusted source adapter; hashing untrusted input does not establish that it is an admitted occurrence.
+`Digest()` is a SHA-256 of the canonical document under the `overlaid.engine.document.v1` domain. `RunID` hashes a fixed-order JSON tuple under `overlaid.engine.run.v1`, binding tenant, canonical occurrence ID, automation ID, version ID, document digest and mode. Occurrence IDs are 64 lowercase hexadecimal characters supplied by a future trusted source adapter; hashing untrusted input does not establish that it is an admitted occurrence.
 
 The modes are `execute`, `reproduce` and `current_config`. Missing/invalid snapshots, occurrences or modes return `engine_identity_invalid`. Reconstructing the same snapshot and occurrence yields the same identity. Changing the tenant, occurrence, automation/version, content or mode changes it. Reproduce and current-configuration rehearsal remain distinct from execution.
 
@@ -45,3 +45,5 @@ GOMAXPROCS=2 go test ./internal/engine -run '^$' -fuzz '^FuzzParse$' -fuzztime=1
 Fixtures exercise graph/refusal boundaries, expanded loops, repeated DAG cost, depth and step edges, control shapes, pinned/foreign/self presets, strict JSON, shared predicate bounds, mutation isolation, concurrent reads, reconstruction and identity bindings. Fuzzing checks bounded parse/refusal and canonical reconstruction; it does not establish evaluator, runtime, database or provider behavior. The [decision trail](../superpowers/plans/2026-10-21-engine-contract-decisions.tsv) records qualification and limitations.
 
 The separate [complete pinned graph resolver](engine-pinned-graphs.md) can now validate supplied exact preset bodies across versions. Local validation and `Validated.RunID` remain unchanged; future admission must load those immutable bodies within its tenant boundary and use the complete graph identity. No persistence or effect permission follows from either structural check.
+
+Schema 2 adds an [explicit admission policy](engine-admission-policy.md), while schema-1 bytes and digests remain unchanged. Neither schema grants admission; current authorization, exact saved graph/source binding and atomic reservations remain separate. Managed policy persistence requires migration 0040.

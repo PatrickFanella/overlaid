@@ -499,9 +499,16 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rawPolicy, err := os.ReadFile(filepath.Join(root, "0040_automation_admission_policy.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	migrateAutomations := func() {
 		t.Helper()
 		if _, err := owner.Exec(strings.ReplaceAll(string(rawAutomation), "overlaid_runtime", role)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := owner.Exec(string(rawPolicy)); err != nil {
 			t.Fatal(err)
 		}
 	}

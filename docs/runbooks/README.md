@@ -80,3 +80,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Immutable automation version storage](automation-version-store.md): scoped publication/current-pointer selection, exact presets, narrow grants and migration 0039; no run admission or activation.
 
 - [Captured engine predicate reports](engine-predicate-reports.md): immutable typed facts, three-valued filter/group outcomes and fixed diagnostics; no authorization or reservation.
+
+- [Explicit versioned admission policy](engine-admission-policy.md): schema-2 gate/limit declarations, schema-1 preservation and migration 0040; no reservation or execution.

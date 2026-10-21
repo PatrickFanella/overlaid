@@ -487,3 +487,44 @@ func TestAutomationPopulatedMigrationReapplication(t *testing.T) {
 		t.Fatal("missing migration startup accepted")
 	}
 }
+
+func TestAutomationAdmissionPolicyCodecAndUpgrade(t *testing.T) {
+	s, a, _, owner, _, f := tenantPair(t)
+	store, scope := automationStore(t, s, a.ID)
+	ctx := t.Context()
+	legacy := automationFixture(t, a.ID, 600, 5000)
+	if _, err := store.Publish(ctx, owner, legacy, ""); err != nil {
+		t.Fatal(err)
+	}
+	// Emulate the reviewed pre-0040 header contract over populated schema1 data.
+	_, err := f.Admin.Exec(`ALTER TABLE engine_automation_versions DROP CONSTRAINT engine_version_schema; ALTER TABLE engine_automation_versions DROP CONSTRAINT engine_version_header; ALTER TABLE engine_automation_versions ADD CONSTRAINT engine_version_header CHECK(document::jsonb @> jsonb_build_object('schemaVersion',1,'tenantId',tenant_id::text,'automationId',automation_id::text,'versionId',id::text))`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = NewAutomationStore(ctx, scope); !errors.Is(err, ErrAutomationSchema) {
+		t.Fatal("old schema accepted", err)
+	}
+	f.MigrateAutomations()
+	d := automationFixture(t, a.ID, 600, 5001).Document()
+	d.SchemaVersion = engine.AdmissionSchemaVersion
+	d.Admission = &engine.AdmissionPolicy{Groups: []string{}, CooldownMS: 1000, PerStreamLimit: 2}
+	v, err := engine.Validate(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.Publish(ctx, owner, v, legacy.Document().VersionID); err != nil {
+		t.Fatal(err)
+	}
+	f.MigrateAutomations()
+	g, err := store.Load(ctx, owner, d.AutomationID, "")
+	if err != nil || g.Root().Digest() != v.Digest() || g.Root().Document().Admission.PerStreamLimit != 2 {
+		t.Fatal("policy roundtrip", err)
+	}
+	old, err := store.Load(ctx, owner, d.AutomationID, legacy.Document().VersionID)
+	if err != nil || old.Root().Digest() != legacy.Digest() {
+		t.Fatal("legacy body changed", err)
+	}
+	if _, err = store.SelectCurrent(ctx, owner, d.AutomationID, legacy.Document().VersionID, d.VersionID); err != nil {
+		t.Fatal("retained legacy pointer", err)
+	}
+}
