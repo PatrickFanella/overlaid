@@ -64,3 +64,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Retained conduit stream ingress](conduit-stream-ingress.md): copied subscription/tenant scopes, all required local owner leases and atomic stream event/payload/job admission across up to sixteen workspaces, plus loopback qualification through real workers into Newsroom.
 
 - [Selected conduit subscription inspection](conduit-subscription-inspection.md): bounded read-only provider/custody observation and native --subscriptions mode, with private-condition exclusion.
+
+- [Versioned engine document contract](engine-document-contract.md): pure structural validation and stable run identity; no application activation, persistence or effect execution.
