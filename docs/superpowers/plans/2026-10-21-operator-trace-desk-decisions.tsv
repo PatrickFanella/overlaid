@@ -1,0 +1,7 @@
+decision	evidence	implementation	verification
+identity	trace ID equals report ID before save	fixed scoped source/report/mode/version/digests before one POST	no body/proposal storage and exact save request fixture
+recovery	lost response grants no repeat write	original lookup then load-trace only; explicit local acknowledgment	lost malformed conflict reload missing source/trace fixtures
+canonical	Go format1 field/step order plus domain-separated SHA256	strict document bytes and source/run/clock/report checks	altered fields order digest and crossed bindings tests
+limits	stored format caps100 steps and10101 dropped	shared decoder requires full prefix if truncated	exact and overflow unit boundaries
+lifetime	private tab scope and cancellation	departed requests and async crypto cannot settle another scope	storage corruption/refusal workspace and late trace fixtures
+remaining	parent25 includes history richer capture effects migration	metadata save/read only; no backend/schema/pool/provider activation	README status runbooks and allowed endpoint assertions

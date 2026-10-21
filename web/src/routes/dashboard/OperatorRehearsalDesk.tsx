@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { versionRequest, type VersionScope } from '../../lib/automationVersions';
 import { decodeOperatorRehearsal, decodeOperatorRun, decodeRehearsalIntent, rehearsalStorageKey, type OperatorRehearsal, type OperatorRun, type RehearsalIntent, type RehearsalMode } from '../../lib/operatorRehearsal';
+import { MetadataTraceSteps } from './MetadataTraceSteps';
+import { OperatorTraceDesk } from './OperatorTraceDesk';
 import { Empty, KeyValues, Notice, Panel, Tag } from './ui';
 
 export type RehearsalCandidate = { automationId: string; versionId: string; documentDigest: string; graphDigest: string };
@@ -79,6 +81,7 @@ export function OperatorRehearsalDesk({ scope, candidate, admissionBlocked }: { 
       ['Original run', run.runId], ['Original occurrence', run.occurrenceId], ['Captured database clock', run.createdAt], ['Original deadline', run.deadline],
     ]} /></div><p className="text-sm">Capture format 1 contains empty facts and seed zero as a format placeholder. It records no provider facts, random choice or rendered variables. The original deadline does not forbid a retained effect-free read.</p><div className="flex flex-wrap gap-2"><button className="desk-btn" disabled={busy} onClick={() => void perform(signal => rehearse('reproduce', signal))}>Reproduce original capture</button><button className="desk-btn" disabled={busy} onClick={() => void perform(signal => rehearse('current_config', signal))}>Rehearse current configuration</button></div></div> : null}
     {report ? <RehearsalReport report={report} /> : null}
+    <OperatorTraceDesk scope={scope} source={intent} run={run} report={report} blocked={busy || admissionBlocked || !!storageError} />
   </Panel>;
 }
 
@@ -88,10 +91,9 @@ export function RehearsalReport({ report }: { report: OperatorRehearsal }) {
     <div className="break-all"><KeyValues items={[
       ['Mode', report.mode], ['Selected version', report.selectedVersionId], ['Report ID', report.id], ['Original graph', report.run.graphDigest], ['Rehearsed graph', report.graphDigest], ['Capture digest', report.captureDigest], ['Original clock', report.clock],
     ]} /></div>
-    {report.droppedSteps ? <Notice tone="warn">Only the first {report.steps.length} trace steps are retained in this report; {report.droppedSteps} additional steps were omitted.</Notice> : null}
-    <h3 className="desk-sub__title">Flow steps</h3><ol className="grid gap-2">{report.steps.map(step => <li className="desk-sub min-w-0 break-all text-sm" key={step.sequence}>#{step.sequence} · {step.nodeId} · {step.kind} · {step.outcome} · {step.reason}<p className="desk-field__hint">{step.automationId} / {step.versionId} · parent {step.parent}</p></li>)}</ol>
+    <MetadataTraceSteps steps={report.steps} droppedSteps={report.droppedSteps} />
     <h3 className="desk-sub__title">Opaque action proposals</h3><p className="text-sm">Arguments are authored text, not rendered variables or transport payloads. Diagnostic proposals in blocked or unsupported reports cannot be executed.</p>
     {!report.proposals.length ? <Empty>No action proposals in this report.</Empty> : <ol className="grid gap-3">{report.proposals.map(proposal => <li className="desk-sub min-w-0 break-all" key={proposal.sequence}><p className="text-sm">Step {proposal.sequence} · {proposal.nodeId} · declared {proposal.declaredCapability}</p><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(proposal.opaqueArguments, null, 2)}</pre></li>)}</ol>}
-    <p className="text-sm">This report stays in memory only. Saving trace metadata and browsing past occurrences are separate work.</p>
+    <p className="text-sm">This live report stays in memory only. Use the separate save control for fixed metadata; browsing past occurrences remains separate work.</p>
   </section>;
 }
