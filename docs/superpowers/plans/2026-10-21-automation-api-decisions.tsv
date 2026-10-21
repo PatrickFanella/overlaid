@@ -1,0 +1,7 @@
+decision	evidence	choice	verification
+auth	Application.actor permits selfhost bootstrap headers	Direct account session on engine control path, fresh configure/CSRF	Cookie/operator/role/tenant HTTP fixtures
+scope	Account control already uses explicit tenant paths	Route workspace authoritative; document must match; no actor override	Cross-workspace/strict-body fixtures
+owner	Managed writers share existing controller lock	Actual ownership check before publish/select/admit/save, no new pool	Released-lock refusal and no rows
+identity	Stores preserve immutable versions and actor/request source	No automatic IDs, no fallback, explicit expected version/mode	Duplicate/stale/purged HTTP workflow
+lifecycle	Session request registry and application context exist	Bind both with bounded outer context	Blocked-write logout/shutdown cancellation
+activation	No effect executor has a reviewed consuming interface	Metadata-only API; existing command/provider paths unchanged	No jobs/runtimes and required gates

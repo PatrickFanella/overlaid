@@ -1,6 +1,6 @@
 # Captured engine predicate reports
 
-[Issue #280](https://git.subcult.tv/subculture-collective/overlaid/issues/280) adds pure typed predicate evaluation for the engine admission/rehearsal work under Phase #25. `engine.EvaluatePredicates(ctx, validatedVersion, facts)` evaluates that version's filters and named restriction groups from supplied facts. No application caller, database write, reservation, effect or provider adapter is registered.
+[Issue #280](https://git.subcult.tv/subculture-collective/overlaid/issues/280) adds pure typed predicate evaluation for the engine admission/rehearsal work under Phase #25. `engine.EvaluatePredicates(ctx, validatedVersion, facts)` evaluates that version's filters and named restriction groups from supplied facts. The [workspace metadata API](automation-control-api.md) consumes it through the operator store. This pure evaluator performs no database write, reservation, effect or provider call.
 
 The result is a report, with no overall authorization or permit field. Named restriction groups are also referenced by condition/switch nodes in the structural document; the report does not decide which groups gate admission or which select conditional branches. Future admission must establish that policy and perform mandatory current permission and entitlement checks independently. An `any` group cannot replace those checks, and a fact named `permission` grants no authority.
 

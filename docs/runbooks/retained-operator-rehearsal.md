@@ -1,6 +1,6 @@
 # Rehearse a retained operator occurrence
 
-`AutomationStore.RehearseOperator(ctx, actor, requestUUID, mode)` connects [operator admission](operator-automation-admission.md) to [captured flow rehearsal](engine-flow-rehearsal.md). [Issue #288](https://git.subcult.tv/subculture-collective/overlaid/issues/288) owns this boundary. The method remains explicit and unregistered in the application: no HTTP/editor/worker path selects it, and no effect is executed or queued.
+`AutomationStore.RehearseOperator(ctx, actor, requestUUID, mode)` connects [operator admission](operator-automation-admission.md) to [captured flow rehearsal](engine-flow-rehearsal.md). [Issue #288](https://git.subcult.tv/subculture-collective/overlaid/issues/288) owns this boundary. The [workspace metadata API](automation-control-api.md) now selects the method for authenticated configure members. No editor/worker path or effect execution is activated.
 
 ## Original input and mode
 

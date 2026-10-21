@@ -1,6 +1,6 @@
 # Versioned engine document contract
 
-[Issue #266](https://git.subcult.tv/subculture-collective/overlaid/issues/266) implements E1 of the [Phase 3 plan](../superpowers/plans/2026-10-21-phase-3-engine-and-variables.md) in `backend/internal/engine`. This is a pure structural contract. The explicit managed version store uses it; no startup/run/effect caller is activated. Existing commands, Newsroom actions, timers, rewards and quick actions retain their current dispatchers.
+[Issue #266](https://git.subcult.tv/subculture-collective/overlaid/issues/266) implements E1 of the [Phase 3 plan](../superpowers/plans/2026-10-21-phase-3-engine-and-variables.md) in `backend/internal/engine`. This is a pure structural contract. The explicit managed stores and [session-bound metadata API](automation-control-api.md) use it; no effect dispatcher is activated. Existing commands, Newsroom actions, timers, rewards and quick actions retain their current dispatchers.
 
 ## Validate and retain a snapshot
 
@@ -20,7 +20,7 @@ Supported structural node kinds are sequential, all, weighted random, condition,
 - Weighted choices: positive integer weights with total at most 1,000,000. Parallel all requests declare a concurrency bound from one to four; sequential all uses zero.
 - Delay declarations: one millisecond through 24 hours. This is a structural bound, not a scheduling or retention allowance. A future continuation must still honor its original source deadline; active computation remains separately bounded by ADR 0005.
 
-A preset reference must specify the same tenant and a nonzero automation/version UUID. Direct self-automation references are conservatively refused, including references to another version of that automation. External preset bodies are **unresolved**: this validator counts the local call as one step and cannot prove the referenced body's cost or absence of cross-version cycles. Before admission or evaluation, the future tenant-scoped boundary must load exact pinned versions, validate the complete reference graph and expanded budgets, and refuse missing, deleted, foreign or cyclic input. Structural validation alone is insufficient for activation.
+A preset reference must specify the same tenant and a nonzero automation/version UUID. Direct self-automation references are conservatively refused, including references to another version of that automation. External preset bodies are **unresolved**: this validator counts the local call as one step and cannot prove the referenced body's cost or absence of cross-version cycles. Before admission or evaluation, the tenant-scoped version/operator boundary loads exact pinned versions, validates the complete reference graph and expanded budgets, and refuses missing, deleted, foreign or cyclic input. Structural validation alone is insufficient for activation.
 
 `JSON()` returns a fresh byte slice and `Document()` returns a fresh deep copy. Changing the original typed input, returned bytes or nested collections cannot change the validated snapshot. Callers must not mutate input concurrently with `Validate`; afterward, a validated snapshot supports concurrent reads. These accessors return private configuration, not a redacted trace or public export.
 

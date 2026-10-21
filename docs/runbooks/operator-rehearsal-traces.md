@@ -1,6 +1,6 @@
 # Retained operator rehearsal traces
 
-[Issue #290](https://git.subcult.tv/subculture-collective/overlaid/issues/290) adds explicit immutable metadata traces for [retained operator rehearsal](retained-operator-rehearsal.md). `SaveOperatorTrace` generates the report internally from an existing initiating actor/request. `LoadOperatorTrace` reads that saved report without evaluating today's configuration. Neither method is registered in the application, HTTP/editor or worker startup.
+[Issue #290](https://git.subcult.tv/subculture-collective/overlaid/issues/290) adds explicit immutable metadata traces for [retained operator rehearsal](retained-operator-rehearsal.md). `SaveOperatorTrace` generates the report internally from an existing initiating actor/request. `LoadOperatorTrace` reads that saved report without evaluating today's configuration. The [workspace metadata API](automation-control-api.md) now selects these methods for authenticated configure members; no editor or worker startup is activated.
 
 ## Save and resolve a report
 

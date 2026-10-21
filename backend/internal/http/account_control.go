@@ -27,6 +27,10 @@ func decodeControl(w http.ResponseWriter, r *http.Request, out any) bool {
 	return true
 }
 func (a *Application) control(w http.ResponseWriter, r *http.Request) {
+	if automationControlPath(r.URL.Path) {
+		a.automationControl(w, r)
+		return
+	}
 	actor, _, token, err := a.actor(r)
 	if err != nil {
 		http.Error(w, "account authentication required", 401)
