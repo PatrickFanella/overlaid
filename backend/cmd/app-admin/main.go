@@ -24,6 +24,7 @@ type custody interface {
 	Accounts(context.Context) ([]appvault.Metadata, error)
 	Receipts(context.Context, string, int) ([]appvault.Receipt, error)
 	Revoke(context.Context, string, int64) (appvault.Metadata, error)
+	LookupIssuance(context.Context, string) (appvault.Issuance, error)
 	Close() error
 }
 type opener func(context.Context, string) (custody, error)
@@ -33,6 +34,7 @@ Commands:
   list                              List app metadata, including revoked records
   receipts --app UUID [--limit N]    Read original receipts (default 20, range 1..1000)
   revoke --app UUID --revision N     Clear local credentials at an exact positive revision
+  issuance --request UUID           Read one original issuance request; never retry it
 
 Private environment: OVERLAID_APP_ADMIN_DATABASE_URL (restricted app-admin login).
 Successful stdout is one JSON object. Diagnostics go to stderr.
@@ -51,11 +53,20 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, env func(string) string, out, diagnostic io.Writer, open opener) int {
+	command := ""
 	invalid := func() int {
 		_, _ = fmt.Fprintln(diagnostic, "Invalid arguments; use overlaid-app-admin --help.")
 		return 2
 	}
 	report := func(err error) int {
+		if command == "issuance" {
+			if ctx.Err() != nil {
+				_, _ = fmt.Fprintln(diagnostic, "Issuance lookup interrupted; retain the original request ID.")
+				return 130
+			}
+			_, _ = fmt.Fprintln(diagnostic, "Issuance request missing or unavailable; retain the original ID and do not create a replacement request.")
+			return 1
+		}
 		if ctx.Err() != nil {
 			_, _ = fmt.Fprintln(diagnostic, "Custody operation interrupted; inspect list and original receipts before retrying.")
 			return 130
@@ -75,6 +86,10 @@ func run(ctx context.Context, args []string, env func(string) string, out, diagn
 		raw = append(raw, '\n')
 		n, err := out.Write(raw)
 		if err != nil || n != len(raw) {
+			if command == "issuance" {
+				_, _ = fmt.Fprintln(diagnostic, "Output unavailable; discard any partial result and retain the original issuance request ID.")
+				return 1
+			}
 			_, _ = fmt.Fprintln(diagnostic, "Output unavailable; inspect list and original receipts before retrying.")
 			return 1
 		}
@@ -97,8 +112,8 @@ func run(ctx context.Context, args []string, env func(string) string, out, diagn
 			return encode(info)
 		}
 	}
-	command := args[0]
-	if command != "list" && command != "receipts" && command != "revoke" {
+	command = args[0]
+	if command != "list" && command != "receipts" && command != "revoke" && command != "issuance" {
 		return invalid()
 	}
 	if len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
@@ -108,6 +123,9 @@ func run(ctx context.Context, args []string, env func(string) string, out, diagn
 		}
 		if command == "revoke" {
 			example = "overlaid-app-admin revoke --app UUID --revision N"
+		}
+		if command == "issuance" {
+			example = "overlaid-app-admin issuance --request UUID\nSuccess reads metadata only; started/uncertain remains unresolved. Never replace a missing request ID."
 		}
 		_, err := io.WriteString(out, usage+"\nExample: "+example+"\n")
 		if err != nil {
@@ -130,8 +148,11 @@ func run(ctx context.Context, args []string, env func(string) string, out, diagn
 			return set(value)
 		})
 	}
-	if command != "list" {
+	if command == "receipts" || command == "revoke" {
 		add("app", func(value string) error { id = value; return nil })
+	}
+	if command == "issuance" {
+		add("request", func(value string) error { id = value; return nil })
 	}
 	if command == "receipts" {
 		add("limit", func(value string) error { var err error; limit, err = strconv.Atoi(value); return err })
@@ -142,7 +163,7 @@ func run(ctx context.Context, args []string, env func(string) string, out, diagn
 	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 {
 		return invalid()
 	}
-	if command != "list" && !tenantdb.ValidID(id) || command == "receipts" && (limit < 1 || limit > 1000) || command == "revoke" && revision < 1 {
+	if command != "list" && !tenantdb.ValidID(id) || command == "receipts" && (limit < 1 || limit > 1000) || command == "revoke" && revision < 1 || command == "issuance" && id != strings.ToLower(id) {
 		return invalid()
 	}
 	if ctx.Err() != nil {
@@ -191,6 +212,12 @@ func run(ctx context.Context, args []string, env func(string) string, out, diagn
 		value = struct {
 			Account appvault.Metadata `json:"account"`
 		}{account}
+	case "issuance":
+		var request appvault.Issuance
+		request, err = store.LookupIssuance(bound, id)
+		value = struct {
+			Issuance appvault.Issuance `json:"issuance"`
+		}{request}
 	}
 	closeErr := store.Close()
 	if err != nil {

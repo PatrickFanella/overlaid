@@ -43,6 +43,7 @@ bin/overlaid-app-admin --help
 bin/overlaid-app-admin --version
 bin/overlaid-app-admin list
 bin/overlaid-app-admin receipts --app APP_UUID --limit 20
+bin/overlaid-app-admin issuance --request ORIGINAL_REQUEST_UUID
 bin/overlaid-app-admin revoke --app APP_UUID --revision CURRENT_REVISION
 ```
 
@@ -53,3 +54,5 @@ Successful stdout is one JSON object: `{"accounts":[...]}`, `{"receipts":[...]}`
 Revocation requires the exact record and revision. A stale/missing record refuses; a matching already-revoked revision returns its existing metadata without another receipt. Clearing local ciphertext does not call Twitch or terminate credentials already held elsewhere. The command makes one store call and never retries. Database work shares a five-second context, shortened by caller cancellation; trusted output/cleanup must cooperate, and a blocked output sink can delay process completion. Close the pool before emitting successful JSON. Output failure can leave partial stdout. Output or close failure can follow a committed revocation, so inspect the original record and receipts before deciding on another explicit action. Do not replace the app ID or advance the expected revision merely because output was lost.
 
 Exit codes are 0 for success, 1 for operational refusal/unavailability/unresolved outcome, 2 for invalid arguments or missing private DSN, and 130 for interruption. Diagnostics go to stderr and omit raw arguments, driver errors, DSNs and credentials. There is no automatic retry or success output after a reported operational error. Removing/stopping the binary rolls back this tool without changing stored records or required keys; default application startup is unchanged.
+
+The [issuance status command](service-app-issuance.md#native-operator-status-lookup) reads fixed metadata for an original request without changing its state or contacting a provider. Its zero exit status means a successful lookup; started/uncertain results remain unresolved. Missing IDs never authorize a replacement request.
