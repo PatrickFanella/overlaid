@@ -1,0 +1,7 @@
+phase	decision	reason	evidence	result
+scope	Consume existing private observation GET in Shows and recordings	Make retained history visible without provider or editorial effects	Issue #262; stream-observations runbook	Historical labels and original times
+privacy	Decode only fixed display fields and use existing account/workspace transport	Reject malformed reports and omit private extras/error bodies	21 new unit cases; hosted workspace Chromium check	No hosted operator header; no role expansion
+lifecycle	Remount by account/workspace/API; abort replaced reads and bound timeout	Old responses must not repaint another scope or remain indefinitely loading	Chromium tab/workspace switch and fake-clock timeout checks	Six browser cases pass
+layout	Use explicit minmax-zero single-column grid tracks before desktop split	Implicit tracks expanded with long category input at 390px	Long-text browser case failed before and passed after fix	No panel horizontal overflow; text stays escaped
+verification	Run final-source make verify and complete disposable PostgreSQL/race gate	Preserve full project checks separately from hosted CI and live qualification	/tmp/overlaid-stream-panel-verify-final.log; /tmp/overlaid-stream-panel-full.log	Final make verify passed; complete database gate pending at PR preparation
+browser	Inspect existing demo with T3 preview at 1280px and 390px	Check rendered panel, original times, sample label and responsive stacking	Owned preview tab; six isolated API-mocked Chromium cases	No real provider effects; live qualification remains open
