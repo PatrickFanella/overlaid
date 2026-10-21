@@ -90,3 +90,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Retained operator rehearsal](retained-operator-rehearsal.md): original run/capture resolution, current-config comparison and retention-coordinated reads; no trace writes or effect execution.
 
 - [Immutable operator rehearsal traces](operator-rehearsal-traces.md): explicit metadata saves/reads, expected-version retry fencing, narrow grants and run lifecycle cascades; migration 0042, no effects.
+
+- [Workspace automation metadata API](automation-control-api.md): session/CSRF/configure-bound version, operator rehearsal and trace operations; no effect executor or command cutover.

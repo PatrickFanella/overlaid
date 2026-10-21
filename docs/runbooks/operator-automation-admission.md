@@ -1,6 +1,6 @@
 # Operator automation run admission
 
-[Issue #284](https://git.subcult.tv/subculture-collective/overlaid/issues/284) adds explicit `AutomationStore.AdmitOperator` and `LookupOperator` methods for managed PostgreSQL. This is the first durable run writer in Phase 3 E2b. No application route constructs or selects an engine caller, and no executor or queue job consumes these rows. A run records admitted metadata and a charged cooldown; it grants no product effect or provider permission.
+[Issue #284](https://git.subcult.tv/subculture-collective/overlaid/issues/284) adds explicit `AutomationStore.AdmitOperator` and `LookupOperator` methods for managed PostgreSQL. This is the first durable run writer in Phase 3 E2b. The [workspace metadata API](automation-control-api.md) now selects explicit admission, lookup and rehearsal operations; no executor or queue job consumes these rows. A run records admitted metadata and a charged cooldown; it grants no product effect or provider permission.
 
 ## Admit and resolve an occurrence
 
