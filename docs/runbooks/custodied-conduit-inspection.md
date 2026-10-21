@@ -1,6 +1,6 @@
 # Custodied conduit inspection
 
-[Issue #222](https://git.subcult.tv/subculture-collective/overlaid/issues/222) connects [service app custody](service-app-custody.md) to the existing [read-only conduit inspector](conduit-inspection.md). `appvault.OpenExecution` opens a separate restricted pool; `InspectConduit` returns the existing allowlisted observation. This is an explicit Go integration boundary. There is no application environment setting, HTTP route, CLI command, worker or startup caller for it.
+[Issue #222](https://git.subcult.tv/subculture-collective/overlaid/issues/222) connects [service app custody](service-app-custody.md) to the existing [read-only conduit inspector](conduit-inspection.md). `appvault.OpenExecution` opens a separate restricted pool; `InspectConduit` returns the existing allowlisted observation. The native [overlaid-conduit-inspect CLI](conduit-inspection-cli.md) invokes this Go boundary with dedicated private configuration. There is no application environment setting, HTTP route, worker or startup caller for it.
 
 ## Inputs and permission boundary
 
