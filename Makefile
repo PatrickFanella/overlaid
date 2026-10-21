@@ -48,6 +48,7 @@ build: build-probe ## Build backend binaries and frontend assets
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/overlaid-app-admin ./cmd/app-admin
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/overlaid-app-issue ./cmd/app-issue
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/overlaid-conduit-inspect ./cmd/conduit-inspect
+	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/overlaid-conduit-create ./cmd/conduit-create
 	pnpm --dir web run build
 
 build-probe: ## Build the readiness monitoring probe
