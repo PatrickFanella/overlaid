@@ -62,6 +62,15 @@ export const dashboardRoutes: DashboardRoute[] = [
     shortcut: '4',
   },
   {
+    path: '/dashboard/automations',
+    navLabel: 'Automations',
+    title: 'Automations',
+    description: 'Discover, inspect and publish immutable configuration versions without executing actions.',
+    landmarkText: 'Automation versions',
+    intent: 'prepare',
+    shortcut: '9',
+  },
+  {
     path: '/dashboard/health',
     navLabel: 'Health',
     title: 'Health',
