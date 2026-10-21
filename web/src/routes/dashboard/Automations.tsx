@@ -3,6 +3,7 @@ import { decodeAutomations, decodeGraph, decodeVersionDesk, decodeVersions, draf
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { compareRootVersions, type RootVersionDiff } from '../../lib/automationVersionDiff';
 import { AutomationVersionComparison } from './AutomationVersionComparison';
+import { OperatorRehearsalDesk } from './OperatorRehearsalDesk';
 import { DashboardShell } from './DashboardShell';
 import { useAccount } from './accountSession';
 import { Empty, Field, KeyValues, Notice, PageHead, Panel, Tag } from './ui';
@@ -118,6 +119,11 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     if (!persist({ ...local, draft: pending.operation === 'publish' ? null : local.draft, pending: null })) return;
     setMessage(pending.operation === 'publish' ? 'The original immutable version is saved. Its current selection may have changed.' : 'The requested version is current in the saved snapshot.');
   }
+  const loadedRoot = graph?.versions.find(v => v.automationId === graph.automationId && v.versionId === graph.versionId);
+  const loadedMetadata = versions?.versions.find(v => v.versionId === graph?.versionId);
+  const rehearsalCandidate = graph && loadedMetadata && loadedRoot?.schemaVersion === 2 && (loadedRoot.trigger as Record<string, unknown> | undefined)?.kind === 'dashboard'
+    ? { automationId: graph.automationId, versionId: graph.versionId, graphDigest: graph.graphDigest, documentDigest: loadedMetadata.digest }
+    : null;
   return <div className="grid min-w-0 gap-5">
     <Notice>Workspace: <strong>{workspaceName}</strong>. This advanced JSON desk manages saved versions only. Actions, variables and Chat commands are not executed here.</Notice>
     {storageError ? <Notice tone="bad" role="alert">{storageError} <button className="desk-btn desk-btn--small" onClick={() => { if (window.confirm('Clear this workspace’s tab draft and unresolved intent? This does not cancel or undo a saved write.')) persist({ ...emptyVersionDesk }); }}>Clear unreadable local state</button></Notice> : null}
@@ -146,5 +152,6 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
       <div className="mt-3 flex flex-wrap gap-2"><button className="desk-btn" disabled={blocked} onClick={() => void run(validate)}>Validate draft</button><button className="desk-btn desk-btn--primary" disabled={blocked} onClick={() => void run(publish)}>Publish draft</button><button className="desk-btn" disabled={blocked} onClick={() => { if (window.confirm('Discard this tab’s draft? Saved versions are unchanged.')) persist({ ...local, draft: null }); }}>Discard draft</button></div>
       <p className="mt-3 text-sm">A conflict keeps your original draft and expected pointer. Inspect saved versions before acknowledging an unresolved write. Start a fresh draft explicitly when you are ready to rebase changes.</p>
     </Panel> : <Tag>No local draft</Tag>}
+    <OperatorRehearsalDesk scope={scope} admissionBlocked={busy || !!local.pending || !!storageError} candidate={rehearsalCandidate} />
   </div>;
 }

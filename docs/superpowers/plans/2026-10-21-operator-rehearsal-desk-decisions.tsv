@@ -1,0 +1,8 @@
+decision	evidence	implementation	verification
+explicit_occurrence	metadata admission reserves cooldown/capacity	prepare scoped stable UUID; persist submitted before one POST	no automatic admission and storage-failure browser checks
+recovery	lost response and retention do not permit replay	original lookup only; reload rechecks; explicit local clear	lost malformed policy-refused purged and reload fixtures
+identity	immutable v1 server source/root/pinned/report hash domains	validate exact account tenant request version digests capture and mode	fixed vector and crossed receipt unit tests
+capture	source format1 stored no provider facts/random choices	empty facts seed0 placeholder; original DB clock precision preserved	current blocked/original proposed and offset precision tests
+private_output	server flow emits bounded opaque proposals	100 steps/proposals 64KiB arguments escaped text; nil slice means no args	HTML-like input malformed report and no execution-control checks
+lifetime	existing page scope and cancellation contract	abort network; fence async crypto; no late repaint	workspace and delayed report browser fixtures
+remaining	Phase25 requires richer capture effects migration full UI	no trace-save/history graphical flow dispatcher or provider change	docs and allowed-operation fixtures

@@ -2,6 +2,8 @@
 
 [Issue #284](https://git.subcult.tv/subculture-collective/overlaid/issues/284) adds explicit `AutomationStore.AdmitOperator` and `LookupOperator` methods for managed PostgreSQL. This is the first durable run writer in Phase 3 E2b. The [workspace metadata API](automation-control-api.md) now selects explicit admission, lookup and rehearsal operations; no executor or queue job consumes these rows. A run records admitted metadata and a charged cooldown; it grants no product effect or provider permission.
 
+The [dashboard operator rehearsal desk](automation-control-api.md#retained-operator-rehearsal-desk) now prepares stable tab-scoped request IDs, submits admission once and resolves unknown outcomes through original-request lookup. Its reports are effect-free; metadata admission still charges the existing cooldown/capacity contract.
+
 ## Admit and resolve an occurrence
 
 The caller supplies an authenticated actor account ID, a previously saved request UUID, the automation ID and its exact expected current version ID. The API accepts no caller facts, provider event, channel or stream ID. The root must be schema 2 with a `dashboard` trigger and a zero per-stream limit. Schema 1, other trigger sources and positive per-stream limits fail closed. Selected predicates evaluate against an empty captured fact set, so missing values stay unknown and reject admission. Unselected conditional groups do not gate root admission.
