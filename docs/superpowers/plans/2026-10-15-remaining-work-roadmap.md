@@ -520,3 +520,7 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Phase 3 admission/rehearsal prerequisite: typed predicate reports
 
 [Issue #280](https://git.subcult.tv/subculture-collective/overlaid/issues/280) supplies [pure captured predicate reports](../../runbooks/engine-predicate-reports.md) after immutable version publication. Bounded tenant-bound facts distinguish false/empty/zero from missing/stale/disconnected; typed comparisons and all/any/none retain unknown outcomes. Groups are reported independently because condition nodes also reference them. Mandatory current permissions/entitlements, admission-group policy and atomic run/cooldown/per-stream reservations remain future work. No application caller, trace storage, node execution or Phase acceptance is added.
+
+### Phase 3 admission prerequisite: pinned explicit policy
+
+[Issue #282](https://git.subcult.tv/subculture-collective/overlaid/issues/282) adds [schema-2 explicit admission policy](../../runbooks/engine-admission-policy.md), selected-only predicate matching and migration 0040 codec guards. Schema-1 bodies retain their original bytes/digests and remain structural-only. Group selection and bounded cooldown/per-stream declarations are immutable version content, independent of conditional-node references. Current mandatory authorization, trusted occurrence/stream binding, atomic run/reservation writes and Phase acceptance remain open.

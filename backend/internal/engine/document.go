@@ -19,14 +19,15 @@ import (
 )
 
 const (
-	SchemaVersion     = 1
-	MaxDocumentBytes  = 64 * 1024
-	MaxDepth          = 16
-	MaxSteps          = 100
-	MaxLoopIterations = 20
-	MaxPredicates     = 100
-	MaxTextBytes      = 4096
-	MaxDelayMS        = 24 * 60 * 60 * 1000
+	SchemaVersion          = 1
+	AdmissionSchemaVersion = 2
+	MaxDocumentBytes       = 64 * 1024
+	MaxDepth               = 16
+	MaxSteps               = 100
+	MaxLoopIterations      = 20
+	MaxPredicates          = 100
+	MaxTextBytes           = 4096
+	MaxDelayMS             = 24 * 60 * 60 * 1000
 )
 
 var ErrDocument = errors.New("engine_document_invalid")
@@ -46,6 +47,7 @@ type Document struct {
 	Capabilities  []platform.Capability `json:"capabilities"`
 	Filters       []Predicate           `json:"filters,omitempty"`
 	Restrictions  []Restriction         `json:"restrictions"`
+	Admission     *AdmissionPolicy      `json:"admission,omitempty"`
 	Root          string                `json:"root"`
 	Nodes         []Node                `json:"nodes"`
 }
@@ -170,7 +172,7 @@ func Validate(input Document) (Validated, error) {
 }
 
 func validDocument(d Document) bool {
-	if len(d.Capabilities) > 64 || len(d.Restrictions) > MaxPredicates || !validName(d.Root) || d.SchemaVersion != SchemaVersion || !validUUID(d.TenantID) || !validUUID(d.AutomationID) || !validUUID(d.VersionID) || !validName(d.Trigger.ID) || !oneOf(d.Trigger.Kind, "command", "keyword", "event", "timer", "cron", "reward", "webhook", "dashboard", "counter", "api") || len(d.Nodes) == 0 || len(d.Nodes) > MaxSteps {
+	if len(d.Capabilities) > 64 || len(d.Restrictions) > MaxPredicates || !validName(d.Root) || (d.SchemaVersion != SchemaVersion && d.SchemaVersion != AdmissionSchemaVersion) || !validUUID(d.TenantID) || !validUUID(d.AutomationID) || !validUUID(d.VersionID) || !validName(d.Trigger.ID) || !oneOf(d.Trigger.Kind, "command", "keyword", "event", "timer", "cron", "reward", "webhook", "dashboard", "counter", "api") || len(d.Nodes) == 0 || len(d.Nodes) > MaxSteps {
 		return false
 	}
 	known := map[platform.Capability]bool{}
@@ -212,6 +214,9 @@ func validDocument(d Document) bool {
 				return false
 			}
 		}
+	}
+	if !validAdmission(d, groups) {
+		return false
 	}
 	nodes := map[string]Node{}
 	for _, n := range d.Nodes {
