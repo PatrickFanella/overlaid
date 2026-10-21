@@ -66,3 +66,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Selected conduit subscription inspection](conduit-subscription-inspection.md): bounded read-only provider/custody observation and native --subscriptions mode, with private-condition exclusion.
 
 - [Versioned engine document contract](engine-document-contract.md): pure structural validation and stable run identity; no application activation, persistence or effect execution.
+
+- [Syntax-2 variable parser](variable-template-parser.md): bounded source-spanned AST and fixed diagnostics; rendering, resolvers, migration and activation remain separate.
