@@ -4,7 +4,7 @@
 
 ## Prepare private configuration
 
-The target database must already have migrations 0034 and 0035, a dedicated login inheriting only `overlaid_app_execution`, and a currently validated encrypted app credential. The custody constructors verify the role and schema; they refuse administrator, tenant and combined identities. This command does not provision roles, install credentials or acquire/refresh a token. See [service app custody](service-app-custody.md) for the administrative boundary and upgrade requirements.
+The target database must already have migrations 0034 through 0036, a dedicated login inheriting only `overlaid_app_execution`, and a currently validated encrypted app credential. The custody constructors verify the role and schema; they refuse administrator, tenant and combined identities. This command does not provision roles, install credentials or acquire/refresh a token. See [service app custody](service-app-custody.md) for the administrative boundary and upgrade requirements.
 
 Supply these values through the operator's private environment mechanism:
 

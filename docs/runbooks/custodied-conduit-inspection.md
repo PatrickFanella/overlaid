@@ -28,11 +28,11 @@ The final checks also detect owner-level SQL changes that bypass the library loc
 
 ## Upgrade and rollback
 
-Apply migrations 0034 and 0035 through the migration administrator. Provision a dedicated login that inherits only `overlaid_app_execution`, with schema usage and no extra capabilities. Supply key material through the service's private mechanism; this unit adds no configuration loader or production provisioning action.
+Apply migrations 0034 through 0036 through the migration administrator. The current shared layout validator also requires the private [issuance ledger](service-app-issuance.md); the execution role receives no access to it. Provision a dedicated login that inherits only `overlaid_app_execution`, with schema usage and no extra capabilities. Supply key material through the service's private mechanism; this unit adds no configuration loader or production provisioning action.
 
 Stop old administrative clients before applying 0035 and upgrade them with the migration. The older validator expects a single policy on the credential table and refuses the new policy set. Current administrative and execution constructors both require the reviewed expanded layout. Existing credentials, revisions, ciphertext, key versions and receipts are preserved; no data backfill or token rotation is performed.
 
-To roll back use of inspection, stop/close its pool and preserve all records, keys and policies. Use an administrative binary compatible with 0035. Removing policies or downgrading to an older administrative client is a separate reviewed rollback; never broaden an active pool's grants or erase custody data to make a downgrade pass. The default application and existing Twitch transport remain unchanged.
+To roll back use of inspection, stop/close its pool and preserve all records, keys and policies. Use an administrative binary compatible with the installed migrations, including 0036. Removing policies or downgrading to an older administrative client is a separate reviewed rollback; never broaden an active pool's grants or erase custody data to make a downgrade pass. The default application and existing Twitch transport remain unchanged.
 
 ## Qualification and source references
 

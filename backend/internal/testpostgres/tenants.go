@@ -450,6 +450,13 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if _, err = owner.Exec(`ALTER ROLE ` + appExecution + ` LOGIN PASSWORD '` + password + `'`); err != nil {
 		t.Fatal(err)
 	}
+	rawAppIssuance, err := os.ReadFile(filepath.Join(root, "0036_service_app_issuance.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.Exec(strings.ReplaceAll(string(rawAppIssuance), "overlaid_app_admin", appAdmin)); err != nil {
+		t.Fatal(err)
+	}
 	u.User = url.UserPassword(appExecution, password)
 	appExecutionURL := u.String()
 	u.User = url.UserPassword(appAdmin, password)

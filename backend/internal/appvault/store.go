@@ -1,6 +1,6 @@
-// Package appvault provides separate administrative custody and explicit
-// read-only conduit inspection for service app credentials. It exposes no
-// plaintext resolver, tenant API or startup execution permission.
+// Package appvault provides separate administrative custody, durable one-attempt
+// issuance and explicit read-only inspection for service app credentials. It
+// exposes no plaintext resolver, tenant API or startup execution permission.
 package appvault
 
 import (
@@ -109,7 +109,7 @@ func (s *Store) transaction(ctx context.Context) (*sql.Tx, error) {
 	if s == nil || s.db == nil {
 		return nil, ErrBoundary
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -128,10 +128,29 @@ func (s *Store) transaction(ctx context.Context) (*sql.Tx, error) {
 
 // Install accepts only the ephemeral acquisition credential and its exact source
 // secret. Historical validation is not current provider permission. No provider
-// call is made under the administrative lock or by any custody operation.
+// call is made under the administrative lock or by Install.
 func (s *Store) Install(ctx context.Context, keyring tenancy.Keyring, secret string, credential twitchconduit.AppCredential, expected int64) (Metadata, error) {
 	bound, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	if _, err := credential.Token(bound); err != nil || expected < 0 || !credential.BindsClientSecret(secret) || len(keyring.Active) < 1 || len(keyring.Active) > 40 || len(keyring.Keys[keyring.Active]) != 32 {
+		return Metadata{}, failure(bound, ErrInvalid)
+	}
+	tx, err := s.transaction(bound)
+	if err != nil {
+		return Metadata{}, failure(bound, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := installTx(bound, tx, keyring, secret, credential, expected)
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		return Metadata{}, failure(bound, err)
+	}
+	return result, nil
+}
+
+func installTx(bound context.Context, tx *sql.Tx, keyring tenancy.Keyring, secret string, credential twitchconduit.AppCredential, expected int64) (Metadata, error) {
 	source := credential.Metadata()
 	token, err := credential.Token(bound)
 	if err != nil || expected < 0 || !credential.BindsClientSecret(secret) || len(keyring.Active) < 1 || len(keyring.Active) > 40 || len(keyring.Keys[keyring.Active]) != 32 {
@@ -140,11 +159,6 @@ func (s *Store) Install(ctx context.Context, keyring tenancy.Keyring, secret str
 	// Snapshot one AES-256 version for both field seals. Callers own an immutable
 	// keyring; rotation supplies a new value, never mutates a map in active use.
 	keys := tenancy.Keyring{Active: keyring.Active, Keys: map[string][]byte{keyring.Active: append([]byte(nil), keyring.Keys[keyring.Active]...)}}
-	tx, err := s.transaction(bound)
-	if err != nil {
-		return Metadata{}, failure(bound, err)
-	}
-	defer func() { _ = tx.Rollback() }()
 	prior, err := scan(tx.QueryRowContext(bound, `SELECT `+columns+` FROM service_app_credentials WHERE provider='twitch' AND client_id=$1 FOR UPDATE`, source.ClientID))
 	id := prior.ID
 	revision := int64(1)
@@ -153,10 +167,10 @@ func (s *Store) Install(ctx context.Context, keyring tenancy.Keyring, secret str
 			return Metadata{}, ErrRevision
 		}
 		var count int
-		if err = tx.QueryRowContext(bound, `SELECT count(*) FROM service_app_credentials`).Scan(&count); err != nil {
+		if err = tx.QueryRowContext(bound, `SELECT count(*) FROM(SELECT client_id FROM service_app_credentials UNION SELECT client_id FROM service_app_issuance WHERE state IN('started','uncertain') OR (state='prepared' AND deadline_at>clock_timestamp()) UNION SELECT $1::text) reserved`, source.ClientID).Scan(&count); err != nil {
 			return Metadata{}, failure(bound, err)
 		}
-		if count >= 8 {
+		if count > 8 {
 			return Metadata{}, ErrCapacity
 		}
 		if err = tx.QueryRowContext(bound, `SELECT gen_random_uuid()::text`).Scan(&id); err != nil {
@@ -195,9 +209,6 @@ func (s *Store) Install(ctx context.Context, keyring tenancy.Keyring, secret str
 	}
 	if err == nil {
 		err = receipt(bound, tx, id, revision, "install")
-	}
-	if err == nil {
-		err = tx.Commit()
 	}
 	if err != nil {
 		return Metadata{}, failure(bound, err)
