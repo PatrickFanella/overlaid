@@ -72,3 +72,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Captured variable rendering](variable-template-rendering.md): immutable supplied values, typed captured-call allowlist, lazy fallback and deterministic bounded pure rendering; no live resolver or activation.
 
 - [Parsed variable template cache](variable-template-cache.md): bounded tenant-scoped LRU, immutable templates and serialized purge; no application activation.
+
+- [Legacy variable conversion preview](variable-template-conversion.md): original/proposed sources and supplied-value output comparisons, bounded warnings and no selection or effects.

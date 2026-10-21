@@ -504,3 +504,7 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Phase 3 V2a: parsed-template cache
 
 [Issue #272](https://git.subcult.tv/subculture-collective/overlaid/issues/272) adds the explicit [tenant-scoped parsed-template cache](../../runbooks/variable-template-cache.md). Successful syntax-2 ASTs use fixed global/per-tenant LRU limits and serialized parse/purge; captured values and rendered results are excluded. No application caller is registered. V2b conversion preview, E2 stored admission, trace/replay, migration and Phase 3 acceptance remain open.
+
+### Phase 3 V2b: effect-free conversion preview
+
+[Issue #274](https://git.subcult.tv/subculture-collective/overlaid/issues/274) adds the [legacy variable conversion preview](../../runbooks/variable-template-conversion.md). It preserves source/version pairs, escapes existing dollar syntax, warns on literal unknown/escaped braces, and compares actual legacy output with pure rendering from bounded supplied values. No editor, HTTP route, provider or selection path is registered. E2 stored admission, authenticated context and trace/replay, explicit migration selection and Phase 3 acceptance remain open.
