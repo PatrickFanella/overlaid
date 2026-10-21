@@ -1,6 +1,6 @@
 # Durable service-app issuance
 
-[Issue #226](https://git.subcult.tv/subculture-collective/overlaid/issues/226) composes the existing [one-attempt acquisition adapter](app-token-acquisition.md) and [encrypted app custody](service-app-custody.md) through a persistent issuance request. This is an explicit administrative Go API. No CLI, route, worker, runtime pool or startup path invokes it. Fixtures use synthetic providers; production invocation and operational secret delivery require their own integration.
+[Issue #226](https://git.subcult.tv/subculture-collective/overlaid/issues/226) composes the existing [one-attempt acquisition adapter](app-token-acquisition.md) and [encrypted app custody](service-app-custody.md) through a persistent issuance request. This is an explicit administrative Go API. The native CLI below invokes only metadata lookup; no CLI, route, worker, runtime pool or startup path invokes preparation or issuance. Fixtures use synthetic providers; production invocation and operational secret delivery require their own integration.
 
 ## Prepare, then issue
 
@@ -31,6 +31,18 @@ After successful acquisition, execution takes the administrative lock again and 
 `ErrIssuanceUncertain` is fixed and retains caller cancellation identity where applicable. Raw database/provider errors are discarded. A refused result is returned with a nonzero error; nil error from `Issue` describes an issued result, including an existing issued no-op. Metadata returned alongside an error is for reconciliation and grants no effect permission.
 
 The operation has one fifteen-second cooperative caller context, with at most five seconds for each database phase and the adapter's existing ten-second bound within that context. Failure bookkeeping uses a separate five-second context after caller cancellation. Its exact claim/state predicate cannot reopen a terminal row. If bookkeeping fails or the process disappears, the durable `started` row remains unresolved and non-replayable. Custom transports are trusted to honor cancellation and protect request secrets; the library cannot isolate a hostile transport from process memory.
+
+## Native operator status lookup
+
+[Issue #228](https://git.subcult.tv/subculture-collective/overlaid/issues/228) exposes only the read-only metadata operation through the existing native administrator CLI:
+
+```bash
+bin/overlaid-app-admin issuance --request '<original-lowercase-request-uuid>'
+```
+
+Use the original retained request ID and the existing private `OVERLAID_APP_ADMIN_DATABASE_URL`. `issuance --help` works offline. Missing, duplicate, unknown, mixed or positional flags are refused before configuration or pool access. The command reads no key/token/secret configuration and makes no provider request. It invokes `LookupIssuance` once within the existing five-second context, honors interruption and closes its pool before writing one JSON object with an `issuance` field.
+
+Exit zero means the metadata was read, including a `prepared`, `started`, `refused` or `uncertain` state. Interpret the state using the table above; a successful lookup does not mean a token was issued or an attempt may be repeated. Missing/purged IDs and unavailable/interrupt/output failures use fixed diagnostics that retain the original-ID contract. A nonzero output status invalidates any partial bytes. The command cannot prepare, issue, retry, mutate, resolve, clear or replace an issuance request. It adds no operational secret-input flow or runtime activation.
 
 ## Retention and unresolved ownership
 

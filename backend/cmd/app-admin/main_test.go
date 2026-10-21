@@ -51,6 +51,11 @@ func (f *fakeCustody) Revoke(ctx context.Context, id string, revision int64) (ap
 	f.revision = revision
 	return appvault.Metadata{ID: id, ClientID: "client", Revision: revision + 1, Revoked: true}, f.fail
 }
+func (f *fakeCustody) LookupIssuance(ctx context.Context, id string) (appvault.Issuance, error) {
+	f.check(ctx)
+	f.id = id
+	return appvault.Issuance{ID: id, ClientID: "client", State: "uncertain", Failure: "uncertain"}, f.fail
+}
 func (f *fakeCustody) Close() error                        { f.closes++; return f.closeErr }
 func mustNotOpen(context.Context, string) (custody, error) { panic("unexpected pool") }
 func noEnv(string) string                                  { panic("unexpected environment read") }
