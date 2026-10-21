@@ -496,3 +496,7 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Pure syntax-2 parser — #268
 
 [Issue #268](https://git.subcult.tv/subculture-collective/overlaid/issues/268) implements V1a of the Phase 3 plan after merged #267: a [bounded variable parser](../../runbooks/variable-template-parser.md) with original-source byte spans, named/nested calls, quotes/escapes and positional range/fallback syntax. The AST is immutable through copy-returning accessors and errors carry fixed codes/spans without source text. It does not resolve names, evaluate fallback, expand ranges, render, cache, convert templates or activate an application consumer. V1b pure rendering, V2 cache/conversion, E2 stored admission and all migration/Phase 3 acceptance remain open.
+
+### Captured-only variable rendering — #270
+
+[Issue #270](https://git.subcult.tv/subculture-collective/overlaid/issues/270) implements V1b after merged #269: [bounded rendering from immutable supplied snapshots](../../runbooks/variable-template-rendering.md), with exact captured invocation matching, explicit unavailable values, typed arity, lazy positional fallback and literal unreparsed results. Clock and seed are supplied; no live resolver or function callback is available. Resolution/output/deadline/cancellation boundaries expose fixed metadata and no partial terminal output. Current syntax-1 behavior and dispatchers remain unchanged. V2 cache/conversion, E2 admission, authenticated retained context/replay, live adapters and migration remain open.

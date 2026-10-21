@@ -68,3 +68,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Versioned engine document contract](engine-document-contract.md): pure structural validation and stable run identity; no application activation, persistence or effect execution.
 
 - [Syntax-2 variable parser](variable-template-parser.md): bounded source-spanned AST and fixed diagnostics; rendering, resolvers, migration and activation remain separate.
+
+- [Captured variable rendering](variable-template-rendering.md): immutable supplied values, typed captured-call allowlist, lazy fallback and deterministic bounded pure rendering; no live resolver or activation.
