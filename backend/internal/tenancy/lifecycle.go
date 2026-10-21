@@ -95,6 +95,9 @@ func (s *Store) Expire(ctx context.Context) error {
 			}
 		}
 		if err == nil {
+			err = lockOperatorRuns(ctx, tx, true)
+		}
+		if err == nil {
 			_, err = tx.ExecContext(ctx, `DELETE FROM engine_operator_runs WHERE /*tenant:engine_operator_runs*/ AND occurrence_id IN (SELECT id FROM engine_operator_occurrences WHERE /*tenant:engine_operator_occurrences*/ AND created_at<now()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1))`, id)
 		}
 		if err == nil {

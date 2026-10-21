@@ -1,6 +1,6 @@
 # Captured automation flow rehearsal
 
-[Issue #286](https://git.subcult.tv/subculture-collective/overlaid/issues/286) adds pure `engine.RehearseFlow(ctx, pinnedGraph, input)` as the first E3 flow rehearsal boundary. No application, HTTP route, editor, dispatcher, worker, provider or database caller selects it. It accepts immutable supplied graphs and facts and returns a trace plus private action proposals. It does not acquire permission, reserve cooldown/stream limits, render variables, persist a run or execute an effect.
+[Issue #286](https://git.subcult.tv/subculture-collective/overlaid/issues/286) adds pure `engine.RehearseFlow(ctx, pinnedGraph, input)` as the first E3 flow rehearsal boundary. The explicit [retained operator rehearsal store method](retained-operator-rehearsal.md) now consumes it; no application, HTTP route, editor, dispatcher, worker or provider caller selects that method. It accepts immutable supplied graphs and facts and returns a trace plus private action proposals. It does not acquire permission, reserve cooldown/stream limits, render variables, persist a run or execute an effect.
 
 ## Capture and mode identity
 

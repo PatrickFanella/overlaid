@@ -55,7 +55,7 @@ func (s *AutomationStore) AdmitOperator(ctx context.Context, actor, request, aut
 	if err := s.validateRuns(ctx); err != nil {
 		return out, err
 	}
-	tx, err := s.begin(ctx, actor, true)
+	tx, err := s.beginOperator(ctx, actor, true)
 	if err != nil {
 		return out, err
 	}
@@ -204,18 +204,11 @@ func (s *AutomationStore) LookupOperator(ctx context.Context, actor, request str
 	if err := s.validateRuns(ctx); err != nil {
 		return out, err
 	}
-	tx, err := s.begin(ctx, actor, false)
+	tx, err := s.beginOperator(ctx, actor, false)
 	if err != nil {
 		return out, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var role string
-	if err = tx.QueryRowContext(ctx, `SELECT role FROM tenant_memberships WHERE tenant_id=current_setting('app.tenant_id')::uuid AND account_id=$1`, actor).Scan(&role); err != nil {
-		return out, err
-	}
-	if !Allowed(role, "configure") {
-		return out, ErrDenied
-	}
 	out, err = lookupOperatorRun(ctx, tx, operatorOccurrence(s.db.TenantID(), actor, request), actor)
 	if err != nil {
 		return OperatorRun{}, err
