@@ -1,0 +1,7 @@
+decision	evidence	implementation	verification
+source	raw request UUIDs intentionally remain caller-held	resolve existing actor/request only; no all-run enumeration	tenant actor role unknown and purged-source fixtures
+projection	trace bodies belong to explicit canonical load	query ID version mode digest save time only; original run receipt	fixed HTTP fields privacy allowlists and explicit load by listed ID
+ordering	per-run storage bound8 already enforced on saves	whole list max8; time DESC ID DESC; overflow refuses	ties exact bound overflow and pointer-change fixtures
+lifecycle	retention and membership share existing fences	tenant and advisory lifecycle read locks plus repeated schema guards	no-write snapshot cancellation grant drift and purged-source fixtures
+transport	managed account/session metadata boundary exists	strict POST requestId only; cookie Origin CSRF cancel no-store; reads need no writer	HTTP guard controller-loss and no job/runtime tests
+remaining	Phase25 includes browser history richer capture effects migration	store and HTTP discovery only; no schema/pool/provider activation	runbooks README status roadmap distinguish implemented scope

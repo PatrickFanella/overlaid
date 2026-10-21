@@ -63,10 +63,13 @@ func TestAutomationControlCatalogue(t *testing.T) {
 
 func TestAutomationControlCatalogueGuards(t *testing.T) {
 	app, a, b, _ := applicationFixture(t)
-	for _, operation := range []string{"list", "list-versions"} {
+	for _, operation := range []string{"list", "list-versions", "list-traces"} {
 		body := map[string]any{}
 		if operation == "list-versions" {
 			body["automationId"] = automationControlDocument(a.tenant, 11100).AutomationID
+		}
+		if operation == "list-traces" {
+			body["requestId"] = "99999999-3333-4333-8333-333333333333"
 		}
 		raw, err := json.Marshal(body)
 		if err != nil {

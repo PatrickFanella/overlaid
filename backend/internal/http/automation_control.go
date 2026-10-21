@@ -247,6 +247,23 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 			proposals = append(proposals, map[string]any{"sequence": p.Sequence, "automationId": p.AutomationID, "versionId": p.VersionID, "nodeId": p.NodeID, "declaredCapability": p.Capability, "opaqueArguments": p.Arguments})
 		}
 		writeJSON(w, map[string]any{"captureVersion": result.CaptureVersion, "selectedVersionId": result.SelectedVersionID, "run": automationRunJSON(result.Run), "rehearsal": map[string]any{"id": f.ID, "mode": f.Mode, "originalGraphDigest": f.OriginalGraphDigest, "graphDigest": f.GraphDigest, "captureDigest": f.CaptureDigest, "clock": f.Clock, "seed": f.Seed, "status": f.Status, "reason": f.Reason, "steps": steps, "droppedSteps": f.DroppedSteps, "proposals": proposals}})
+	case "list-traces":
+		var body struct {
+			RequestID string `json:"requestId"`
+		}
+		if !decodeControl(w, r, &body) {
+			return
+		}
+		result, e := store.ListOperatorTraces(ctx, actor, body.RequestID)
+		if e != nil {
+			automationControlError(w, e)
+			return
+		}
+		items := make([]map[string]any, 0, len(result.Traces))
+		for _, item := range result.Traces {
+			items = append(items, map[string]any{"traceId": item.ID, "versionId": item.VersionID, "mode": item.Mode, "digest": item.Digest, "createdAt": item.CreatedAt})
+		}
+		writeJSON(w, map[string]any{"run": automationRunJSON(result.Run), "traces": items})
 	case "save-trace":
 		var body struct {
 			RequestID         string      `json:"requestId"`
