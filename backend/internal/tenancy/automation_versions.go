@@ -26,7 +26,7 @@ var (
 )
 
 // AutomationStore borrows an immutable validated tenant scope, never its pool
-// ownership. Construction and operations are explicit; no startup caller exists.
+// ownership. Metadata control constructs it explicitly; it selects no effects.
 type AutomationStore struct{ db *tenantdb.DB }
 type AutomationPublication struct {
 	AutomationID, VersionID, Digest, GraphDigest string

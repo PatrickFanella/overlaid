@@ -1,0 +1,7 @@
+decision	evidence	implementation	verification
+whole_catalogues	publication caps 100 automations and 32 versions	limit plus one and fixed capacity refusal; no partial result/prune	exact-bound and overflow SQL fixtures
+private_metadata	API already requires session Origin CSRF configure	IDs digest current pointer counts timestamps only; no document query	HTTP allowlist and cross-tenant/role fixtures
+consistent_selection	publication/selection lock tenant FOR UPDATE	discovery tenant FOR SHARE; stable ID and creation time order	older selection and forced timestamp tie fixtures
+read_lifetime	existing account cancellation and managed controller	session/app cancellation; no writer-owner dependency or new pool	logout/shutdown blocked reads and actual controller-loss HTTP checks
+error_identity	initial fixture reported missing row as canceled	normalize using original caller context before internal timeout cleanup	not-found capacity invalid schema and canceled fixtures
+remaining_scope	Phase 25 requires editor richer capture effects migration	discovery only; no dispatcher or new body/name schema	docs and no-job/no-runtime fixtures

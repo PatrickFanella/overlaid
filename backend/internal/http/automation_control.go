@@ -98,6 +98,38 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 	}
 	actor := session.AccountID
 	switch parts[4] {
+	case "list":
+		var body struct{}
+		if !decodeControl(w, r, &body) {
+			return
+		}
+		result, e := store.List(ctx, actor)
+		if e != nil {
+			automationControlError(w, e)
+			return
+		}
+		items := make([]map[string]any, 0, len(result))
+		for _, item := range result {
+			items = append(items, map[string]any{"automationId": item.AutomationID, "currentVersionId": item.CurrentVersionID, "digest": item.Digest, "versionCount": item.VersionCount, "updatedAt": item.UpdatedAt, "versionCreatedAt": item.VersionCreatedAt})
+		}
+		writeJSON(w, map[string]any{"automations": items})
+	case "list-versions":
+		var body struct {
+			AutomationID string `json:"automationId"`
+		}
+		if !decodeControl(w, r, &body) {
+			return
+		}
+		result, e := store.ListVersions(ctx, actor, body.AutomationID)
+		if e != nil {
+			automationControlError(w, e)
+			return
+		}
+		items := make([]map[string]any, 0, len(result.Versions))
+		for _, item := range result.Versions {
+			items = append(items, map[string]any{"versionId": item.VersionID, "digest": item.Digest, "createdAt": item.CreatedAt})
+		}
+		writeJSON(w, map[string]any{"automationId": result.AutomationID, "currentVersionId": result.CurrentVersionID, "versions": items})
 	case "validate", "publish":
 		var body struct {
 			Document                 json.RawMessage `json:"document"`
