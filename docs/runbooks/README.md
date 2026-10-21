@@ -62,3 +62,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Owned initial conduit session](owned-conduit-session.md): private welcome binding, original deadline, scoped lease, bounded notification delivery and explicit shutdown.
 
 - [Retained conduit stream ingress](conduit-stream-ingress.md): copied subscription/tenant scopes, required local owner lease and existing atomic stream event/payload/job admission.
+
+- [Selected conduit subscription inspection](conduit-subscription-inspection.md): bounded read-only provider/custody observation and native --subscriptions mode, with private-condition exclusion.

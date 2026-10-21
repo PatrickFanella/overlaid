@@ -32,8 +32,13 @@ type inventoryInspection interface {
 	InventoryConduits(context.Context, tenancy.Keyring, appvault.Binding, *http.Client) (twitchconduit.InventoryObservation, error)
 }
 
+type subscriptionInspection interface {
+	InspectConduitSubscriptions(context.Context, tenancy.Keyring, appvault.Binding, string, *http.Client) (twitchconduit.SubscriptionObservation, error)
+}
+
 const usage = `Usage: overlaid-conduit-inspect --app UUID --client ID --revision N --conduit ID
        overlaid-conduit-inspect --app UUID --client ID --revision N --inventory
+       overlaid-conduit-inspect --app UUID --client ID --revision N --conduit ID --subscriptions
 
 Read one selected conduit through separately restricted service-app custody.
 Use the exact lowercase app UUID, client ID and positive stored revision from
@@ -50,6 +55,8 @@ Retain the stored credential's AES-256 key version in the keyring.
 
 Successful stdout is one JSON object containing binding and observation.
 Inventory mode returns binding and inventory instead, without shard/session reads.
+Subscriptions mode returns selected-conduit metadata after two complete reads; it
+never creates/adopts routes or reveals private conditions, callbacks or sessions.
 Diagnostics go to stderr. Exit: 0 complete observation, 1 refused/unavailable,
 2 invalid input/configuration, 130 interrupted. No automatic retries.
 One ten-second cooperative bound includes opening and inspecting; a blocked output
@@ -113,6 +120,7 @@ func run(ctx context.Context, args []string, env func(string) string, out, diagn
 	binding := appvault.Binding{}
 	conduit := ""
 	inventory := false
+	subscriptions := false
 	seen := map[string]bool{}
 	add := func(name string, set func(string) error) {
 		flags.Func(name, "", func(value string) error {
@@ -139,7 +147,25 @@ func run(ctx context.Context, args []string, env func(string) string, out, diagn
 		inventory = true
 		return nil
 	})
-	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || len(seen) != 4 || !tenantdb.ValidID(binding.AppID) || binding.AppID != strings.ToLower(binding.AppID) || binding.Revision < 1 {
+	flags.BoolFunc("subscriptions", "", func(value string) error {
+		if seen["subscriptions"] || value != "true" {
+			return errors.New("invalid subscriptions flag")
+		}
+		seen["subscriptions"] = true
+		subscriptions = true
+		return nil
+	})
+	if err := flags.Parse(args); err != nil {
+		return invalid()
+	}
+	expectedFlags := 4
+	if subscriptions {
+		expectedFlags = 5
+	}
+	if flags.NArg() != 0 || len(seen) != expectedFlags || !tenantdb.ValidID(binding.AppID) || binding.AppID != strings.ToLower(binding.AppID) || binding.Revision < 1 {
+		return invalid()
+	}
+	if subscriptions && (inventory || !seen["conduit"]) {
 		return invalid()
 	}
 	// Reuse the exact client/ID grammar before private configuration access.
@@ -175,6 +201,22 @@ func run(ctx context.Context, args []string, env func(string) string, out, diagn
 	}
 	if store == nil {
 		return report()
+	}
+	if subscriptions {
+		reader, ok := store.(subscriptionInspection)
+		if !ok {
+			_ = store.Close()
+			return report()
+		}
+		observed, err := reader.InspectConduitSubscriptions(bound, keys, binding, conduit, client)
+		closeErr := store.Close()
+		if err != nil || closeErr != nil || bound.Err() != nil || !validSubscriptions(binding, conduit, observed) {
+			return report()
+		}
+		return encode(struct {
+			Binding       appvault.Binding                      `json:"binding"`
+			Subscriptions twitchconduit.SubscriptionObservation `json:"subscriptions"`
+		}{binding, observed})
 	}
 	if inventory {
 		reader, ok := store.(inventoryInspection)
@@ -218,4 +260,8 @@ func validInventory(b appvault.Binding, r twitchconduit.InventoryObservation) bo
 		previous = c.ID
 	}
 	return true
+}
+
+func validSubscriptions(b appvault.Binding, conduit string, r twitchconduit.SubscriptionObservation) bool {
+	return r.ValidFor(b.ClientID, conduit)
 }
