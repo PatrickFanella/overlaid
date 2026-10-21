@@ -418,3 +418,172 @@ func TestOwnedConduitSameNativeDeliveryAcrossTenantRoutes(t *testing.T) {
 	count(t, a, 1)
 	count(t, b, 1)
 }
+
+func TestOwnedConduitOneSubscriptionFansOutAtomically(t *testing.T) {
+	_, a, b := fixture(t)
+	first := binding("shared", "channel.update")
+	second := first
+	second.TenantID = tenantB
+	var held []string
+	var released []string
+	expectedBefore := 0
+	expected := 0
+	cleanupPanic := false
+	acquire := func(ctx context.Context, got Binding) (func(), error) {
+		if got != first && got != second {
+			t.Error("foreign route")
+		}
+		// Every owner must be acquired before either tenant receives new work.
+		if len(held) == 0 {
+			count(t, a, expectedBefore)
+			count(t, b, expectedBefore)
+		}
+		held = append(held, got.TenantID)
+		return func() {
+			count(t, a, expected)
+			count(t, b, expected)
+			released = append(released, got.TenantID)
+			if cleanupPanic && got.TenantID == tenantB {
+				panic("PRIVATE CLEANUP")
+			}
+		}, nil
+	}
+	sink, err := NewStreamSink(Config{Routes: []Route{{second, b}, {first, a}}, Acquire: acquire})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, send := socket(t, sink.Accept)
+	original := packet("one-native-for-two", first)
+	object(object(original, "payload"), "event")["tenant_id"] = "forged-scope"
+	// The cleanup sees the complete commit while both leases are still owned.
+	expected = 1
+	if err := send(original); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(held) != fmt.Sprint([]string{tenantA, tenantB}) || fmt.Sprint(released) != fmt.Sprint([]string{tenantB, tenantA}) {
+		t.Fatal("owner order", held, released)
+	}
+	held = nil
+	released = nil
+	expectedBefore = 1
+	if err := send(original); err != nil {
+		t.Fatal("duplicate", err)
+	}
+	count(t, a, 1)
+	count(t, b, 1)
+	cleanupPanic = true
+	if err := send(original); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("cleanup panic escaped", err)
+	}
+	if len(released) != 4 {
+		t.Fatal("panic skipped earlier cleanup", released)
+	}
+	count(t, a, 1)
+	count(t, b, 1)
+}
+
+func TestOwnedConduitLaterOwnerFailureReleasesAllWithoutAdmission(t *testing.T) {
+	_, a, b := fixture(t)
+	first := binding("shared", "stream.offline")
+	second := first
+	second.TenantID = tenantB
+	for _, mode := range []string{"refused", "missing", "panic", "cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			var released []string
+			var cancel context.CancelFunc
+			sink, err := NewStreamSink(Config{Routes: []Route{{second, b}, {first, a}}, Acquire: func(ctx context.Context, got Binding) (func(), error) {
+				count(t, a, 0)
+				count(t, b, 0)
+				release := func() { released = append(released, got.TenantID) }
+				if got.TenantID == tenantA {
+					return release, nil
+				}
+				switch mode {
+				case "refused":
+					return release, errors.New("PRIVATE REFUSAL")
+				case "missing":
+					return nil, nil
+				case "panic":
+					panic("PRIVATE PANIC")
+				case "cancel":
+					cancel()
+					return release, nil
+				}
+				return release, nil
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, send := socket(t, func(ctx context.Context, n twitchconduit.SessionNotification) error {
+				ctx, stop := context.WithCancel(ctx)
+				defer stop()
+				cancel = stop
+				return sink.Accept(ctx, n)
+			})
+			err = send(packet(mode, first))
+			if err == nil || strings.Contains(err.Error(), "PRIVATE") {
+				t.Fatal("owner failure", err)
+			}
+			if mode == "cancel" && !errors.Is(err, context.Canceled) {
+				t.Fatal("context identity", err)
+			}
+			want := []string{tenantA}
+			if mode == "refused" || mode == "cancel" {
+				want = []string{tenantB, tenantA}
+			}
+			if fmt.Sprint(released) != fmt.Sprint(want) {
+				t.Fatal("cleanup order", released, want)
+			}
+			count(t, a, 0)
+			count(t, b, 0)
+		})
+	}
+}
+
+func TestOwnedConduitFanoutRejectsContradictoryMapping(t *testing.T) {
+	f, a, b := fixture(t)
+	separate, err := tenantdb.Open(f.RuntimeURL, tenantB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = separate.Close() }()
+	first := binding("shared", "stream.offline")
+	for _, mode := range []string{"conduit", "kind", "version", "broadcaster", "pool", "bound"} {
+		second := first
+		second.TenantID = tenantB
+		db := b
+		switch mode {
+		case "conduit":
+			second.ConduitID = "other"
+		case "kind":
+			second.Type = "stream.online"
+		case "version":
+			second.Type = "channel.update"
+			second.Version = "2"
+		case "broadcaster":
+			second.BroadcasterID = "other"
+		case "pool":
+			db = separate
+		}
+		routes := []Route{{first, a}, {second, db}}
+		if mode == "bound" {
+			routes = routes[:1]
+			for i := 1; i <= 16; i++ {
+				id := fmt.Sprintf("00000000-0000-4000-8000-%012d", 200+i)
+				scope, err := a.Scoped(id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				next := first
+				next.TenantID = id
+				routes = append(routes, Route{next, scope})
+			}
+			if _, err := NewStreamSink(Config{Routes: routes[:16], Acquire: func(context.Context, Binding) (func(), error) { return func() {}, nil }}); err != nil {
+				t.Fatal("valid maximum mapping", err)
+			}
+		}
+		if _, err := NewStreamSink(Config{Routes: routes, Acquire: func(context.Context, Binding) (func(), error) { return func() {}, nil }}); !errors.Is(err, ErrInvalid) {
+			t.Fatal("contradictory mapping", mode, err)
+		}
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
@@ -42,9 +43,10 @@ type Config struct {
 type route struct {
 	binding Binding
 	store   *platformingest.Store
+	db      *tenantdb.DB
 }
 type StreamSink struct {
-	routes  map[string]route
+	routes  map[string][]route
 	acquire func(context.Context, Binding) (func(), error)
 }
 
@@ -54,20 +56,30 @@ func NewStreamSink(c Config) (*StreamSink, error) {
 	if c.Acquire == nil || len(c.Routes) == 0 || len(c.Routes) > 4096 {
 		return nil, ErrInvalid
 	}
-	s := &StreamSink{routes: make(map[string]route, len(c.Routes)), acquire: c.Acquire}
+	s := &StreamSink{routes: make(map[string][]route, len(c.Routes)), acquire: c.Acquire}
 	for _, r := range c.Routes {
 		b := r.Binding
 		if !atom(b.ConduitID) || !atom(b.SubscriptionID) || !atom(b.BroadcasterID) || !tenantdb.ValidID(b.TenantID) || r.DB == nil || !r.DB.IsScoped() || b.TenantID != r.DB.TenantID() || !supported(b.Type, b.Version) {
 			return nil, ErrInvalid
 		}
-		if _, exists := s.routes[b.SubscriptionID]; exists {
+		existing := s.routes[b.SubscriptionID]
+		if len(existing) >= tenantdb.MaxStreamFanout {
 			return nil, ErrInvalid
+		}
+		for _, prior := range existing {
+			pb := prior.binding
+			if pb.TenantID == b.TenantID || pb.ConduitID != b.ConduitID || pb.Type != b.Type || pb.Version != b.Version || pb.BroadcasterID != b.BroadcasterID || !r.DB.SharesPool(prior.db) {
+				return nil, ErrInvalid
+			}
 		}
 		store, e := platformingest.New(r.DB)
 		if e != nil {
 			return nil, ErrInvalid
 		}
-		s.routes[b.SubscriptionID] = route{b, store}
+		s.routes[b.SubscriptionID] = append(existing, route{binding: b, store: store, db: r.DB})
+	}
+	for _, routes := range s.routes {
+		sort.Slice(routes, func(i, j int) bool { return routes[i].binding.TenantID < routes[j].binding.TenantID })
 	}
 	return s, nil
 }
@@ -91,26 +103,27 @@ func supported(kind, version string) bool {
 }
 
 // Accept is suitable for SessionConfig.Notify. One committed event/native/job
-// transaction is the only output. A commit followed by canceled/failed cleanup
-// can return an error; retained native identity prevents duplicate admission.
+// transaction across every configured target is the only output. A commit
+// followed by canceled/failed cleanup can return an error; retained native
+// identity prevents duplicate admission.
 func (s *StreamSink) Accept(caller context.Context, n twitchconduit.SessionNotification) (err error) {
 	if caller == nil || s == nil || s.acquire == nil {
 		return ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(caller, 5*time.Second)
 	defer cancel()
-	var release func()
+	var releases []func()
 	defer func() {
 		panicked := recover() != nil
 		cleanupFailed := false
-		if release != nil {
+		for i := len(releases) - 1; i >= 0; i-- {
 			func() {
 				defer func() {
 					if recover() != nil {
 						cleanupFailed = true
 					}
 				}()
-				release()
+				releases[i]()
 			}()
 		}
 		if panicked || cleanupFailed {
@@ -123,7 +136,7 @@ func (s *StreamSink) Accept(caller context.Context, n twitchconduit.SessionNotif
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	r, ok := s.routes[n.SubscriptionID]
+	routes, ok := s.routes[n.SubscriptionID]
 	if !ok {
 		return ErrInvalid
 	}
@@ -148,7 +161,7 @@ func (s *StreamSink) Accept(caller context.Context, n twitchconduit.SessionNotif
 	if json.Unmarshal(raw, &message) != nil || json.Unmarshal(raw, &envelope) != nil {
 		return ErrInvalid
 	}
-	b := r.binding
+	b := routes[0].binding
 	sub := message.Payload.Subscription
 	if message.Metadata.MessageType != "notification" || message.Metadata.MessageID != n.ID || !message.Metadata.MessageTimestamp.Equal(n.Timestamp) || envelope.Metadata.Type != b.Type || envelope.Metadata.Version != b.Version || n.Type != b.Type || n.Version != b.Version || envelope.Payload.Subscription.ID != b.SubscriptionID || sub.Type != b.Type || sub.Version != b.Version || sub.Status != "enabled" || len(envelope.Payload.Subscription.Condition) != 1 || sub.Condition.BroadcasterUserID != b.BroadcasterID {
 		return ErrInvalid
@@ -162,18 +175,30 @@ func (s *StreamSink) Accept(caller context.Context, n twitchconduit.SessionNotif
 	if len(transport) != 2 || json.Unmarshal(transport["method"], &method) != nil || json.Unmarshal(transport["conduit_id"], &conduit) != nil || method != "conduit" || conduit != b.ConduitID {
 		return ErrInvalid
 	}
-	event, e := twitch.NormalizeStreamNotification(platform.Connection{TenantID: b.TenantID, ID: "twitch:" + b.BroadcasterID, Platform: "twitch"}, b.BroadcasterID, message, n.ReceivedAt())
-	if e != nil {
-		return ErrInvalid
+	targets := make([]platformingest.StreamTarget, len(routes))
+	for i, r := range routes {
+		b := r.binding
+		event, e := twitch.NormalizeStreamNotification(platform.Connection{TenantID: b.TenantID, ID: "twitch:" + b.BroadcasterID, Platform: "twitch"}, b.BroadcasterID, message, n.ReceivedAt())
+		if e != nil {
+			return ErrInvalid
+		}
+		targets[i] = platformingest.StreamTarget{Store: r.store, Event: event, Native: raw}
 	}
-	release, e = s.acquire(ctx, b)
-	if e != nil || release == nil {
-		return fixed(ctx, e)
+	// Acquire every sorted target before any persistence. A refusal (including a
+	// returned cleanup) releases earlier leases in reverse order without admission.
+	for _, r := range routes {
+		release, e := s.acquire(ctx, r.binding)
+		if release != nil {
+			releases = append(releases, release)
+		}
+		if e != nil || release == nil {
+			return fixed(ctx, e)
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	_, e = r.store.IngestStream(ctx, event, raw)
+	_, e := platformingest.IngestStreamFanout(ctx, targets)
 	if errors.Is(e, platformingest.ErrInvalid) {
 		return ErrInvalid
 	}
