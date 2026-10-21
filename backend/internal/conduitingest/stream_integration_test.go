@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -586,4 +587,97 @@ func TestOwnedConduitFanoutRejectsContradictoryMapping(t *testing.T) {
 			t.Fatal("contradictory mapping", mode, err)
 		}
 	}
+}
+
+// A private payload copied from an earlier callback is not input owned by the
+// current callback, even when its native fields and route bindings are valid.
+func TestConduitStreamRejectsSavedNotificationDuringLaterCallback(t *testing.T) {
+	_, a, _ := fixture(t)
+	var acquired atomic.Int32
+	sink, err := NewStreamSink(Config{Routes: []Route{{binding("update", "channel.update"), a}}, Acquire: func(context.Context, Binding) (func(), error) { acquired.Add(1); return func() {}, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved twitchconduit.SessionNotification
+	var original context.Context
+	_, send := socket(t, func(ctx context.Context, n twitchconduit.SessionNotification) error {
+		if n.ID == "saved" {
+			saved = n
+			original = ctx
+			return nil
+		}
+		// Keep both contexts live: this is a later callback on the same still-open
+		// owner, not a forged public value or merely an already-canceled caller.
+		return sink.Accept(original, saved)
+	})
+	if err := send(packet("saved", binding("update", "channel.update"))); err != nil {
+		t.Fatal(err)
+	}
+	err = send(packet("barrier", binding("update", "channel.update")))
+	if !errors.Is(err, ErrUnavailable) || acquired.Load() != 0 {
+		t.Fatalf("saved notification reached route admission: err=%v guards=%d", err, acquired.Load())
+	}
+	count(t, a, 0)
+}
+
+func TestConduitStreamOwnerCancellationSurvivesStrippedCaller(t *testing.T) {
+	f, a, _ := fixture(t)
+	lock, err := f.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lock.Rollback() }()
+	if _, err = lock.Exec(`SELECT 1 FROM tenants WHERE id=$1 FOR UPDATE`, a.TenantID()); err != nil {
+		t.Fatal(err)
+	}
+	var releases atomic.Int32
+	sink, err := NewStreamSink(Config{Routes: []Route{{binding("update", "channel.update"), a}}, Acquire: func(context.Context, Binding) (func(), error) { return func() { releases.Add(1) }, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, send := socket(t, func(ctx context.Context, n twitchconduit.SessionNotification) error {
+		return sink.Accept(context.WithoutCancel(ctx), n)
+	})
+	done := make(chan error, 1)
+	go func() { done <- send(packet("owner-cancel", binding("update", "channel.update"))) }()
+	u, _ := url.Parse(f.RuntimeURL)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		select {
+		case err := <-done:
+			t.Fatal("admission did not wait on tenant lock", err)
+		default:
+		}
+		var blocked bool
+		if err = f.Admin.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE usename=$1 AND wait_event_type='Lock')`, u.User.Username()).Scan(&blocked); err != nil {
+			t.Fatal(err)
+		}
+		if blocked {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no admission lock wait")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	closing, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err := owner.Close(closing); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatal("socket cancellation lost", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stripped caller continued after owner cancellation")
+	}
+	if releases.Load() != 1 || owner.Snapshot().NotificationLeased {
+		t.Fatal("local/transport cleanup incomplete")
+	}
+	if err := lock.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	count(t, a, 0)
 }

@@ -44,6 +44,8 @@ type SessionNotification struct {
 	Timestamp      time.Time `json:"timestamp"`
 	raw            []byte
 	receivedAt     time.Time
+	origin         *Session
+	frame          *notificationFrame
 }
 
 // ReceivedAt is the original local frame receipt, before parsing/queue wait.
@@ -55,9 +57,12 @@ func (n SessionNotification) String() string {
 }
 func (n SessionNotification) GoString() string { return n.String() }
 
+type notificationFrame struct{ used bool }
+
 type SessionSnapshot struct {
 	Open               bool      `json:"open"`
 	Leased             bool      `json:"leased"`
+	NotificationLeased bool      `json:"notificationLeased"`
 	ConduitID          string    `json:"conduitId"`
 	ShardID            string    `json:"shardId"`
 	ShardCount         int       `json:"shardCount"`
@@ -84,6 +89,8 @@ type Session struct {
 	done                                                              chan struct{}
 	closed, leased, readerDone, workerDone, doneClosed, closeComplete bool
 	err                                                               error
+	activeNotification                                                *notificationFrame
+	notificationLeased                                                bool
 }
 type sessionContextKey struct{}
 
@@ -207,7 +214,7 @@ func (s *Session) Snapshot() SessionSnapshot {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return SessionSnapshot{Open: !s.closed && s.ctx.Err() == nil, Leased: s.leased, ConduitID: s.binding.ConduitID, ShardID: s.binding.ShardID, ShardCount: s.binding.ShardCount, WelcomeAt: s.welcome.UTC(), AssignmentDeadline: s.deadline.UTC(), LastMessageAt: s.last.UTC(), Pending: len(s.queue)}
+	return SessionSnapshot{Open: !s.closed && s.ctx.Err() == nil, Leased: s.leased, NotificationLeased: s.notificationLeased, ConduitID: s.binding.ConduitID, ShardID: s.binding.ShardID, ShardCount: s.binding.ShardCount, WelcomeAt: s.welcome.UTC(), AssignmentDeadline: s.deadline.UTC(), LastMessageAt: s.last.UTC(), Pending: len(s.queue)}
 }
 func (s *Session) Err() error {
 	if s == nil || s.ctx == nil {
@@ -252,6 +259,63 @@ func (s *Session) Acquire(ctx context.Context, p ShardBinding) (func(), error) {
 	return func() { once.Do(func() { s.mu.Lock(); defer s.mu.Unlock(); s.leased = false; s.finishLocked() }) }, nil
 }
 
+// AcquireNotification binds one bounded attempt to the exact original live
+// Notify invocation. Saved notifications and another owner's context cannot
+// acquire it. The returned context is canceled by both caller and owner, even
+// if a trusted caller stripped cancellation while retaining context values.
+// A lease establishes transport lifetime only, not route/assignment permission.
+func AcquireNotification(caller context.Context, n SessionNotification) (context.Context, func(), error) {
+	if caller == nil || n.origin == nil || n.frame == nil {
+		return nil, nil, ErrInvalid
+	}
+	if err := sessionFailure(caller, nil); err != nil {
+		return nil, nil, err
+	}
+	deadline, bounded := caller.Deadline()
+	if !bounded || deadline.After(time.Now().Add(5*time.Second)) {
+		return nil, nil, ErrInvalid
+	}
+	s := n.origin
+	// Caller context methods run before acquiring owner state or any lease.
+	if caller.Value(sessionContextKey{}) != s {
+		return nil, nil, ErrUnavailable
+	}
+	bound, cancel := context.WithCancel(caller)
+	stopOwner := context.AfterFunc(s.ctx, cancel)
+	keep := false
+	defer func() {
+		if !keep {
+			stopOwner()
+			cancel()
+		}
+	}()
+	s.mu.Lock()
+	if s.closed || s.ctx.Err() != nil || s.activeNotification != n.frame || n.frame.used || s.notificationLeased {
+		s.mu.Unlock()
+		return nil, nil, ErrUnavailable
+	}
+	n.frame.used = true
+	s.notificationLeased = true
+	s.mu.Unlock()
+	release := sync.OnceFunc(func() {
+		stopOwner()
+		cancel()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.notificationLeased = false
+		s.finishLocked()
+	})
+	if s.ctx.Err() != nil {
+		cancel()
+	}
+	if err := bound.Err(); err != nil {
+		release()
+		return nil, nil, err
+	}
+	keep = true
+	return bound, release, nil
+}
+
 // Close invalidates immediately, then waits for reader/worker and lease cleanup.
 // A timed-out wait retains this owner; callers may retry Close after cleanup.
 func (s *Session) Close(ctx context.Context) error {
@@ -294,7 +358,7 @@ func (s *Session) stop(cause error) {
 	})
 }
 func (s *Session) finishLocked() {
-	if s.closed && s.closeComplete && s.readerDone && s.workerDone && !s.leased && !s.doneClosed {
+	if s.closed && s.closeComplete && s.readerDone && s.workerDone && !s.leased && !s.notificationLeased && !s.doneClosed {
 		s.doneClosed = true
 		close(s.done)
 	}
@@ -392,12 +456,37 @@ func (s *Session) deliver() {
 			if s.ctx.Err() != nil {
 				return
 			}
-			if err := s.notify(s.ctx, n); err != nil {
+			if err := s.notifyOne(n); err != nil {
 				return
 			}
 		}
 	}
 }
+
+// notifyOne seals the private frame for precisely this ordered callback. A
+// callback that returns or panics with a live lease invalidates the owner; Close
+// still retains ownership until that lease is explicitly released.
+func (s *Session) notifyOne(n SessionNotification) (err error) {
+	s.mu.Lock()
+	if s.closed || s.ctx.Err() != nil || s.notificationLeased {
+		s.mu.Unlock()
+		return ErrUnavailable
+	}
+	frame := &notificationFrame{}
+	n.origin, n.frame = s, frame
+	s.activeNotification = frame
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.activeNotification = nil
+		if s.notificationLeased {
+			err = ErrUnavailable
+		}
+	}()
+	return s.notify(s.ctx, n)
+}
+
 func text(m map[string]json.RawMessage, key string) string {
 	var v string
 	if json.Unmarshal(m[key], &v) != nil {

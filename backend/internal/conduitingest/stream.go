@@ -112,6 +112,8 @@ func (s *StreamSink) Accept(caller context.Context, n twitchconduit.SessionNotif
 	}
 	ctx, cancel := context.WithTimeout(caller, 5*time.Second)
 	defer cancel()
+	callerBound := ctx
+	var transportErr error
 	var releases []func()
 	defer func() {
 		panicked := recover() != nil
@@ -129,8 +131,11 @@ func (s *StreamSink) Accept(caller context.Context, n twitchconduit.SessionNotif
 		if panicked || cleanupFailed {
 			err = ErrUnavailable
 		}
-		if ctx.Err() != nil {
-			err = ctx.Err()
+		if transportErr != nil {
+			err = transportErr
+		}
+		if callerBound.Err() != nil {
+			err = callerBound.Err()
 		}
 	}()
 	if ctx.Err() != nil {
@@ -184,6 +189,18 @@ func (s *StreamSink) Accept(caller context.Context, n twitchconduit.SessionNotif
 		}
 		targets[i] = platformingest.StreamTarget{Store: r.store, Event: event, Native: raw}
 	}
+	// The original active socket callback owns this private input. Hold its
+	// transport lifetime after all local cleanup; it grants no route permission.
+	bound, releaseTransport, e := twitchconduit.AcquireNotification(ctx, n)
+	if e != nil {
+		return fixed(ctx, e)
+	}
+	ctx = bound
+	releases = append(releases, func() {
+		// Observe owner cancellation before Release cancels its own lease context.
+		transportErr = bound.Err()
+		releaseTransport()
+	})
 	// Acquire every sorted target before any persistence. A refusal (including a
 	// returned cleanup) releases earlier leases in reverse order without admission.
 	for _, r := range routes {
@@ -198,7 +215,7 @@ func (s *StreamSink) Accept(caller context.Context, n twitchconduit.SessionNotif
 			return ctx.Err()
 		}
 	}
-	_, e := platformingest.IngestStreamFanout(ctx, targets)
+	_, e = platformingest.IngestStreamFanout(ctx, targets)
 	if errors.Is(e, platformingest.ErrInvalid) {
 		return ErrInvalid
 	}
