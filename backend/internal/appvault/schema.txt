@@ -26,3 +26,27 @@ service_app_credentials:service_app_credentials_pk:true:PRIMARY KEY (id)
 service_app_credentials:service_app_provider:true:CHECK ((provider = 'twitch'::text))
 service_app_credentials:service_app_revision:true:CHECK ((revision > 0))
 service_app_credentials:service_app_state:true:CHECK ((((revoked_at IS NULL) AND (secret_ciphertext IS NOT NULL) AND (token_ciphertext IS NOT NULL) AND ((octet_length(secret_ciphertext) >= 28) AND (octet_length(secret_ciphertext) <= 32768)) AND ((octet_length(token_ciphertext) >= 28) AND (octet_length(token_ciphertext) <= 32768)) AND (key_version IS NOT NULL) AND ((length(key_version) >= 1) AND (length(key_version) <= 40)) AND (validated_at IS NOT NULL) AND (expires_at IS NOT NULL) AND (expires_at > validated_at)) OR ((revoked_at IS NOT NULL) AND (secret_ciphertext IS NULL) AND (token_ciphertext IS NULL) AND (key_version IS NULL) AND (validated_at IS NULL) AND (expires_at IS NULL))))
+service_app_issuance:id:uuid:true:gen_random_uuid():
+service_app_issuance:client_id:text:true::pg_catalog."C"
+service_app_issuance:expected_revision:bigint:true::
+service_app_issuance:secret_fingerprint:text:true::pg_catalog."default"
+service_app_issuance:state:text:true:'prepared'::text:pg_catalog."default"
+service_app_issuance:claim_hash:text:false::pg_catalog."default"
+service_app_issuance:started_at:timestamp with time zone:false::
+service_app_issuance:completed_at:timestamp with time zone:false::
+service_app_issuance:failure_code:text:false::pg_catalog."default"
+service_app_issuance:installed_app_id:uuid:false::
+service_app_issuance:installed_revision:bigint:false::
+service_app_issuance:principal:text:true:SESSION_USER:pg_catalog."default"
+service_app_issuance:created_at:timestamp with time zone:true:statement_timestamp():
+service_app_issuance:deadline_at:timestamp with time zone:true:(statement_timestamp() + '00:05:00'::interval):
+service_app_issuance:service_app_issuance_app:true:FOREIGN KEY (installed_app_id) REFERENCES service_app_credentials(id) ON DELETE CASCADE
+service_app_issuance:service_app_issuance_client:true:CHECK ((client_id ~ '^[A-Za-z0-9_-]{1,128}$'::text))
+service_app_issuance:service_app_issuance_deadline:true:CHECK ((deadline_at = (created_at + '00:05:00'::interval)))
+service_app_issuance:service_app_issuance_pk:true:PRIMARY KEY (id)
+service_app_issuance:service_app_issuance_revision:true:CHECK (((expected_revision >= 0) AND (expected_revision < '9223372036854775807'::bigint)))
+service_app_issuance:service_app_issuance_secret:true:CHECK ((secret_fingerprint ~ '^[0-9a-f]{64}$'::text))
+service_app_issuance:service_app_issuance_state:true:CHECK (((((claim_hash IS NULL) AND (started_at IS NULL)) OR ((claim_hash IS NOT NULL) AND (claim_hash ~ '^[0-9a-f]{64}$'::text) AND (started_at IS NOT NULL))) AND (((state = 'prepared'::text) AND (claim_hash IS NULL) AND (completed_at IS NULL) AND (failure_code IS NULL) AND (installed_app_id IS NULL) AND (installed_revision IS NULL)) OR ((state = 'started'::text) AND (claim_hash IS NOT NULL) AND (completed_at IS NULL) AND (failure_code IS NULL) AND (installed_app_id IS NULL) AND (installed_revision IS NULL)) OR ((state = 'issued'::text) AND (claim_hash IS NOT NULL) AND (completed_at IS NOT NULL) AND (failure_code IS NULL) AND (installed_app_id IS NOT NULL) AND (installed_revision IS NOT NULL) AND (installed_revision = (expected_revision + 1))) OR ((state = ANY (ARRAY['refused'::text, 'uncertain'::text])) AND (completed_at IS NOT NULL) AND (failure_code IS NOT NULL) AND (((state = 'refused'::text) AND (failure_code = ANY (ARRAY['expired'::text, 'not_started'::text, 'provider_refused'::text]))) OR ((state = 'uncertain'::text) AND (failure_code = 'uncertain'::text))) AND (installed_app_id IS NULL) AND (installed_revision IS NULL)))))
+service_app_issuance:index:service_app_issuance_active:true:true:CREATE UNIQUE INDEX service_app_issuance_active ON service_app_issuance USING btree (client_id) WHERE (state = ANY (ARRAY['prepared'::text, 'started'::text, 'uncertain'::text]))
+service_app_issuance:index:service_app_issuance_pk:true:true:CREATE UNIQUE INDEX service_app_issuance_pk ON service_app_issuance USING btree (id)
+service_app_issuance:index:service_app_issuance_retention:true:true:CREATE INDEX service_app_issuance_retention ON service_app_issuance USING btree (created_at, id)
