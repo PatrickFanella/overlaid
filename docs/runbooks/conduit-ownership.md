@@ -2,7 +2,7 @@
 
 [Issue #234](https://git.subcult.tv/subculture-collective/overlaid/issues/234) adds `conduitownership.Store`, an explicit metadata-only creation ledger. It preserves the original app binding, request identity, deadline and one-use claim across concurrent callers and restarts. It calls no provider and has no CLI, HTTP route, worker or application startup registration.
 
-The separate [creation transport](conduit-creation.md) still has no application caller. Future execution must compose both boundaries with fresh credential custody/revision checks and provider authorization. A ledger claim alone grants no credential access or effect permission.
+The explicit [custody-bound creation API](custodied-conduit-creation.md) composes this ledger with the [creation transport](conduit-creation.md), using separate borrowed pools and fresh credential custody/revision checks. It has no application startup caller. A ledger claim alone grants no credential access or effect permission.
 
 ## Administrative boundary
 
@@ -44,4 +44,4 @@ Run `make verify`, disposable-PostgreSQL uncached races for `./internal/conduito
 
 Migration 0037 is additive and changes no existing custody, issuance, runtime or dispatch owner. Before rollback, stop every new ledger caller and retain the table, role, original IDs and unresolved/created records. Older binaries provide no conduit execution or recovery. Dropping the table or clearing uncertain ownership would lose external-effect evidence and is not a safe rollback. Database fixtures do not establish power-loss durability or live-provider recovery.
 
-The [decision trail](../superpowers/plans/2026-10-20-conduit-ownership-decisions.tsv) records qualification. Fresh custody-bound execution, durable reconciliation, shard assignment/subscriptions, coordinated cutover and live/load/onboarding acceptance remain under [the roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md).
+The [decision trail](../superpowers/plans/2026-10-20-conduit-ownership-decisions.tsv) records qualification. Operational callers, durable reconciliation, shard assignment/subscriptions, coordinated cutover and live/load/onboarding acceptance remain under [the roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md).

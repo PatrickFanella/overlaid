@@ -15,8 +15,8 @@ import (
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitchconduit"
 )
 
-// ExecutionStore permits only explicit read-only conduit inspection. It exposes
-// neither the token nor a generic callback, secret accessor or effect executor.
+// ExecutionStore reads only restricted token columns for explicit inspection or
+// ledger-fenced creation. It exposes no token, secret or generic effect callback.
 type ExecutionStore struct{ db *sql.DB }
 
 type Binding struct {
