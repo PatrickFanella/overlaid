@@ -28,13 +28,15 @@ bin/overlaid-conduit-inspect \
   --conduit '<selected-conduit-id>'
 ```
 
-All four flags are required. Unknown, duplicate, missing or positional arguments are refused before reading private configuration or opening a pool. Client/conduit IDs use the existing inspector's bounded identifier grammar. App UUIDs must be lowercase; revisions must be positive signed 64-bit integers. There is no automatic app, revision or conduit selection.
+All four flags are required for selected-conduit inspection. Alternatively use `--inventory` instead of `--conduit` for a [read-only app-wide ID/count observation](conduit-inventory.md). The modes are mutually exclusive; inventory makes no shard reads and cannot identify or clear an unknown creation request. Unknown, duplicate, mixed, missing or positional arguments are refused before reading private configuration or opening a pool. Client/conduit IDs use the existing inspector's bounded identifier grammar. App UUIDs must be lowercase; revisions must be positive signed 64-bit integers. There is no automatic app, revision or conduit selection.
 
 The command opens one restricted pool and invokes `InspectConduit` once. Its ten-second cooperative context includes opening and inspection; a shorter caller deadline or SIGINT/SIGTERM cancels database/provider work. The existing inspector performs bounded validation/inventory GETs, refuses redirects, validates the app identity before and after provider reads, and fences the final credential revision, expiry and role state. The pool closes before success output. No retry, acquisition, mutation, socket or subscription operation is performed.
 
 ## Read the result
 
 Success writes one JSON object containing `binding` (`appId`, `clientId`, `revision`) and `observation` (client/conduit IDs, start/completion times, shard count and the existing allowlisted shard metadata). Credentials, key versions, raw provider fields, session IDs, callback URLs and administrative receipts are excluded. The report is a non-atomic observation of the selected conduit, not a readiness verdict, ownership lease, tenant mapping, send/badge grant or future effect permission.
+
+Inventory mode returns `binding` and `inventory`, containing the exact client, local interval and sorted IDs/counts. An empty array is a valid observation. Two matching lists do not establish ownership or permit retry, adoption, replacement creation or uncertainty clearing. See [inventory limits and qualification](conduit-inventory.md#recovery-limits).
 
 | Exit | Meaning |
 | --- | --- |

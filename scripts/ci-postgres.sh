@@ -19,9 +19,13 @@ cleanup_fixture() {
   exit "$result"
 }
 trap cleanup_fixture EXIT
+# Frequent fixture schema creation generates enough WAL to crowd the 2 GiB
+# mount at the default 1 GiB checkpoint target. Checkpoint sooner; keep fsync,
+# synchronous_commit and full_page_writes enabled. max_wal_size is a soft target.
 docker run -d --name "$fixture_name" --label overlaid.fixture=ci "${fixture_storage_args[@]}" \
   -e POSTGRES_PASSWORD="$fixture_password" -e POSTGRES_DB=overlaid_ci \
-  -p 0:5432 docker.io/library/postgres:17 >/dev/null
+  -p 0:5432 docker.io/library/postgres:17 \
+  -c max_wal_size=256MB >/dev/null
 for ((attempt=0; attempt<60; attempt++)); do
   if docker exec "$fixture_name" pg_isready -U postgres -d overlaid_ci >/dev/null 2>&1; then break; fi
   sleep 1
