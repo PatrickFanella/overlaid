@@ -516,3 +516,7 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Phase 3 E2a: immutable saved-version publication
 
 [Issue #278](https://git.subcult.tv/subculture-collective/overlaid/issues/278) adds the explicit managed [immutable version store](../../runbooks/automation-version-store.md) with migration 0039, forced-RLS composite version/preset references, fresh tenant-fenced membership, expected-pointer publication/rollback, atomic metadata audit and bounded private document retention. Exact pinned bodies are loaded and revalidated from the tenant scope. No HTTP/editor/application caller is registered. E2b atomic run/cooldown/per-stream reservation admission, trace/replay, migration selection, file-mode design and Phase 3 acceptance remain open.
+
+### Phase 3 admission/rehearsal prerequisite: typed predicate reports
+
+[Issue #280](https://git.subcult.tv/subculture-collective/overlaid/issues/280) supplies [pure captured predicate reports](../../runbooks/engine-predicate-reports.md) after immutable version publication. Bounded tenant-bound facts distinguish false/empty/zero from missing/stale/disconnected; typed comparisons and all/any/none retain unknown outcomes. Groups are reported independently because condition nodes also reference them. Mandatory current permissions/entitlements, admission-group policy and atomic run/cooldown/per-stream reservations remain future work. No application caller, trace storage, node execution or Phase acceptance is added.

@@ -78,3 +78,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Complete pinned automation graphs](engine-pinned-graphs.md): exact supplied version resolution, expanded budgets and complete graph identity; no persistence or effect admission.
 
 - [Immutable automation version storage](automation-version-store.md): scoped publication/current-pointer selection, exact presets, narrow grants and migration 0039; no run admission or activation.
+
+- [Captured engine predicate reports](engine-predicate-reports.md): immutable typed facts, three-valued filter/group outcomes and fixed diagnostics; no authorization or reservation.
