@@ -43,7 +43,11 @@ type SessionNotification struct {
 	SubscriptionID string    `json:"subscriptionId"`
 	Timestamp      time.Time `json:"timestamp"`
 	raw            []byte
+	receivedAt     time.Time
 }
+
+// ReceivedAt is the original local frame receipt, before parsing/queue wait.
+func (n SessionNotification) ReceivedAt() time.Time { return n.receivedAt.UTC() }
 
 func (n SessionNotification) NativePayload() []byte { return append([]byte(nil), n.raw...) }
 func (n SessionNotification) String() string {
@@ -338,6 +342,7 @@ func (s *Session) read() {
 				s.stop(ErrInvalid)
 				return
 			}
+			n.receivedAt = received
 			s.mu.Lock()
 			if s.closed || s.ctx.Err() != nil {
 				s.mu.Unlock()

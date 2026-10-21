@@ -1,0 +1,31 @@
+# Retained conduit stream ingress
+
+[Issue #252](https://git.subcult.tv/subculture-collective/overlaid/issues/252) adds the explicit `conduitingest.NewStreamSink` bridge after merged [PR #251](https://git.subcult.tv/subculture-collective/overlaid/pulls/251). Its `Accept` method can serve as the private notification callback for the [initial session owner](owned-conduit-session.md). It admits only the three existing normalized stream kinds: `stream.online` v1, `stream.offline` v1 and `channel.update` v2. Construction and admission register no subscription, consumer or startup caller.
+
+## Trusted subscription bindings
+
+A trusted `Config` supplies one to 4096 routes and a required local acquisition callback. Each route copies exact conduit/subscription/type/version/tenant/broadcaster metadata and borrows a matching immutable scoped `tenantdb.DB`. Duplicate subscription IDs, unsupported versions, invalid bounded identities, missing scope and mismatched tenants refuse construction. The incoming event never selects a tenant, database or broadcaster. Replacing a route requires a new separately owned sink; mutating the original configuration slice cannot change it.
+
+The callback must freshly validate the exact copied binding against the current controller, route/mapping owner, runtime and permission state. It returns a local lease that prevents those owners from changing through the complete admission transaction. It must cooperate with cancellation, protect private state and avoid provider calls or reentering admission. Keep lock order local owner/mapping before the existing tenant/connection admission locks; do not hold a database lock needed by that transaction. A successful callback is a trusted integration contract, not independent proof of authorization. No application caller supplying that contract is registered here.
+
+Missing cleanup, callback error/panic or canceled context refuses admission. Returned cleanup runs once, including when acquisition also returns an error. The sink bounds each attempt to five seconds shortened by its caller. A callback that ignores cancellation can delay return; no detached helper hides it. Borrowed pools must remain alive through return.
+
+## Exact private input and atomic admission
+
+`SessionNotification.ReceivedAt()` exposes the original local receipt captured before frame parsing and queue wait. It has no setter and is separate from the provider occurrence timestamp. The bridge requires that receipt, compares public notification metadata back to its private native envelope, and bounds the whole envelope to 65536 bytes. The session's stricter duplicate/case-alias/depth/message validation remains upstream. A metadata-only fabricated notification has no private envelope or receipt and cannot be admitted.
+
+The bridge requires the exact copied subscription ID, correlated type/version, enabled state, an exact broadcaster-only condition, a two-field conduit transport and matching event broadcaster. The existing Twitch codec validates the reviewed kind's fields. Unknown subscriptions, chat/other kinds, extra conditions and malformed/mismatched input return fixed failures; no central or direct fallback exists.
+
+Twitch's [conduit notification documentation](https://dev.twitch.tv/docs/eventsub/handling-conduit-events/), refreshed October 21, 2026, describes subscription conditions and the conduit transport in notification payloads. The copied routes, lease, byte/count bounds, strict refusal and local receipt contract here are application rules.
+
+While holding the local lease, `platformingest.IngestStream` commits the normalized event, first private native payload and one identity-only stream job in its existing transaction. Active connection binding, combined retained-event allowance, canonical native delivery identity, original occurrence-derived deadline, forced RLS and lifecycle cascades remain unchanged. There is no chat job or handler/provider effect at this boundary. Equal duplicate deliveries preserve the first envelope/payload/job and deadline, including after restart. A changed normalized source conflicts; changes to unknown native extensions alone do not replace the original payload.
+
+The method returns fixed invalid/unavailable/conflict/allowance errors and preserves standard cancellation identity. Private callback/database errors and panic text do not escape. A committed transaction followed by cleanup failure or cancellation can return an error; callers must treat that as unresolved admission, retain the original native identity and never manufacture a new event ID. The durable source and downstream handler fence prevent automatic repeated dispatch. The sink's formatting/JSON excludes private bindings and native input.
+
+## Ownership and remaining integration
+
+The normal session owner invalidates on a callback error, cancels its context and drains pending private input. A production composition must supply the current owner/controller/mapping lease and must coordinate teardown with that owner's callback completion before closing borrowed product pools. The socket's transport readiness alone supplies none of those permissions.
+
+Fixtures use real loopback sessions and disposable scoped SQL databases. They cover all three kinds, one original atomic event/payload/job, lease held through commit, route copying, same native ID isolated across two tenant routes, unknown/mismatched/oversized input, restart duplicates, changed normalized input, plan refusal, revoked/deleted connections, callback refusal/panic/cleanup and cancellation before commit. Run `make verify`, focused uncached `conduitingest`/`twitchconduit`/`platformingest` races, full-package lint, documentation/whitespace checks and the full PostgreSQL/race gate before merge.
+
+This is an unregistered stream ingress bridge. Persistent subscription ownership/reconciliation, actual application lease composition, chat/echo coordination, reconnect overlap, rebinding/recovery and coordinated startup/cutover remain open under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). No production or real Twitch operation occurs. Local checks, exact-head/merged-main CI, deployment and live/load/onboarding acceptance remain separate; the [decision trail](../superpowers/plans/2026-10-21-conduit-stream-ingress-decisions.tsv) records verification.
