@@ -76,3 +76,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Legacy variable conversion preview](variable-template-conversion.md): original/proposed sources and supplied-value output comparisons, bounded warnings and no selection or effects.
 
 - [Complete pinned automation graphs](engine-pinned-graphs.md): exact supplied version resolution, expanded budgets and complete graph identity; no persistence or effect admission.
+
+- [Immutable automation version storage](automation-version-store.md): scoped publication/current-pointer selection, exact presets, narrow grants and migration 0039; no run admission or activation.

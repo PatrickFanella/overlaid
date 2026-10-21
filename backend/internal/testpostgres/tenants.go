@@ -30,6 +30,7 @@ type TenantFixture struct {
 	ModerationPacerURL  string
 	Schema              string
 	Migrate             func()
+	MigrateAutomations  func()
 }
 
 // Every fixture owns its schema and login/lookup roles, retains only shared
@@ -494,6 +495,17 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	}
 	u.User = url.UserPassword(worker, password)
 	workerURL := u.String()
+	rawAutomation, err := os.ReadFile(filepath.Join(root, "0039_automation_versions.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	migrateAutomations := func() {
+		t.Helper()
+		if _, err := owner.Exec(strings.ReplaceAll(string(rawAutomation), "overlaid_runtime", role)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	migrateAutomations()
 	u.User = url.UserPassword(role, password)
-	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, BotAdminURL: botAdminURL, AppAdminURL: appAdminURL, AppExecutionURL: appExecutionURL, BotExecutorURL: botExecutorURL, PacerURL: pacerURL, OutboundWorkerURL: outboundURL, ModerationWorkerURL: moderationURL, StreamWorkerURL: streamURL, ModerationPacerURL: moderationPacerURL, Schema: schema, Migrate: migrate}
+	return TenantFixture{Admin: owner, RuntimeURL: u.String(), WorkerURL: workerURL, BotAdminURL: botAdminURL, AppAdminURL: appAdminURL, AppExecutionURL: appExecutionURL, BotExecutorURL: botExecutorURL, PacerURL: pacerURL, OutboundWorkerURL: outboundURL, ModerationWorkerURL: moderationURL, StreamWorkerURL: streamURL, ModerationPacerURL: moderationPacerURL, Schema: schema, Migrate: migrate, MigrateAutomations: migrateAutomations}
 }

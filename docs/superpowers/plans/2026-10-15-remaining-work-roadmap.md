@@ -512,3 +512,7 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Phase 3 E2 prerequisite: complete pinned graph validation
 
 [Issue #276](https://git.subcult.tv/subculture-collective/overlaid/issues/276) adds [complete supplied pinned-version graph validation](../../runbooks/engine-pinned-graphs.md). Exact tenant/version references, cross-version cycles, repeated invocation and loop/branch expansion are checked under bounded version/document/depth/step limits. Graph identity binds every supplied immutable body. Trusted saved-version loading, publication/current pointers, actor/diff records, atomic run/reservation admission and all E2 persistence acceptance remain open; no application consumer is selected.
+
+### Phase 3 E2a: immutable saved-version publication
+
+[Issue #278](https://git.subcult.tv/subculture-collective/overlaid/issues/278) adds the explicit managed [immutable version store](../../runbooks/automation-version-store.md) with migration 0039, forced-RLS composite version/preset references, fresh tenant-fenced membership, expected-pointer publication/rollback, atomic metadata audit and bounded private document retention. Exact pinned bodies are loaded and revalidated from the tenant scope. No HTTP/editor/application caller is registered. E2b atomic run/cooldown/per-stream reservation admission, trace/replay, migration selection, file-mode design and Phase 3 acceptance remain open.
