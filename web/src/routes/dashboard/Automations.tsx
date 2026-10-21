@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { decodeAutomations, decodeGraph, decodeVersionDesk, decodeVersions, draftDocument, emptyVersionDesk, verifyPublication, verifyValidation, versionRequest, versionStorageKey, type AutomationItem, type Graph, type VersionDeskState, type VersionList, type VersionScope } from '../../lib/automationVersions';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
+import { compareRootVersions, type RootVersionDiff } from '../../lib/automationVersionDiff';
+import { AutomationVersionComparison } from './AutomationVersionComparison';
 import { DashboardShell } from './DashboardShell';
 import { useAccount } from './accountSession';
 import { Empty, Field, KeyValues, Notice, PageHead, Panel, Tag } from './ui';
@@ -30,6 +32,7 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
   const [listed, setListed] = useState(false);
   const [versions, setVersions] = useState<VersionList | null>(null);
   const [graph, setGraph] = useState<Graph | null>(null);
+  const [comparison, setComparison] = useState<RootVersionDiff | null>(null);
   const [busy, setBusy] = useState(false);
   const request = useRef<AbortController | null>(null);
   const mounted = useRef(false);
@@ -47,7 +50,7 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     finally { window.clearTimeout(timeout); if (request.current === controller) { request.current = null; if (mounted.current) setBusy(false); } }
   }
   const call = (op: string, body: Record<string, unknown>, signal: AbortSignal) => versionRequest(scope, op, body, signal);
-  async function refresh(signal: AbortSignal) { setListed(false); setItems([]); setItems(decodeAutomations(await call('list', {}, signal))); setListed(true); }
+  async function refresh(signal: AbortSignal) { setComparison(null); setListed(false); setItems([]); setItems(decodeAutomations(await call('list', {}, signal))); setListed(true); }
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController(); request.current = controller; setBusy(true);
@@ -56,10 +59,18 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     return () => { mounted.current = false; controller.abort(); request.current?.abort(); };
   }, [scope]);
   async function open(automationId: string, versionId: string | undefined, signal: AbortSignal) {
+    setComparison(null);
     const list = decodeVersions(await call('list-versions', { automationId }, signal), automationId);
     const selected = versionId || list.currentVersionId;
     const loaded = decodeGraph(await call('load', { automationId, versionId: selected }, signal), scope.tenantId, automationId, selected);
     setVersions(list); setGraph(loaded);
+  }
+  async function compare(signal: AbortSignal) {
+    setComparison(null);
+    if (!graph) return;
+    const list = decodeVersions(await call('list-versions', { automationId: graph.automationId }, signal), graph.automationId);
+    const current = decodeGraph(await call('load', { automationId: graph.automationId, versionId: list.currentVersionId }, signal), scope.tenantId, graph.automationId, list.currentVersionId);
+    setComparison(compareRootVersions(graph, current));
   }
   const blocked = busy || !!local.pending || !!storageError;
   function newDraft(copy: boolean) {
@@ -76,6 +87,7 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     setMessage(`Structure valid. Digest ${digest}. Presets, publication and current permissions are checked separately.`);
   }
   async function publish(signal: AbortSignal) {
+    setComparison(null);
     if (!local.draft || local.pending || storageError) return;
     const draft = local.draft; const document = draftDocument(draft, scope.tenantId);
     const digest = verifyValidation(await call('validate', { document }, signal), draft);
@@ -86,6 +98,7 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     setMessage('Version published. No actions were executed. Refresh the catalogue to inspect current selection.');
   }
   async function select(signal: AbortSignal) {
+    setComparison(null);
     if (!graph || !versions || blocked) return;
     const selected = versions.versions.find(v => v.versionId === graph.versionId);
     if (!selected) throw new Error('Refresh versions before selecting this version.');
@@ -118,14 +131,15 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     <Panel title="Automation versions" description="Discover saved automations, inspect their immutable versions and choose what to edit." actions={<><button className="desk-btn desk-btn--small" disabled={busy} onClick={() => void run(refresh)}>Refresh catalogue</button><button className="desk-btn desk-btn--small" disabled={blocked || !!local.draft} onClick={() => newDraft(false)}>New automation draft</button></>}>
       {!listed ? <Empty>Refresh to load saved automations.</Empty> : !items.length ? <Empty>No automations are saved in this workspace.</Empty> : <ul className="grid gap-3">{items.map(item => <li key={item.automationId} className="desk-sub min-w-0"><button className="desk-btn max-w-full whitespace-normal break-all text-left" disabled={busy} onClick={() => void run(signal => open(item.automationId, undefined, signal))}>{item.automationId}</button><p className="mt-2 break-all text-sm">Current {item.currentVersionId} · {item.versionCount} version{item.versionCount === 1 ? '' : 's'}</p></li>)}</ul>}
     </Panel>
-    {graph && versions ? <Panel title="Saved version" actions={<><button className="desk-btn desk-btn--small" disabled={blocked || !!local.draft} onClick={() => newDraft(true)}>Draft from loaded version</button><button className="desk-btn desk-btn--small" disabled={blocked || !!local.draft || graph.versionId === versions.currentVersionId} onClick={() => void run(select)}>Select loaded version as current</button></>}>
-      <Field label="Loaded version" hint="Newest-created first. Current selection is independent of creation order."><select className="desk-input max-w-full" value={graph.versionId} disabled={busy} onChange={e => void run(signal => open(graph.automationId, e.target.value, signal))}>{versions.versions.map(v => <option key={v.versionId} value={v.versionId}>{v.versionId}{v.versionId === versions.currentVersionId ? ' · current' : ''}</option>)}</select></Field>
+    {graph && versions ? <Panel title="Saved version" actions={<><button className="desk-btn desk-btn--small" disabled={busy} onClick={() => void run(compare)}>Compare with current snapshot</button><button className="desk-btn desk-btn--small" disabled={blocked || !!local.draft} onClick={() => newDraft(true)}>Draft from loaded version</button><button className="desk-btn desk-btn--small" disabled={blocked || !!local.draft || graph.versionId === versions.currentVersionId} onClick={() => void run(select)}>Select loaded version as current</button></>}>
+      <Field label="Loaded version" hint="Newest-created first. Current selection below is the snapshot from this load; comparison reads its own fresh snapshot."><select className="desk-input max-w-full" value={graph.versionId} disabled={busy} onChange={e => void run(signal => open(graph.automationId, e.target.value, signal))}>{versions.versions.map(v => <option key={v.versionId} value={v.versionId}>{v.versionId}{v.versionId === versions.currentVersionId ? ' · current at load' : ''}</option>)}</select></Field>
       <div className="mt-3 break-all"><KeyValues items={[
-        ['Current version', versions.currentVersionId], ['Loaded version', graph.versionId], ['Graph digest', graph.graphDigest], ['Pinned documents', graph.versions.length],
+        ['Current at load', versions.currentVersionId], ['Loaded version', graph.versionId], ['Graph digest', graph.graphDigest], ['Pinned documents', graph.versions.length],
         ['Version created', versions.versions.find(v => v.versionId === graph.versionId)?.createdAt || 'Unavailable'],
       ]} /></div>
       <details className="desk-disclosure mt-3"><summary>Exact pinned documents</summary><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(graph.versions, null, 2)}</pre></details>
     </Panel> : null}
+    {comparison ? <AutomationVersionComparison report={comparison} /> : null}
     {local.draft ? <Panel title="Version draft" description="Saved in this tab for this account, workspace and API. UUIDs are fixed for this draft. Validation checks structure; publish also checks presets and the expected current version.">
       <div className="mb-3 break-all"><KeyValues items={[["Draft version", local.draft.versionId], ["Expected current", local.draft.expected || 'Create only']]} /></div>
       <Field label="Automation document JSON" hint="Maximum 60,000 UTF-8 bytes. Leave the workspace, automation and version IDs unchanged."><textarea className="desk-input min-h-96 w-full font-mono text-sm" rows={20} maxLength={60000} spellCheck={false} value={local.draft.text} disabled={blocked} onChange={e => { if (local.draft) { setMessage(''); persist({ ...local, draft: { ...local.draft, text: e.target.value } }); } }} /></Field>

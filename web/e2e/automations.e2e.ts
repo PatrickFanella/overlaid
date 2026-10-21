@@ -7,10 +7,10 @@ const version = '44444444-4444-4444-8444-444444444444';
 const older = '55555555-5555-4555-8555-555555555555';
 const hash = 'a'.repeat(64);
 const at = '2026-10-21T23:00:00Z';
-function document(id = version) { return { schemaVersion: 2, tenantId: tenant, automationId: automation, versionId: id, trigger: { id: 'button', kind: 'dashboard' }, capabilities: ['chat.send'], restrictions: [], admission: { groups: [], cooldownMs: 0, perStreamLimit: 0 }, root: 'root', nodes: [{ id: 'root', kind: 'action', capability: 'chat.send', arguments: [{ name: 'text', value: 'Fixture version text' }] }] }; }
+function document(id = version) { return { schemaVersion: 2, tenantId: tenant, automationId: automation, versionId: id, trigger: { id: 'button', kind: 'dashboard' }, capabilities: ['chat.send'], restrictions: [], admission: { groups: [], cooldownMs: 0, perStreamLimit: 0 }, root: 'root', nodes: [{ id: 'root', kind: 'action', capability: 'chat.send', arguments: [{ name: 'text', value: id === older ? '<img src=x onerror=alert(1)>' : 'Fixture version text' }] }] }; }
 
 async function fixture(page: Page) {
-  const state = { role: 'owner', mode: 'ok', workspace: tenant, operations: [] as { operation: string; body: Record<string, unknown> }[], empty: false };
+  const state = { role: 'owner', mode: 'ok', workspace: tenant, operations: [] as { operation: string; body: Record<string, unknown> }[], empty: false, chooseCurrent: (id: string) => current.set(automation, id) };
   const docs = new Map<string, Record<string, unknown>>([[version, document()], [older, document(older)]]);
   const current = new Map([[automation, version]]);
   await page.route('**/api/**', async route => {
@@ -35,6 +35,7 @@ async function fixture(page: Page) {
       return route.fulfill({ json: { automationId: aid, currentVersionId: current.get(aid), versions: [...docs].filter(([, d]) => d.automationId === aid).map(([versionId]) => ({ versionId, digest: hash, createdAt: at })) } });
     }
     if (operation === 'load') {
+      if (state.mode === 'compare-error') return route.fulfill({ status: 503, body: 'PRIVATE COMPARE FAILURE' });
       const d = docs.get(body.versionId as string);
       if (!d) return route.fulfill({ status: 404 });
       return route.fulfill({ json: { automationId: aid, versionId: body.versionId, graphDigest: hash, versions: [d] } });
@@ -195,4 +196,45 @@ test('late graph from a departed workspace cannot repaint the new desk', async (
   await expect(page.getByRole('region', { name: 'Saved version', exact: true })).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText('OBSOLETE WORKSPACE TEXT');
   expect(state.operations.filter(x => ['publish', 'select'].includes(x.operation))).toHaveLength(0);
+});
+
+test('root comparison reads a fresh current snapshot and preserves unresolved draft state', async ({ page }) => {
+  const state = await fixture(page);
+  await openDesk(page);
+  await page.getByRole('button', { name: automation, exact: true }).click();
+  await page.getByRole('combobox', { name: 'Loaded version' }).selectOption(older);
+  await page.getByRole('button', { name: 'Draft from loaded version' }).click();
+  const input = page.getByRole('textbox', { name: 'Automation document JSON' });
+  const original = await input.inputValue();
+  state.mode = 'conflict';
+  await page.getByRole('button', { name: 'Publish draft', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Unresolved version intent' })).toBeVisible();
+  const savedState = await page.evaluate(() => Object.keys(sessionStorage).filter(k => k.startsWith('overlaid.automation-version-desk')).map(k => sessionStorage.getItem(k)));
+  const writes = state.operations.filter(x => ['publish', 'select'].includes(x.operation));
+  await page.getByRole('button', { name: 'Compare with current snapshot' }).click();
+  const panel = page.getByRole('region', { name: 'Root version comparison', exact: true });
+  await expect(panel).toContainText('/nodes/0/arguments/0/value');
+  await expect(panel).toContainText('<img src=x onerror=alert(1)>');
+  await expect(panel.locator('img')).toHaveCount(0);
+  await expect(panel).toContainText('Preset dependency contents are not compared');
+  await expect(input).toHaveValue(original);
+  await expect(input).toBeDisabled();
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(k => k.startsWith('overlaid.automation-version-desk')).map(k => sessionStorage.getItem(k)))).toEqual(savedState);
+  await panel.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: '/tmp/overlaid-version-comparison-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: '/tmp/overlaid-version-comparison-changes-narrow.png', fullPage: true });
+  state.chooseCurrent(older);
+  await page.getByRole('button', { name: 'Compare with current snapshot' }).click();
+  await expect(panel).toContainText('No root document differences found');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: '/tmp/overlaid-version-comparison-narrow.png', fullPage: true });
+  state.mode = 'compare-error';
+  await page.getByRole('button', { name: 'Compare with current snapshot' }).click();
+  await expect(page.getByRole('alert')).not.toContainText('PRIVATE');
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Unresolved version intent' })).toBeVisible();
+  expect(state.operations.filter(x => ['publish', 'select'].includes(x.operation))).toEqual(writes);
 });
