@@ -41,6 +41,7 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Explicit conduit creation transport](conduit-creation.md): one app-validated POST with fixed uncertainty and metadata projection; durable ownership and application invocation remain separate.
 - [Durable conduit creation ownership](conduit-ownership.md): a separate metadata-only role, original intent/deadline, one-use claims and retained uncertainty; no provider or startup caller.
 - [Custody-bound conduit creation](custodied-conduit-creation.md): explicit composition of separate token-reader and ledger pools, fresh custody checks and one claimed provider attempt; no startup caller.
+- [Native conduit creation](native-conduit-creation.md): explicit prepare/status/execute, dedicated private configuration, original request IDs and no automatic replay.
 
 - [Explicit app-token acquisition](app-token-acquisition.md): one bounded issuance attempt and app validation, with redacted ephemeral credentials and explicit uncertainty before custody.
 

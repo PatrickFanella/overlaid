@@ -2,6 +2,8 @@
 
 [Issue #236](https://git.subcult.tv/subculture-collective/overlaid/issues/236) composes the restricted [app-token reader](custodied-conduit-inspection.md), [durable ownership ledger](conduit-ownership.md) and [one-attempt transport](conduit-creation.md) through `appvault.ExecutionStore.CreateConduit`. This explicit Go API opens no pool and adds no application startup caller, CLI or HTTP route. Fixtures use synthetic HTTP only.
 
+The separate [native conduit command](native-conduit-creation.md) is now an explicit prepare/status/execute caller. It owns and closes its private pools; no application startup path selects this API.
+
 ## Trusted configuration and original request
 
 The caller borrows two independently provisioned stores: the existing token-column-only `appvault.ExecutionStore` and a separate metadata-only `conduitownership.Store`. Supply a retained private keyring, exact app/client/revision binding, original prepared request UUID and shard count. The API accepts an optional trusted HTTP transport/shorter timeout through the creation adapter. There is no client-secret input, generic token callback, plaintext accessor, acquisition, refresh or selected-identity fallback.
