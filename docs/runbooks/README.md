@@ -56,3 +56,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [One-attempt WebSocket conduit shard assignment](conduit-shard-assignment.md)
 
 - [Durable conduit shard assignment ledger](conduit-assignment-ledger.md): original session fingerprints, one-use claims and retained uncertainty under a separate metadata-only role.
+
+- [Custody-bound conduit shard assignment](custodied-conduit-assignment.md): separate credential/creation/assignment owners, required live-session guard and one committed provider attempt.
