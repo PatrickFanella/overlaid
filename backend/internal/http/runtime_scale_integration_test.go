@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -108,6 +109,7 @@ func qualifyRealRuntimeLimit(t *testing.T, limit int) {
 			t.Fatal(err)
 		}
 		if failed != 0 {
+			runtimeScaleDiagnostics(t, app, f.Admin)
 			t.Fatal("real runtime command failed", completed, failed)
 		}
 		if completed == limit {
@@ -165,6 +167,7 @@ func qualifyRealRuntimeLimit(t *testing.T, limit int) {
 	}
 	shutdownStart := time.Now()
 	if err := app.Close(); err != nil {
+		runtimeScaleDiagnostics(t, app, f.Admin)
 		t.Fatal("runtime shutdown failed", err)
 	}
 	shutdown := time.Since(shutdownStart)
@@ -298,6 +301,7 @@ func TestRetainedGlobalRuntimeResumeAndRetention(t *testing.T) {
 				t.Fatal(err)
 			}
 			if failed != 0 {
+				runtimeScaleDiagnostics(t, app, f.Admin)
 				t.Fatal("resumed command failed", generation, completed, failed)
 			}
 			if completed == expected && unfinished == 0 {
@@ -342,4 +346,45 @@ func TestRetainedGlobalRuntimeResumeAndRetention(t *testing.T) {
 	if err := f.Admin.QueryRow(`SELECT count(*) FROM platform_outbound_actions`).Scan(&actions); err != nil || actions != 0 || providerCalls.Load() != 0 {
 		t.Fatal("global resume emitted a provider effect", actions, providerCalls.Load(), err)
 	}
+}
+
+// Fixed counts only: never log connection strings, roles, tenant/viewer input,
+// query text or arbitrary audit/driver error messages when a scale gate fails.
+func runtimeScaleDiagnostics(t *testing.T, app *Application, admin *sql.DB) {
+	t.Helper()
+	app.mu.Lock()
+	servers := make([]*Server, 0, len(app.runtimes))
+	for _, r := range app.runtimes {
+		servers = append(servers, r.server)
+	}
+	app.mu.Unlock()
+	pending, auditDeadline, auditCanceled, auditOther := 0, 0, 0, 0
+	canceled, stop := context.WithCancel(context.Background())
+	stop()
+	for _, s := range servers {
+		if s.FlushBotAudit(canceled) != nil {
+			pending++
+		}
+		message := s.botRuntime.LastAuditError()
+		switch {
+		case message == "":
+		case strings.Contains(message, "deadline exceeded"):
+			auditDeadline++
+		case strings.Contains(message, "context canceled"):
+			auditCanceled++
+		default:
+			auditOther++
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var sessions, active, lockWaits, ioWaits, clientWaits, failed, uncertain, skipped int
+	err := admin.QueryRowContext(ctx, `SELECT
+ (SELECT count(*) FROM pg_stat_activity WHERE datname=current_database()),
+ (SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND state='active'),
+ (SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'),
+ (SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='IO'),
+ (SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Client'),
+ count(*) FILTER(WHERE state='failed'),count(*) FILTER(WHERE state='uncertain'),count(*) FILTER(WHERE state='skipped') FROM platform_dispatch_receipts`).Scan(&sessions, &active, &lockWaits, &ioWaits, &clientWaits, &failed, &uncertain, &skipped)
+	t.Logf("runtime diagnostics: runtimes=%d pending_audits=%d audit_deadline=%d audit_canceled=%d audit_other=%d db_read=%t sessions=%d active=%d lock_waits=%d io_waits=%d client_waits=%d failed=%d uncertain=%d skipped=%d", len(servers), pending, auditDeadline, auditCanceled, auditOther, err == nil, sessions, active, lockWaits, ioWaits, clientWaits, failed, uncertain, skipped)
 }

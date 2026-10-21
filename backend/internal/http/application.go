@@ -166,6 +166,14 @@ func NewApplication(cfg config.Config) (*Application, error) {
 	return a, nil
 }
 func (a *Application) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+	defer cancel()
+	return a.closeWithContext(ctx)
+}
+
+// Retain dependencies and controller ownership when bounded cleanup cannot
+// finish. A later close retries the same canceled owner; it never resumes work.
+func (a *Application) closeWithContext(stopCtx context.Context) error {
 	a.cancel()
 	a.mu.Lock()
 	moderation := a.moderation
@@ -175,19 +183,16 @@ func (a *Application) Close() error {
 	if a.chatControl != nil {
 		a.chatControl.live.Store(false)
 	}
-	stopCtx, stopWorkers := context.WithTimeout(context.Background(), 50*time.Second)
 	if a.outbound != nil {
 		a.outbound.ready.Store(false)
 	}
 	if stream != nil {
 		if err := stream.close(stopCtx); err != nil {
-			stopWorkers()
 			return err
 		}
 	}
 	if moderation != nil {
 		if err := moderation.close(stopCtx); err != nil {
-			stopWorkers()
 			return err
 		}
 	}
@@ -197,11 +202,21 @@ func (a *Application) Close() error {
 	if a.outbound != nil {
 		result = errors.Join(result, a.outbound.close(stopCtx))
 	}
-	stopWorkers()
+	if result != nil {
+		return result
+	}
+	// Audits outlive handler cancellation by design. Use the remaining shutdown
+	// budget, and never close their product pool or release the controller while
+	// accepted work is still draining.
+	if a.store != nil {
+		if err := a.FlushBotAudit(stopCtx); err != nil {
+			return err
+		}
+	}
 
 	if a.chatControl != nil {
 		if a.chatControl.lease != nil {
-			ctx, stop := context.WithTimeout(context.Background(), time.Second)
+			ctx, stop := context.WithTimeout(stopCtx, time.Second)
 			if release, err := acquireGate(ctx, a.chatControl.checks); err == nil {
 				_, _ = a.chatControl.lease.ExecContext(ctx, `SELECT pg_advisory_unlock(`+chatControllerKey+`)`)
 				release()
@@ -210,11 +225,6 @@ func (a *Application) Close() error {
 			result = errors.Join(result, a.chatControl.lease.Close())
 		}
 		result = errors.Join(result, a.chatControl.pool.Close())
-	}
-	if a.store != nil {
-		ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
-		result = errors.Join(result, a.FlushBotAudit(ctx))
-		stop()
 	}
 	a.mu.Lock()
 	for id, r := range a.runtimes {
