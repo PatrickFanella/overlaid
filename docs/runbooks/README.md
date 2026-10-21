@@ -38,6 +38,7 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Retained channel-update subscriptions](channel-update-subscriptions.md): selected stream-set repair, reconnect, historical metadata and editorial isolation.
 
 - [Explicit conduit inspection](conduit-inspection.md): validated app-token reads of one selected conduit; no credential custody, provider writes or startup activation.
+- [Explicit conduit creation transport](conduit-creation.md): one app-validated POST with fixed uncertainty and metadata projection; durable ownership and application invocation remain separate.
 
 - [Explicit app-token acquisition](app-token-acquisition.md): one bounded issuance attempt and app validation, with redacted ephemeral credentials and explicit uncertainty before custody.
 
