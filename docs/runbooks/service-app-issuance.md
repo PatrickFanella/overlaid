@@ -1,6 +1,6 @@
 # Durable service-app issuance
 
-[Issue #226](https://git.subcult.tv/subculture-collective/overlaid/issues/226) composes the existing [one-attempt acquisition adapter](app-token-acquisition.md) and [encrypted app custody](service-app-custody.md) through a persistent issuance request. This is an explicit administrative Go API. The native CLI below invokes only metadata lookup; no CLI, route, worker, runtime pool or startup path invokes preparation or issuance. Fixtures use synthetic providers; production invocation and operational secret delivery require their own integration.
+[Issue #226](https://git.subcult.tv/subculture-collective/overlaid/issues/226) composes the existing [one-attempt acquisition adapter](app-token-acquisition.md) and [encrypted app custody](service-app-custody.md) through a persistent issuance request. This is an explicit administrative Go API. The administrator status CLI below invokes only metadata lookup; a separate [native issuance command](native-app-issuance.md) explicitly prepares or executes requests. No route, worker, runtime pool or startup path invokes issuance. Fixtures use synthetic providers; production private configuration and live qualification remain separate.
 
 ## Prepare, then issue
 
