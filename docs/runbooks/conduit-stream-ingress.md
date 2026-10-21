@@ -31,3 +31,20 @@ Fixtures use real loopback sessions and disposable scoped SQL databases. Fanout 
 This is an unregistered stream ingress bridge. Persistent subscription ownership/reconciliation, actual application lease composition, chat/echo coordination, reconnect overlap, rebinding/recovery and coordinated startup/cutover remain open under [#24](https://git.subcult.tv/subculture-collective/overlaid/issues/24). No production or real Twitch operation occurs. Local checks, exact-head/merged-main CI, deployment and live/load/onboarding acceptance remain separate; the [decision trail](../superpowers/plans/2026-10-21-conduit-stream-ingress-decisions.tsv) records verification.
 
 [Issue #256](https://git.subcult.tv/subculture-collective/overlaid/issues/256) extends the explicit bridge with atomic workspace fanout. Its [decision trail](../superpowers/plans/2026-10-21-conduit-stream-fanout-decisions.tsv) records verification. Persistent route selection and application activation remain separate.
+
+## Loopback socket through real Newsroom workers
+
+[Issue #258](https://git.subcult.tv/subculture-collective/overlaid/issues/258) adds `TestConduitNewsroom*` in `backend/internal/http/conduit_newsroom_integration_test.go`. The disposable PostgreSQL fixture connects both workspaces to one broadcaster, enables the existing configured retained stream consumer and sends private notifications over a real owned loopback WebSocket. Each target receives its own canonical source, private native payload, identity-only job and terminal receipt. Online/offline boundaries reach the existing Newsroom stores with original times. Channel updates remain readable historical metadata and receive skipped handler receipts; they do not start shows.
+
+The fixture verifies independent automation opt-out, a skipped identity staying skipped after re-enabling, a distinct fresh source remaining eligible, complete source/payload/job/receipt/editorial snapshots unchanged across duplicate delivery and application restart, and independent connection cascade cleanup. Later-target allowance exhaustion charged by retained chat, or a revoked connection, admits no stream work and changes neither Newsroom document. The actual socket owner invalidates and drains on the callback error. A refusing Twitch HTTP adapter checks that the composed path makes no provider request.
+
+Run the focused qualification against a disposable database:
+
+```bash
+cd backend
+GOTOOLCHAIN=go1.26.0 go test -race -count=5 -run '^TestConduitNewsroom' ./internal/http
+```
+
+`OVERLAID_TEST_DATABASE_URL` must point to that disposable database. An unset variable skips the SQL fixtures and does not qualify the path. Run `make verify` and the complete `scripts/ci-postgres.sh` gate before merge.
+
+The route mapping and its acquisition callback are fixed, explicitly fixture-owned configuration. The callback exercises current controller, exact runtime and ready consumer checks; it has no concurrent mapping mutation path. This is conformance evidence for the composed storage/worker/editorial path, not a production mapping lease, a race qualification of application invalidation, provider assignment/subscription proof, reconnect overlap or startup activation. Those remain open. The [qualification decision trail](../superpowers/plans/2026-10-21-conduit-newsroom-qualification-decisions.tsv) preserves outcomes and limits.
