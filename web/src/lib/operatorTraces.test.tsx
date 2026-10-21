@@ -1,9 +1,10 @@
+import { decodeHistoryTrace, decodeTraceCatalogue } from './operatorTraceHistory';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { decodeSavedOperatorTrace, decodeTraceReference, traceStorageKey, type TraceReference } from './operatorTraces';
 import { operatorIdentities, operatorIdentity, type RehearsalIntent, type OperatorRun } from './operatorRehearsal';
 import type { VersionScope } from './automationVersions';
-import { SavedTraceSummary } from '../routes/dashboard/OperatorTraceDesk';
+import { SavedTraceSummary } from '../routes/dashboard/SavedTraceSummary';
 const scope: VersionScope = { accountId: '11111111-1111-4111-8111-111111111111', tenantId: '22222222-2222-4222-8222-222222222222', csrf: 'private', baseURL: 'http://example.test' };
 const source: RehearsalIntent = { format: 1, phase: 'submitted', requestId: '66666666-6666-4666-8666-666666666666', automationId: '33333333-3333-4333-8333-333333333333', versionId: '44444444-4444-4444-8444-444444444444', documentDigest: 'a'.repeat(64), graphDigest: 'a'.repeat(64) };
 async function fixture() {
@@ -46,4 +47,16 @@ describe('saved metadata trace contract', () => {
     expect(traceStorageKey(scope)).not.toBe(traceStorageKey({ ...scope, tenantId: scope.accountId }));
     expect(traceStorageKey(scope)).not.toContain(scope.csrf);
   });
+});
+
+it('binds a loaded history body to its validated summary, source and exact save time', async () => {
+  const { ref, run, raw } = await fixture();
+  const selected = { traceId: ref.traceId, versionId: ref.versionId, mode: ref.mode, digest: raw.digest, createdAt: raw.createdAt };
+  const catalogue = await decodeTraceCatalogue({ run, traces: [selected] }, scope, source);
+  await expect(decodeHistoryTrace(raw, scope, source, catalogue, catalogue.traces[0])).resolves.toMatchObject({ id: ref.traceId, digest: raw.digest });
+  await expect(decodeHistoryTrace(raw, scope, source, catalogue, { ...catalogue.traces[0] })).rejects.toThrow();
+  for (const change of [{ digest: 'f'.repeat(64) }, { createdAt: '2026-10-21T23:00:00.123457Z' }, { mode: 'current_config' }, { versionId: scope.accountId }]) {
+    const changed = await decodeTraceCatalogue({ run, traces: [{ ...selected, ...change, mode: change.versionId ? 'current_config' : change.mode || selected.mode }] }, scope, source);
+    await expect(decodeHistoryTrace(raw, scope, source, changed, changed.traces[0])).rejects.toThrow();
+  }
 });
