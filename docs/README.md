@@ -22,6 +22,7 @@ Start with the [project README](../README.md) for the product overview and [curr
 
 - [Contributing](../CONTRIBUTING.md) and [security reporting](../SECURITY.md).
 - [Remaining-work roadmap](superpowers/plans/2026-10-15-remaining-work-roadmap.md): current delivery order and completion gates.
+- [Phase 3 engine and variable plan](superpowers/plans/2026-10-21-phase-3-engine-and-variables.md): bounded units, first-code scope, compatibility and verification gates; implementation remains pending.
 - [Architecture decisions](adr/README.md): accepted contracts and boundaries.
 - [Original multi-platform scope](superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md): feature targets and research context.
 - [Gitea project](https://git.subcult.tv/subculture-collective/overlaid/projects/4): hosted work tracking; repository permissions apply.
