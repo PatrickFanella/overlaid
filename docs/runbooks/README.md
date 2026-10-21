@@ -86,3 +86,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Operator automation run admission](operator-automation-admission.md): explicit dashboard occurrences, pinned run metadata, atomic cooldown and retained retry markers; migration 0041, no executor or activation.
 
 - [Captured engine flow rehearsal](engine-flow-rehearsal.md): deterministic bounded traces and opaque action proposals, explicit unsupported cases, no persistence or effect execution.
+
+- [Retained operator rehearsal](retained-operator-rehearsal.md): original run/capture resolution, current-config comparison and retention-coordinated reads; no trace writes or effect execution.

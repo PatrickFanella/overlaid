@@ -1,0 +1,5 @@
+decision	evidence	choice	verification
+source	Operator v1 admission accepted no facts	Load actual actor/request run and original DB time; empty facts, seed0	Original/current/preset/capacity fixtures
+identity	Saved full graph/run binding	Revalidate original even in current-config mode	Forged identity and source-kind refusal
+lifecycle	Immutable rows intentionally lack UPDATE grants	Tenant share plus shared/exclusive advisory retention fence	Lock-wait/retention/member/cancellation SQL fixtures
+persistence	Trace/context schema not yet reviewed	Return bounded private report without new writes/table/activation	Stored xmin/state/budget/audit snapshots
