@@ -43,3 +43,5 @@ GOMAXPROCS=2 go test ./internal/engine -run '^$' -fuzz '^FuzzParse$' -fuzztime=1
 ```
 
 Fixtures exercise graph/refusal boundaries, expanded loops, repeated DAG cost, depth and step edges, control shapes, pinned/foreign/self presets, strict JSON, shared predicate bounds, mutation isolation, concurrent reads, reconstruction and identity bindings. Fuzzing checks bounded parse/refusal and canonical reconstruction; it does not establish evaluator, runtime, database or provider behavior. The [decision trail](../superpowers/plans/2026-10-21-engine-contract-decisions.tsv) records qualification and limitations.
+
+The separate [complete pinned graph resolver](engine-pinned-graphs.md) can now validate supplied exact preset bodies across versions. Local validation and `Validated.RunID` remain unchanged; future admission must load those immutable bodies within its tenant boundary and use the complete graph identity. No persistence or effect permission follows from either structural check.

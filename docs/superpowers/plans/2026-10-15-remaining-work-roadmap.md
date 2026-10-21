@@ -508,3 +508,7 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Phase 3 V2b: effect-free conversion preview
 
 [Issue #274](https://git.subcult.tv/subculture-collective/overlaid/issues/274) adds the [legacy variable conversion preview](../../runbooks/variable-template-conversion.md). It preserves source/version pairs, escapes existing dollar syntax, warns on literal unknown/escaped braces, and compares actual legacy output with pure rendering from bounded supplied values. No editor, HTTP route, provider or selection path is registered. E2 stored admission, authenticated context and trace/replay, explicit migration selection and Phase 3 acceptance remain open.
+
+### Phase 3 E2 prerequisite: complete pinned graph validation
+
+[Issue #276](https://git.subcult.tv/subculture-collective/overlaid/issues/276) adds [complete supplied pinned-version graph validation](../../runbooks/engine-pinned-graphs.md). Exact tenant/version references, cross-version cycles, repeated invocation and loop/branch expansion are checked under bounded version/document/depth/step limits. Graph identity binds every supplied immutable body. Trusted saved-version loading, publication/current pointers, actor/diff records, atomic run/reservation admission and all E2 persistence acceptance remain open; no application consumer is selected.
