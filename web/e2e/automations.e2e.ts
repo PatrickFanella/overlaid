@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
 const actor = '11111111-1111-4111-8111-111111111111';
 const tenant = '22222222-2222-4222-8222-222222222222';
@@ -7,12 +8,14 @@ const version = '44444444-4444-4444-8444-444444444444';
 const older = '55555555-5555-4555-8555-555555555555';
 const hash = 'a'.repeat(64);
 const at = '2026-10-21T23:00:00Z';
-function document(id = version) { return { schemaVersion: 2, tenantId: tenant, automationId: automation, versionId: id, trigger: { id: 'button', kind: 'dashboard' }, capabilities: ['chat.send'], restrictions: [], admission: { groups: [], cooldownMs: 0, perStreamLimit: 0 }, root: 'root', nodes: [{ id: 'root', kind: 'action', capability: 'chat.send', arguments: [{ name: 'text', value: id === older ? '<img src=x onerror=alert(1)>' : 'Fixture version text' }] }] }; }
+function document(id = version) { return { schemaVersion: 2, tenantId: tenant, automationId: automation, versionId: id, trigger: { id: 'button', kind: 'dashboard' }, capabilities: ['chat.send'], restrictions: [], admission: { groups: [], cooldownMs: 0, perStreamLimit: 0 }, root: 'root', nodes: [{ id: 'root', kind: 'action', capability: 'chat.send', arguments: [{ name: 'text', value: id === older ? '<img src=x onerror=alert(1)>' : 'Fixture version text $(user) <img src=x onerror=alert(1)>' }] }] }; }
+const identity = (parts: string[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 
 async function fixture(page: Page) {
   const state = { role: 'owner', mode: 'ok', workspace: tenant, operations: [] as { operation: string; body: Record<string, unknown> }[], empty: false, chooseCurrent: (id: string) => current.set(automation, id) };
   const docs = new Map<string, Record<string, unknown>>([[version, document()], [older, document(older)]]);
   const current = new Map([[automation, version]]);
+  const runs = new Map<string, { runId: string; occurrenceId: string; automationId: string; versionId: string; graphDigest: string; createdAt: string; deadline: string; unchanged: boolean; state: string }>();
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/account') return route.fulfill({ json: { authenticated: true, deploymentMode: 'hosted', accountId: actor, activeTenantId: state.workspace, csrfToken: 'fixture-csrf', tenants: [{ id: state.workspace, name: 'Fixture workspace', role: state.role, slug: 'fixture', plan: 'free', retentionDays: 30 }] } });
@@ -23,7 +26,33 @@ async function fixture(page: Page) {
     expect(route.request().method()).toBe('POST');
     expect(route.request().headers()['x-overlaid-csrf']).toBe('fixture-csrf');
     expect(route.request().headers()['x-overlay-operator-secret']).toBeUndefined();
-    expect(['list', 'list-versions', 'load', 'validate', 'publish', 'select']).toContain(operation);
+    expect(['list', 'list-versions', 'load', 'validate', 'publish', 'select', 'admit', 'lookup', 'rehearse']).toContain(operation);
+    if (operation === 'admit') {
+      if (state.mode === 'admission-error') return route.fulfill({ status: 409, body: 'PRIVATE POLICY DETAIL' });
+      const aid = body.automationId as string; const vid = body.expectedVersionId as string; const request = body.requestId as string;
+      if (current.get(aid) !== vid) return route.fulfill({ status: 409 });
+      const occurrenceId = identity(['overlaid.engine.operator-occurrence.v1', state.workspace, actor, request]);
+      const root = identity(['overlaid.engine.run.v1', state.workspace, occurrenceId, aid, vid, hash, 'execute']);
+      const run = { runId: identity(['overlaid.engine.pinned-run.v1', root, hash]), occurrenceId, automationId: aid, versionId: vid, graphDigest: hash, createdAt: at, deadline: '2026-10-21T23:02:00Z', unchanged: false, state: 'admitted_metadata' };
+      runs.set(request, run);
+      if (state.mode === 'lost-run') return route.abort();
+      return route.fulfill({ json: state.mode === 'malformed-run' ? { ...run, runId: 'f'.repeat(64) } : run });
+    }
+    if (operation === 'lookup' || operation === 'rehearse') {
+      const run = runs.get(body.requestId as string);
+      if (!run || state.mode === 'purged-run') return route.fulfill({ status: 404, body: 'PRIVATE PURGED INPUT' });
+      if (operation === 'lookup') return route.fulfill({ json: { ...run, unchanged: true } });
+      const mode = body.mode as string;
+      const selected = mode === 'reproduce' ? run.versionId : current.get(run.automationId)!;
+      const changed = selected !== run.versionId;
+      const graphDigest = changed ? 'c'.repeat(64) : hash; const captureDigest = 'b'.repeat(64);
+      const steps = [{ sequence: 1, parent: 0, automationId: run.automationId, versionId: selected, nodeId: 'button', kind: 'admission', outcome: 'checked', reason: changed ? 'filters_unavailable' : 'matched' }];
+      if (!changed) steps.push({ sequence: 2, parent: 0, automationId: run.automationId, versionId: selected, nodeId: 'root', kind: 'action', outcome: 'proposed', reason: 'opaque_arguments' });
+      const proposals = changed ? [] : [{ sequence: 2, automationId: run.automationId, versionId: selected, nodeId: 'root', declaredCapability: 'chat.send', opaqueArguments: document(selected).nodes[0].arguments }];
+      const report = { captureVersion: 1, selectedVersionId: selected, run: { ...run, unchanged: true }, rehearsal: { id: identity(['overlaid.engine.rehearsal.v1', graphDigest, run.graphDigest, run.occurrenceId, mode, captureDigest, '100']), mode, originalGraphDigest: run.graphDigest, graphDigest, captureDigest, clock: run.createdAt, seed: 0, status: changed ? 'blocked' : 'proposed', reason: changed ? 'filters_unavailable' : 'supported_flow', steps, droppedSteps: 0, proposals } };
+      if (state.mode === 'malformed-report') report.rehearsal.seed = 99;
+      return route.fulfill({ json: report });
+    }
     if (operation === 'list') {
       if (state.mode === 'error') return route.fulfill({ status: 503, body: 'PRIVATE PROVIDER TEXT' });
       if (state.mode === 'bad-list') return route.fulfill({ json: { automations: [{ automationId: 'PRIVATE MALFORMED' }] } });
@@ -237,4 +266,117 @@ test('root comparison reads a fresh current snapshot and preserves unresolved dr
   await expect(panel).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Unresolved version intent' })).toBeVisible();
   expect(state.operations.filter(x => ['publish', 'select'].includes(x.operation))).toEqual(writes);
+});
+
+test('operator desk explicitly admits metadata then reproduces original or current capture', async ({ page }) => {
+  const state = await fixture(page);
+  await openDesk(page);
+  const desk = page.getByRole('region', { name: 'Operator rehearsal', exact: true });
+  await expect(desk.getByRole('button', { name: 'Prepare rehearsal occurrence' })).toBeDisabled();
+  await page.getByRole('button', { name: automation, exact: true }).click();
+  await desk.getByRole('button', { name: 'Prepare rehearsal occurrence' }).click();
+  expect(state.operations.filter(x => x.operation === 'admit')).toHaveLength(0);
+  await desk.getByRole('button', { name: 'Admit occurrence metadata' }).click();
+  await expect(desk.getByText('Retained metadata accepted · no execution')).toBeVisible();
+  await desk.getByRole('button', { name: 'Reproduce original capture' }).click();
+  const report = desk.getByRole('region', { name: 'Retained rehearsal report' });
+  await expect(report).toContainText('Rehearsal: proposed');
+  await expect(report).toContainText('$(user)');
+  await expect(report).toContainText('<img src=x onerror=alert(1)>');
+  await expect(report.locator('img')).toHaveCount(0);
+  state.chooseCurrent(older);
+  await desk.getByRole('button', { name: 'Rehearse current configuration' }).click();
+  await expect(report).toContainText('Rehearsal: blocked');
+  await expect(report).toContainText('filters_unavailable');
+  await expect(report).toContainText(older);
+  await desk.getByRole('button', { name: 'Reproduce original capture' }).click();
+  await expect(report).toContainText('Rehearsal: proposed');
+  state.mode = 'malformed-report';
+  await desk.getByRole('button', { name: 'Reproduce original capture' }).click();
+  await expect(desk.getByRole('alert')).toContainText('Invalid retained rehearsal metadata');
+  await expect(report).toHaveCount(0);
+  expect(state.operations.filter(x => x.operation === 'admit')).toHaveLength(1);
+  expect(state.operations.filter(x => ['publish', 'select', 'save-trace'].includes(x.operation))).toHaveLength(0);
+});
+
+for (const mode of ['lost-run', 'malformed-run', 'admission-error']) test(`operator ${mode} preserves request through reload without re-admission`, async ({ page }) => {
+  const state = await fixture(page);
+  await openDesk(page);
+  await page.getByRole('button', { name: automation, exact: true }).click();
+  const desk = page.getByRole('region', { name: 'Operator rehearsal', exact: true });
+  await desk.getByRole('button', { name: 'Prepare rehearsal occurrence' }).click();
+  state.mode = mode;
+  await desk.getByRole('button', { name: 'Admit occurrence metadata' }).click();
+  await expect(desk.getByRole('alert')).toBeVisible();
+  await expect(desk.getByRole('alert')).not.toContainText('PRIVATE');
+  const sent = state.operations.find(x => x.operation === 'admit')!;
+  await page.reload();
+  await expect(desk.getByText(sent.body.requestId as string, { exact: true })).toBeVisible();
+  await expect(desk.getByRole('button', { name: 'Admit occurrence metadata' })).toBeDisabled();
+  await desk.getByRole('button', { name: 'Check original occurrence' }).click();
+  if (mode === 'admission-error') await expect(desk.getByRole('alert')).toContainText('(404)');
+  else await expect(desk.getByText('Retained metadata accepted · no execution')).toBeVisible();
+  state.mode = 'purged-run';
+  await desk.getByRole('button', { name: 'Check original occurrence' }).click();
+  await expect(desk.getByRole('alert')).toContainText('(404)');
+  await expect(desk.getByRole('button', { name: 'Reproduce original capture' })).toHaveCount(0);
+  expect(state.operations.filter(x => x.operation === 'admit')).toEqual([sent]);
+  expect(state.operations.filter(x => x.operation === 'lookup').every(x => x.body.requestId === sent.body.requestId)).toBe(true);
+});
+
+test('prepared operator intent needs durable storage and stays in its initiating workspace', async ({ page }) => {
+  const state = await fixture(page);
+  await openDesk(page);
+  await page.getByRole('button', { name: automation, exact: true }).click();
+  const desk = page.getByRole('region', { name: 'Operator rehearsal', exact: true });
+  await desk.getByRole('button', { name: 'Prepare rehearsal occurrence' }).click();
+  await page.reload();
+  await expect(desk.getByText('Prepared; no admission attempt sent', { exact: true })).toBeVisible();
+  await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('fixture quota'); }; });
+  await desk.getByRole('button', { name: 'Admit occurrence metadata' }).click();
+  await expect(desk.getByRole('alert')).toContainText('storage is unavailable');
+  expect(state.operations.filter(x => x.operation === 'admit')).toHaveLength(0);
+  state.workspace = actor;
+  await page.reload();
+  await expect(desk.getByText('Request UUID', { exact: true })).toHaveCount(0);
+  state.workspace = tenant;
+  await page.reload();
+  await expect(desk.getByText('Prepared; no admission attempt sent', { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await desk.getByRole('button', { name: 'Admit occurrence metadata' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(desk.getByText('Retained metadata accepted · no execution')).toBeVisible();
+  await desk.getByRole('button', { name: 'Reproduce original capture' }).click();
+  await expect(desk.getByRole('region', { name: 'Retained rehearsal report' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: '/tmp/overlaid-rehearsal-desk-narrow.png', fullPage: true });
+  await desk.screenshot({ path: '/tmp/overlaid-rehearsal-desk-panel.png' });
+  await page.evaluate(() => { const key = Object.keys(sessionStorage).find(k => k.endsWith('.operator-occurrence')); if (key) sessionStorage.setItem(key, '{'); });
+  await page.reload();
+  await expect(desk.getByRole('alert')).toContainText('unreadable');
+  await expect(desk.getByRole('button', { name: 'Prepare rehearsal occurrence' })).toBeDisabled();
+});
+
+test('a late rehearsal cannot repaint a different workspace', async ({ page }) => {
+  const state = await fixture(page);
+  await openDesk(page);
+  await page.getByRole('button', { name: automation, exact: true }).click();
+  const desk = page.getByRole('region', { name: 'Operator rehearsal', exact: true });
+  await desk.getByRole('button', { name: 'Prepare rehearsal occurrence' }).click();
+  await desk.getByRole('button', { name: 'Admit occurrence metadata' }).click();
+  await expect(desk.getByText('Retained metadata accepted · no execution')).toBeVisible();
+  let entered = false;
+  let release!: () => void;
+  const barrier = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/automations/rehearse', async route => { entered = true; await barrier; await route.fallback().catch(() => {}); });
+  await desk.getByRole('button', { name: 'Reproduce original capture' }).click();
+  await expect.poll(() => entered).toBe(true);
+  state.workspace = actor;
+  await page.goto('/dashboard/automations');
+  await expect(page.getByRole('button', { name: 'New automation draft' })).toBeEnabled();
+  release();
+  await expect(desk.getByRole('region', { name: 'Retained rehearsal report' })).toHaveCount(0);
+  await expect(desk.getByText('Request UUID', { exact: true })).toHaveCount(0);
+  expect(state.operations.filter(x => x.operation === 'admit')).toHaveLength(1);
 });
