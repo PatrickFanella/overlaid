@@ -11,7 +11,7 @@ function record(value: unknown): Record<string, unknown> { if (!value || typeof 
 function id(value: unknown): string { return versionID(value) ? value : fail(); }
 function hash(value: unknown): string { return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : fail(); }
 function code(value: unknown): string { return typeof value === 'string' && /^[a-z][a-z0-9_.:-]{0,63}$/.test(value) ? value : fail(); }
-function integer(value: unknown, min = 0, max = 10000): number { return Number.isInteger(value) && Number(value) >= min && Number(value) <= max ? Number(value) : fail(); }
+function integer(value: unknown, min = 0, max = 10201): number { return Number.isInteger(value) && Number(value) >= min && Number(value) <= max ? Number(value) : fail(); }
 function at(value: unknown): string {
   if (typeof value !== 'string' || value.length > 64 || !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,9})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(`${value.slice(0, 10)}T00:00:00Z`).toISOString().slice(0, 10) !== value.slice(0, 10)) return fail();
   return value;
@@ -25,6 +25,21 @@ function validStep(s: RehearsalStep): boolean {
   if (s.kind === 'stop') return s.outcome === 'stopped' && s.reason === 'explicit_stop';
   if (s.outcome === 'unsupported') return ['random', 'delay', 'set_output', 'all', 'preset'].includes(s.kind) && s.reason === 'unsupported_node';
   return ['sequential', 'all', 'loop', 'condition', 'switch', 'preset'].includes(s.kind) && s.outcome === 'visited' && s.reason === 'supported';
+}
+export function decodeFlowMetadata(value: unknown) {
+  const r = record(value);
+  const statusReasons: Record<string, string[]> = { proposed: ['supported_flow'], stopped: ['explicit_stop'], unsupported: ['unsupported_node'], blocked: [...admissionReasons.filter(reason => reason !== 'matched'), 'condition_unavailable'] };
+  const status = code(r.status); const reason = code(r.reason);
+  if (!Object.hasOwn(statusReasons, status) || !statusReasons[status].includes(reason) || !Array.isArray(r.steps) || !r.steps.length || r.steps.length > 100) return fail();
+  const droppedSteps = integer(r.droppedSteps, 0, 10101);
+  if (droppedSteps > 0 && r.steps.length !== 100) return fail();
+  const steps = r.steps.map((raw, index) => {
+    const s = record(raw); const sequence = integer(s.sequence, 1);
+    if (sequence !== index + 1) return fail();
+    const step = { sequence, parent: integer(s.parent, 0, sequence - 1), automationId: id(s.automationId), versionId: id(s.versionId), nodeId: code(s.nodeId), kind: code(s.kind), outcome: code(s.outcome), reason: code(s.reason) };
+    return validStep(step) ? step : fail();
+  });
+  return { status, reason, steps, droppedSteps };
 }
 export function rehearsalStorageKey(scope: VersionScope) { return `${versionStorageKey(scope)}.operator-occurrence`; }
 export function decodeRehearsalIntent(raw: string | null): RehearsalIntent | null {
@@ -42,6 +57,7 @@ async function identity(parts: string[]): Promise<string> {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(parts)));
   return [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
+export { identity as operatorIdentity, at as operatorTimestamp, sameInstant as sameOperatorInstant };
 export async function operatorIdentities(scope: VersionScope, intent: RehearsalIntent) {
   const occurrenceId = await identity(['overlaid.engine.operator-occurrence.v1', scope.tenantId, scope.accountId, intent.requestId]);
   const root = await identity(['overlaid.engine.run.v1', scope.tenantId, occurrenceId, intent.automationId, intent.versionId, intent.documentDigest, 'execute']);
@@ -62,17 +78,8 @@ export async function decodeOperatorRehearsal(value: unknown, scope: VersionScop
   const selectedVersionId = id(top.selectedVersionId); const graphDigest = hash(r.graphDigest); const captureDigest = hash(r.captureDigest);
   if (mode === 'reproduce' && (selectedVersionId !== intent.versionId || graphDigest !== intent.graphDigest)) return fail();
   const reportId = await identity(['overlaid.engine.rehearsal.v1', graphDigest, intent.graphDigest, run.occurrenceId, mode, captureDigest, '100']);
-  if (r.id !== reportId || !Array.isArray(r.steps) || !r.steps.length || r.steps.length > 100 || !Array.isArray(r.proposals) || r.proposals.length > 100) return fail();
-  const droppedSteps = integer(r.droppedSteps); const total = r.steps.length + droppedSteps;
-  if (total > 10000) return fail();
-  const statusReasons: Record<string, string[]> = { proposed: ['supported_flow'], stopped: ['explicit_stop'], unsupported: ['unsupported_node'], blocked: [...admissionReasons.filter(reason => reason !== 'matched'), 'condition_unavailable'] };
-  if (!statusReasons[String(r.status)].includes(String(r.reason))) return fail();
-  const steps = r.steps.map((raw, index) => {
-    const s = record(raw); const sequence = integer(s.sequence, 1);
-    if (sequence !== index + 1 || !['visited', 'checked', 'proposed', 'unsupported', 'stopped'].includes(String(s.outcome))) return fail();
-    const step = { sequence, parent: integer(s.parent, 0, sequence - 1), automationId: id(s.automationId), versionId: id(s.versionId), nodeId: code(s.nodeId), kind: code(s.kind), outcome: String(s.outcome), reason: code(s.reason) };
-    return validStep(step) ? step : fail();
-  });
+  if (r.id !== reportId || !Array.isArray(r.proposals) || r.proposals.length > 100) return fail();
+  const { status, reason, steps, droppedSteps } = decodeFlowMetadata(r); const total = steps.length + droppedSteps;
   if (steps[0].kind !== 'admission' || steps[0].automationId !== intent.automationId || steps[0].versionId !== selectedVersionId) return fail();
   const seen = new Set<number>(); let bytes = 0; let previous = 0;
   const proposals = r.proposals.map(raw => {
@@ -96,5 +103,5 @@ export async function decodeOperatorRehearsal(value: unknown, scope: VersionScop
     return proposal;
   });
   if (steps.some(step => step.outcome === 'proposed' && !seen.has(step.sequence))) return fail();
-  return { id: reportId, mode, selectedVersionId, run, graphDigest, captureDigest, clock, status: String(r.status), reason: code(r.reason), steps, droppedSteps, proposals };
+  return { id: reportId, mode, selectedVersionId, run, graphDigest, captureDigest, clock, status, reason, steps, droppedSteps, proposals };
 }

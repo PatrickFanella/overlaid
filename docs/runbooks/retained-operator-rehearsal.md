@@ -23,7 +23,7 @@ These reads use ordinary transactions because PostgreSQL forbids the required te
 
 `OperatorRehearsal` returns `CaptureVersion: 1`, unchanged original run metadata and the private flow report. Its proposals contain opaque authored arguments, including unrendered variable syntax. Diagnostic prefixes, blocked/unsupported reports and successful pure traversal are never transport payloads, effect permissions or replay grants. The existing pure evaluator's depth/node/proposal-byte/trace bounds and truncation semantics apply unchanged.
 
-No new table, migration or export field is introduced. Original source/run/member/tenant retention remains authoritative; the independent occurrence marker still prevents re-admission after private-run deletion. The method does not save its report. A separate [explicit metadata trace writer](operator-rehearsal-traces.md) now retains bounded reports; richer context persistence, captured variable rendering, provider observations, continuations, effects, trace-saving UI and saved history remain unfinished under [Phase #25](https://git.subcult.tv/subculture-collective/overlaid/issues/25).
+No new table, migration or export field is introduced. Original source/run/member/tenant retention remains authoritative; the independent occurrence marker still prevents re-admission after private-run deletion. The method does not save its report. A separate [explicit metadata trace writer](operator-rehearsal-traces.md) now retains bounded reports; richer context persistence, captured variable rendering, provider observations, continuations, effects and saved history listing remain unfinished under [Phase #25](https://git.subcult.tv/subculture-collective/overlaid/issues/25).
 
 ## Verification and rollback
 

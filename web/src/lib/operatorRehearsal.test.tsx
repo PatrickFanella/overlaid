@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { decodeOperatorRehearsal, decodeOperatorRun, decodeRehearsalIntent, operatorIdentities, rehearsalStorageKey, type RehearsalIntent } from './operatorRehearsal';
+import { decodeFlowMetadata, decodeOperatorRehearsal, decodeOperatorRun, decodeRehearsalIntent, operatorIdentities, rehearsalStorageKey, type RehearsalIntent } from './operatorRehearsal';
 import type { VersionScope } from './automationVersions';
 import { RehearsalReport } from '../routes/dashboard/OperatorRehearsalDesk';
 
@@ -66,4 +66,11 @@ describe('operator admission/rehearsal receipt projection', () => {
     raw.rehearsal.clock = '2026-10-21T18:00:00.123457-05:00';
     await expect(decodeOperatorRehearsal(raw, scope, intent, run, 'reproduce')).rejects.toThrow();
   });
+});
+
+it('matches stored trace truncation limits without accepting a partial truncated prefix', async () => {
+  const { raw } = await fixture();
+  const steps = Array.from({ length: 100 }, (_, i) => ({ ...raw.rehearsal.steps[i === 0 ? 0 : 1], sequence: i + 1 }));
+  expect(decodeFlowMetadata({ status: 'proposed', reason: 'supported_flow', steps, droppedSteps: 10101 }).droppedSteps).toBe(10101);
+  for (const value of [{ steps, droppedSteps: 10102 }, { steps: steps.slice(0, 99), droppedSteps: 1 }, { steps: [...steps, steps[99]], droppedSteps: 0 }]) expect(() => decodeFlowMetadata({ status: 'proposed', reason: 'supported_flow', ...value })).toThrow();
 });

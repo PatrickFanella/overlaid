@@ -33,3 +33,7 @@ Managed tenant pool opening requires the additional forced-RLS table. Explicit t
 For binary rollback, stop explicit callers and retain additive traces, run references and lifecycle markers. Older application binaries without trace callers may ignore the added table. Do not rewrite old reports, delete markers, refund charges or replay proposals to make rollback appear fresh. This work performs no production migration, deployment or power-loss qualification.
 
 Disposable SQL races cover concurrent duplicate saves, stable retry after pointer changes, original/current reports, rollback, per-run/plan capacity, canonical privacy decoding, metadata exports, member/run cascade, actor/tenant isolation, populated reapplication, grant/policy/reference drift and cancellation. Run `make verify`, focused race/metadata checks, affected-package new-diff lint and the full disposable PostgreSQL gate before merge. Provider/variable capture, proposal execution/continuations, remaining semantics and HTTP/editor activation remain under [Phase #25](https://git.subcult.tv/subculture-collective/overlaid/issues/25).
+
+## Dashboard save and recovery
+
+The [saved operator trace desk](automation-control-api.md#saved-operator-trace-desk) exposes explicit metadata saves from a validated report. Its original trace ID is known before POST, so lost responses recover through lookup/load without repeating the save. The browser retains a scoped metadata reference only; it checks canonical digest, source identity and fixed steps before display. Saved-history listing remains separate work.
