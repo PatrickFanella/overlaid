@@ -37,3 +37,9 @@ Disposable SQL races cover concurrent duplicate saves, stable retry after pointe
 ## Dashboard save and recovery
 
 The [saved operator trace desk](automation-control-api.md#saved-operator-trace-desk) exposes explicit metadata saves from a validated report. Its original trace ID is known before POST, so lost responses recover through lookup/load without repeating the save. The browser retains a scoped metadata reference only; it checks canonical digest, source identity and fixed steps before display. Saved-history listing remains separate work.
+
+## Source-bound trace discovery
+
+`ListOperatorTraces(ctx, actor, requestUUID)` lists metadata for that initiating account's original source. It uses the same ten-second operation bound and tenant/lifecycle locks as retained reads, validates current role/schema contracts and returns the unchanged original run plus at most eight ID/version/mode/digest/save-time summaries. Ordering is saved time then ID descending; overflow refuses without partial output. Missing or purged sources remain missing, while an expired original deadline still permits a retained read. The [list-traces endpoint](automation-control-api.md#discover-saved-traces-for-an-original-occurrence) exposes it through account control.
+
+Discovery reads no trace bodies and does not validate their canonical contents; callers must use `LoadOperatorTrace` before displaying saved metadata. It neither stores raw request UUIDs nor enumerates other actors or runs. No new grant, schema, pool, budget charge, write, pruning or effect is added. The browser catalogue/selection flow remains a later unit.
