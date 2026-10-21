@@ -84,3 +84,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Explicit versioned admission policy](engine-admission-policy.md): schema-2 gate/limit declarations, schema-1 preservation and migration 0040; no reservation or execution.
 
 - [Operator automation run admission](operator-automation-admission.md): explicit dashboard occurrences, pinned run metadata, atomic cooldown and retained retry markers; migration 0041, no executor or activation.
+
+- [Captured engine flow rehearsal](engine-flow-rehearsal.md): deterministic bounded traces and opaque action proposals, explicit unsupported cases, no persistence or effect execution.
