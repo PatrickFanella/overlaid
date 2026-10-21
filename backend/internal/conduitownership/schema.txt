@@ -1,0 +1,24 @@
+service_conduit_creations:id:uuid:true:gen_random_uuid():
+service_conduit_creations:app_id:uuid:true::
+service_conduit_creations:client_id:text:true::pg_catalog."C"
+service_conduit_creations:app_revision:bigint:true::
+service_conduit_creations:shard_count:integer:true::
+service_conduit_creations:state:text:true:'prepared'::text:pg_catalog."default"
+service_conduit_creations:claim_hash:text:false::pg_catalog."default"
+service_conduit_creations:started_at:timestamp with time zone:false::
+service_conduit_creations:completed_at:timestamp with time zone:false::
+service_conduit_creations:failure_code:text:false::pg_catalog."default"
+service_conduit_creations:conduit_id:text:false::pg_catalog."C"
+service_conduit_creations:principal:text:true:SESSION_USER:pg_catalog."default"
+service_conduit_creations:created_at:timestamp with time zone:true:statement_timestamp():
+service_conduit_creations:deadline_at:timestamp with time zone:true:(statement_timestamp() + '00:05:00'::interval):
+service_conduit_creations:service_conduit_creation_client:true:CHECK ((client_id ~ '^[A-Za-z0-9_-]{1,128}$'::text))
+service_conduit_creations:service_conduit_creation_deadline:true:CHECK ((deadline_at = (created_at + '00:05:00'::interval)))
+service_conduit_creations:service_conduit_creation_pk:true:PRIMARY KEY (id)
+service_conduit_creations:service_conduit_creation_revision:true:CHECK ((app_revision > 0))
+service_conduit_creations:service_conduit_creation_shards:true:CHECK (((shard_count >= 1) AND (shard_count <= 20000)))
+service_conduit_creations:service_conduit_creation_state:true:CHECK (((((claim_hash IS NULL) AND (started_at IS NULL)) OR ((claim_hash IS NOT NULL) AND (claim_hash ~ '^[0-9a-f]{64}$'::text) AND (started_at IS NOT NULL))) AND (((state = 'prepared'::text) AND (claim_hash IS NULL) AND (completed_at IS NULL) AND (failure_code IS NULL) AND (conduit_id IS NULL)) OR ((state = 'started'::text) AND (claim_hash IS NOT NULL) AND (completed_at IS NULL) AND (failure_code IS NULL) AND (conduit_id IS NULL)) OR ((state = 'created'::text) AND (claim_hash IS NOT NULL) AND (completed_at IS NOT NULL) AND (failure_code IS NULL) AND (conduit_id IS NOT NULL) AND (conduit_id ~ '^[A-Za-z0-9_-]{1,128}$'::text)) OR ((state = ANY (ARRAY['refused'::text, 'uncertain'::text])) AND (completed_at IS NOT NULL) AND (failure_code IS NOT NULL) AND (conduit_id IS NULL) AND (((state = 'refused'::text) AND (failure_code = ANY (ARRAY['expired'::text, 'not_started'::text, 'provider_refused'::text]))) OR ((state = 'uncertain'::text) AND (claim_hash IS NOT NULL) AND (failure_code = 'uncertain'::text)))))))
+service_conduit_creations:index:service_conduit_creation_active:true:true:CREATE UNIQUE INDEX service_conduit_creation_active ON service_conduit_creations USING btree (client_id) WHERE (state = ANY (ARRAY['prepared'::text, 'started'::text, 'uncertain'::text, 'created'::text]))
+service_conduit_creations:index:service_conduit_creation_pk:true:true:CREATE UNIQUE INDEX service_conduit_creation_pk ON service_conduit_creations USING btree (id)
+service_conduit_creations:index:service_conduit_creation_provider:true:true:CREATE UNIQUE INDEX service_conduit_creation_provider ON service_conduit_creations USING btree (client_id, conduit_id) WHERE (conduit_id IS NOT NULL)
+service_conduit_creations:index:service_conduit_creation_retention:true:true:CREATE INDEX service_conduit_creation_retention ON service_conduit_creations USING btree (created_at, id)
