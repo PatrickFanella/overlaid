@@ -90,7 +90,7 @@ Local tests, hosted CI, deployment, and live Twitch/OBS/provider acceptance are 
 
 ## Development
 
-The versioned engine is under development and has no active dispatcher. Its managed foundations include immutable versions, captured predicate/variable evaluation, [effect-free retained operator rehearsal](docs/runbooks/retained-operator-rehearsal.md) and [explicit operator run/cooldown admission](docs/runbooks/operator-automation-admission.md). HTTP/editor activation, trusted stream limits, effect execution and source migration remain open under Phase #25.
+The versioned engine is under development and has no active dispatcher. Its managed foundations include immutable versions, captured predicate/variable evaluation, [effect-free retained operator rehearsal](docs/runbooks/retained-operator-rehearsal.md), [immutable metadata traces](docs/runbooks/operator-rehearsal-traces.md) and [explicit operator run/cooldown admission](docs/runbooks/operator-automation-admission.md). HTTP/editor activation, trusted stream limits, effect execution and source migration remain open under Phase #25.
 
 The backend uses Go 1.26 (`go 1.26.0` in the module); the frontend uses React 19, TypeScript, Vite 7, and Tailwind 4. The web build image uses Node 24; `web/package.json` selects pnpm 10.33.0. PostgreSQL 17 and Docker Compose provide the container setup. See [stack and configuration](docs/reference/stack.md).
 

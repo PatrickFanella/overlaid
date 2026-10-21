@@ -1,0 +1,6 @@
+decision	evidence	choice	verification
+privacy	FlowRehearsal proposals contain opaque private authored arguments	Persist separate typed metadata DTO, strict codec, no proposals/facts	Private-body/unknown-field/export fixtures
+retry	Current pointer can change after lost save response	Unique run/mode/version selection resolved before pointer reads	Concurrent/changed-pointer/capacity duplicate fixtures
+lifecycle	Private operator run already cascades from membership and retention	Composite trace/run/version cascades; no direct trace DELETE grant	Run/member/ref-drift fixtures
+capacity	Reports consume retained metadata storage	Plan storedEvents bound plus10000 tenant/eight run caps; no cooldown charges	Capacity/rollback SQL fixtures
+activation	No route or effect adapter is selected	Explicit save/read API only, preserve read-only rehearsal	Code search and required gates
