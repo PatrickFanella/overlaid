@@ -1,0 +1,5 @@
+decision	evidence	choice	verification
+source	No trusted universal event/stream or captured-facts producer	Explicit dashboard operator only; unavailable facts and per-stream limits refuse	Policy refusal SQL fixtures
+identity	Pinned graph and immutable version store	Actor/request hash plus complete graph run identity; retained markers	Duplicate/version/member/retention fixtures
+reservation	Schema2 cooldown declaration	One per-automation charge in run transaction, DB time after locks	Race and rollback SQL fixtures
+activation	Phase25 migration gates unfinished	No route, executor, queue or provider startup	Code search and make verify

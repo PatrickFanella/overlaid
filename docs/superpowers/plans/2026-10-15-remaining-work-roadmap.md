@@ -524,3 +524,7 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Phase 3 admission prerequisite: pinned explicit policy
 
 [Issue #282](https://git.subcult.tv/subculture-collective/overlaid/issues/282) adds [schema-2 explicit admission policy](../../runbooks/engine-admission-policy.md), selected-only predicate matching and migration 0040 codec guards. Schema-1 bodies retain their original bytes/digests and remain structural-only. Group selection and bounded cooldown/per-stream declarations are immutable version content, independent of conditional-node references. Current mandatory authorization, trusted occurrence/stream binding, atomic run/reservation writes and Phase acceptance remain open.
+
+### Phase 3 E2b first source: operator run/cooldown admission
+
+[Issue #284](https://git.subcult.tv/subculture-collective/overlaid/issues/284) adds [explicit dashboard operator run admission](../../runbooks/operator-automation-admission.md) with fresh configure/metadata-capacity checks, complete immutable graph identity, stable request markers, fixed DB-clock deadlines and atomic version-independent cooldown charges. Membership and retention remove private runs while markers prevent recreation. Positive per-stream limits and unavailable captured facts fail closed. No HTTP, worker, effect executor or dispatcher is activated. Trusted stream/per-stream reservation, captured context, trace/replay, source migrations and Phase #25 acceptance remain open.

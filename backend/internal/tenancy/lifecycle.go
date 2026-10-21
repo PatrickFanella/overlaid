@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_stream_dispatch_receipts", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources", "engine_automations", "engine_automation_versions", "engine_automation_presets"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_stream_dispatch_receipts", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources", "engine_automations", "engine_automation_versions", "engine_automation_presets", "engine_operator_occurrences", "engine_operator_runs", "engine_run_budgets"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -95,6 +95,9 @@ func (s *Store) Expire(ctx context.Context) error {
 			}
 		}
 		if err == nil {
+			_, err = tx.ExecContext(ctx, `DELETE FROM engine_operator_runs WHERE /*tenant:engine_operator_runs*/ AND occurrence_id IN (SELECT id FROM engine_operator_occurrences WHERE /*tenant:engine_operator_occurrences*/ AND created_at<now()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1))`, id)
+		}
+		if err == nil {
 			_, err = tx.ExecContext(ctx, `DELETE FROM tenant_usage WHERE /*tenant:tenant_usage*/ AND window_start<now()-interval '2 days'`)
 		}
 		if err == nil {
@@ -132,6 +135,12 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 	bytes := 0
 	for _, table := range ProductTables {
 		query := `SELECT to_jsonb(row) FROM (SELECT * FROM ` + table + ` WHERE /*tenant:` + table + `*/ LIMIT 250001) row`
+		if table == "engine_operator_runs" {
+			query = `SELECT jsonb_build_object('runId',id,'automationId',automation_id,'versionId',version_id,'graphDigest',graph_digest) FROM engine_operator_runs WHERE /*tenant:engine_operator_runs*/ LIMIT 10001`
+		}
+		if table == "engine_operator_occurrences" {
+			query = `SELECT jsonb_build_object('automationId',automation_id,'versionId',version_id,'createdAt',created_at,'deadline',deadline) FROM engine_operator_occurrences WHERE /*tenant:engine_operator_occurrences*/ LIMIT 10001`
+		}
 		if table == "engine_automation_versions" {
 			query = `SELECT jsonb_build_object('automationId',automation_id,'versionId',id,'digest',digest,'createdAt',created_at) FROM engine_automation_versions WHERE /*tenant:engine_automation_versions*/ LIMIT 3201`
 		}

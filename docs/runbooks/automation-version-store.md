@@ -1,6 +1,6 @@
 # Immutable automation version storage
 
-[Issue #278](https://git.subcult.tv/subculture-collective/overlaid/issues/278) implements Phase 3 E2a: durable version publication and current-pointer selection. `tenancy.NewAutomationStore(ctx, scope)` explicitly borrows an immutable managed `tenantdb.DB` scope. No application, HTTP, editor, file-mode or dispatcher caller constructs this store. E2b run creation and atomic cooldown/per-stream reservations remain separate work.
+[Issue #278](https://git.subcult.tv/subculture-collective/overlaid/issues/278) implements Phase 3 E2a: durable version publication and current-pointer selection. `tenancy.NewAutomationStore(ctx, scope)` explicitly borrows an immutable managed `tenantdb.DB` scope. No application, HTTP, editor, file-mode or dispatcher caller constructs this store. [Explicit operator run admission](operator-automation-admission.md) now supplies the first E2b writer with atomic cooldown reservation. Trusted stream/per-stream reservation and provider/source integration remain separate work.
 
 ## Migration and role boundary
 
@@ -46,4 +46,6 @@ Rollback to a prior compatible binary leaves the additive schema and saved versi
 
 Disposable fixtures cover exact presets through a changed target current pointer, tenant isolation, missing context, member revocation, immutable grants, competing expected-pointer publications, audit rollback, no-op retries, canonical conflict checks, author deletion, owner tenant deletion, metadata exports, all three storage caps, populated reapplication, missing migration and policy/constraint/reachable-role drift. Focused SQL race tests and new-diff lint run before the full `scripts/ci-postgres.sh` gate, which includes `make verify` and the full application/River race suites. The gate is required before merge; its result is recorded on the PR. These checks do not prove power-loss durability, deployment, run uniqueness, effect delivery or Phase #25 completion.
 
-The current explicit store additionally requires [migration 0040 and the schema-2 admission policy codec](engine-admission-policy.md). Schema-1 bodies remain canonical and loadable; current schema/header guards reject pre-upgrade or broadened contracts. Older explicit-store builds fail closed against the upgraded header. Preserve both codecs and data on rollback; no run writer is activated.
+The current explicit store additionally requires [migration 0040 and the schema-2 admission policy codec](engine-admission-policy.md). Schema-1 bodies remain canonical and loadable; current schema/header guards reject pre-upgrade or broadened contracts. Older explicit-store builds fail closed against the upgraded header. Preserve both codecs and data on rollback; the explicit operator run writer remains unregistered in the application.
+
+New managed binaries also require the additive forced-RLS tables from [migration 0041](operator-automation-admission.md) at pool opening. Version operations retain their existing schema checks; explicit run operations have additional repeated contract checks.
