@@ -528,3 +528,7 @@ The [application adapter decision trail](2026-10-20-owned-stream-decisions.tsv) 
 ### Phase 3 E2b first source: operator run/cooldown admission
 
 [Issue #284](https://git.subcult.tv/subculture-collective/overlaid/issues/284) adds [explicit dashboard operator run admission](../../runbooks/operator-automation-admission.md) with fresh configure/metadata-capacity checks, complete immutable graph identity, stable request markers, fixed DB-clock deadlines and atomic version-independent cooldown charges. Membership and retention remove private runs while markers prevent recreation. Positive per-stream limits and unavailable captured facts fail closed. No HTTP, worker, effect executor or dispatcher is activated. Trusted stream/per-stream reservation, captured context, trace/replay, source migrations and Phase #25 acceptance remain open.
+
+### Phase 3 E3a: captured flow rehearsal
+
+[Issue #286](https://git.subcult.tv/subculture-collective/overlaid/issues/286) adds [pure captured flow rehearsal](../../runbooks/engine-flow-rehearsal.md), binding original/current graphs, occurrence, facts, mode, clock/seed and trace cap. Supported serial/conditional/loop/stop/preset flow emits bounded fixed traces and private opaque action proposals; unknown branches block and unsupported nodes remain explicit. No variable rendering, context/trace persistence, effect adapter or application caller is added. E3 authenticated capture/storage, E4 effects/continuations, remaining E5 semantics and all migration/Phase acceptance remain open.

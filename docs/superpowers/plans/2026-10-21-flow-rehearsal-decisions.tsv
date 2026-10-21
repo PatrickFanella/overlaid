@@ -1,0 +1,6 @@
+decision	evidence	choice	verification
+mode	ADR0005 distinguishes reproduce/current config	Bind both graph digests plus capture and reject execute	Identity/reconstruction fixtures
+flow	Typed structural nodes and predicate reports exist	Walk supported serial/conditional/loop/preset nodes; unknown blocks	Lazy/unknown/preset/stop fixtures
+values	Document arguments have no rendering contract	Keep authored arguments opaque/private; no implicit syntax selection	Literal argument and trace privacy fixtures
+unsupported	No durable continuation/random-state/output/parallel executor	Fixed unsupported diagnostic boundary, no silent emulation	Unsupported cases and no callbacks
+budgets	Depth16/steps100 accepted, private proposals need own cap	64KiB authored arguments plus trace cap and dropped count	Budget/truncation/cancellation/fuzz fixtures
