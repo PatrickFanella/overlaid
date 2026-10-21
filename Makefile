@@ -46,6 +46,7 @@ build: build-probe ## Build backend binaries and frontend assets
 	cd backend && go build -o ../bin/overlaid-pacing-probe ./cmd/pacing-probe
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/overlaid-bot-admin ./cmd/bot-admin
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/overlaid-app-admin ./cmd/app-admin
+	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/overlaid-app-issue ./cmd/app-issue
 	cd backend && go build -ldflags '$(GO_LDFLAGS)' -o ../bin/overlaid-conduit-inspect ./cmd/conduit-inspect
 	pnpm --dir web run build
 
