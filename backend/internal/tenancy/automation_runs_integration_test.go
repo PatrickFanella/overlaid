@@ -400,7 +400,7 @@ func TestAutomationOperatorMissingSchemaPolicyAndCapacityBound(t *testing.T) {
 	if _, err := f.Admin.Exec(fmt.Sprintf(`REVOKE DELETE ON engine_operator_occurrences FROM %q`, extra)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.Admin.Exec(`DROP TABLE engine_operator_runs`); err != nil {
+	if _, err := f.Admin.Exec(`DROP TABLE engine_operator_rehearsals,engine_operator_runs`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.AdmitOperator(ctx, owner, operatorRequest(60), d.AutomationID, d.VersionID); !errors.Is(err, ErrAutomationSchema) {

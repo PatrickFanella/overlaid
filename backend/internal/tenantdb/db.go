@@ -81,14 +81,14 @@ func Open(databaseURL, tenantID string) (*DB, error) {
 		return nil, errors.New("tenant runtime requires a non-owner PostgreSQL role without RLS bypass")
 	}
 	var migrated bool
-	err = raw.QueryRowContext(ctx, `SELECT count(*)=39 AND bool_and(relrowsecurity AND relforcerowsecurity)
+	err = raw.QueryRowContext(ctx, `SELECT count(*)=40 AND bool_and(relrowsecurity AND relforcerowsecurity)
 		FROM pg_class WHERE oid IN (
 		'app_metadata'::regclass,'stream_events'::regclass,'twitch_interaction_rules'::regclass,
 		'dashboard_configs'::regclass,'stream_sessions'::regclass,'stream_session_readiness_snapshots'::regclass,
 		'bot_audit_events'::regclass,'bot_commands'::regclass,'bot_timers'::regclass,'bot_counters'::regclass,
 		'bot_quotes'::regclass,'bot_moderation_rules'::regclass,'bot_api_variables'::regclass,
 'platform_connections'::regclass,'tenant_credentials'::regclass,'tenant_imports'::regclass,'tenant_usage'::regclass,'overlay_state'::regclass,'newsroom_documents'::regclass,
-'normalized_chat_events'::regclass,'platform_event_payloads'::regclass,'normalized_stream_events'::regclass,'platform_stream_payloads'::regclass,'platform_stream_dispatch_receipts'::regclass,'river_job'::regclass,'platform_dispatch_receipts'::regclass,'twitch_sent_messages'::regclass,'bot_accounts'::regclass,'shared_bot_delegations'::regclass,'platform_outbound_actions'::regclass,'platform_moderation_actions'::regclass,'platform_manual_sources'::regclass,'platform_moderation_sources'::regclass,'engine_automations'::regclass,'engine_automation_versions'::regclass,'engine_automation_presets'::regclass,'engine_operator_occurrences'::regclass,'engine_operator_runs'::regclass,'engine_run_budgets'::regclass)`).Scan(&migrated)
+'normalized_chat_events'::regclass,'platform_event_payloads'::regclass,'normalized_stream_events'::regclass,'platform_stream_payloads'::regclass,'platform_stream_dispatch_receipts'::regclass,'river_job'::regclass,'platform_dispatch_receipts'::regclass,'twitch_sent_messages'::regclass,'bot_accounts'::regclass,'shared_bot_delegations'::regclass,'platform_outbound_actions'::regclass,'platform_moderation_actions'::regclass,'platform_manual_sources'::regclass,'platform_moderation_sources'::regclass,'engine_automations'::regclass,'engine_automation_versions'::regclass,'engine_automation_presets'::regclass,'engine_operator_occurrences'::regclass,'engine_operator_runs'::regclass,'engine_run_budgets'::regclass,'engine_operator_rehearsals'::regclass)`).Scan(&migrated)
 	if err == nil && migrated {
 		err = raw.QueryRowContext(ctx, `SELECT count(*)=2 FROM pg_constraint WHERE conrelid='river_job'::regclass AND contype='f' AND convalidated AND ((confrelid='platform_outbound_actions'::regclass AND conname='overlaid_outbound_job') OR (confrelid='platform_moderation_actions'::regclass AND conname='overlaid_moderation_job'))`).Scan(&migrated)
 	}

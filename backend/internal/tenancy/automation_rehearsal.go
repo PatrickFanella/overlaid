@@ -13,9 +13,10 @@ import (
 // occurrence clock, no captured facts and a fixed zero seed. It is not a provider
 // or variable capture. The result grants no execution or replay permission.
 type OperatorRehearsal struct {
-	CaptureVersion int
-	Run            OperatorRun
-	Flow           engine.FlowRehearsal
+	CaptureVersion    int
+	SelectedVersionID string
+	Run               OperatorRun
+	Flow              engine.FlowRehearsal
 }
 
 // RehearseOperator resolves an existing actor/request, never caller-supplied
@@ -47,6 +48,19 @@ func (s *AutomationStore) RehearseOperator(ctx context.Context, actor, request s
 	if err != nil {
 		return out, err
 	}
+	out, err = s.rehearseOperatorTx(ctx, tx, run, mode)
+	if err != nil {
+		return OperatorRehearsal{}, err
+	}
+	if err = ctx.Err(); err != nil {
+		return out, err
+	}
+	if err = tx.Commit(); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+func (s *AutomationStore) rehearseOperatorTx(ctx context.Context, tx *tenantdb.Tx, run OperatorRun, mode engine.Mode) (out OperatorRehearsal, failure error) {
 	// Validate the original graph even in current-config mode: original capture
 	// provenance cannot be established by following today's current pointer.
 	original, err := operatorRunGraph(ctx, tx, run)
@@ -79,15 +93,10 @@ func (s *AutomationStore) RehearseOperator(ctx context.Context, actor, request s
 	if err != nil {
 		return out, err
 	}
-	if err = ctx.Err(); err != nil {
-		return out, err
-	}
-	if err = tx.Commit(); err != nil {
-		return out, err
-	}
 	run.Unchanged = true
-	return OperatorRehearsal{CaptureVersion: 1, Run: run, Flow: flow}, nil
+	return OperatorRehearsal{CaptureVersion: 1, SelectedVersionID: selected.Root().Document().VersionID, Run: run, Flow: flow}, nil
 }
+
 func operatorRunGraph(ctx context.Context, tx *tenantdb.Tx, run OperatorRun) (engine.PinnedGraph, error) {
 	v, _, err := storedAutomation(ctx, tx, run.AutomationID, run.VersionID)
 	if err != nil {
