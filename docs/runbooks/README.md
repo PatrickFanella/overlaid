@@ -70,3 +70,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Syntax-2 variable parser](variable-template-parser.md): bounded source-spanned AST and fixed diagnostics; rendering, resolvers, migration and activation remain separate.
 
 - [Captured variable rendering](variable-template-rendering.md): immutable supplied values, typed captured-call allowlist, lazy fallback and deterministic bounded pure rendering; no live resolver or activation.
+
+- [Parsed variable template cache](variable-template-cache.md): bounded tenant-scoped LRU, immutable templates and serialized purge; no application activation.
