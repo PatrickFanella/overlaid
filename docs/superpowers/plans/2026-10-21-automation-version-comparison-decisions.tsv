@@ -1,0 +1,8 @@
+decision	evidence	implementation	verification
+root_only	immutable exact graph loading already available	compare root documents; preset bodies explicitly excluded	dependency fixture and visible disclaimer
+current_snapshot	current pointer may change after load	fresh list-versions then exact load; retain both IDs/digests	browser selection change fixture
+structural	JSON arrays and fields are authored input	deterministic JSON Pointer paths; positional arrays; no semantic inference	escaped-key null type and reorder regressions
+bounds	private documents can contain many/large fields	200 rows 8192 visits 64 depth 1024 path 512 preview	partial-report and oversized input fixtures
+write_isolation	version intent may be unresolved	comparison is ephemeral and read-only; no ID or storage mutation	exact tab-state and no new writes browser assertions
+privacy_lifecycle	private values and late scopes need fences	escaped text; clear obsolete reports; existing abort/scope validation	HTML-like input error narrow and existing late-response fixtures
+remaining	Phase 25 exceeds structural root comparison	no draft/preset semantic diff flow editor effects migration or deployment	docs boundary review
