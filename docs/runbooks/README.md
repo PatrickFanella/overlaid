@@ -74,3 +74,5 @@ Retained moderation has an explicit `TWITCH_MODERATION_MODE=retained` opt-in wit
 - [Parsed variable template cache](variable-template-cache.md): bounded tenant-scoped LRU, immutable templates and serialized purge; no application activation.
 
 - [Legacy variable conversion preview](variable-template-conversion.md): original/proposed sources and supplied-value output comparisons, bounded warnings and no selection or effects.
+
+- [Complete pinned automation graphs](engine-pinned-graphs.md): exact supplied version resolution, expanded budgets and complete graph identity; no persistence or effect admission.
