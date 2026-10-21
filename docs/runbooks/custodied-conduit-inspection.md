@@ -4,6 +4,8 @@
 
 The separate [custody-bound creation API](custodied-conduit-creation.md) now borrows the same token-column reader with an independently restricted ledger pool. Inspection remains read-only and invokes no creation. The creation method requires original durable intent/claim and fresh custody checks; the role gains no credential writes or ledger access.
 
+The [app-wide inventory read](conduit-inventory.md) uses this same restricted custody and lock without selecting a conduit or reading shards. It returns bounded IDs/counts and leaves all uncertain ownership unchanged.
+
 ## Inputs and permission boundary
 
 Trusted service code supplies a private execution DSN, an immutable versioned keyring, a `Binding` with the exact app UUID, case-sensitive client ID and positive stored revision, and one explicit conduit ID. Obtain the binding from administrative metadata. A missing, revoked or stale binding fails closed; the method does not choose another app, revision or conduit. It exports neither a token accessor nor a generic credential callback.
