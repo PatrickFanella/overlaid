@@ -525,3 +525,25 @@ func TestAssignmentLedgerColumnPrivilegesAndIdentity(t *testing.T) {
 		t.Fatal(identity, err)
 	}
 }
+
+func TestAssignmentMetadataMatchHasExactPrivateScope(t *testing.T) {
+	b, p := binding("client"), private()
+	r := Intent{Binding: b, ConduitID: p.ConduitID, ShardCount: p.ShardCount, ShardID: 0, SessionHash: fingerprint(b, p)}
+	if !r.Matches(b, p) {
+		t.Fatal("original snapshot refused")
+	}
+	p.SessionID = "other"
+	if r.Matches(b, p) {
+		t.Fatal("private mismatch accepted")
+	}
+	p = private()
+	b.Revision++
+	if r.Matches(b, p) {
+		t.Fatal("revision mismatch accepted")
+	}
+	b = binding("client")
+	p.ShardID = "00"
+	if r.Matches(b, p) {
+		t.Fatal("noncanonical snapshot accepted")
+	}
+}

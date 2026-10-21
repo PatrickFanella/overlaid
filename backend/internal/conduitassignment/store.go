@@ -389,3 +389,9 @@ func validPrivate(p twitchconduit.ShardBinding) bool {
 func matches(r Intent, b Binding, p twitchconduit.ShardBinding) bool {
 	return r.Binding == b && r.ShardCount == p.ShardCount && r.ConduitID == p.ConduitID && r.ShardID == shardNumber(p) && r.SessionHash == fingerprint(b, p)
 }
+
+// Matches compares metadata with an exact private snapshot. It grants no claim,
+// credential, creation ownership, session lease or provider permission.
+func (r Intent) Matches(b Binding, p twitchconduit.ShardBinding) bool {
+	return valid(b, p.ShardCount) && validPrivate(p) && matches(r, b, p)
+}
