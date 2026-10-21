@@ -1,6 +1,6 @@
 # Workspace automation metadata API
 
-[Issue #292](https://git.subcult.tv/subculture-collective/overlaid/issues/292) exposes the existing version, operator-admission, rehearsal and trace stores through managed account control. The endpoints publish configuration and retain metadata; they do not select an effect executor, command dispatcher, worker, provider adapter or graphical editor.
+[Issue #292](https://git.subcult.tv/subculture-collective/overlaid/issues/292) exposes the existing version, operator-admission, rehearsal and trace stores through managed account control. The endpoints publish configuration and retain metadata; they do not select an effect executor, command dispatcher, worker, provider adapter or graphical flow editor. The advanced [version desk](#dashboard-version-desk) consumes the version operations only.
 
 ## Authentication and workspace scope
 
@@ -63,6 +63,20 @@ Use the authenticated account API to find the intended workspace and current ses
 ```
 
 Replace the example tenant with the authorized route workspace and choose actual immutable IDs. Send the document to `validate`, then `publish` when intentionally saving it. Persist a separate request UUID before calling `admit` with the returned automation/version IDs. Use that exact request UUID for `lookup` and `rehearse`. Save a trace deliberately with the reported selected version, then use its trace ID for `load-trace`. The example's `$(user)` stays opaque: variable rendering and message delivery are unfinished work.
+
+## Dashboard version desk
+
+[Issue #296](https://git.subcult.tv/subculture-collective/overlaid/issues/296) adds **Prepare → Automations** at `/dashboard/automations` for authenticated owners, managers and editors. It uses the existing managed API; file-backed installations require a managed workspace before this desk is available. The page lists saved automation IDs, loads exact versions and their pinned documents, and displays loaded versus current version identity separately. Version lists retain creation order after selecting an older version.
+
+To edit, choose **New automation draft** or **Draft from loaded version**. Each explicit draft receives a fresh version UUID; a new automation also receives a fresh automation UUID. Keep the workspace/automation/version headers unchanged in the JSON editor. The editor accepts up to 60,000 UTF-8 bytes and saves draft text in this tab's `sessionStorage`, scoped to the API URL, account and workspace. Invalid JSON remains editable across reload. Closing the tab can discard this local state; it is not a server backup. Authored text is private workspace input, so avoid putting secrets in documents. **Discard draft** requires explicit confirmation and affects local state only.
+
+**Validate draft** checks structure without publishing. **Publish draft** revalidates the exact input, retains the canonical digest, freezes the draft and expected current pointer in tab storage, then sends one publication POST. **Select loaded version as current** likewise freezes its exact automation/version/expected-pointer intent before POST. No write is sent if intent storage fails. Responses must match the intended IDs and digest with well-formed metadata before the intent is cleared. Publishing/selecting saved configuration does not execute actions, migrate Chat commands or activate a dispatcher.
+
+A failed, canceled, conflicted or malformed write response leaves the original intent unresolved through reload. Editing, fresh drafts and new writes are blocked. **Check saved state** performs only `list-versions`: publication is confirmed by the exact immutable version and validated digest; selection is confirmed only when the requested version is current in that snapshot. Publication confirmation does not imply the version is still current. Missing or contradictory saved state remains unresolved; the desk never invents a replacement UUID or retries a write automatically. **Acknowledge unresolved intent** explicitly clears local bookkeeping after confirmation, without canceling, undoing or proving the outcome of the earlier request. Preserve original IDs for further investigation. A conflict retains draft text and the original expected pointer; inspect saved state and explicitly start a fresh draft when rebasing changes.
+
+Account/workspace/API/CSRF changes remount the private desk; departure aborts active requests. Captured request scope supplies the route, cookie credentials and exact CSRF token, without global operator authority or mutable account-context headers. Reads and writes have a fifteen-second browser bound; late aborted responses cannot settle an intent or repaint another desk. Server authorization and expected-pointer fences remain authoritative. Unreadable local state blocks writes until explicitly cleared; storage is not silently reset.
+
+Browser fixtures intercept local API requests and cover the version workflow, exact expected pointers, lost/malformed/conflicted publication, unresolved selection, reload, unavailable/corrupt storage, permissions, workspace isolation, late responses and keyboard/narrow layout. These are browser/client conformance checks against fixtures. The prior disposable HTTP/store tests establish the server contract separately. No production login, provider delivery or real deployment acceptance is claimed. A graphical flow builder, version-diff view, run/rehearsal/trace desk, richer capture and live effects remain unfinished.
 
 ## Failures, compatibility and verification
 

@@ -4,6 +4,7 @@ import { NewsroomSharedPage } from './routes/NewsroomShared';
 import { OverlayNewsroomPage } from './routes/OverlayNewsroom';
 import { DashboardNewsroomPage } from './routes/dashboard/Newsroom';
 import { DashboardAccountPage } from './routes/dashboard/Account';
+import { DashboardAutomationsPage } from './routes/dashboard/Automations';
 import { LegalPage, PublicStatusPage } from './routes/Legal';
 import { HomePage } from './routes/Home';
 import { OverlayAlertsPage } from './routes/OverlayAlerts';
@@ -32,6 +33,7 @@ const pages: Record<string, () => ReactElement> = {
   '/newsroom/shared': () => <NewsroomSharedPage />,
   '/': () => <HomePage />,
   '/dashboard/account': () => <DashboardAccountPage />,
+  '/dashboard/automations': () => <DashboardAutomationsPage />,
   '/privacy': () => <LegalPage kind="privacy" />,
   '/terms': () => <LegalPage kind="terms" />,
   '/status': () => <PublicStatusPage />,

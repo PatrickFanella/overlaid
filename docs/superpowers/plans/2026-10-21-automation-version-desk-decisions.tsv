@@ -1,0 +1,8 @@
+decision	evidence	implementation	verification
+version_desk	merged metadata API and bounded discovery	Prepare Automations JSON editor; no execution controls	App route and workflow browser tests
+immutable_drafts	server current-pointer and immutable version contracts	fresh UUID only explicit draft; frozen expected pointer/header	publication expected-pointer and reload fixtures
+unresolved_writes	lost response does not prove no commit	save intent before POST; digest/ID receipt checks; read-only resolution	lost malformed conflict selection and storage-failure fixtures
+private_scope	account session and route tenant are authoritative	captured API/account/tenant/CSRF requests; scope remount and abort	unit transport plus workspace and late-response browser tests
+local_retention	private editable input can survive conflicts	scoped sessionStorage; explicit discard/ack; corruption blocks writes	reload corrupt-storage and identity tests
+layout	existing desk primitives separate from overlays	labelled forms version metadata and JSON editor	390px no overflow keyboard and screenshot inspection
+remaining	Phase 25 broader than authoring versions	no graphical tree diff rehearsal desk effects migration or deployment	docs and allowed-operation browser assertions
