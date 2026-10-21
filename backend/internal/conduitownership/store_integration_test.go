@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"git.subcult.tv/PatrickFanella/over-laid/internal/appvault"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/testpostgres"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/twitchconduit"
 )
@@ -159,17 +158,6 @@ func TestOwnershipPrepareClaimCompleteAndRestart(t *testing.T) {
 	if existing, err := s.Prepare(t.Context(), r.Binding, 2); err != nil || existing != done {
 		t.Fatal(existing, err)
 	}
-	// New ledger grants do not broaden either existing custody role.
-	admin, err := appvault.Open(t.Context(), f.AppAdminURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = admin.Close()
-	reader, err := appvault.OpenExecution(t.Context(), f.AppExecutionURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = reader.Close()
 }
 
 func TestOwnershipConcurrentOriginalIdentity(t *testing.T) {

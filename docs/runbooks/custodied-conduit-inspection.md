@@ -2,6 +2,8 @@
 
 [Issue #222](https://git.subcult.tv/subculture-collective/overlaid/issues/222) connects [service app custody](service-app-custody.md) to the existing [read-only conduit inspector](conduit-inspection.md). `appvault.OpenExecution` opens a separate restricted pool; `InspectConduit` returns the existing allowlisted observation. The native [overlaid-conduit-inspect CLI](conduit-inspection-cli.md) invokes this Go boundary with dedicated private configuration. There is no application environment setting, HTTP route, worker or startup caller for it.
 
+The separate [custody-bound creation API](custodied-conduit-creation.md) now borrows the same token-column reader with an independently restricted ledger pool. Inspection remains read-only and invokes no creation. The creation method requires original durable intent/claim and fresh custody checks; the role gains no credential writes or ledger access.
+
 ## Inputs and permission boundary
 
 Trusted service code supplies a private execution DSN, an immutable versioned keyring, a `Binding` with the exact app UUID, case-sensitive client ID and positive stored revision, and one explicit conduit ID. Obtain the binding from administrative metadata. A missing, revoked or stale binding fails closed; the method does not choose another app, revision or conduit. It exports neither a token accessor nor a generic credential callback.
