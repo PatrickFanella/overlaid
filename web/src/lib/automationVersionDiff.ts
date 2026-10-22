@@ -1,4 +1,4 @@
-import { versionID, type Graph } from './automationVersions';
+import { draftDocument, versionID, type Draft, type Graph } from './automationVersions';
 
 export const versionDiffLimits = { changes: 200, visits: 8192, depth: 64, path: 1024, preview: 512 } as const;
 export type VersionChange = { path: string; kind: 'added' | 'removed' | 'changed'; before?: string; after?: string; previewTruncated: boolean };
@@ -14,6 +14,24 @@ export function compareRootVersions(from: Graph, to: Graph): RootVersionDiff {
   const [left, right] = roots.map(r => r[0]);
   if (!versionID(left.tenantId) || left.tenantId !== right.tenantId) return fail();
   const result: RootVersionDiff = { fromVersionId: from.versionId, toVersionId: to.versionId, fromGraphDigest: from.graphDigest, toGraphDigest: to.graphDigest, changes: [], limited: false };
+  return { ...result, ...compareJSONRoots(left, right) };
+}
+export type DraftVersionDiff = { draftVersionId: string; draftTextDigest: string; expectedCurrentId: string; toVersionId: string; toGraphDigest: string; changes: VersionChange[]; limited: boolean };
+
+// The raw UTF-8 text hash identifies only the tab's exact draft snapshot. It is
+// not the server canonical document digest, a pinned graph or validation proof.
+export async function compareDraftRoot(draft: Draft, tenantId: string, current: Graph): Promise<DraftVersionDiff> {
+  if (!versionID(tenantId) || !versionID(draft.automationId) || !versionID(draft.versionId) || (draft.expected !== '' && !versionID(draft.expected))) throw new Error('Cannot compare an invalid draft identity. Keep the original workspace and version headers.');
+  const left = draftDocument(draft, tenantId);
+  const roots = current.versions.filter(v => v.automationId === current.automationId && v.versionId === current.versionId);
+  if (current.automationId !== draft.automationId || !versionID(current.versionId) || !/^[a-f0-9]{64}$/.test(current.graphDigest) || roots.length !== 1 || roots[0].tenantId !== tenantId) throw new Error('Cannot compare this draft with a mismatched saved snapshot. Refresh its own automation.');
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(draft.text));
+  const draftTextDigest = [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return { draftVersionId: draft.versionId, draftTextDigest, expectedCurrentId: draft.expected, toVersionId: current.versionId, toGraphDigest: current.graphDigest, ...compareJSONRoots(left, roots[0]) };
+}
+
+function compareJSONRoots(left: Record<string, unknown>, right: Record<string, unknown>) {
+  const result: { changes: VersionChange[]; limited: boolean } = { changes: [], limited: false };
   let visits = 0;
   function preview(value: unknown): { text: string; shortened: boolean } {
     const text = Array.isArray(value) ? `[${value.length} items]` : value !== null && typeof value === 'object' ? `{${Object.keys(value).length} fields}` : JSON.stringify(value) ?? 'undefined';
