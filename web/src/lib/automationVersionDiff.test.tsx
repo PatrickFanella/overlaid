@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { compareRootVersions, versionDiffLimits } from './automationVersionDiff';
-import type { Graph } from './automationVersions';
+import { compareDraftRoot, compareRootVersions, versionDiffLimits } from './automationVersionDiff';
+import type { Draft, Graph } from './automationVersions';
 import { AutomationVersionComparison } from '../routes/dashboard/AutomationVersionComparison';
 
 const tenant = '11111111-1111-4111-8111-111111111111';
@@ -54,5 +54,36 @@ describe('bounded immutable root comparison', () => {
     const result = compareRootVersions(graph(), graph({ '<img src=x onerror=alert(1)>': '<script>private text</script>' }));
     const html = renderToStaticMarkup(<AutomationVersionComparison report={result} />);
     expect(html).toContain('&lt;script&gt;'); expect(html).toContain('&lt;img'); expect(html).not.toContain('<script>'); expect(html).not.toContain('<img');
+  });
+});
+
+describe('bounded raw draft to current-root comparison', () => {
+  function draft(fields: Record<string, unknown> = {}): Draft { return { automationId: automation, versionId: version, expected: version, text: JSON.stringify(graph(fields).versions[0]) }; }
+  it('identifies exact raw UTF8 draft text separately from structural equality and server graph identity', async () => {
+    const current = graph({ text: '雪 <script>' }); const original = draft({ text: '雪 <script>' });
+    const report = await compareDraftRoot(original, tenant, current);
+    const formatted = { ...original, text: JSON.stringify(JSON.parse(original.text), null, 2) };
+    expect(report.changes).toEqual([]);
+    expect(report.draftTextDigest).toBe('16ce9801a7ffca25f1884b573cc257f9defcf6962e494dd6d999fbad65452408');
+    expect((await compareDraftRoot(formatted, tenant, current)).draftTextDigest).not.toBe(report.draftTextDigest);
+    expect(original.expected).toBe(version); expect(report.toGraphDigest).toBe(current.graphDigest);
+    const html = renderToStaticMarkup(<AutomationVersionComparison report={report} />);
+    expect(html).toContain('Draft version comparison'); expect(html).toContain('exact raw draft text'); expect(html).not.toContain('From graph digest');
+  });
+  it('refuses invalid/private source headers and mismatched or missing saved roots without fabricating a graph', async () => {
+    for (const bad of [{ ...draft(), expected: 'invalid' }, { ...draft(), text: '{' }, { ...draft(), text: JSON.stringify({ ...graph().versions[0], tenantId: automation }) }, { ...draft(), text: ' '.repeat(60001) }]) await expect(compareDraftRoot(bad, tenant, graph())).rejects.toThrow();
+    for (const current of [{ ...graph(), automationId: tenant }, { ...graph(), versions: [] }, { ...graph(), graphDigest: 'PRIVATE' }, { ...graph(), versions: [...graph().versions, ...graph().versions] }, graph({ tenantId: automation })]) await expect(compareDraftRoot(draft(), tenant, current)).rejects.toThrow('mismatched');
+  });
+  it('shares root-only limits and escaped previews, while keeping stale expected pointers immutable', async () => {
+    const input = draft({ text: '<img src=x onerror=alert(1)> $(user)', nodes: Array.from({ length: 500 }, (_, i) => i) });
+    input.expected = automation;
+    const before = JSON.stringify(input);
+    const report = await compareDraftRoot(input, tenant, graph({ text: 'saved', nodes: [] }));
+    expect(report.limited).toBe(true); expect(report.changes).toHaveLength(versionDiffLimits.changes);
+    expect(JSON.stringify(input)).toBe(before); expect(report.expectedCurrentId).toBe(automation);
+    const escaped = await compareDraftRoot(draft({ text: '<script>opaque</script>' }), tenant, graph());
+    const html = renderToStaticMarkup(<AutomationVersionComparison report={escaped} />);
+    expect(html).toContain('&lt;script&gt;'); expect(html).not.toContain('<script>');
+    expect(renderToStaticMarkup(<AutomationVersionComparison report={report} />)).toContain('differs from the current saved snapshot');
   });
 });

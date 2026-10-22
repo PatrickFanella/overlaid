@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { decodeAutomations, decodeGraph, decodeVersionDesk, decodeVersions, draftDocument, emptyVersionDesk, verifyPublication, verifyValidation, versionRequest, versionStorageKey, type AutomationItem, type Graph, type VersionDeskState, type VersionList, type VersionScope } from '../../lib/automationVersions';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
-import { compareRootVersions, type RootVersionDiff } from '../../lib/automationVersionDiff';
+import { compareDraftRoot, compareRootVersions, type DraftVersionDiff, type RootVersionDiff } from '../../lib/automationVersionDiff';
 import { AutomationVersionComparison } from './AutomationVersionComparison';
 import { OperatorRehearsalDesk } from './OperatorRehearsalDesk';
 import { DashboardShell } from './DashboardShell';
@@ -33,12 +33,13 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
   const [listed, setListed] = useState(false);
   const [versions, setVersions] = useState<VersionList | null>(null);
   const [graph, setGraph] = useState<Graph | null>(null);
+  const [draftComparison, setDraftComparison] = useState<DraftVersionDiff | null>(null);
   const [comparison, setComparison] = useState<RootVersionDiff | null>(null);
   const [busy, setBusy] = useState(false);
   const request = useRef<AbortController | null>(null);
   const mounted = useRef(false);
   function persist(next: VersionDeskState): boolean {
-    try { const raw = JSON.stringify(next); decodeVersionDesk(raw, scope.tenantId); sessionStorage.setItem(storageKey, raw); setLocal(next); setStorageError(''); return true; }
+    try { const raw = JSON.stringify(next); decodeVersionDesk(raw, scope.tenantId); sessionStorage.setItem(storageKey, raw); setLocal(next); setDraftComparison(null); setStorageError(''); return true; }
     catch { setStorageError('Tab storage is unavailable. Writes are blocked until this workspace’s draft and intent can be saved.'); return false; }
   }
   async function run(job: (signal: AbortSignal) => Promise<void>) {
@@ -51,7 +52,7 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     finally { window.clearTimeout(timeout); if (request.current === controller) { request.current = null; if (mounted.current) setBusy(false); } }
   }
   const call = (op: string, body: Record<string, unknown>, signal: AbortSignal) => versionRequest(scope, op, body, signal);
-  async function refresh(signal: AbortSignal) { setComparison(null); setListed(false); setItems([]); setItems(decodeAutomations(await call('list', {}, signal))); setListed(true); }
+  async function refresh(signal: AbortSignal) { setComparison(null); setDraftComparison(null); setListed(false); setItems([]); setItems(decodeAutomations(await call('list', {}, signal))); setListed(true); }
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController(); request.current = controller; setBusy(true);
@@ -60,18 +61,30 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     return () => { mounted.current = false; controller.abort(); request.current?.abort(); };
   }, [scope]);
   async function open(automationId: string, versionId: string | undefined, signal: AbortSignal) {
-    setComparison(null);
+    setComparison(null); setDraftComparison(null);
     const list = decodeVersions(await call('list-versions', { automationId }, signal), automationId);
     const selected = versionId || list.currentVersionId;
     const loaded = decodeGraph(await call('load', { automationId, versionId: selected }, signal), scope.tenantId, automationId, selected);
     setVersions(list); setGraph(loaded);
   }
   async function compare(signal: AbortSignal) {
-    setComparison(null);
+    setComparison(null); setDraftComparison(null);
     if (!graph) return;
     const list = decodeVersions(await call('list-versions', { automationId: graph.automationId }, signal), graph.automationId);
     const current = decodeGraph(await call('load', { automationId: graph.automationId, versionId: list.currentVersionId }, signal), scope.tenantId, graph.automationId, list.currentVersionId);
     setComparison(compareRootVersions(graph, current));
+  }
+  async function compareDraft(signal: AbortSignal) {
+    setDraftComparison(null);
+    if (!local.draft) return;
+    const draft = local.draft;
+    // Reject invalid/changed draft headers before sending discovery reads.
+    draftDocument(draft, scope.tenantId);
+    const list = decodeVersions(await call('list-versions', { automationId: draft.automationId }, signal), draft.automationId);
+    const current = decodeGraph(await call('load', { automationId: draft.automationId, versionId: list.currentVersionId }, signal), scope.tenantId, draft.automationId, list.currentVersionId);
+    const result = await compareDraftRoot(draft, scope.tenantId, current);
+    if (signal.aborted || !mounted.current || request.current?.signal !== signal) return;
+    setDraftComparison(result);
   }
   const blocked = busy || !!local.pending || !!storageError;
   function newDraft(copy: boolean) {
@@ -88,7 +101,7 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     setMessage(`Structure valid. Digest ${digest}. Presets, publication and current permissions are checked separately.`);
   }
   async function publish(signal: AbortSignal) {
-    setComparison(null);
+    setComparison(null); setDraftComparison(null);
     if (!local.draft || local.pending || storageError) return;
     const draft = local.draft; const document = draftDocument(draft, scope.tenantId);
     const digest = verifyValidation(await call('validate', { document }, signal), draft);
@@ -99,7 +112,7 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     setMessage('Version published. No actions were executed. Refresh the catalogue to inspect current selection.');
   }
   async function select(signal: AbortSignal) {
-    setComparison(null);
+    setComparison(null); setDraftComparison(null);
     if (!graph || !versions || blocked) return;
     const selected = versions.versions.find(v => v.versionId === graph.versionId);
     if (!selected) throw new Error('Refresh versions before selecting this version.');
@@ -126,7 +139,7 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     : null;
   return <div className="grid min-w-0 gap-5">
     <Notice>Workspace: <strong>{workspaceName}</strong>. This advanced JSON desk manages saved versions only. Actions, variables and Chat commands are not executed here.</Notice>
-    {storageError ? <Notice tone="bad" role="alert">{storageError} <button className="desk-btn desk-btn--small" onClick={() => { if (window.confirm('Clear this workspace’s tab draft and unresolved intent? This does not cancel or undo a saved write.')) persist({ ...emptyVersionDesk }); }}>Clear unreadable local state</button></Notice> : null}
+    {storageError ? <Notice tone="bad" role="alert">{storageError} <button className="desk-btn desk-btn--small" disabled={busy} onClick={() => { if (window.confirm('Clear this workspace’s tab draft and unresolved intent? This does not cancel or undo a saved write.')) persist({ ...emptyVersionDesk }); }}>Clear unreadable local state</button></Notice> : null}
     {error ? <Notice tone="bad" role="alert">{error}</Notice> : null}
     {message ? <Notice tone="ok" role="status">{message}</Notice> : null}
     {busy ? <p role="status">Working on this workspace’s versions…</p> : null}
@@ -149,9 +162,10 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     {local.draft ? <Panel title="Version draft" description="Saved in this tab for this account, workspace and API. UUIDs are fixed for this draft. Validation checks structure; publish also checks presets and the expected current version.">
       <div className="mb-3 break-all"><KeyValues items={[["Draft version", local.draft.versionId], ["Expected current", local.draft.expected || 'Create only']]} /></div>
       <Field label="Automation document JSON" hint="Maximum 60,000 UTF-8 bytes. Leave the workspace, automation and version IDs unchanged."><textarea className="desk-input min-h-96 w-full font-mono text-sm" rows={20} maxLength={60000} spellCheck={false} value={local.draft.text} disabled={blocked} onChange={e => { if (local.draft) { setMessage(''); persist({ ...local, draft: { ...local.draft, text: e.target.value } }); } }} /></Field>
-      <div className="mt-3 flex flex-wrap gap-2"><button className="desk-btn" disabled={blocked} onClick={() => void run(validate)}>Validate draft</button><button className="desk-btn desk-btn--primary" disabled={blocked} onClick={() => void run(publish)}>Publish draft</button><button className="desk-btn" disabled={blocked} onClick={() => { if (window.confirm('Discard this tab’s draft? Saved versions are unchanged.')) persist({ ...local, draft: null }); }}>Discard draft</button></div>
+      <div className="mt-3 flex flex-wrap gap-2"><button className="desk-btn" disabled={busy} onClick={() => void run(compareDraft)}>Compare draft with current snapshot</button><button className="desk-btn" disabled={blocked} onClick={() => void run(validate)}>Validate draft</button><button className="desk-btn desk-btn--primary" disabled={blocked} onClick={() => void run(publish)}>Publish draft</button><button className="desk-btn" disabled={blocked} onClick={() => { if (window.confirm('Discard this tab’s draft? Saved versions are unchanged.')) persist({ ...local, draft: null }); }}>Discard draft</button></div>
       <p className="mt-3 text-sm">A conflict keeps your original draft and expected pointer. Inspect saved versions before acknowledging an unresolved write. Start a fresh draft explicitly when you are ready to rebase changes.</p>
     </Panel> : <Tag>No local draft</Tag>}
+    {draftComparison ? <AutomationVersionComparison report={draftComparison} /> : null}
     <OperatorRehearsalDesk scope={scope} admissionBlocked={busy || !!local.pending || !!storageError} candidate={rehearsalCandidate} />
   </div>;
 }
