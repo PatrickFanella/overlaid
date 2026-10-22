@@ -27,7 +27,7 @@ async function fixture(page: Page) {
     expect(route.request().method()).toBe('POST');
     expect(route.request().headers()['x-overlaid-csrf']).toBe('fixture-csrf');
     expect(route.request().headers()['x-overlay-operator-secret']).toBeUndefined();
-    expect(['list', 'list-versions', 'load', 'validate', 'publish', 'select', 'admit', 'lookup', 'rehearse', 'save-trace', 'load-trace']).toContain(operation);
+    expect(['list', 'list-versions', 'load', 'validate', 'publish', 'select', 'admit', 'lookup', 'rehearse', 'save-trace', 'load-trace', 'list-traces']).toContain(operation);
     if (operation === 'admit') {
       if (state.mode === 'admission-error') return route.fulfill({ status: 409, body: 'PRIVATE POLICY DETAIL' });
       const aid = body.automationId as string; const vid = body.expectedVersionId as string; const request = body.requestId as string;
@@ -39,10 +39,17 @@ async function fixture(page: Page) {
       if (state.mode === 'lost-run') return route.abort();
       return route.fulfill({ json: state.mode === 'malformed-run' ? { ...run, runId: 'f'.repeat(64) } : run });
     }
-    if (['lookup', 'rehearse', 'save-trace', 'load-trace'].includes(operation)) {
+    if (['lookup', 'rehearse', 'save-trace', 'load-trace', 'list-traces'].includes(operation)) {
       const run = runs.get(body.requestId as string);
       if (!run || state.mode === 'purged-run') return route.fulfill({ status: 404, body: 'PRIVATE PURGED INPUT' });
       if (operation === 'lookup') return route.fulfill({ json: { ...run, unchanged: true } });
+      if (operation === 'list-traces') {
+        const items = [...traces.values()].map(raw => {
+          const r = raw as { document: { runId: string; id: string; versionId: string; mode: string }; digest: string; createdAt: string };
+          return { ...r, document: r.document };
+        }).filter(r => r.document.runId === run.runId).map(r => ({ traceId: r.document.id, versionId: r.document.versionId, mode: r.document.mode, digest: r.digest, createdAt: r.createdAt })).sort((a, b) => a.createdAt === b.createdAt ? b.traceId.localeCompare(a.traceId) : b.createdAt.localeCompare(a.createdAt));
+        return route.fulfill({ json: { run: { ...run, unchanged: true }, traces: state.mode === 'malformed-catalogue' ? [...items, ...items] : items } });
+      }
       if (operation === 'load-trace') {
         const trace = traces.get(body.traceId as string);
         return trace && state.mode !== 'purged-trace' ? route.fulfill({ json: trace }) : route.fulfill({ status: 404 });
@@ -521,4 +528,130 @@ test('saved current-config metadata keeps its selected graph and refuses malform
   expect(state.operations.filter(x => x.operation === 'save-trace')).toHaveLength(1);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: '/tmp/overlaid-trace-desk-error-desktop.png', fullPage: true });
+});
+
+test('history opens original and current snapshots through reads without changing recovery handles', async ({ page }) => {
+  const state = await fixture(page);
+  await rehearseForTrace(page);
+  const history = page.getByRole('region', { name: 'Original occurrence trace history', exact: true });
+  await history.getByRole('button', { name: 'Refresh original trace history' }).click();
+  await expect(history).toContainText('No saved traces for this original occurrence');
+  await page.getByRole('button', { name: 'Save rehearsal metadata trace' }).click();
+  await expect(page.getByRole('region', { name: 'Saved rehearsal trace', exact: true }).getByText('Saved metadata verified', { exact: true })).toBeVisible();
+  page.on('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Acknowledge and clear trace handle', exact: true }).click();
+  state.chooseCurrent(older);
+  await page.getByRole('button', { name: 'Rehearse current configuration' }).click();
+  await expect(page.getByRole('region', { name: 'Retained rehearsal report' })).toContainText('blocked');
+  state.mode = 'lost-trace';
+  await page.getByRole('button', { name: 'Save rehearsal metadata trace' }).click();
+  await expect(page.getByRole('region', { name: 'Saved rehearsal trace', exact: true }).getByRole('alert')).toBeVisible();
+  state.chooseCurrent(version);
+  await page.reload();
+  await expect(page.getByRole('button', { name: automation, exact: true })).toBeEnabled();
+  const savedStorage = await page.evaluate(() => Object.keys(sessionStorage).filter(k => k.startsWith('overlaid.automation-version-desk')).map(k => [k, sessionStorage.getItem(k)]));
+  const before = state.operations.length;
+  await history.getByRole('button', { name: 'Refresh original trace history' }).click();
+  const rows = history.getByRole('button', { name: /^Open saved trace / });
+  await expect(rows).toHaveCount(2);
+  for (let i = 0; i < 2; i++) {
+    await rows.nth(i).focus(); await page.keyboard.press('Enter');
+    await expect(history.getByRole('region', { name: 'Verified saved trace' })).toBeVisible();
+    await expect(history).not.toContainText('Fixture version text');
+    await expect(history).not.toContainText('$(user)');
+  }
+  expect(state.operations.slice(before).map(x => x.operation)).toEqual(['list-traces', 'load-trace', 'load-trace']);
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(k => k.startsWith('overlaid.automation-version-desk')).map(k => [k, sessionStorage.getItem(k)]))).toEqual(savedStorage);
+  await expect(page.getByText('Outcome unverified; check original saved trace', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save rehearsal metadata trace' })).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: '/tmp/overlaid-trace-history-narrow.png', fullPage: true });
+  await history.screenshot({ path: '/tmp/overlaid-trace-history-panel.png' });
+  state.mode = 'purged-trace';
+  await rows.first().click();
+  await expect(history.getByRole('alert')).toContainText('(404)');
+  await expect(history.getByRole('region', { name: 'Verified saved trace' })).toHaveCount(0);
+  state.mode = 'malformed-catalogue';
+  await history.getByRole('button', { name: 'Refresh original trace history' }).click();
+  await expect(history.getByRole('alert')).toContainText('Invalid saved trace catalogue');
+  await expect(rows).toHaveCount(0);
+  state.mode = 'purged-run';
+  await history.getByRole('button', { name: 'Refresh original trace history' }).click();
+  await expect(history.getByRole('alert')).toContainText('(404)');
+  expect(state.operations.filter(x => x.operation === 'save-trace')).toHaveLength(2);
+  expect(state.operations.filter(x => x.operation === 'admit')).toHaveLength(1);
+});
+
+test('history rejects malformed loaded bodies and clears on reload and source departure', async ({ page }) => {
+  const state = await fixture(page);
+  await rehearseForTrace(page);
+  await page.getByRole('button', { name: 'Save rehearsal metadata trace' }).click();
+  await expect(page.getByRole('region', { name: 'Saved rehearsal trace', exact: true }).getByText('Saved metadata verified', { exact: true })).toBeVisible();
+  const history = page.getByRole('region', { name: 'Original occurrence trace history', exact: true });
+  await history.getByRole('button', { name: 'Refresh original trace history' }).click();
+  await expect(history.getByRole('button', { name: /^Open saved trace / })).toHaveCount(1);
+  await page.route('**/automations/load-trace', route => route.fulfill({ json: { document: { privateText: 'PRIVATE WRONG BODY' } } }));
+  await history.getByRole('button', { name: /^Open saved trace / }).click();
+  await expect(history.getByRole('alert')).toBeVisible();
+  await expect(history).not.toContainText('PRIVATE WRONG BODY');
+  await expect(history.getByRole('region', { name: 'Verified saved trace' })).toHaveCount(0);
+  await page.reload();
+  await expect(history.getByRole('button', { name: /^Open saved trace / })).toHaveCount(0);
+  page.on('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Acknowledge and clear trace handle', exact: true }).click();
+  await history.getByRole('button', { name: 'Refresh original trace history' }).click();
+  await expect(history.getByRole('button', { name: /^Open saved trace / })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Acknowledge and clear rehearsal intent', exact: true }).click();
+  await expect(history.getByRole('button', { name: 'Refresh original trace history' })).toBeDisabled();
+  await expect(history.getByRole('button', { name: /^Open saved trace / })).toHaveCount(0);
+  expect(state.operations.filter(x => x.operation === 'save-trace')).toHaveLength(1);
+});
+
+for (const operation of ['list-traces', 'load-trace']) test(`late history ${operation} cannot repaint another workspace`, async ({ page }) => {
+  const state = await fixture(page);
+  await rehearseForTrace(page);
+  await page.getByRole('button', { name: 'Save rehearsal metadata trace' }).click();
+  await expect(page.getByRole('region', { name: 'Saved rehearsal trace', exact: true }).getByText('Saved metadata verified', { exact: true })).toBeVisible();
+  const history = page.getByRole('region', { name: 'Original occurrence trace history', exact: true });
+  if (operation === 'load-trace') {
+    await history.getByRole('button', { name: 'Refresh original trace history' }).click();
+    await expect(history.getByRole('button', { name: /^Open saved trace / })).toHaveCount(1);
+  }
+  let entered = false; let release!: () => void;
+  const barrier = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/automations/${operation}`, async route => { entered = true; await barrier; await route.fallback().catch(() => {}); });
+  await history.getByRole('button', { name: operation === 'list-traces' ? 'Refresh original trace history' : /^Open saved trace / }).click();
+  await expect.poll(() => entered).toBe(true);
+  state.workspace = actor;
+  await page.goto('/dashboard/automations');
+  await expect(page.getByRole('button', { name: 'New automation draft' })).toBeEnabled();
+  release();
+  await expect(history.getByRole('button', { name: /^Open saved trace / })).toHaveCount(0);
+  await expect(history.getByRole('region', { name: 'Verified saved trace' })).toHaveCount(0);
+});
+
+test('history keeps the recovery handle source when a newer rehearsal occurrence is admitted', async ({ page }) => {
+  const state = await fixture(page);
+  await rehearseForTrace(page);
+  const original = state.operations.find(x => x.operation === 'admit')!.body.requestId;
+  state.mode = 'lost-trace';
+  await page.getByRole('button', { name: 'Save rehearsal metadata trace' }).click();
+  await expect(page.getByRole('region', { name: 'Saved rehearsal trace', exact: true }).getByRole('alert')).toBeVisible();
+  page.on('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Acknowledge and clear rehearsal intent', exact: true }).click();
+  state.mode = 'ok';
+  await page.getByRole('button', { name: 'Prepare rehearsal occurrence' }).click();
+  await page.getByRole('button', { name: 'Admit occurrence metadata' }).click();
+  await expect(page.getByText('Retained metadata accepted · no execution')).toBeVisible();
+  const admissions = state.operations.filter(x => x.operation === 'admit');
+  expect(admissions).toHaveLength(2);
+  expect(admissions[1].body.requestId).not.toBe(original);
+  const history = page.getByRole('region', { name: 'Original occurrence trace history', exact: true });
+  await expect(history).toContainText(`History request: ${original}`);
+  await history.getByRole('button', { name: 'Refresh original trace history' }).click();
+  await expect(history.getByRole('button', { name: /^Open saved trace / })).toHaveCount(1);
+  expect(state.operations.filter(x => x.operation === 'list-traces').at(-1)!.body.requestId).toBe(original);
+  await expect(page.getByText('Outcome unverified; check original saved trace', { exact: true })).toBeVisible();
+  expect(state.operations.filter(x => x.operation === 'save-trace')).toHaveLength(1);
 });

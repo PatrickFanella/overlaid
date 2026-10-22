@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { versionRequest, type VersionScope } from '../../lib/automationVersions';
 import { decodeOperatorRun, type OperatorRehearsal, type OperatorRun, type RehearsalIntent } from '../../lib/operatorRehearsal';
 import { decodeSavedOperatorTrace, decodeTraceReference, traceStorageKey, type SavedOperatorTrace, type TraceReference } from '../../lib/operatorTraces';
-import { MetadataTraceSteps } from './MetadataTraceSteps';
+import { SavedTraceSummary } from './SavedTraceSummary';
+import { OperatorTraceHistory } from './OperatorTraceHistory';
 import { Empty, KeyValues, Notice } from './ui';
 
 export function OperatorTraceDesk({ scope, source, run, report, blocked }: { scope: VersionScope; source: RehearsalIntent | null; run: OperatorRun | null; report: OperatorRehearsal | null; blocked: boolean }) {
@@ -62,16 +63,6 @@ export function OperatorTraceDesk({ scope, source, run, report, blocked }: { sco
       ['Original request', reference.source.requestId], ['Original trace ID', reference.traceId], ['Trace mode', reference.mode], ['Trace version', reference.versionId], ['Tab trace state', saved ? 'Saved metadata verified' : 'Outcome unverified; check original saved trace'],
     ]} /></div><div className="flex flex-wrap gap-2"><button className="desk-btn" disabled={busy} onClick={() => void perform(check)}>Check original saved trace</button><button className="desk-btn" disabled={busy} onClick={clear}>Acknowledge and clear trace handle</button></div><p className="text-sm">This tab retains one original trace handle, independently of the currently loaded version or rehearsal. Checks use only original-occurrence lookup and trace loading. Errors never repeat the save. Clearing affects local bookkeeping only; retain the IDs before clearing an unresolved handle.</p></> : <Empty>Rehearse an accepted occurrence to choose a trace to save. Existing saved handles can be checked independently after reload.</Empty>}
     {saved ? <SavedTraceSummary trace={saved} /> : null}
-  </section>;
-}
-
-export function SavedTraceSummary({ trace }: { trace: SavedOperatorTrace }) {
-  return <section aria-label="Verified saved trace" className="grid min-w-0 gap-3">
-    <Notice role="status">Saved metadata trace: {trace.status} · {trace.reason}. This is the stored snapshot; it was not re-evaluated or executed by this read.</Notice>
-    <div className="break-all"><KeyValues items={[
-      ['Stored trace digest', trace.digest], ['Saved at', trace.createdAt], ['Original run', trace.runId], ['Trace ID', trace.id], ['Mode', trace.mode], ['Selected version', trace.versionId], ['Original graph', trace.originalGraphDigest], ['Trace graph', trace.graphDigest], ['Capture digest', trace.captureDigest], ['Original clock', trace.clock],
-    ]} /></div>
-    <p className="text-sm">Format 1 / capture 1: empty facts and seed zero as a format placeholder. This metadata contains no action arguments or delivery receipts.</p>
-    <MetadataTraceSteps steps={trace.steps} droppedSteps={trace.droppedSteps} />
+    <OperatorTraceHistory key={JSON.stringify(reference?.source || (source?.phase === 'submitted' ? source : null))} scope={scope} source={reference?.source || (source?.phase === 'submitted' ? source : null)} />
   </section>;
 }
