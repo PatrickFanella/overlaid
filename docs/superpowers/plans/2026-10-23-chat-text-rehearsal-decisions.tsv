@@ -1,0 +1,7 @@
+decision	evidence	implementation	verification
+source	flow reports and variable captures were independent pure values	regenerate pinned flow; require explicit syntax2 and immutable supplied snapshot	reconstruction mode drift and forged-report-free API checks
+capture	operator source seed0 is a format placeholder	optional explicit clock/seed must match; missing remains unavailable	fingerprint availability UTC offsets time/random and mismatch tests
+shape	only chat.send single text has an unthreaded payload shape	reject all other capabilities and extra/missing args; reject diagnostic prefixes	mixed action unsupported prefix loop/preset/stop tests
+bounds	general renderer allows fallback and8192byte outputs	chat preparation refuses diagnostics;500runes100total resolutions64KiB output1second	exact and overflow rune resolution byte plus cancellation checks
+identity	future ledger must recheck trusted source/current authority	private versioned snapshot flow/proposal hashes; no ledger/permission claim	immutable canonical capture and repeat sequence identity tests
+remaining	E4 still needs trusted capture and retained effect bridge	unregistered pure composition; no SQL/pool/provider/source-format activation	README status runbook roadmap and import scan

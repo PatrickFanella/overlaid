@@ -1,6 +1,9 @@
 package variables
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
@@ -47,6 +50,7 @@ type SnapshotInput struct {
 // Snapshot owns private copies. Its zero value is invalid. Construction grants
 // no provider access, current permission or effect authorization.
 type Snapshot struct {
+	fingerprint                          string
 	values                               map[string]Value
 	definitions                          map[string]Definition
 	calls                                map[string]Value
@@ -144,6 +148,20 @@ func NewSnapshot(input SnapshotInput) (Snapshot, error) {
 	if query := s.values["query"]; query.Available {
 		s.arguments = strings.Fields(query.Text)
 	}
+	raw, err := json.Marshal(struct {
+		Values                               map[string]Value
+		Definitions                          map[string]Definition
+		Calls                                map[string]Value
+		Clock                                time.Time
+		Seed                                 uint64
+		HasClock, HasSeed                    bool
+		UnknownFallback, UnavailableFallback string
+	}{s.values, s.definitions, s.calls, s.clock, s.seed, s.hasClock, s.hasSeed, s.unknownFallback, s.unavailableFallback})
+	if err != nil {
+		return Snapshot{}, ErrSnapshot
+	}
+	sum := sha256.Sum256(append([]byte("overlaid.variables.snapshot.v1\x00"), raw...))
+	s.fingerprint = hex.EncodeToString(sum[:])
 	s.valid = true
 	return s, nil
 }
@@ -174,4 +192,14 @@ func callKey(name string, args []string) string {
 		b.WriteString(arg)
 	}
 	return b.String()
+}
+
+// Fingerprint identifies this private immutable capture, including availability
+// and explicit clock/seed presence. It proves neither provenance nor authority.
+func (s Snapshot) Fingerprint() string { return s.fingerprint }
+
+// MatchesClockSeed rejects disagreement in explicitly captured values. Missing
+// clock/seed remain unavailable; this method never supplies or invents either.
+func (s Snapshot) MatchesClockSeed(clock time.Time, seed uint64) bool {
+	return s.valid && (!s.hasClock || s.clock.Equal(clock)) && (!s.hasSeed || s.seed == seed)
 }
