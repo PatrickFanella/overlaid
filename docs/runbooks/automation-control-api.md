@@ -25,6 +25,7 @@ Bodies are limited to 65,536 bytes for the whole JSON request, with unknown fiel
 | `admit` | `requestId`, `automationId`, `expectedVersionId` | Original run/occurrence/version/graph identity, creation/deadline and `state: admitted_metadata`. This creates the bounded run/cooldown record; it queues no effect. |
 | `lookup` | `requestId` | Original initiating actor's retained run metadata. Missing/purged input creates nothing. |
 | `rehearse` | `requestId`, `mode` | Capture version, selected version ID, original run and bounded private rehearsal report/proposals. |
+| `rehearse-chat-text` | `requestId`, `mode`, `expectedVersionId`, `syntaxVersion: 2` | Original run, exact selected version and private bounded rendered chat text from the retained source clock. No saved text or delivery. |
 | `save-trace` | `requestId`, `mode`, `expectedVersionId` | Canonical metadata `document`, digest, original trace save time and `unchanged`. No proposals are persisted. |
 | `list-traces` | `requestId` | Original run receipt and bounded saved trace ID/version/mode/digest/time summaries. No trace bodies. |
 | `load-trace` | `requestId`, `traceId` | Saved canonical metadata `document`, digest and original save time, without re-evaluation. |
@@ -63,7 +64,30 @@ Use the authenticated account API to find the intended workspace and current ses
 }
 ```
 
-Replace the example tenant with the authorized route workspace and choose actual immutable IDs. Send the document to `validate`, then `publish` when intentionally saving it. Persist a separate request UUID before calling `admit` with the returned automation/version IDs. Use that exact request UUID for `lookup` and `rehearse`. Save a trace deliberately with the reported selected version, then use its trace ID for `load-trace`. The example's `$(user)` stays opaque: variable rendering and message delivery are unfinished work.
+Replace the example tenant with the authorized route workspace and choose actual immutable IDs. Send the document to `validate`, then `publish` when intentionally saving it. Persist a separate request UUID before calling `admit` with the returned automation/version IDs. Use that exact request UUID for `lookup` and `rehearse`. Save a trace deliberately with the reported selected version, then use its trace ID for `load-trace`. The example's `$(user)` stays opaque in `rehearse` and refuses as unavailable in the separate `rehearse-chat-text` read. This operator source has no captured user. Message delivery remains unfinished.
+
+## Rehearse chat text from the original operator clock
+
+[Issue #313](https://git.subcult.tv/subculture-collective/overlaid/issues/313) adds `rehearse-chat-text` as a separate read-only operation. Supply the original request UUID, explicit `reproduce` or `current_config` mode, exact expected selected version UUID and `syntaxVersion: 2`. The store authenticates the initiating account, revalidates the original run and complete pinned graph even in current-config mode, and retains the existing tenant/lifecycle fences. A moved selected version returns 409 `automation_version_conflict`; the server never silently retargets the request. The dashboard does not yet expose this operation.
+
+Capture format 1 remains unchanged. The server creates a private immutable variable snapshot from the original occurrence's database-created clock only. `$(time)` renders that instant in UTC RFC 3339 with original fractional precision, including when the source deadline has expired. It does not read the current wall clock. There are no captured user, query, login, channel, command, now-playing, custom-call or provider values. No seed is supplied: the flow format's zero placeholder is not historical randomness. References to unavailable values, including random choices, refuse the entire text report. No live resolver or snapshot fallback supplies uncaptured values. Explicit authored positional fallbacks retain the variable language's lazy semantics. Literal text and captured time remain subject to the [pure renderer's bounds](engine-chat-text-rehearsal.md).
+
+For example, after explicitly admitting a saved dashboard version whose single `chat.send` text is `Prepared at $(time)`, send:
+
+```json
+{
+  "requestId": "99999999-3333-4333-8333-333333333333",
+  "mode": "reproduce",
+  "expectedVersionId": "33333333-3333-4333-8333-333333333333",
+  "syntaxVersion": 2
+}
+```
+
+The response has `captureVersion: 1`, `syntaxVersion: 2`, `selectedVersionId`, the original unchanged `run`, `availableInputs: ["time"]` and `chatText`. That private report contains `id`, `flowId`, `mode`, `graphDigest`, `captureDigest`, `variableFingerprint` and `proposals`. Each proposal has `id`, `sequence`, `automationId`, `versionId`, `nodeId` and `text`. The original run version remains separate from the selected current version. Report/proposal hashes identify rehearsal, not delivery, effect admission or replay permission.
+
+Unsupported/blocked flow or action shapes return 409 `automation_chat_text_unsupported`; unavailable render inputs return 409 `automation_chat_text_unavailable`; text or aggregate limits return 409 `automation_chat_text_limited`; malformed syntax or empty/invalid text returns 400 `automation_chat_text_invalid`. Errors contain only a fixed code and no partial private output. Missing syntax/expected version or execute mode returns 400. Unknown body fields, including captures, clocks, seeds, graphs and actors, are rejected. The standard authentication, no-store and cancellation rules apply.
+
+This read requires no controller ownership, makes no source/budget/audit/trace/job writes and opens no additional pool. It cannot create a missing/purged occurrence or renew a deadline. Existing `rehearse`, saved trace bodies/digests and browser codecs remain unchanged. Trusted provider/event captures, persisted rendered text, retained effect admission and continuations require separate work under #25.
 
 ## Dashboard version desk
 

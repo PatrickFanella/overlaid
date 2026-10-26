@@ -200,7 +200,7 @@ func TestAutomationControlAuthenticationScopeAndStrictInput(t *testing.T) {
 	automationControlObject(t, automationControlPost(t, app, a, a.tenant, "validate", map[string]any{"document": d}), 503)
 }
 func TestAutomationControlSessionAndApplicationCancellation(t *testing.T) {
-	for _, test := range []struct{ reason, operation string }{{"logout", "publish"}, {"shutdown", "publish"}, {"logout", "list"}, {"shutdown", "list"}, {"logout", "list-versions"}, {"shutdown", "list-versions"}} {
+	for _, test := range []struct{ reason, operation string }{{"logout", "publish"}, {"shutdown", "publish"}, {"logout", "list"}, {"shutdown", "list"}, {"logout", "list-versions"}, {"shutdown", "list-versions"}, {"logout", "rehearse-chat-text"}, {"shutdown", "rehearse-chat-text"}} {
 		t.Run(test.reason+"/"+test.operation, func(t *testing.T) {
 			app, a, _, f := applicationFixture(t)
 			ctx := t.Context()
@@ -211,6 +211,11 @@ func TestAutomationControlSessionAndApplicationCancellation(t *testing.T) {
 				body["document"] = d
 			case "list-versions":
 				body["automationId"] = d.AutomationID
+			case "rehearse-chat-text":
+				body["requestId"] = "99999999-3333-4333-8333-333333333333"
+				body["mode"] = "reproduce"
+				body["expectedVersionId"] = d.VersionID
+				body["syntaxVersion"] = 2
 			}
 			raw, _ := json.Marshal(body)
 			held, err := f.Admin.BeginTx(ctx, nil)

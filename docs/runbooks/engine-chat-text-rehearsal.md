@@ -1,6 +1,6 @@
 # Captured chat-text rehearsal
 
-[Issue #311](https://git.subcult.tv/subculture-collective/overlaid/issues/311) adds explicit `engine.RehearseChatText` as a pure composition of pinned-graph flow rehearsal and captured syntax-2 variable rendering. It prepares private diagnostic text for future bridge work. No application caller, HTTP route, store, provider adapter, queue or effect executor selects it.
+[Issue #311](https://git.subcult.tv/subculture-collective/overlaid/issues/311) adds explicit `engine.RehearseChatText` as a pure composition of pinned-graph flow rehearsal and captured syntax-2 variable rendering. It prepares private diagnostic text for future bridge work. The separate [source-bound operator API](automation-control-api.md#rehearse-chat-text-from-the-original-operator-clock) now consumes it with the original database clock only. No provider adapter, queue or effect executor selects it.
 
 ## Supplied input and identity
 
@@ -24,4 +24,4 @@ Every message must be valid UTF-8, contain no NUL, have non-whitespace text and 
 
 Unit and race fixtures cover deterministic reconstruction, capture fingerprint/availability/offsets, explicit time/random, literal variable results, repeated loop/preset identities, stop and unsupported prefixes, argument refusal, exact/overflow rune and resolution bounds, aggregate UTF-8 output and canceled/expired contexts. `FuzzChatTextCapture` exercises bounded arbitrary templates/captured values for deterministic results and no private partial output on failure. Run `make verify` and `go test -race ./internal/engine ./internal/variables` from `backend` for the latter command.
 
-This unused pure API changes no schema, role, pool, worker or runtime concurrency path, so its package races remain separate from the prior disposable database qualification. No real messages or provider requests are sent. Retained source capture, permission/entitlement checks, atomic ledger/job admission, one-use claims, continuations, dispatcher migration and live acceptance remain unfinished under [Phase #25](https://git.subcult.tv/subculture-collective/overlaid/issues/25). Existing dashboard/operator rehearsal and saved trace codecs remain unchanged and opaque.
+The pure API changes no schema, role, pool, worker or runtime concurrency path. Its source-bound store/HTTP consumer separately runs the disposable PostgreSQL gate. No real messages or provider requests are sent. Retained source capture, permission/entitlement checks, atomic ledger/job admission, one-use claims, continuations, dispatcher migration and live acceptance remain unfinished under [Phase #25](https://git.subcult.tv/subculture-collective/overlaid/issues/25). Existing dashboard/operator rehearsal and saved trace codecs remain unchanged and opaque.
