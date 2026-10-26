@@ -247,6 +247,27 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 			proposals = append(proposals, map[string]any{"sequence": p.Sequence, "automationId": p.AutomationID, "versionId": p.VersionID, "nodeId": p.NodeID, "declaredCapability": p.Capability, "opaqueArguments": p.Arguments})
 		}
 		writeJSON(w, map[string]any{"captureVersion": result.CaptureVersion, "selectedVersionId": result.SelectedVersionID, "run": automationRunJSON(result.Run), "rehearsal": map[string]any{"id": f.ID, "mode": f.Mode, "originalGraphDigest": f.OriginalGraphDigest, "graphDigest": f.GraphDigest, "captureDigest": f.CaptureDigest, "clock": f.Clock, "seed": f.Seed, "status": f.Status, "reason": f.Reason, "steps": steps, "droppedSteps": f.DroppedSteps, "proposals": proposals}})
+	case "rehearse-chat-text":
+		var body struct {
+			RequestID         string      `json:"requestId"`
+			Mode              engine.Mode `json:"mode"`
+			ExpectedVersionID string      `json:"expectedVersionId"`
+			SyntaxVersion     int         `json:"syntaxVersion"`
+		}
+		if !decodeControl(w, r, &body) {
+			return
+		}
+		result, e := store.RehearseOperatorChatText(ctx, actor, body.RequestID, body.Mode, body.ExpectedVersionID, body.SyntaxVersion)
+		if e != nil {
+			automationControlError(w, e)
+			return
+		}
+		text := result.Text
+		proposals := make([]map[string]any, 0, len(text.Proposals))
+		for _, p := range text.Proposals {
+			proposals = append(proposals, map[string]any{"id": p.ID, "sequence": p.Sequence, "automationId": p.AutomationID, "versionId": p.VersionID, "nodeId": p.NodeID, "text": p.Text})
+		}
+		writeJSON(w, map[string]any{"captureVersion": result.CaptureVersion, "syntaxVersion": result.SyntaxVersion, "selectedVersionId": result.SelectedVersionID, "run": automationRunJSON(result.Run), "availableInputs": []string{"time"}, "chatText": map[string]any{"id": text.ID, "flowId": text.FlowID, "mode": text.Mode, "graphDigest": text.GraphDigest, "captureDigest": text.CaptureDigest, "variableFingerprint": text.VariableFingerprint, "proposals": proposals}})
 	case "list-traces":
 		var body struct {
 			RequestID string `json:"requestId"`
@@ -317,6 +338,14 @@ func automationControlError(w http.ResponseWriter, err error) {
 		status, code = 400, "invalid_document"
 	case errors.Is(err, tenancy.ErrAutomationInvalid):
 		status, code = 400, "invalid_automation_request"
+	case errors.Is(err, engine.ErrChatText):
+		status, code = 400, "automation_chat_text_invalid"
+	case errors.Is(err, engine.ErrChatTextUnsupported):
+		status, code = 409, "automation_chat_text_unsupported"
+	case errors.Is(err, engine.ErrChatTextUnavailable):
+		status, code = 409, "automation_chat_text_unavailable"
+	case errors.Is(err, engine.ErrChatTextLimit):
+		status, code = 409, "automation_chat_text_limited"
 	case errors.Is(err, tenancy.ErrAutomationConflict):
 		status, code = 409, "automation_version_conflict"
 	case errors.Is(err, tenancy.ErrAutomationPolicy):

@@ -61,40 +61,50 @@ func (s *AutomationStore) RehearseOperator(ctx context.Context, actor, request s
 	return out, nil
 }
 func (s *AutomationStore) rehearseOperatorTx(ctx context.Context, tx *tenantdb.Tx, run OperatorRun, mode engine.Mode) (out OperatorRehearsal, failure error) {
-	// Validate the original graph even in current-config mode: original capture
-	// provenance cannot be established by following today's current pointer.
-	original, err := operatorRunGraph(ctx, tx, run)
+	selected, input, err := s.operatorRehearsalInput(ctx, tx, run, mode)
 	if err != nil {
 		return out, err
 	}
-	selected := original
-	if mode == engine.ModeCurrentConfig {
-		current, e := currentAutomation(ctx, tx, run.AutomationID)
-		if e != nil {
-			return out, e
-		}
-		v, _, e := storedAutomation(ctx, tx, run.AutomationID, current)
-		if e != nil {
-			return out, e
-		}
-		if v.Document().Trigger.Kind != "dashboard" {
-			return out, ErrAutomationPolicy
-		}
-		selected, e = loadAutomationGraph(ctx, tx, v)
-		if e != nil {
-			return out, e
-		}
-	}
-	facts, err := engine.NewFacts(s.db.TenantID(), nil)
-	if err != nil {
-		return out, ErrAutomationInvalid
-	}
-	flow, err := engine.RehearseFlow(ctx, selected, engine.RehearsalInput{OccurrenceID: run.OccurrenceID, OriginalGraphDigest: original.Digest(), Mode: mode, Clock: run.CreatedAt, Seed: 0, Facts: facts, TraceLimit: engine.MaxSteps})
+	flow, err := engine.RehearseFlow(ctx, selected, input)
 	if err != nil {
 		return out, err
 	}
 	run.Unchanged = true
 	return OperatorRehearsal{CaptureVersion: 1, SelectedVersionID: selected.Root().Document().VersionID, Run: run, Flow: flow}, nil
+}
+
+// operatorRehearsalInput reconstructs the same source-bound graph/capture for
+// opaque flow and chat-text reads. It never fills absent historical input.
+func (s *AutomationStore) operatorRehearsalInput(ctx context.Context, tx *tenantdb.Tx, run OperatorRun, mode engine.Mode) (engine.PinnedGraph, engine.RehearsalInput, error) {
+	// Validate the original graph even in current-config mode: original capture
+	// provenance cannot be established by following today's current pointer.
+	original, err := operatorRunGraph(ctx, tx, run)
+	if err != nil {
+		return engine.PinnedGraph{}, engine.RehearsalInput{}, err
+	}
+	selected := original
+	if mode == engine.ModeCurrentConfig {
+		current, e := currentAutomation(ctx, tx, run.AutomationID)
+		if e != nil {
+			return engine.PinnedGraph{}, engine.RehearsalInput{}, e
+		}
+		v, _, e := storedAutomation(ctx, tx, run.AutomationID, current)
+		if e != nil {
+			return engine.PinnedGraph{}, engine.RehearsalInput{}, e
+		}
+		if v.Document().Trigger.Kind != "dashboard" {
+			return engine.PinnedGraph{}, engine.RehearsalInput{}, ErrAutomationPolicy
+		}
+		selected, e = loadAutomationGraph(ctx, tx, v)
+		if e != nil {
+			return engine.PinnedGraph{}, engine.RehearsalInput{}, e
+		}
+	}
+	facts, err := engine.NewFacts(s.db.TenantID(), nil)
+	if err != nil {
+		return engine.PinnedGraph{}, engine.RehearsalInput{}, ErrAutomationInvalid
+	}
+	return selected, engine.RehearsalInput{OccurrenceID: run.OccurrenceID, OriginalGraphDigest: original.Digest(), Mode: mode, Clock: run.CreatedAt, Seed: 0, Facts: facts, TraceLimit: engine.MaxSteps}, nil
 }
 
 func operatorRunGraph(ctx context.Context, tx *tenantdb.Tx, run OperatorRun) (engine.PinnedGraph, error) {
