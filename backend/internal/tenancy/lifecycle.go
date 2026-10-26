@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_stream_dispatch_receipts", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources", "engine_automations", "engine_automation_versions", "engine_automation_presets", "engine_operator_occurrences", "engine_operator_runs", "engine_run_budgets", "engine_operator_rehearsals"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_stream_dispatch_receipts", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources", "engine_automations", "engine_automation_versions", "engine_automation_presets", "engine_operator_occurrences", "engine_operator_runs", "engine_run_budgets", "engine_operator_rehearsals", "engine_operator_chat_plans", "engine_operator_chat_plan_markers"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -138,6 +138,12 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 	bytes := 0
 	for _, table := range ProductTables {
 		query := `SELECT to_jsonb(row) FROM (SELECT * FROM ` + table + ` WHERE /*tenant:` + table + `*/ LIMIT 250001) row`
+		if table == "engine_operator_chat_plan_markers" {
+			query = `SELECT jsonb_build_object('sourceId',id,'runId',run_id,'preparedAt',prepared_at) FROM engine_operator_chat_plan_markers WHERE /*tenant:engine_operator_chat_plan_markers*/ LIMIT 10001`
+		}
+		if table == "engine_operator_chat_plans" {
+			query = `SELECT jsonb_build_object('sourceId',id,'runId',run_id,'automationId',automation_id,'versionId',version_id,'digest',digest,'effectCount',effect_count,'preparedAt',prepared_at,'deadline',deadline) FROM engine_operator_chat_plans WHERE /*tenant:engine_operator_chat_plans*/ LIMIT 10001`
+		}
 		if table == "engine_operator_rehearsals" {
 			query = `SELECT jsonb_build_object('traceId',id,'runId',run_id,'automationId',automation_id,'versionId',version_id,'digest',digest,'createdAt',created_at) FROM engine_operator_rehearsals WHERE /*tenant:engine_operator_rehearsals*/ LIMIT 10001`
 		}
