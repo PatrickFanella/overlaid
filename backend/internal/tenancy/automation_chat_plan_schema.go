@@ -9,7 +9,11 @@ func (s *AutomationStore) validateChatPlanStore(ctx context.Context) error {
 	if err := s.validateRuns(ctx); err != nil {
 		return err
 	}
-	for table, columns := range operatorChatPlanColumns {
+	return s.validateImmutableAutomationTables(ctx, operatorChatPlanColumns, operatorChatPlanConstraints)
+}
+
+func (s *AutomationStore) validateImmutableAutomationTables(ctx context.Context, tables map[string]map[string]string, constraints map[string]struct{ table, definition string }) error {
+	for table, columns := range tables {
 		var valid bool
 		types, _ := json.Marshal(columns)
 		err := s.db.QueryRowContext(ctx, `SELECT count(*)=$2 AND bool_and(attnotnull) AND jsonb_object_agg(attname,format_type(atttypid,atttypmod))=$3::jsonb FROM pg_attribute WHERE attrelid=to_regclass($1) AND attnum>0 AND NOT attisdropped`, table, len(columns), string(types)).Scan(&valid)
@@ -30,7 +34,7 @@ func (s *AutomationStore) validateChatPlanStore(ctx context.Context) error {
 			return automationSchemaError(ctx)
 		}
 	}
-	for name, c := range operatorChatPlanConstraints {
+	for name, c := range constraints {
 		var valid bool
 		err := s.db.QueryRowContext(ctx, `SELECT count(*)=1 FROM pg_constraint WHERE conrelid=to_regclass($1) AND conname=$2 AND convalidated AND NOT condeferrable AND pg_get_constraintdef(oid)=$3`, c.table, name, c.definition).Scan(&valid)
 		if err != nil || !valid {

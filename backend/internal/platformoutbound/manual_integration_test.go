@@ -313,13 +313,13 @@ func TestManualMigrationPreservesChatRowsAndJobs(t *testing.T) {
 	snapshot := func() string {
 		t.Helper()
 		var raw string
-		if err := f.Admin.QueryRow(`SELECT jsonb_agg(to_jsonb(a)-'manual_source_id' ORDER BY id)::text FROM platform_outbound_actions a`).Scan(&raw); err != nil {
+		if err := f.Admin.QueryRow(`SELECT jsonb_agg(to_jsonb(a)-'manual_source_id'-'engine_source_id' ORDER BY id)::text FROM platform_outbound_actions a`).Scan(&raw); err != nil {
 			t.Fatal(err)
 		}
 		return raw
 	}
 	before := snapshot()
-	if _, err := f.Admin.Exec(`DROP INDEX platform_outbound_one_manual; ALTER TABLE platform_outbound_actions DROP CONSTRAINT platform_outbound_source_kind; ALTER TABLE platform_outbound_actions DROP CONSTRAINT platform_outbound_manual_source; ALTER TABLE platform_outbound_actions DROP COLUMN manual_source_id; ALTER TABLE platform_outbound_actions ALTER COLUMN event_id SET NOT NULL; DROP TABLE platform_manual_sources; DELETE FROM overlaid_migrations WHERE name='0026_manual_outbound_sources.sql'`); err != nil {
+	if _, err := f.Admin.Exec(`DROP INDEX platform_outbound_one_manual; ALTER TABLE platform_outbound_actions DROP CONSTRAINT platform_outbound_source_v2; ALTER TABLE platform_outbound_actions DROP COLUMN engine_source_id; ALTER TABLE platform_outbound_actions DROP CONSTRAINT platform_outbound_manual_source; ALTER TABLE platform_outbound_actions DROP COLUMN manual_source_id; ALTER TABLE platform_outbound_actions ALTER COLUMN event_id SET NOT NULL; DROP TABLE platform_manual_sources; DELETE FROM overlaid_migrations WHERE name='0026_manual_outbound_sources.sql'`); err != nil {
 		t.Fatal(err)
 	}
 	_, file, _, _ := runtime.Caller(0)

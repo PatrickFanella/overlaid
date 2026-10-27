@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_stream_dispatch_receipts", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources", "engine_automations", "engine_automation_versions", "engine_automation_presets", "engine_operator_occurrences", "engine_operator_runs", "engine_run_budgets", "engine_operator_rehearsals", "engine_operator_chat_plans", "engine_operator_chat_plan_markers"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_stream_dispatch_receipts", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources", "engine_automations", "engine_automation_versions", "engine_automation_presets", "engine_operator_occurrences", "engine_operator_runs", "engine_run_budgets", "engine_operator_rehearsals", "engine_operator_chat_plans", "engine_operator_chat_plan_markers", "engine_operator_chat_admissions"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -138,6 +138,9 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 	bytes := 0
 	for _, table := range ProductTables {
 		query := `SELECT to_jsonb(row) FROM (SELECT * FROM ` + table + ` WHERE /*tenant:` + table + `*/ LIMIT 250001) row`
+		if table == "engine_operator_chat_admissions" {
+			query = `SELECT jsonb_build_object('sourceId',id,'admittedAt',admitted_at) FROM engine_operator_chat_admissions WHERE /*tenant:engine_operator_chat_admissions*/ LIMIT 10001`
+		}
 		if table == "engine_operator_chat_plan_markers" {
 			query = `SELECT jsonb_build_object('sourceId',id,'runId',run_id,'preparedAt',prepared_at) FROM engine_operator_chat_plan_markers WHERE /*tenant:engine_operator_chat_plan_markers*/ LIMIT 10001`
 		}
@@ -166,7 +169,7 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 			query = `SELECT jsonb_build_object('id',id,'provider',provider,'userId',provider_user_id,'login',login,'scopes',scopes,'revoked',revoked_at IS NOT NULL) FROM bot_accounts WHERE /*tenant:bot_accounts*/ LIMIT 250001`
 		}
 		if table == "platform_outbound_actions" {
-			query = `SELECT jsonb_build_object('actionId',id,'eventId',event_id,'manualSourceId',manual_source_id,'connectionId',connection_id,'state',state,'code',code,'providerMessageId',provider_message_id,'failure',failure,'retryAfter',retry_after_ns,'createdAt',created_at,'startedAt',started_at,'finishedAt',finished_at) FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ LIMIT 250001`
+			query = `SELECT jsonb_build_object('actionId',id,'eventId',event_id,'manualSourceId',manual_source_id,'engineSourceId',engine_source_id,'connectionId',connection_id,'state',state,'code',code,'providerMessageId',provider_message_id,'failure',failure,'retryAfter',retry_after_ns,'createdAt',created_at,'startedAt',started_at,'finishedAt',finished_at) FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ LIMIT 250001`
 		}
 		if table == "platform_moderation_sources" {
 			query = `SELECT jsonb_build_object('sourceId',id,'kind',kind,'actionCount',action_count,'createdAt',created_at,'deadline',deadline) FROM platform_moderation_sources WHERE /*tenant:platform_moderation_sources*/ LIMIT 250001`
