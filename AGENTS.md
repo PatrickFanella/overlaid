@@ -24,7 +24,7 @@ Run:
 make verify
 ```
 
-Use narrower commands only when an issue explicitly asks for a smaller check.
+Use narrower commands only when an issue explicitly asks for a smaller check. The application test pass and uncached PostgreSQL race pass each use a 15-minute per-package watchdog; the hosted verification job has a 35-minute total bound. These suite budgets do not change individual operation deadlines.
 
 Optional Postgres integration checks use `OVERLAID_TEST_DATABASE_URL` pointing to a disposable database. Fixtures must work without preloaded application tables, create/drop owned schemas, and initialize the shared `pgcrypto` extension in `public` through the serialized test helper.
 
