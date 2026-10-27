@@ -47,5 +47,8 @@ PY
 )
 export OVERLAID_TEST_DATABASE_URL="postgres://postgres:$fixture_password@$fixture_endpoint/overlaid_ci?sslmode=disable"
 make verify
-(cd backend && go test -race -count=1 ./...)
+# The HTTP package owns many independent schema fixtures. Its complete race
+# pass can exceed Go's default 10m package budget on a shared runner; individual
+# operation deadlines remain unchanged. Keep the package watchdog bounded.
+(cd backend && go test -timeout=15m -race -count=1 ./...)
 (cd backend/spikes/river && go test -race -count=1 ./...)

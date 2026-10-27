@@ -1,0 +1,7 @@
+decision	reason	verification
+Use existing private canonical plan	No caller text or second renderer/dispatcher	Regeneration and corruption fixtures
+Effect ID is ledger action ID/key	Stable traversal identity across retries	Concurrent admission and exact job identities
+Immutable metadata admission marker	Do not recreate deleted suffix/jobs	Partial deletion refusal and lifecycle tests
+Third source kind and exact composite FK	Do not fabricate viewer/Newsroom inputs or renew deadlines	Schema drift and executor fixtures
+Remove old source constraint name	Refuse incompatible older startup	Migration/startup compatibility checks
+Internal writer only	Owned route and read-only outcome recovery remain separate	Production caller scan

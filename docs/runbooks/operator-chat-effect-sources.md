@@ -1,6 +1,6 @@
 # Retained operator chat-effect source plans
 
-[Issue #315](https://git.subcult.tv/subculture-collective/overlaid/issues/315) adds the first durable source contract for Phase #25's E4 chat bridge. `AutomationStore.PrepareOperatorChatPlan` retains one immutable private plan for an original operator run. `LookupOperatorChatPlan` validates that plan and returns metadata. These are explicit managed-store APIs; no HTTP route, dashboard control, startup writer, outbound action/job or sender selects them.
+[Issue #315](https://git.subcult.tv/subculture-collective/overlaid/issues/315) adds the first durable source contract for Phase #25's E4 chat bridge. `AutomationStore.PrepareOperatorChatPlan` retains one immutable private plan for an original operator run. `LookupOperatorChatPlan` validates that plan and returns metadata. These are explicit managed-store APIs; no HTTP route, dashboard control or startup writer selects them. The separate [atomic admission operation](operator-chat-admission.md) can enqueue a validated prepared plan through the existing ledger; preparation alone still creates no action or job.
 
 The source plan gives a later admission writer a stable run/step identity, original deadline and private text. Preparation grants no effect permission, pacing permit, claim, delivery guarantee or replay permission. The existing Newsroom manual-source kinds, chat source identities, opaque rehearsal, saved traces and dispatchers keep their current contracts.
 
