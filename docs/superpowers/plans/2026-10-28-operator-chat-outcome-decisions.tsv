@@ -1,0 +1,7 @@
+decision	reason	verification
+Original actor/request and reviewed digest only	Do not enumerate or retarget another intent	Actor/tenant/digest isolation fixtures
+Whole-plan canonical payload comparison	Missing/corrupt/extra outcomes stay unresolved	Refusal fixtures return zero result
+One SQL outcome statement	Consistent mutable snapshot without blocking claims	Mixed-state and existing executor fixtures
+Fixed metadata allowlist	Keep text/provider IDs/claim hashes private	Serialization and receipt vocabulary checks
+No repair or expiry on lookup	Read recovery cannot create effects or renew deadlines	DML-refusing triggers and expired pending fixture
+Reuse tenant/lifecycle read fences	Coordinate permission and private deletion	Cancellation/schema/grant/deletion fixtures
