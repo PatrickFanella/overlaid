@@ -618,3 +618,8 @@ Next: an explicitly owned controller/runtime boundary before HTTP/dashboard admi
 ## E4 account recovery transport
 
 [Issue #321](https://git.subcult.tv/subculture-collective/overlaid/issues/321) connects original-request admission lookup to the existing authenticated automation API. Strict requestId/digest decoding, session/Origin/CSRF/configure scope, bootstrap refusal and explicit no-store metadata projection preserve read-only recovery after controller loss. PostgreSQL fixtures cover prepared-but-unadmitted missing results, queued lookup, actor isolation, unknown fields and unchanged job/runtime counts. No browser or admission writer is activated. Next: owned controller/runtime delivery admission and scoped browser intent handling.
+
+
+## E4 owned admission boundary
+
+[Issue #323](https://git.subcult.tv/subculture-collective/overlaid/issues/323) adds the [explicit application admission operation](../../runbooks/operator-chat-admission.md#application-owned-admission), bound to the existing retained controller and exact already-live tenant runtime. Caller/app/tenant cancellation, a five-second operation bound, actual lock/role checks and stale/bootstrap/legacy/unready refusal precede the canonical store admission. Existing executor claims/provider authorization remain unchanged. No route, default startup activation, pool or dispatcher is added. Next: authenticated delivery transport and frozen browser intent recovery before UI activation. Phase #25 and full parity acceptance remain open.
