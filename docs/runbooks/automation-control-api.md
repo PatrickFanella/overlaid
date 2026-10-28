@@ -186,3 +186,7 @@ Disposable HTTP/store races exercise publish/admit/rehearse/save/load, duplicate
 Catalogue fixtures additionally cover empty results, deterministic timestamp ties, older current selection, load-by-discovered-ID, metadata allowlists, exact/overflow bounds, cross-tenant isolation, configure/revoked membership, grant drift, canceled lock waits and unchanged persisted state. HTTP discovery is exercised after actual controller ownership loss; it still creates no jobs or tenant runtimes.
 
 Trace-discovery fixtures cover empty results, original/current saved selections, timestamp ties, pointer changes, expired/purged sources, initiating-account/tenant/configure boundaries, metadata allowlists, exact/overflow bounds, unchanged persistence, active-pool grant drift and cancellation at the lifecycle lock. HTTP fixtures additionally exercise strict bodies and cookie/Origin/CSRF checks, actual controller loss and no runtime/job activation. These checks do not establish browser history selection or live provider acceptance.
+
+## Original chat admission recovery
+
+`lookup-chat-admission` reads an existing original request using `{ "requestId": "<original UUID>", "digest": "<reviewed plan digest>" }`. It uses the same session/configure/CSRF boundary and never performs admission. See [the recovery contract](operator-chat-admission.md#account-recovery-transport) for the fixed metadata response and missing/purged behavior. Sender/controller ownership is unnecessary for this read; delivery admission remains separate.
