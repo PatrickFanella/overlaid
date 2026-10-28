@@ -75,6 +75,10 @@ func TestOperatorChatAdmissionExistingExecutor(t *testing.T) {
 			}
 		}
 	}
+	status, err := store.LookupOperatorChatAdmission(t.Context(), owner, request, p.Digest)
+	if err != nil || len(status.Actions) != 1 || status.Actions[0].State != "delivered" || status.Actions[0].ActionID != args.ActionID {
+		t.Fatal(status, err)
+	}
 	if !found {
 		t.Fatal("missing engine receipt")
 	}
