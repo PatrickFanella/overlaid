@@ -239,3 +239,6 @@ Preserve atomic marker/plan insertion, per-run uniqueness, 64KiB bodies, min(sto
 
 
 Account POST `lookup-chat-admission` accepts only original requestId/reviewed digest under the existing session/Origin/CSRF/configure boundary. Preserve no-store, fixed explicit metadata/error projection, bootstrap refusal and controller-independent read recovery. It must never prepare/admit/repair/expire work, activate a runtime/sender or fall back to direct delivery. New delivery admission still requires owned controller/runtime checks and scoped unresolved intent handling.
+
+
+Explicit unregistered `Application.admitOperatorChatPlan` uses `operatorChatContext` to require retained ingestion/sending, an already-ready owner and exact live same-scope runtime. Preserve bootstrap/stale/deleting/unready refusal, authoritative controller and restricted-role validation, five-second caller/app/tenant cancellation and no new runtime/pool/fallback. Store authorization/source/target/limit/deadline and executor authorization/pacing/claims remain mandatory. No HTTP delivery or dashboard caller is selected by this helper; read-only recovery must remain owner-independent.
