@@ -211,6 +211,24 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		writeJSON(w, automationRunJSON(result))
+	case "lookup-chat-admission":
+		var body struct {
+			RequestID string `json:"requestId"`
+			Digest    string `json:"digest"`
+		}
+		if !decodeControl(w, r, &body) {
+			return
+		}
+		result, e := store.LookupOperatorChatAdmission(ctx, actor, body.RequestID, body.Digest)
+		if e != nil {
+			automationControlError(w, e)
+			return
+		}
+		actions := make([]map[string]any, 0, len(result.Actions))
+		for _, item := range result.Actions {
+			actions = append(actions, map[string]any{"actionId": item.ActionID, "sequence": item.Sequence, "state": item.State, "code": item.Code, "failure": item.Failure, "retryAfter": item.RetryAfter})
+		}
+		writeJSON(w, map[string]any{"sourceId": result.SourceID, "runId": result.RunID, "digest": result.Digest, "deadline": result.Deadline, "admittedAt": result.AdmittedAt, "actions": actions})
 	case "lookup":
 		var body struct {
 			RequestID string `json:"requestId"`
