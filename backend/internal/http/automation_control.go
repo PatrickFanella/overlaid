@@ -211,6 +211,36 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		writeJSON(w, automationRunJSON(result))
+	case "admit-chat-plan":
+		var body struct {
+			RequestID string `json:"requestId"`
+			Digest    string `json:"digest"`
+		}
+		if !decodeControl(w, r, &body) {
+			return
+		}
+		// Admission cannot create a runtime or choose a replacement owner.
+		a.mu.Lock()
+		current, exists := a.runtimes[tenant.ID]
+		var server *Server
+		if exists {
+			server = current.server
+		}
+		a.mu.Unlock()
+		if server == nil {
+			automationControlError(w, errAutomationWriterUnavailable)
+			return
+		}
+		result, e := a.admitOperatorChatPlan(ctx, server, actor, body.RequestID, body.Digest)
+		if e != nil {
+			automationControlError(w, e)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if result.Created {
+			w.WriteHeader(http.StatusAccepted)
+		}
+		writeJSON(w, map[string]any{"sourceId": result.SourceID, "actionIds": result.ActionIDs, "deadline": result.Deadline, "admittedAt": result.AdmittedAt, "created": result.Created, "state": "admitted_queued"})
 	case "lookup-chat-admission":
 		var body struct {
 			RequestID string `json:"requestId"`
@@ -370,6 +400,8 @@ func automationControlError(w http.ResponseWriter, err error) {
 		status, code = 409, "automation_policy_refused"
 	case errors.Is(err, tenancy.ErrAutomationCooldown):
 		status, code = 409, "automation_cooldown"
+	case errors.Is(err, tenancy.ErrAutomationPlanExpired):
+		status, code = 410, "automation_chat_plan_expired"
 	case errors.Is(err, tenancy.ErrAutomationPurged):
 		status, code = 410, "automation_run_purged"
 	case errors.Is(err, tenancy.ErrLimit), errors.Is(err, tenantdb.ErrLimit):
