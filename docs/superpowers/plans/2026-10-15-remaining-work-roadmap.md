@@ -623,3 +623,8 @@ Next: an explicitly owned controller/runtime boundary before HTTP/dashboard admi
 ## E4 owned admission boundary
 
 [Issue #323](https://git.subcult.tv/subculture-collective/overlaid/issues/323) adds the [explicit application admission operation](../../runbooks/operator-chat-admission.md#application-owned-admission), bound to the existing retained controller and exact already-live tenant runtime. Caller/app/tenant cancellation, a five-second operation bound, actual lock/role checks and stale/bootstrap/legacy/unready refusal precede the canonical store admission. Existing executor claims/provider authorization remain unchanged. No route, default startup activation, pool or dispatcher is added. Next: authenticated delivery transport and frozen browser intent recovery before UI activation. Phase #25 and full parity acceptance remain open.
+
+
+## E4 authenticated delivery admission
+
+[Issue #325](https://git.subcult.tv/subculture-collective/overlaid/issues/325) adds [account delivery transport](../../runbooks/operator-chat-admission.md#authenticated-delivery-admission) for already prepared original request/digest plans. Strict shared authentication/CSRF/configure scope and exact existing runtime selection invoke the retained owner without runtime creation or fallback. Fixed no-store 202/new or 200/no-op metadata acknowledges admission only; independent lookup resolves current outcomes and never admits on missing data. PostgreSQL transport races cover authority, strict input, owner/runtime refusal, stable identities and recovery. Next: plan-preparation transport and browser scoped frozen intents; full phase/parity acceptance remains open.

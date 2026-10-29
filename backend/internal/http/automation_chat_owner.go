@@ -40,7 +40,7 @@ func (a *Application) operatorChatContext(ctx context.Context, s *Server) (conte
 	return bounded, release, nil
 }
 
-// admitOperatorChatPlan is an explicit unregistered application operation.
+// admitOperatorChatPlan is the explicit application operation used by account admission.
 // Callers supply authenticated actor and a frozen original request/digest.
 // The store rechecks configure, source, target, limits and original deadline.
 func (a *Application) admitOperatorChatPlan(ctx context.Context, s *Server, actor, request, digest string) (tenancy.OperatorChatAdmission, error) {

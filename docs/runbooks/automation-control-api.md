@@ -190,3 +190,7 @@ Trace-discovery fixtures cover empty results, original/current saved selections,
 ## Original chat admission recovery
 
 `lookup-chat-admission` reads an existing original request using `{ "requestId": "<original UUID>", "digest": "<reviewed plan digest>" }`. It uses the same session/configure/CSRF boundary and never performs admission. See [the recovery contract](operator-chat-admission.md#account-recovery-transport) for the fixed metadata response and missing/purged behavior. Sender/controller ownership is unnecessary for this read; delivery admission remains separate.
+
+## Original chat-plan delivery admission
+
+`admit-chat-plan` submits exactly `{ "requestId": "<original UUID>", "digest": "<reviewed plan digest>" }` through the existing account/configure/CSRF boundary and owned retained controller/runtime checks. It requires an already prepared plan and already-live runtime; it creates neither. HTTP202 means new queue admission, while HTTP200/created=false means the original admission already exists. Use `lookup-chat-admission` for recovery/current outcomes, never an automatic admission retry. See the [delivery contract](operator-chat-admission.md#authenticated-delivery-admission).
