@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { versionRequest, type VersionScope } from '../../lib/automationVersions';
 import { decodeOperatorRehearsal, decodeOperatorRun, decodeRehearsalIntent, rehearsalStorageKey, type OperatorRehearsal, type OperatorRun, type RehearsalIntent, type RehearsalMode } from '../../lib/operatorRehearsal';
 import { MetadataTraceSteps } from './MetadataTraceSteps';
+import { OperatorChatPlanDesk } from './OperatorChatPlanDesk';
 import { OperatorTraceDesk } from './OperatorTraceDesk';
 import { Empty, KeyValues, Notice, Panel, Tag } from './ui';
 
@@ -82,6 +83,7 @@ export function OperatorRehearsalDesk({ scope, candidate, admissionBlocked }: { 
     ]} /></div><p className="text-sm">Capture format 1 contains empty facts and seed zero as a format placeholder. It records no provider facts, random choice or rendered variables. The original deadline does not forbid a retained effect-free read.</p><div className="flex flex-wrap gap-2"><button className="desk-btn" disabled={busy} onClick={() => void perform(signal => rehearse('reproduce', signal))}>Reproduce original capture</button><button className="desk-btn" disabled={busy} onClick={() => void perform(signal => rehearse('current_config', signal))}>Rehearse current configuration</button></div></div> : null}
     {report ? <RehearsalReport report={report} /> : null}
     <OperatorTraceDesk scope={scope} source={intent} run={run} report={report} blocked={busy || admissionBlocked || !!storageError} />
+    <OperatorChatPlanDesk scope={scope} source={intent} run={run} blocked={busy || admissionBlocked || !!storageError} />
   </Panel>;
 }
 
