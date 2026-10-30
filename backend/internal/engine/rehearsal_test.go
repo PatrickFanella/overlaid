@@ -93,7 +93,7 @@ func TestFlowRehearsalBranchesUnknownAndLazyTraversal(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			d := rehearsalDocument()
 			d.Restrictions = []Restriction{{ID: "choose", Mode: "all", Predicates: []Predicate{{ID: "check", Field: "ready", Operator: "eq", Value: "true"}}}}
-			d.Nodes = []Node{{ID: "root", Kind: kind, Children: []string{"send", "otherwise"}, Conditions: []string{"choose"}}, {ID: "send", Kind: "action", Capability: "chat.send"}, {ID: "otherwise", Kind: "set_output", Arguments: []Argument{{Name: "output", Value: "unsupported"}}}}
+			d.Nodes = []Node{{ID: "root", Kind: kind, Children: []string{"send", "otherwise"}, Conditions: []string{"choose"}}, {ID: "send", Kind: "action", Capability: "chat.send"}, {ID: "otherwise", Kind: "random", Children: []string{"send"}, Weights: []int{1}}}
 			g, in := rehearsalFixture(t, d)
 			r, e := RehearseFlow(t.Context(), g, in)
 			if e != nil || r.Status != "blocked" || r.Reason != "condition_unavailable" || len(r.Proposals) != 0 {
@@ -190,7 +190,7 @@ func TestFlowRehearsalRefusalsBudgetsAndCancellation(t *testing.T) {
 	}
 }
 func TestFlowRehearsalUnsupportedNodes(t *testing.T) {
-	for _, n := range []Node{{ID: "root", Kind: "delay", DelayMS: 1000, Children: []string{"send"}}, {ID: "root", Kind: "random", Children: []string{"send"}, Weights: []int{1}, NoRepeat: true}, {ID: "root", Kind: "all", Parallel: true, Concurrency: 2, Children: []string{"send"}}, {ID: "root", Kind: "set_output", Arguments: []Argument{{Name: "text", Value: "opaque"}}}} {
+	for _, n := range []Node{{ID: "root", Kind: "random", Children: []string{"send"}, Weights: []int{1}, NoRepeat: true}, {ID: "root", Kind: "random", Children: []string{"send"}, Weights: []int{1}}} {
 		d := rehearsalDocument()
 		d.Nodes = []Node{n}
 		if len(n.Children) > 0 {
@@ -262,5 +262,52 @@ func TestFlowRehearsalMidEvaluationCancellationAndPresetArguments(t *testing.T) 
 	r, e := RehearseFlow(t.Context(), g, in)
 	if e != nil || r.Status != "unsupported" || len(r.Proposals) != 0 {
 		t.Fatal("preset arguments silently discarded", r, e)
+	}
+}
+
+func TestFlowRehearsalSimulatedDelayParallelAndOutput(t *testing.T) {
+	d := rehearsalDocument()
+	d.Nodes = []Node{
+		{ID: "root", Kind: "sequential", Children: []string{"declare", "fan", "later"}},
+		{ID: "declare", Kind: "set_output", Arguments: []Argument{{Name: "result", Value: "PRIVATE-OUTPUT"}}},
+		{ID: "fan", Kind: "all", Parallel: true, Concurrency: 2, Children: []string{"a", "b"}},
+		{ID: "a", Kind: "action", Capability: "chat.send", Arguments: []Argument{{Name: "text", Value: "first"}}},
+		{ID: "b", Kind: "action", Capability: "chat.send", Arguments: []Argument{{Name: "text", Value: "second"}}},
+		{ID: "later", Kind: "delay", DelayMS: 5000, Children: []string{"c"}},
+		{ID: "c", Kind: "action", Capability: "chat.send", Arguments: []Argument{{Name: "text", Value: "third"}}},
+	}
+	g, in := rehearsalFixture(t, d)
+	r, err := RehearseFlow(t.Context(), g, in)
+	if err != nil || r.Status != "proposed" || r.Reason != "supported_flow" || !r.Deferred || len(r.Proposals) != 3 {
+		t.Fatal(r, err)
+	}
+	got := []string{}
+	for _, s := range r.Steps {
+		got = append(got, s.NodeID+":"+s.Kind+":"+s.Outcome+":"+s.Reason)
+	}
+	want := []string{"trigger:admission:checked:matched", "root:sequential:visited:supported", "declare:set_output:visited:output_declared", "fan:all:visited:parallel_branches", "a:action:proposed:opaque_arguments", "b:action:proposed:opaque_arguments", "later:delay:visited:simulated_delay", "c:action:proposed:opaque_arguments"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatal(got)
+	}
+	// The delayed child's parent is the delay step; set_output never becomes a proposal.
+	if r.Steps[7].Parent != r.Steps[6].Sequence || r.Proposals[2].NodeID != "c" {
+		t.Fatal(r.Steps, r.Proposals)
+	}
+	raw, _ := json.Marshal(r.Steps)
+	if strings.Contains(string(raw), "PRIVATE-OUTPUT") || strings.Contains(string(raw), "5000") {
+		t.Fatal("trace leaked authored values", string(raw))
+	}
+	// Without a delay the flow is not deferred, and a stop after a delay keeps the flag.
+	d.Nodes[0].Children = []string{"declare", "fan"}
+	d.Nodes = d.Nodes[:5]
+	g, in = rehearsalFixture(t, d)
+	if r, err = RehearseFlow(t.Context(), g, in); err != nil || r.Deferred || len(r.Proposals) != 2 {
+		t.Fatal("undelayed flow deferred", r, err)
+	}
+	d = rehearsalDocument()
+	d.Nodes = []Node{{ID: "root", Kind: "delay", DelayMS: 1, Children: []string{"halt"}}, {ID: "halt", Kind: "stop"}}
+	g, in = rehearsalFixture(t, d)
+	if r, err = RehearseFlow(t.Context(), g, in); err != nil || r.Status != "stopped" || !r.Deferred {
+		t.Fatal("stop after delay", r, err)
 	}
 }

@@ -211,3 +211,31 @@ func FuzzChatTextCapture(f *testing.F) {
 		}
 	})
 }
+
+// A delay needs a durable continuation, so the immediate chat path refuses it
+// even when the trace limit drops the delay step itself.
+func TestChatTextRefusesDeferredFlowAndAllowsParallelOutput(t *testing.T) {
+	build := func(nodes []Node) (PinnedGraph, ChatTextInput) {
+		_, in := chatTextFixture(t, "hi")
+		d := rehearsalDocument()
+		d.Nodes = nodes
+		g, e := ResolvePinned(mustValidate(t, d), nil)
+		if e != nil {
+			t.Fatal(e)
+		}
+		in.Flow.OriginalGraphDigest = g.Digest()
+		return g, in
+	}
+	send := func(id string) Node {
+		return Node{ID: id, Kind: "action", Capability: "chat.send", Arguments: []Argument{{Name: "text", Value: "hi " + id}}}
+	}
+	g, in := build([]Node{{ID: "root", Kind: "sequential", Children: []string{"now", "wait"}}, send("now"), {ID: "wait", Kind: "delay", DelayMS: 1000, Children: []string{"later"}}, send("later")})
+	if r, e := RehearseChatText(t.Context(), g, in); !errors.Is(e, ErrChatTextUnsupported) || r.ID != "" || r.Proposals != nil {
+		t.Fatal("delayed flow rendered as immediate", r, e)
+	}
+	g, in = build([]Node{{ID: "root", Kind: "sequential", Children: []string{"mark", "fan"}}, {ID: "mark", Kind: "set_output", Arguments: []Argument{{Name: "out", Value: "x"}}}, {ID: "fan", Kind: "all", Parallel: true, Concurrency: 2, Children: []string{"a", "b"}}, send("a"), send("b")})
+	r, e := RehearseChatText(t.Context(), g, in)
+	if e != nil || len(r.Proposals) != 2 || r.Proposals[0].Text != "hi a" || r.Proposals[1].Text != "hi b" {
+		t.Fatal(r, e)
+	}
+}

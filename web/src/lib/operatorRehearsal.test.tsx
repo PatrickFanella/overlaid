@@ -74,3 +74,21 @@ it('matches stored trace truncation limits without accepting a partial truncated
   expect(decodeFlowMetadata({ status: 'proposed', reason: 'supported_flow', steps, droppedSteps: 10101 }).droppedSteps).toBe(10101);
   for (const value of [{ steps, droppedSteps: 10102 }, { steps: steps.slice(0, 99), droppedSteps: 1 }, { steps: [...steps, steps[99]], droppedSteps: 0 }]) expect(() => decodeFlowMetadata({ status: 'proposed', reason: 'supported_flow', ...value })).toThrow();
 });
+
+it('accepts simulated delay, parallel and output steps with fixed reasons only', () => {
+  const base = { automationId: intent.automationId, versionId: intent.versionId, parent: 0 };
+  const steps = [
+    { ...base, sequence: 1, nodeId: 'button', kind: 'admission', outcome: 'checked', reason: 'matched' },
+    { ...base, sequence: 2, nodeId: 'fan', kind: 'all', outcome: 'visited', reason: 'parallel_branches' },
+    { ...base, sequence: 3, parent: 2, nodeId: 'mark', kind: 'set_output', outcome: 'visited', reason: 'output_declared' },
+    { ...base, sequence: 4, parent: 2, nodeId: 'wait', kind: 'delay', outcome: 'visited', reason: 'simulated_delay' },
+  ];
+  expect(decodeFlowMetadata({ status: 'proposed', reason: 'supported_flow', droppedSteps: 0, steps }).steps.map(s => s.reason)).toEqual(['matched', 'parallel_branches', 'output_declared', 'simulated_delay']);
+  const second = { ...steps[3], sequence: 2, parent: 0 };
+  expect(decodeFlowMetadata({ status: 'proposed', reason: 'supported_flow', droppedSteps: 0, steps: [steps[0], second] }).steps).toHaveLength(2);
+  for (const bad of [{ kind: 'delay', reason: 'supported' }, { kind: 'set_output', reason: 'supported' }, { kind: 'sequential', reason: 'parallel_branches' }, { kind: 'delay', reason: 'output_declared' }, { kind: 'delay', outcome: 'proposed', reason: 'simulated_delay' }]) {
+    expect(() => decodeFlowMetadata({ status: 'proposed', reason: 'supported_flow', droppedSteps: 0, steps: [steps[0], { ...second, ...bad }] })).toThrow();
+  }
+  // Older traces that recorded these kinds as unsupported still load.
+  expect(decodeFlowMetadata({ status: 'unsupported', reason: 'unsupported_node', droppedSteps: 0, steps: [steps[0], { ...second, outcome: 'unsupported', reason: 'unsupported_node' }] }).status).toBe('unsupported');
+});
