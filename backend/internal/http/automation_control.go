@@ -86,6 +86,12 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
+	// Template conversion preview is pure supplied-value comparison: it needs
+	// configure membership but no automation store, schema or owner.
+	if parts[4] == "preview-template-conversion" {
+		automationTemplatePreview(ctx, w, r)
+		return
+	}
 	scope, err := a.store.Product.Scoped(tenant.ID)
 	if err != nil {
 		automationControlError(w, err)
