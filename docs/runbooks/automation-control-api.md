@@ -194,3 +194,8 @@ Trace-discovery fixtures cover empty results, original/current saved selections,
 ## Original chat-plan delivery admission
 
 `admit-chat-plan` submits exactly `{ "requestId": "<original UUID>", "digest": "<reviewed plan digest>" }` through the existing account/configure/CSRF boundary and owned retained controller/runtime checks. It requires an already prepared plan and already-live runtime; it creates neither. HTTP202 means new queue admission, while HTTP200/created=false means the original admission already exists. Use `lookup-chat-admission` for recovery/current outcomes, never an automatic admission retry. See the [delivery contract](operator-chat-admission.md#authenticated-delivery-admission).
+
+
+### Retained chat-plan preparation
+
+`prepare-chat-plan` accepts exactly `{ "requestId": "<original UUID>", "expectedVersionId": "<original version UUID>", "syntaxVersion": 2 }`. The existing controller check guards this metadata writer. `lookup-chat-plan` accepts only `{ "requestId": "<original UUID>" }`, needs no controller and never creates work. Both use the shared account session/Origin/CSRF/configure boundary and fixed no-store metadata with `state: prepared_metadata`; neither queues delivery or exposes private text. HTTP200/unchanged distinguishes new preparation from retained recovery. See the [source contract](operator-chat-effect-sources.md#account-preparation-and-recovery) for fields and uncertainty handling. Browser frozen-intent controls remain separate.

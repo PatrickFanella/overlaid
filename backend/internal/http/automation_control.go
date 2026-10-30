@@ -76,7 +76,7 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 	// Metadata writers participate in the existing managed owner; this check
 	// opens no execution pool and grants no provider/effect permission.
 	switch parts[4] {
-	case "publish", "select", "admit", "save-trace":
+	case "publish", "select", "admit", "save-trace", "prepare-chat-plan":
 		if e := a.checkChatController(ctx); e != nil {
 			if ctx.Err() != nil && a.ctx.Err() == nil {
 				automationControlError(w, ctx.Err())
@@ -211,6 +211,34 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		writeJSON(w, automationRunJSON(result))
+	case "prepare-chat-plan":
+		var body struct {
+			RequestID         string `json:"requestId"`
+			ExpectedVersionID string `json:"expectedVersionId"`
+			SyntaxVersion     int    `json:"syntaxVersion"`
+		}
+		if !decodeControl(w, r, &body) {
+			return
+		}
+		result, e := store.PrepareOperatorChatPlan(ctx, actor, body.RequestID, body.ExpectedVersionID, body.SyntaxVersion)
+		if e != nil {
+			automationControlError(w, e)
+			return
+		}
+		writeJSON(w, automationChatPlanJSON(result))
+	case "lookup-chat-plan":
+		var body struct {
+			RequestID string `json:"requestId"`
+		}
+		if !decodeControl(w, r, &body) {
+			return
+		}
+		result, e := store.LookupOperatorChatPlan(ctx, actor, body.RequestID)
+		if e != nil {
+			automationControlError(w, e)
+			return
+		}
+		writeJSON(w, automationChatPlanJSON(result))
 	case "admit-chat-plan":
 		var body struct {
 			RequestID string `json:"requestId"`
@@ -365,6 +393,11 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// Preparation metadata grants no ledger admission or provider permission.
+func automationChatPlanJSON(p tenancy.OperatorChatPlanMetadata) map[string]any {
+	return map[string]any{"sourceId": p.ID, "runId": p.RunID, "automationId": p.AutomationID, "versionId": p.VersionID, "graphDigest": p.GraphDigest, "connectionId": p.ConnectionID, "channelId": p.ChannelID, "digest": p.Digest, "effectCount": p.EffectCount, "preparedAt": p.PreparedAt, "deadline": p.Deadline, "unchanged": p.Unchanged, "state": "prepared_metadata"}
 }
 func automationPublicationJSON(p tenancy.AutomationPublication) map[string]any {
 	return map[string]any{"automationId": p.AutomationID, "versionId": p.VersionID, "digest": p.Digest, "graphDigest": p.GraphDigest, "createdAt": p.CreatedAt, "unchanged": p.Unchanged}
