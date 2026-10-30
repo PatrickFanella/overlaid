@@ -29,6 +29,7 @@ Bodies are limited to 65,536 bytes for the whole JSON request, with unknown fiel
 | `save-trace` | `requestId`, `mode`, `expectedVersionId` | Canonical metadata `document`, digest, original trace save time and `unchanged`. No proposals are persisted. |
 | `list-traces` | `requestId` | Original run receipt and bounded saved trace ID/version/mode/digest/time summaries. No trace bodies. |
 | `load-trace` | `requestId`, `traceId` | Saved canonical metadata `document`, digest and original save time, without re-evaluation. |
+| `preview-template-conversion` | `source`, `values` | `state: preview_only`, original/proposed sources and syntax versions, warning/diagnostic byte spans, legacy and proposed outputs and `different`. Typed values only; no tenant state is read or written. See [variable template conversion](variable-template-conversion.md#account-route-and-dashboard-panel). |
 
 Modes must be explicitly `reproduce` or `current_config`; execute/missing/unknown modes refuse. Rehearsal returns camel-case transport step metadata and `opaqueArguments` on private proposals. Saved trace `document` preserves the existing canonical format-1 field names, including its versioned step fields. The returned digest identifies that stored canonical document; the outer response is not a signed execution receipt.
 

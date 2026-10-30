@@ -4,6 +4,7 @@ import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { compareDraftRoot, compareRootVersions, type DraftVersionDiff, type RootVersionDiff } from '../../lib/automationVersionDiff';
 import { AutomationVersionComparison } from './AutomationVersionComparison';
 import { OperatorRehearsalDesk } from './OperatorRehearsalDesk';
+import { TemplateConversionDesk } from './TemplateConversionDesk';
 import { DashboardShell } from './DashboardShell';
 import { useAccount } from './accountSession';
 import { Empty, Field, KeyValues, Notice, PageHead, Panel, Tag } from './ui';
@@ -167,5 +168,6 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     </Panel> : <Tag>No local draft</Tag>}
     {draftComparison ? <AutomationVersionComparison report={draftComparison} /> : null}
     <OperatorRehearsalDesk scope={scope} admissionBlocked={busy || !!local.pending || !!storageError} candidate={rehearsalCandidate} />
+    <TemplateConversionDesk scope={scope} />
   </div>;
 }

@@ -643,3 +643,7 @@ Next: an explicitly owned controller/runtime boundary before HTTP/dashboard admi
 ## E5 simulated delay, parallel and output steps
 
 [Issue #335](https://git.subcult.tv/subculture-collective/overlaid/issues/335) lets [flow rehearsal](../../runbooks/engine-flow-rehearsal.md) simulate delay, parallel `all` and set output instead of stopping at `unsupported_node`. Delays mark the result deferred, and chat text and plan preparation refuse deferred flows until durable continuations exist. Saved-trace validators in Go and the browser accept the new fixed reasons and still load older traces. Weighted random, no-repeat and preset arguments remain unsupported pending a captured seed, retained no-repeat state and an argument binding contract. Next: E4 durable delay continuations.
+
+### Phase 3 V2c: conversion preview route and dashboard panel
+
+Adds the account `preview-template-conversion` operation and the Automations [conversion preview panel](../../runbooks/variable-template-conversion.md#account-route-and-dashboard-panel). Configure members compare a legacy template with its proposed syntax-2 text using typed values. The route reads no tenant state and needs no writer owner; the panel keeps input and output in memory and has no save or select control. M1 command inventory preview, version selection and migration remain open.
