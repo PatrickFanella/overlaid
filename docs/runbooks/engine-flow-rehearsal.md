@@ -17,13 +17,19 @@ All input remains supplied evidence. A future authenticated caller must load the
 
 Root filters and selected admission groups use the existing three-valued captured predicate evaluator. A missing schema-2 policy or a nonmatching/unavailable root gate returns a blocked report before any node proposals. Admission matching simulates captured predicates only; current roles, plans, cooldown, stream identity and provider permission are not checked or reserved.
 
-Supported nodes are sequential, serial `all`, condition, switch, finite loop, stop, action declarations and exact pinned presets without invocation arguments. A condition's true branch is first and false branch second. A switch selects the first true group or its final default if all prior groups are false. An unknown group halts traversal with `condition_unavailable`; it never selects a false/default branch or skips to a later true case. Only selected branches are traversed.
+Supported nodes are sequential, serial and parallel `all`, condition, switch, finite loop, stop, delay, set output, action declarations and exact pinned presets without invocation arguments. A condition's true branch is first and false branch second. A switch selects the first true group or its final default if all prior groups are false. An unknown group halts traversal with `condition_unavailable`; it never selects a false/default branch or skips to a later true case. Only selected branches are traversed.
 
 Each preset invocation enters its exact retained effect-tree root and local condition groups. It does not select a current version or reapply that preset's independent trigger-admission policy. `stop` halts the entire rehearsal, including callers of a preset. Loops and repeated presets receive separate sequence numbers, preserving their qualified automation/version/node identity.
 
 Action proposals contain capability declarations and opaque authored arguments. For example, `hello $(user)` stays exactly that string. It is not a rendered message or validated transport payload. Variable rendering and capability-specific effect contracts require separate integration. Callers must handle proposals as private workspace input and never send them directly to an adapter.
 
-Delay, random/no-repeat, parallel `all`, set-output mutation and argument-bearing presets stop with fixed `unsupported_node` metadata. They do not sleep, mutate output, discard invocation arguments or simulate permission. The report may retain the trace and proposals from before a blocked/unsupported boundary; that prefix is diagnostic, not a complete executable plan. These cases are explicit remaining work rather than successful rehearsals of those behaviors.
+[Issue #335](https://git.subcult.tv/subculture-collective/overlaid/issues/335) simulates three further kinds without effects:
+
+- `delay` records `visited`/`simulated_delay`, walks its child immediately and sets `Deferred` on the result. Nothing sleeps and no elapsed time is reported. Chat-text rendering, and so chat-plan preparation, refuses a deferred flow even when trace truncation drops the delay step: a delayed reply needs a durable continuation and must never be prepared as immediate.
+- Parallel `all` records `visited`/`parallel_branches` and walks children in authored order. Rehearsal says nothing about real concurrency or ordering.
+- `set_output` records `visited`/`output_declared`. The authored value is not rendered, stored or made available to later steps.
+
+Weighted random, no-repeat and argument-bearing presets still stop with fixed `unsupported_node` metadata. Random needs a captured seed, and the operator capture format records seed 0 only as a placeholder. No-repeat needs retained per-automation state. Preset arguments have no binding contract yet. Saved traces from before #335 that recorded delay, parallel `all` or set output as unsupported remain valid. Older binaries refuse to load traces containing the new reasons; stored rows are unchanged, so returning to a current binary restores them. The report may retain the trace and proposals from before a blocked/unsupported boundary; that prefix is diagnostic, not a complete executable plan. These cases are explicit remaining work rather than successful rehearsals of those behaviors.
 
 ## Bounds, trace and cancellation
 
@@ -35,6 +41,6 @@ Caller cancellation is checked throughout predicate/traversal work and before re
 
 ## Verification and remaining work
 
-Engine race tests cover canonical reconstruction, capture/mode/current-graph binding, tenant mismatch, mutation isolation, root refusal, lazy branch selection, unknown switch ordering, loop/preset/stop traversal, unsupported cases, trace truncation, proposal exhaustion and mid-evaluation cancellation. `FuzzRehearsalCapture` checks bounded captured inputs and deterministic output. Run `make verify`, engine race tests, bounded fuzzing and new-diff lint before merge. This unit changes no SQL, durable queue or startup caller.
+Engine race tests cover canonical reconstruction, capture/mode/current-graph binding, tenant mismatch, mutation isolation, root refusal, lazy branch selection, unknown switch ordering, loop/preset/stop traversal, simulated delay/parallel/output steps, deferred chat-text refusal, remaining unsupported cases, trace truncation, proposal exhaustion and mid-evaluation cancellation. `FuzzRehearsalCapture` checks bounded captured inputs and deterministic output. Run `make verify`, engine race tests, bounded fuzzing and new-diff lint before merge. This unit changes no SQL, durable queue or startup caller.
 
 E3 context/trace persistence and authenticated retrieval are unfinished. E4 effect admission/continuations, E5 remaining semantics and the command/Newsroom/timer/editor migrations remain under [Phase #25](https://git.subcult.tv/subculture-collective/overlaid/issues/25). A pure proposed trace is not run completion, delivery, live acceptance or full Newsroom parity.

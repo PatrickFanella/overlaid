@@ -67,7 +67,8 @@ func RehearseChatText(ctx context.Context, g PinnedGraph, in ChatTextInput) (out
 	if err != nil {
 		return out, err
 	}
-	if flow.Status != "proposed" && flow.Status != "stopped" {
+	// A delayed reply needs a durable continuation; never prepare it as immediate.
+	if flow.Status != "proposed" && flow.Status != "stopped" || flow.Deferred {
 		return out, ErrChatTextUnsupported
 	}
 	out = ChatTextRehearsal{FlowID: flow.ID, GraphDigest: flow.GraphDigest, CaptureDigest: flow.CaptureDigest, VariableFingerprint: in.Variables.Fingerprint(), Mode: flow.Mode, Proposals: []ChatTextProposal{}}

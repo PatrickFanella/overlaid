@@ -638,3 +638,8 @@ Next: an explicitly owned controller/runtime boundary before HTTP/dashboard admi
 ## E4 dashboard chat delivery
 
 [Issue #333](https://git.subcult.tv/subculture-collective/overlaid/issues/333) adds [dashboard delivery controls](../../runbooks/operator-chat-admission.md#dashboard-delivery-controls) under chat-plan preparation. A verified plan digest can be held locally. Queueing requires confirmation, re-reads the plan read-only, requires the same digest, stores the submitted phase and sends one admission POST; afterwards only outcome lookup is available. Receipts and outcomes are checked against the original admission and the server outcome vocabulary. Node tests cover POST ordering, changed plans, storage failure, lost and malformed responses, reload, missing outcomes, scope changes and escaping. Next: browser qualification of the full preparation-to-delivery path against a test channel, continuations and trusted source migration. Live provider qualification and full phase/parity acceptance remain open.
+
+
+## E5 simulated delay, parallel and output steps
+
+[Issue #335](https://git.subcult.tv/subculture-collective/overlaid/issues/335) lets [flow rehearsal](../../runbooks/engine-flow-rehearsal.md) simulate delay, parallel `all` and set output instead of stopping at `unsupported_node`. Delays mark the result deferred, and chat text and plan preparation refuse deferred flows until durable continuations exist. Saved-trace validators in Go and the browser accept the new fixed reasons and still load older traces. Weighted random, no-repeat and preset arguments remain unsupported pending a captured seed, retained no-repeat state and an argument binding contract. Next: E4 durable delay continuations.

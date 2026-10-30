@@ -23,6 +23,15 @@ func TestOperatorTraceFixedMetadataValidation(t *testing.T) {
 			t.Fatal("invalid trace accepted", changed)
 		}
 	}
+	// Simulated flow reasons are accepted alongside older unsupported traces.
+	for _, step := range []engine.FlowStep{{Kind: "delay", Outcome: "visited", Reason: "simulated_delay"}, {Kind: "all", Outcome: "visited", Reason: "parallel_branches"}, {Kind: "set_output", Outcome: "visited", Reason: "output_declared"}, {Kind: "delay", Outcome: "unsupported", Reason: "unsupported_node"}} {
+		changed := trace
+		step.Sequence, step.AutomationID, step.VersionID, step.NodeID = 1, id, id, "root"
+		changed.Steps = []engine.FlowStep{step}
+		if !validOperatorTrace(changed) {
+			t.Fatal("simulated step refused", step)
+		}
+	}
 	if operatorTraceDigest([]byte("a")) == operatorTraceDigest([]byte("b")) {
 		t.Fatal("unbound body digest")
 	}

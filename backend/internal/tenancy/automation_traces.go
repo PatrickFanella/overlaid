@@ -273,7 +273,7 @@ func validOperatorTrace(t OperatorTrace) bool {
 	}
 	prior := 0
 	for _, step := range t.Steps {
-		if step.Sequence != prior+1 || step.Parent < 0 || step.Parent >= step.Sequence || !automationID(step.AutomationID) || !automationID(step.VersionID) || !traceName.MatchString(step.NodeID) || !traceOneOf(step.Kind, "admission", "sequential", "all", "loop", "condition", "switch", "condition_group", "preset", "stop", "action", "random", "delay", "set_output") || !traceOneOf(step.Outcome, "checked", "visited", "proposed", "stopped", "unsupported") || !traceOneOf(step.Reason, "matched", "not_matched", "unavailable", "supported", "opaque_arguments", "explicit_stop", "unsupported_node", "policy_missing", "filters_rejected", "filters_unavailable", "group_rejected", "group_unavailable") {
+		if step.Sequence != prior+1 || step.Parent < 0 || step.Parent >= step.Sequence || !automationID(step.AutomationID) || !automationID(step.VersionID) || !traceName.MatchString(step.NodeID) || !traceOneOf(step.Kind, "admission", "sequential", "all", "loop", "condition", "switch", "condition_group", "preset", "stop", "action", "random", "delay", "set_output") || !traceOneOf(step.Outcome, "checked", "visited", "proposed", "stopped", "unsupported") || !traceOneOf(step.Reason, "matched", "not_matched", "unavailable", "supported", "opaque_arguments", "explicit_stop", "unsupported_node", "simulated_delay", "parallel_branches", "output_declared", "policy_missing", "filters_rejected", "filters_unavailable", "group_rejected", "group_unavailable") {
 			return false
 		}
 		prior = step.Sequence

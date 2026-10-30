@@ -24,6 +24,11 @@ function validStep(s: RehearsalStep): boolean {
   if (s.kind === 'action') return s.outcome === 'proposed' && s.reason === 'opaque_arguments';
   if (s.kind === 'stop') return s.outcome === 'stopped' && s.reason === 'explicit_stop';
   if (s.outcome === 'unsupported') return ['random', 'delay', 'set_output', 'all', 'preset'].includes(s.kind) && s.reason === 'unsupported_node';
+  // Simulated without waiting or rendering. Older traces may still record these
+  // kinds as unsupported above.
+  if (s.kind === 'delay') return s.outcome === 'visited' && s.reason === 'simulated_delay';
+  if (s.kind === 'set_output') return s.outcome === 'visited' && s.reason === 'output_declared';
+  if (s.kind === 'all' && s.reason === 'parallel_branches') return s.outcome === 'visited';
   return ['sequential', 'all', 'loop', 'condition', 'switch', 'preset'].includes(s.kind) && s.outcome === 'visited' && s.reason === 'supported';
 }
 export function decodeFlowMetadata(value: unknown) {

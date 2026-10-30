@@ -54,11 +54,19 @@ type FlowRehearsal struct {
 	Steps                                               []FlowStep
 	DroppedSteps                                        int
 	Proposals                                           []FlowProposal
+	// Deferred reports a simulated delay. Proposals after it would run later,
+	// so immediate effect preparation must refuse the whole flow.
+	Deferred bool
 }
 
 // RehearseFlow traverses supported captured control flow only. Its API has no
 // provider, persistence, clock, variable resolver or effect callback. Root
 // predicates are simulated; cooldown, entitlement and permission are not checked.
+// Delays are simulated without waiting and mark the result Deferred. Parallel
+// branches are walked in authored order. Set output records the declaration
+// only. Random, no-repeat and preset arguments remain unsupported: they need a
+// captured seed, retained no-repeat state or argument binding that no capture
+// format supplies yet.
 func RehearseFlow(ctx context.Context, g PinnedGraph, in RehearsalInput) (out FlowRehearsal, failure error) {
 	defer func() {
 		if ctx != nil && ctx.Err() != nil {
@@ -169,7 +177,7 @@ func (w *flowWalker) walk(k versionKey, id string, parent, depth int) error {
 	}
 	kind, outcome, reason := n.Kind, "visited", "supported"
 	switch {
-	case n.Kind == "random" || n.Kind == "delay" || n.Kind == "set_output" || n.Parallel || n.Kind == "preset" && len(n.Arguments) > 0:
+	case n.Kind == "random" || n.Kind == "preset" && len(n.Arguments) > 0:
 		w.record(k, id, kind, "unsupported", "unsupported_node", parent)
 		w.halt("unsupported", "unsupported_node")
 		return nil
@@ -189,6 +197,15 @@ func (w *flowWalker) walk(k versionKey, id string, parent, depth int) error {
 		seq := w.record(k, id, kind, "proposed", "opaque_arguments", parent)
 		w.out.Proposals = append(w.out.Proposals, FlowProposal{Sequence: seq, AutomationID: k.automation, VersionID: k.version, NodeID: id, Capability: n.Capability, Arguments: slices.Clone(n.Arguments)})
 		return nil
+	case n.Kind == "set_output":
+		// The authored value is never rendered or exposed by the trace.
+		w.record(k, id, kind, "visited", "output_declared", parent)
+		return nil
+	case n.Kind == "delay":
+		reason = "simulated_delay"
+		w.out.Deferred = true
+	case n.Parallel:
+		reason = "parallel_branches"
 	}
 	seq := w.record(k, id, kind, outcome, reason, parent)
 	switch n.Kind {
@@ -198,6 +215,8 @@ func (w *flowWalker) walk(k versionKey, id string, parent, depth int) error {
 				return err
 			}
 		}
+	case "delay":
+		return w.walk(k, n.Children[0], seq, depth+1)
 	case "loop":
 		for range n.Iterations {
 			if err := w.walk(k, n.Children[0], seq, depth+1); err != nil {
