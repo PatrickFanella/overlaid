@@ -3,6 +3,7 @@ import { versionRequest, type VersionScope } from '../../lib/automationVersions'
 import { chatPlanStorageFailure, freezeChatPlanIntent, loadChatPlanIntent, recoverChatPlan, submitChatPlan, writeChatPlanIntent, type ChatPlanStep, type ChatPlanStorage } from '../../lib/operatorChatPlanFlow';
 import { chatPlanStorageKey, type ChatPlanIntent, type ChatPlanMetadata } from '../../lib/operatorChatPlans';
 import type { OperatorRun, RehearsalIntent } from '../../lib/operatorRehearsal';
+import { OperatorChatAdmissionDesk } from './OperatorChatAdmissionDesk';
 import { Empty, KeyValues, Notice, Tag } from './ui';
 
 function tabStorage(key: string): ChatPlanStorage {
@@ -68,6 +69,7 @@ export function OperatorChatPlanDesk({ scope, source, run, blocked }: { scope: V
       <p className="text-sm">This handle stays bound to its original occurrence even if a newer rehearsal is loaded. Preparation is sent once. After a lost response, reload or error, only the read-only check is available; it never prepares again or creates a replacement request. Clearing changes tab bookkeeping only.</p>
     </div>}
     {metadata ? <ChatPlanSummary metadata={metadata} /> : null}
+    <OperatorChatAdmissionDesk scope={scope} plan={intent} metadata={metadata} blocked={busy || blocked || !!storageError} />
   </section>;
 }
 
