@@ -64,11 +64,22 @@ POST `/api/tenants/{id}/automations/prepare-chat-plan` accepts exactly `requestI
 
 POST `/api/tenants/{id}/automations/lookup-chat-plan` accepts exactly the original `requestId` through the same account/configure boundary. It is read-only, requires no controller and never prepares missing work. Both routes return HTTP200 with no-store fixed metadata: source/run/automation/version/graph, original connection/channel, digest, effect count, preparation/deadline times, unchanged flag and `state: prepared_metadata`. Private canonical text remains inaccessible through these routes. The state grants no delivery permission; delivery admission is a separate explicit operation.
 
-Persist the original scoped preparation intent before its first POST. An uncertain response must use lookup with that original request, retaining the expected version and scope locally; missing or purged input never justifies a new UUID or automatic write retry. These routes do not implement browser intent storage. Account reads still require a running application and valid session; ownership detection can cancel the application, whose normal request cancellation remains authoritative.
+Persist the original scoped preparation intent before its first POST. An uncertain response must use lookup with that original request, retaining the expected version and scope locally; missing or purged input never justifies a new UUID or automatic write retry. The dashboard controls below implement this browser intent storage. Account reads still require a running application and valid session; ownership detection can cancel the application, whose normal request cancellation remains authoritative.
 
 
 ## Browser recovery contract
 
 `web/src/lib/operatorChatPlans.ts` defines a bounded tab-storage handle for the original submitted occurrence and explicit syntax2. Its key follows the existing API/account/workspace version-desk scope; CSRF rotation does not discard unresolved intent. Future UI callers must additionally fence requests and asynchronous validation by the captured live scope, including CSRF, and persist submitted state before one preparation POST.
 
-The metadata decoder reconstructs the original run and domain-separated source identity, checks version/graph/target pairing and 1..16 effects, and compares preparation against the original exclusive deadline at nanosecond precision. It keeps only allowlisted metadata and never treats preparation as delivery. Corrupt handles or contradictory responses refuse. This module performs no storage/network operations, creates no IDs and is not yet selected by dashboard controls. Preparation/delivery UI state transitions and provider qualification remain open.
+The metadata decoder reconstructs the original run and domain-separated source identity, checks version/graph/target pairing and 1..16 effects, and compares preparation against the original exclusive deadline at nanosecond precision. It keeps only allowlisted metadata and never treats preparation as delivery. Corrupt handles or contradictory responses refuse. This module performs no storage/network operations and creates no IDs.
+
+### Dashboard preparation controls
+
+The operator rehearsal panel at `/dashboard/automations` includes a chat-plan preparation section (`OperatorChatPlanDesk.tsx`), driven by the transitions in `web/src/lib/operatorChatPlanFlow.ts`.
+
+1. **Hold.** Available only after the rehearsal panel has verified an accepted occurrence. Holding stores the original submitted source and `syntaxVersion: 2` in tab storage. It sends nothing and generates no request ID.
+2. **Prepare.** The panel first reads the original run through `lookup`. It then stores the `submitted` phase and sends one `prepare-chat-plan` POST with the original request ID and original version as `expectedVersionId`. If storage fails or the run lookup does not match, no preparation is sent.
+3. **Check.** After a lost response, malformed receipt, error or reload, the only control is a read-only `lookup` followed by `lookup-chat-plan`. A missing or purged plan stays unresolved. Recovery never prepares again or generates a replacement request.
+4. **Clear.** Explicit acknowledgment removes the tab handle only. It does not cancel or delete a prepared plan.
+
+The handle stays bound to its original occurrence when a newer rehearsal is loaded. The parent desk remounts on account, workspace or CSRF changes; the mount and request fences discard late network and validation results. Unreadable storage blocks new preparation until acknowledged. Verified metadata is shown as escaped text, without private reply text or delivery controls. Delivery admission controls, live provider qualification and deployment remain open.

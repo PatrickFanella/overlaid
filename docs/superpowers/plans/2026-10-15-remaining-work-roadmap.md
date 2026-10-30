@@ -628,3 +628,8 @@ Next: an explicitly owned controller/runtime boundary before HTTP/dashboard admi
 ## E4 authenticated delivery admission
 
 [Issue #325](https://git.subcult.tv/subculture-collective/overlaid/issues/325) adds [account delivery transport](../../runbooks/operator-chat-admission.md#authenticated-delivery-admission) for already prepared original request/digest plans. Strict shared authentication/CSRF/configure scope and exact existing runtime selection invoke the retained owner without runtime creation or fallback. Fixed no-store 202/new or 200/no-op metadata acknowledges admission only; independent lookup resolves current outcomes and never admits on missing data. PostgreSQL transport races cover authority, strict input, owner/runtime refusal, stable identities and recovery. Next: browser scoped frozen intents; full phase/parity acceptance remains open.
+
+
+## E4 dashboard chat-plan preparation
+
+[Issue #331](https://git.subcult.tv/subculture-collective/overlaid/issues/331) adds [dashboard preparation controls](../../runbooks/operator-chat-effect-sources.md#dashboard-preparation-controls) to the operator rehearsal panel, using the browser codec from #329 and the account routes from #327. A verified accepted occurrence can be held in tab storage without sending anything. Preparation reads the original run, stores the submitted phase and sends one POST; afterwards only original-request lookup is available. Storage failure or a mismatched run sends nothing. Mount and scope fences discard late results. Node tests cover lost responses, reload, malformed receipts, missing plans, storage failure and scope changes during validation. Next: browser delivery admission controls. Live provider qualification and full phase/parity acceptance remain open.
