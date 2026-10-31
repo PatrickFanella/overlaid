@@ -326,7 +326,7 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 		}
 		proposals := make([]map[string]any, 0, len(f.Proposals))
 		for _, p := range f.Proposals {
-			proposals = append(proposals, map[string]any{"sequence": p.Sequence, "automationId": p.AutomationID, "versionId": p.VersionID, "nodeId": p.NodeID, "declaredCapability": p.Capability, "opaqueArguments": p.Arguments})
+			proposals = append(proposals, map[string]any{"sequence": p.Sequence, "automationId": p.AutomationID, "versionId": p.VersionID, "nodeId": p.NodeID, "declaredCapability": p.Capability, "opaqueArguments": p.Arguments, "delayMs": p.DelayMS})
 		}
 		writeJSON(w, map[string]any{"captureVersion": result.CaptureVersion, "selectedVersionId": result.SelectedVersionID, "run": automationRunJSON(result.Run), "rehearsal": map[string]any{"id": f.ID, "mode": f.Mode, "originalGraphDigest": f.OriginalGraphDigest, "graphDigest": f.GraphDigest, "captureDigest": f.CaptureDigest, "clock": f.Clock, "seed": f.Seed, "status": f.Status, "reason": f.Reason, "steps": steps, "droppedSteps": f.DroppedSteps, "proposals": proposals}})
 	case "rehearse-chat-text":
@@ -347,7 +347,7 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 		text := result.Text
 		proposals := make([]map[string]any, 0, len(text.Proposals))
 		for _, p := range text.Proposals {
-			proposals = append(proposals, map[string]any{"id": p.ID, "sequence": p.Sequence, "automationId": p.AutomationID, "versionId": p.VersionID, "nodeId": p.NodeID, "text": p.Text})
+			proposals = append(proposals, map[string]any{"id": p.ID, "sequence": p.Sequence, "automationId": p.AutomationID, "versionId": p.VersionID, "nodeId": p.NodeID, "text": p.Text, "delayMs": p.DelayMS})
 		}
 		writeJSON(w, map[string]any{"captureVersion": result.CaptureVersion, "syntaxVersion": result.SyntaxVersion, "selectedVersionId": result.SelectedVersionID, "run": automationRunJSON(result.Run), "availableInputs": []string{"time"}, "chatText": map[string]any{"id": text.ID, "flowId": text.FlowID, "mode": text.Mode, "graphDigest": text.GraphDigest, "captureDigest": text.CaptureDigest, "variableFingerprint": text.VariableFingerprint, "proposals": proposals}})
 	case "list-traces":

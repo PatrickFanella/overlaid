@@ -618,3 +618,39 @@ func TestOperatorChatPlansExpiryAndCapacityBounds(t *testing.T) {
 		t.Fatal("hard marker bound", err)
 	}
 }
+
+func TestOperatorChatPlansRefuseDelayedReplies(t *testing.T) {
+	s, a, _, owner, _, _ := tenantPair(t)
+	store, _ := automationStore(t, s, a.ID)
+	ctx := t.Context()
+	if err := s.SaveConnection(ctx, botKeys(t), a.ID, owner, "twitch", "channel", "channel", nil, json.RawMessage(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	// A reply after a delay has no continuation deadline yet and is refused; a
+	// delay that shifts no reply leaves the plan immediate.
+	for i, test := range []struct {
+		nodes []engine.Node
+		want  error
+	}{
+		{[]engine.Node{{ID: "root", Kind: "sequential", Children: []string{"send", "wait"}}, {ID: "send", Kind: "action", Capability: "chat.send", Arguments: []engine.Argument{{Name: "text", Value: "now"}}}, {ID: "wait", Kind: "delay", DelayMS: 1000, Children: []string{"later"}}, {ID: "later", Kind: "action", Capability: "chat.send", Arguments: []engine.Argument{{Name: "text", Value: "later"}}}}, ErrAutomationPolicy},
+		{[]engine.Node{{ID: "root", Kind: "sequential", Children: []string{"send", "wait"}}, {ID: "send", Kind: "action", Capability: "chat.send", Arguments: []engine.Argument{{Name: "text", Value: "now"}}}, {ID: "wait", Kind: "delay", DelayMS: 1000, Children: []string{"mark"}}, {ID: "mark", Kind: "set_output", Arguments: []engine.Argument{{Name: "out", Value: "x"}}}}, nil},
+	} {
+		d := chatPlanVersion(t, a.ID, 865+i, 8650+i, "x", 1).Document()
+		d.Nodes = test.nodes
+		v, err := engine.Validate(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.Publish(ctx, owner, v, ""); err != nil {
+			t.Fatal(err)
+		}
+		r := operatorRequest(865 + i)
+		if _, err = store.AdmitOperator(ctx, owner, r, d.AutomationID, d.VersionID); err != nil {
+			t.Fatal(err)
+		}
+		got, e := store.PrepareOperatorChatPlan(ctx, owner, r, d.VersionID, 2)
+		if !errors.Is(e, test.want) || test.want != nil && !reflect.DeepEqual(got, OperatorChatPlanMetadata{}) || test.want == nil && got.EffectCount != 1 {
+			t.Fatal("delay preparation", i, got, e)
+		}
+	}
+}

@@ -24,8 +24,8 @@ Bodies are limited to 65,536 bytes for the whole JSON request, with unknown fiel
 | `load` | `automationId`, optional `versionId` | Complete private pinned graph: selected root IDs, graph digest and exact canonical `versions` bodies. Empty version selects the current root. |
 | `admit` | `requestId`, `automationId`, `expectedVersionId` | Original run/occurrence/version/graph identity, creation/deadline and `state: admitted_metadata`. This creates the bounded run/cooldown record; it queues no effect. |
 | `lookup` | `requestId` | Original initiating actor's retained run metadata. Missing/purged input creates nothing. |
-| `rehearse` | `requestId`, `mode` | Capture version, selected version ID, original run and bounded private rehearsal report/proposals. |
-| `rehearse-chat-text` | `requestId`, `mode`, `expectedVersionId`, `syntaxVersion: 2` | Original run, exact selected version and private bounded rendered chat text from the retained source clock. No saved text or delivery. |
+| `rehearse` | `requestId`, `mode` | Capture version, selected version ID, original run and bounded private rehearsal report/proposals. Proposals include `delayMs`; the dashboard ignores it. |
+| `rehearse-chat-text` | `requestId`, `mode`, `expectedVersionId`, `syntaxVersion: 2` | Original run, exact selected version and private bounded rendered chat text from the retained source clock. Each proposal includes `delayMs`, its offset from that clock. No saved text or delivery. |
 | `save-trace` | `requestId`, `mode`, `expectedVersionId` | Canonical metadata `document`, digest, original trace save time and `unchanged`. No proposals are persisted. |
 | `list-traces` | `requestId` | Original run receipt and bounded saved trace ID/version/mode/digest/time summaries. No trace bodies. |
 | `load-trace` | `requestId`, `traceId` | Saved canonical metadata `document`, digest and original save time, without re-evaluation. |
