@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -309,5 +310,52 @@ func TestFlowRehearsalSimulatedDelayParallelAndOutput(t *testing.T) {
 	g, in = rehearsalFixture(t, d)
 	if r, err = RehearseFlow(t.Context(), g, in); err != nil || r.Status != "stopped" || !r.Deferred {
 		t.Fatal("stop after delay", r, err)
+	}
+}
+
+// Offsets follow authored timing: sequential children start where the previous
+// one ended, parallel branches share a start and end at the latest, loops
+// repeat sequentially and a delay shifts only its own subtree.
+func TestFlowRehearsalDelayOffsets(t *testing.T) {
+	send := func(id string) Node {
+		return Node{ID: id, Kind: "action", Capability: "chat.send", Arguments: []Argument{{Name: "text", Value: id}}}
+	}
+	d := rehearsalDocument()
+	d.Nodes = []Node{
+		{ID: "root", Kind: "sequential", Children: []string{"now", "fan", "after", "repeat"}},
+		send("now"),
+		{ID: "fan", Kind: "all", Parallel: true, Concurrency: 2, Children: []string{"short", "long"}},
+		{ID: "short", Kind: "delay", DelayMS: 1000, Children: []string{"s"}},
+		send("s"),
+		{ID: "long", Kind: "delay", DelayMS: 3000, Children: []string{"l"}},
+		send("l"),
+		send("after"),
+		{ID: "repeat", Kind: "loop", Iterations: 2, Children: []string{"tick"}},
+		{ID: "tick", Kind: "delay", DelayMS: 500, Children: []string{"t"}},
+		send("t"),
+	}
+	g, in := rehearsalFixture(t, d)
+	r, err := RehearseFlow(t.Context(), g, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{}
+	for _, p := range r.Proposals {
+		got = append(got, p.NodeID+"@"+strconv.FormatInt(p.DelayMS, 10))
+	}
+	if want := []string{"now@0", "s@1000", "l@3000", "after@3000", "t@3500", "t@4000"}; !reflect.DeepEqual(got, want) {
+		t.Fatal(got)
+	}
+	// Total offset is capped at MaxDelayMS even when each delay is valid alone.
+	d = rehearsalDocument()
+	d.Nodes = []Node{{ID: "root", Kind: "loop", Iterations: 2, Children: []string{"wait"}}, {ID: "wait", Kind: "delay", DelayMS: MaxDelayMS, Children: []string{"x"}}, send("x")}
+	g, in = rehearsalFixture(t, d)
+	if r, err = RehearseFlow(t.Context(), g, in); !errors.Is(err, ErrRehearsalLimit) || r.ID != "" || r.Proposals != nil {
+		t.Fatal("offset cap", r, err)
+	}
+	d.Nodes[0].Iterations = 1
+	g, in = rehearsalFixture(t, d)
+	if r, err = RehearseFlow(t.Context(), g, in); err != nil || r.Proposals[0].DelayMS != MaxDelayMS {
+		t.Fatal("exact cap", r, err)
 	}
 }

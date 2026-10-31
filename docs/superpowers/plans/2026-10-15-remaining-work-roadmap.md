@@ -647,3 +647,7 @@ Next: an explicitly owned controller/runtime boundary before HTTP/dashboard admi
 ### Phase 3 V2c: conversion preview route and dashboard panel
 
 Adds the account `preview-template-conversion` operation and the Automations [conversion preview panel](../../runbooks/variable-template-conversion.md#account-route-and-dashboard-panel). Configure members compare a legacy template with its proposed syntax-2 text using typed values. The route reads no tenant state and needs no writer owner; the panel keeps input and output in memory and has no save or select control. M1 command inventory preview, version selection and migration remain open.
+
+### Phase 3 E4a: delay offsets in flow rehearsal
+
+Flow rehearsal now records each proposal's fixed offset from the occurrence clock: sequential children accumulate, a delay shifts its subtree, parallel branches share a start and loops repeat in order, with a 24-hour total cap. Chat text carries the offsets and the rehearsal and chat-text control responses include `delayMs`. Plan preparation still refuses any delayed reply. E4b (per-effect not-before times and deadlines fixed at preparation, with a migration and scheduled queueing) and E4c (cancelling delayed replies before they start) remain open.

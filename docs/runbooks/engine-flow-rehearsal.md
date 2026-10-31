@@ -25,7 +25,8 @@ Action proposals contain capability declarations and opaque authored arguments. 
 
 [Issue #335](https://git.subcult.tv/subculture-collective/overlaid/issues/335) simulates three further kinds without effects:
 
-- `delay` records `visited`/`simulated_delay`, walks its child immediately and sets `Deferred` on the result. Nothing sleeps and no elapsed time is reported. Chat-text rendering, and so chat-plan preparation, refuses a deferred flow even when trace truncation drops the delay step: a delayed reply needs a durable continuation and must never be prepared as immediate.
+- `delay` records `visited`/`simulated_delay`, walks its child immediately and sets `Deferred` on the result. Nothing sleeps. Each proposal carries `DelayMS`, its fixed offset from the occurrence clock: sequential children start where the previous child ended, a delay adds its `delayMs` to its own subtree, parallel `all` branches share a start and finish at the latest branch, and loop iterations run one after another. A total offset above 24 hours (`MaxDelayMS`) fails the whole rehearsal with `engine_rehearsal_limit`. Offsets are not in the saved trace.
+- Chat-text rendering keeps each proposal's offset and still renders every reply from the occurrence clock, never a later time. Chat-plan preparation refuses any plan with a nonzero offset: a delayed reply needs its own fixed continuation deadline, which is separate work. A delay that shifts no reply leaves the plan immediate.
 - Parallel `all` records `visited`/`parallel_branches` and walks children in authored order. Rehearsal says nothing about real concurrency or ordering.
 - `set_output` records `visited`/`output_declared`. The authored value is not rendered, stored or made available to later steps.
 
@@ -41,6 +42,6 @@ Caller cancellation is checked throughout predicate/traversal work and before re
 
 ## Verification and remaining work
 
-Engine race tests cover canonical reconstruction, capture/mode/current-graph binding, tenant mismatch, mutation isolation, root refusal, lazy branch selection, unknown switch ordering, loop/preset/stop traversal, simulated delay/parallel/output steps, deferred chat-text refusal, remaining unsupported cases, trace truncation, proposal exhaustion and mid-evaluation cancellation. `FuzzRehearsalCapture` checks bounded captured inputs and deterministic output. Run `make verify`, engine race tests, bounded fuzzing and new-diff lint before merge. This unit changes no SQL, durable queue or startup caller.
+Engine race tests cover canonical reconstruction, capture/mode/current-graph binding, tenant mismatch, mutation isolation, root refusal, lazy branch selection, unknown switch ordering, loop/preset/stop traversal, simulated delay/parallel/output steps, sequential/parallel/loop delay offsets and the 24-hour offset cap, remaining unsupported cases, trace truncation, proposal exhaustion and mid-evaluation cancellation. `FuzzRehearsalCapture` checks bounded captured inputs and deterministic output. Run `make verify`, engine race tests, bounded fuzzing and new-diff lint before merge. This unit changes no SQL, durable queue or startup caller.
 
 E3 context/trace persistence and authenticated retrieval are unfinished. E4 effect admission/continuations, E5 remaining semantics and the command/Newsroom/timer/editor migrations remain under [Phase #25](https://git.subcult.tv/subculture-collective/overlaid/issues/25). A pure proposed trace is not run completion, delivery, live acceptance or full Newsroom parity.

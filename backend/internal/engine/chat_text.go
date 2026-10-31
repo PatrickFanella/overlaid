@@ -35,6 +35,7 @@ type ChatTextProposal struct {
 	ID                                    string
 	Sequence                              int
 	AutomationID, VersionID, NodeID, Text string
+	DelayMS                               int64 // Offset from the occurrence clock.
 }
 type ChatTextRehearsal struct {
 	ID, FlowID, GraphDigest, CaptureDigest, VariableFingerprint string
@@ -67,8 +68,9 @@ func RehearseChatText(ctx context.Context, g PinnedGraph, in ChatTextInput) (out
 	if err != nil {
 		return out, err
 	}
-	// A delayed reply needs a durable continuation; never prepare it as immediate.
-	if flow.Status != "proposed" && flow.Status != "stopped" || flow.Deferred {
+	// Delayed proposals keep their offsets; callers decide whether they can
+	// schedule them. Rendering uses the occurrence clock, never a later time.
+	if flow.Status != "proposed" && flow.Status != "stopped" {
 		return out, ErrChatTextUnsupported
 	}
 	out = ChatTextRehearsal{FlowID: flow.ID, GraphDigest: flow.GraphDigest, CaptureDigest: flow.CaptureDigest, VariableFingerprint: in.Variables.Fingerprint(), Mode: flow.Mode, Proposals: []ChatTextProposal{}}
@@ -113,7 +115,7 @@ func RehearseChatText(ctx context.Context, g PinnedGraph, in ChatTextInput) (out
 		}
 		total += len(text)
 		id := rehearsalHash("overlaid.engine.chat-text-proposal.v1", out.ID, strconv.Itoa(p.Sequence), p.AutomationID, p.VersionID, p.NodeID)
-		out.Proposals = append(out.Proposals, ChatTextProposal{ID: id, Sequence: p.Sequence, AutomationID: p.AutomationID, VersionID: p.VersionID, NodeID: p.NodeID, Text: text})
+		out.Proposals = append(out.Proposals, ChatTextProposal{ID: id, Sequence: p.Sequence, AutomationID: p.AutomationID, VersionID: p.VersionID, NodeID: p.NodeID, Text: text, DelayMS: p.DelayMS})
 	}
 	if err = ctx.Err(); err != nil {
 		return out, err

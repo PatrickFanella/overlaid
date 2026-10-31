@@ -103,6 +103,13 @@ func (s *AutomationStore) makeOperatorChatPlan(ctx context.Context, tx *tenantdb
 	if len(text.Proposals) < 1 || len(text.Proposals) > MaxOperatorChatEffects {
 		return operatorChatPlan{}, "", ErrAutomationPolicy
 	}
+	// Delayed replies need their own fixed continuation deadlines; until those
+	// exist, never prepare one as an immediate send.
+	for _, proposal := range text.Proposals {
+		if proposal.DelayMS != 0 {
+			return operatorChatPlan{}, "", ErrAutomationPolicy
+		}
+	}
 	id := operatorChatIdentity("overlaid.engine.operator-chat-source.v1", s.db.TenantID(), run.ID)
 	p := operatorChatPlan{FormatVersion: 1, SyntaxVersion: variables.SyntaxVersion, CaptureVersion: 1, TenantID: s.db.TenantID(), ID: id, RunID: run.ID, OccurrenceID: run.OccurrenceID, AutomationID: run.AutomationID, VersionID: run.VersionID, GraphDigest: run.GraphDigest, ConnectionID: connection, ChannelID: channel, Clock: run.CreatedAt.UTC(), Deadline: run.Deadline.UTC(), VariableFingerprint: text.VariableFingerprint, EffectCount: len(text.Proposals), Effects: []operatorChatEffect{}}
 	for _, proposal := range text.Proposals {
