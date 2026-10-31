@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { versionRequest, type VersionScope } from '../../lib/automationVersions';
-import { chatAdmissionStorageFailure, loadChatAdmissionIntent, recoverChatAdmission, submitChatAdmission, writeChatAdmissionIntent, type ChatAdmissionStep } from '../../lib/operatorChatAdmissionFlow';
+import { cancelChatAdmission, chatAdmissionStorageFailure, loadChatAdmissionIntent, recoverChatAdmission, submitChatAdmission, writeChatAdmissionIntent, type ChatAdmissionStep } from '../../lib/operatorChatAdmissionFlow';
 import { chatAdmissionStorageKey, freezeChatAdmissionIntent, type ChatAdmissionIntent, type ChatAdmissionReceipt, type ChatAdmissionStatus } from '../../lib/operatorChatAdmissions';
 import type { ChatPlanStorage } from '../../lib/operatorChatPlanFlow';
 import type { ChatPlanIntent, ChatPlanMetadata } from '../../lib/operatorChatPlans';
@@ -20,6 +20,7 @@ export function OperatorChatAdmissionDesk({ scope, plan, metadata, blocked }: { 
   const [status, setStatus] = useState<ChatAdmissionStatus | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [canceled, setCanceled] = useState<number | null>(null);
   const controller = useRef<AbortController | null>(null);
   const mounted = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; controller.current?.abort(); }; }, []);
@@ -29,7 +30,7 @@ export function OperatorChatAdmissionDesk({ scope, plan, metadata, blocked }: { 
   }
   async function perform(job: (step: ChatAdmissionStep) => Promise<void>) {
     if (controller.current || !intent) return;
-    const current = new AbortController(); controller.current = current; setBusy(true); setError(''); setStatus(null);
+    const current = new AbortController(); controller.current = current; setBusy(true); setError(''); setStatus(null); setCanceled(null);
     const timeout = window.setTimeout(() => current.abort(), 15000);
     const active = () => { if (current.signal.aborted || !mounted.current || controller.current !== current) throw new Error('Delivery request canceled. Check the original delivery outcome.'); };
     try { await job({ scope, intent, storage, request: (operation, body, signal) => versionRequest(scope, operation, body, signal), signal: current.signal, active }); }
@@ -48,6 +49,11 @@ export function OperatorChatAdmissionDesk({ scope, plan, metadata, blocked }: { 
     finally { if (mounted.current) { const saved = loadChatAdmissionIntent(storage); if (saved.intent) setIntent(saved.intent); } }
   }
   async function check(step: ChatAdmissionStep) { setStatus(await recoverChatAdmission(step, receipt)); }
+  async function cancelUnsent(step: ChatAdmissionStep) {
+    if (!window.confirm('Cancel every reply in this delivery that has not started sending? Replies already sending or sent cannot be recalled.')) return;
+    const result = await cancelChatAdmission(step, receipt);
+    setCanceled(result.canceled.canceledActionIds.length); setStatus(result.status);
+  }
   function clear() {
     if (controller.current) return;
     if (window.confirm('Clear this tab’s delivery handle? This does not cancel queued or sent messages and does not resolve an unknown outcome. Keep the original request ID and digest for recovery.')) {
@@ -64,10 +70,11 @@ export function OperatorChatAdmissionDesk({ scope, plan, metadata, blocked }: { 
       <div className="break-all"><KeyValues items={[
         ['Original request', intent.plan.source.requestId], ['Reviewed plan digest', intent.digest], ['Replies', String(intent.effectCount)], ['Original deadline', intent.deadline], ['Tab delivery state', status ? 'Outcome metadata verified' : receipt ? 'Queued receipt verified' : intent.phase === 'prepared' ? 'Held; nothing queued' : 'Submitted; check original outcome'],
       ]} /></div>
-      <div className="flex flex-wrap gap-2"><button className="desk-btn desk-btn--primary" disabled={busy || blocked || !!storageError || intent.phase !== 'prepared'} onClick={() => void perform(submit)}>Queue delivery</button><button className="desk-btn" disabled={busy || intent.phase !== 'submitted'} onClick={() => void perform(check)}>Check delivery outcome</button><button className="desk-btn" disabled={busy} onClick={clear}>Acknowledge and clear delivery handle</button></div>
-      <p className="text-sm">Before queueing, the plan is re-read and must still match this digest. The request is sent once. After a lost response, reload or error, only the read-only outcome check is available; it never queues again or creates a replacement request. Clearing changes tab bookkeeping only.</p>
+      <div className="flex flex-wrap gap-2"><button className="desk-btn desk-btn--primary" disabled={busy || blocked || !!storageError || intent.phase !== 'prepared'} onClick={() => void perform(submit)}>Queue delivery</button><button className="desk-btn" disabled={busy || intent.phase !== 'submitted'} onClick={() => void perform(check)}>Check delivery outcome</button><button className="desk-btn" disabled={busy || intent.phase !== 'submitted'} onClick={() => void perform(cancelUnsent)}>Cancel unsent replies</button><button className="desk-btn" disabled={busy} onClick={clear}>Acknowledge and clear delivery handle</button></div>
+      <p className="text-sm">Before queueing, the plan is re-read and must still match this digest. The request is sent once. After a lost response, reload or error, only the read-only outcome check is available; it never queues again or creates a replacement request. Cancelling stops replies that have not started sending, including delayed ones; it is safe to repeat. Clearing changes tab bookkeeping only.</p>
     </div>}
     {receipt ? <ChatAdmissionReceiptSummary receipt={receipt} /> : null}
+    {canceled !== null ? <Notice role="status">Canceled {canceled} {canceled === 1 ? 'reply' : 'replies'} that had not started. Replies already sending or sent were not recalled.</Notice> : null}
     {status ? <ChatAdmissionStatusSummary status={status} /> : null}
   </section>;
 }

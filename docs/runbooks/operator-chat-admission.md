@@ -72,3 +72,13 @@ A missing lookup, network error, cancellation or malformed response leaves the o
 4. **Clear.** Explicit acknowledgment removes the tab handle only. It does not cancel queued or sent messages.
 
 Receipts must carry the original source and deadline, exactly the held number of unique action IDs, and an admission time inside the original prepared/deadline interval. Outcome lookups must match the server's state/code/failure/retry combinations, keep strictly increasing traversal sequences and, when a receipt is in memory, the same action IDs and admission time. A queued receipt is shown as queue acknowledgment, not delivery. Retry hints are informational and grant no new attempt. Live provider qualification and deployment remain open.
+
+## Cancelling unsent replies
+
+Account POST `cancel-chat-admission` accepts exactly `requestId` and the reviewed `digest`, under the same session, Origin/CSRF and configure checks as admission. Like the other metadata writers, it requires the live chat controller. The store regenerates the original plan, requires an existing admission and updates only that plan's replies that are still `pending`: they become `rejected` with code `canceled`, an empty failure and no start time. A reply that is `running` may already be at the provider and is never recalled. Finished replies are left alone. The update takes the same row lock the executor's claim uses, so a canceled reply can never be claimed afterwards, and its queued job ends when the executor finds it no longer pending.
+
+The response is `{sourceId, canceledActionIds, canceledAt, state: "canceled_unclaimed"}`. It lists only the replies canceled by this call, in traversal order. Repeating the call is safe and returns an empty list. It never queues, retries or creates a new request. Use `lookup-chat-admission` to read every outcome; canceled replies appear there with code `canceled`.
+
+Migration 0046 adds `canceled` to the outbound code vocabulary. A CHECK (`platform_outbound_engine_cancel`) restricts it to engine rows that are `rejected`, never started and finished, with no failure or retry hint. Startup requires that constraint. An older runtime's lookup would refuse a canceled outcome as malformed and never treat it as a delivery.
+
+The delivery desk's **Cancel unsent replies** button asks for confirmation, sends one cancel request, then reads the outcomes and checks that every reported cancellation shows code `canceled`. It changes no stored intent.

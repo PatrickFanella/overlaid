@@ -655,3 +655,7 @@ Flow rehearsal now records each proposal's fixed offset from the occurrence cloc
 ### Phase 3 E4b: per-reply delay windows
 
 Migration 0045 lets an operator chat plan include delayed replies. Preparation stores each reply's `delayMs` in the plan body, omitted at zero so earlier plans keep their digests. Admission gives each reply a fixed `not_before` (occurrence clock plus offset) and deadline (plan deadline plus offset). The engine-source key no longer includes the deadline, and engine rows must have a `not_before` before their deadline. Queueing schedules delayed jobs at `not_before`. The executor and `Start` refuse to claim earlier, without changing state. `lookup-chat-admission` and the delivery desk show each reply's window. Older runtimes refuse the migrated schema. E4c (cancelling delayed replies before they start) remains open.
+
+### Phase 3 E4c: cancel unsent replies
+
+Account POST `cancel-chat-admission` and the delivery desk's **Cancel unsent replies** button cancel every reply of an admitted operator chat plan that has not been claimed, including delayed replies. Replies already sending or sent are not recalled. Migration 0046 adds the engine-only `canceled` code. Repeating the cancel is safe. Durable delay continuations (E4) are complete for operator chat plans; M1 command migration preview is next.

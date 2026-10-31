@@ -200,6 +200,7 @@ var operatorChatAdmissionConstraints = map[string]struct{ table, definition stri
 	"platform_outbound_source_v2":          {"platform_outbound_actions", "CHECK ((num_nonnulls(event_id, manual_source_id, engine_source_id) = 1))"},
 	"platform_outbound_engine_source_v2":   {"platform_outbound_actions", "FOREIGN KEY (tenant_id, engine_source_id, connection_id) REFERENCES engine_operator_chat_plans(tenant_id, id, connection_id) ON DELETE CASCADE"},
 	"platform_outbound_not_before":         {"platform_outbound_actions", "CHECK ((((engine_source_id IS NULL) AND (not_before IS NULL)) OR ((engine_source_id IS NOT NULL) AND (not_before IS NOT NULL) AND isfinite(not_before) AND (not_before < deadline))))"},
+	"platform_outbound_engine_cancel":      {"platform_outbound_actions", "CHECK (((code <> 'canceled'::text) OR ((engine_source_id IS NOT NULL) AND (state = 'rejected'::text) AND (failure = ''::text) AND (retry_after_ns = 0) AND (started_at IS NULL) AND (finished_at IS NOT NULL))))"},
 	"engine_chat_plan_effect_binding":      {"engine_operator_chat_plans", "UNIQUE (tenant_id, id, connection_id)"},
 	"platform_outbound_engine_text":        {"platform_outbound_actions", "CHECK (((engine_source_id IS NULL) OR ((capability = 'chat.send'::text) AND (reply_to_id = ''::text) AND (id = action_key))))"},
 }
