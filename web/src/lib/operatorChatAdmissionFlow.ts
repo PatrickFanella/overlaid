@@ -1,8 +1,8 @@
 import type { VersionScope } from './automationVersions';
-import { decodeChatAdmissionIntent, decodeChatAdmissionReceipt, decodeChatAdmissionStatus, sameReviewedPlan, type ChatAdmissionIntent, type ChatAdmissionReceipt, type ChatAdmissionStatus } from './operatorChatAdmissions';
+import { decodeChatAdmissionIntent, decodeChatAdmissionReceipt, decodeChatAdmissionStatus, decodeChatCancelReceipt, sameReviewedPlan, type ChatAdmissionIntent, type ChatAdmissionReceipt, type ChatAdmissionStatus, type ChatCancelReceipt } from './operatorChatAdmissions';
 import { recoverChatPlan, type ChatPlanFence, type ChatPlanStorage } from './operatorChatPlanFlow';
 
-export type ChatAdmissionRequest = (operation: 'lookup' | 'lookup-chat-plan' | 'admit-chat-plan' | 'lookup-chat-admission', body: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>;
+export type ChatAdmissionRequest = (operation: 'lookup' | 'lookup-chat-plan' | 'admit-chat-plan' | 'lookup-chat-admission' | 'cancel-chat-admission', body: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>;
 export type ChatAdmissionStep = { scope: VersionScope; intent: ChatAdmissionIntent; storage: ChatPlanStorage; request: ChatAdmissionRequest; signal: AbortSignal; active: ChatPlanFence };
 
 export const chatAdmissionStorageFailure = 'Chat delivery intent storage is unavailable. No new delivery can be queued.';
@@ -44,4 +44,16 @@ export async function recoverChatAdmission(step: ChatAdmissionStep, receipt: Cha
   if (intent.phase !== 'submitted') throw new Error('No delivery was queued for this intent; nothing to check.');
   const raw = await request('lookup-chat-admission', { requestId: intent.plan.source.requestId, digest: intent.digest }, signal); active();
   return decodeChatAdmissionStatus(raw, intent, receipt);
+}
+
+// Cancels only replies that have not been claimed, then reads every outcome.
+// Repeating it is harmless: it never queues, retries or recalls anything.
+export async function cancelChatAdmission(step: ChatAdmissionStep, receipt: ChatAdmissionReceipt | null): Promise<{ canceled: ChatCancelReceipt; status: ChatAdmissionStatus }> {
+  const { intent, request, signal, active } = step;
+  if (intent.phase !== 'submitted') throw new Error('No delivery was queued for this intent; nothing to cancel.');
+  const raw = await request('cancel-chat-admission', { requestId: intent.plan.source.requestId, digest: intent.digest }, signal); active();
+  const canceled = decodeChatCancelReceipt(raw, intent);
+  const status = await recoverChatAdmission(step, receipt);
+  if (canceled.canceledActionIds.some(id => status.actions.find(a => a.actionId === id)?.code !== 'canceled')) throw new Error('Cancellation result contradicts the delivery outcomes. Check the original outcome again.');
+  return { canceled, status };
 }

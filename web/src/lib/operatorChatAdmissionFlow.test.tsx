@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { loadChatAdmissionIntent, recoverChatAdmission, submitChatAdmission, writeChatAdmissionIntent, type ChatAdmissionRequest } from './operatorChatAdmissionFlow';
+import { cancelChatAdmission, loadChatAdmissionIntent, recoverChatAdmission, submitChatAdmission, writeChatAdmissionIntent, type ChatAdmissionRequest } from './operatorChatAdmissionFlow';
 import { decodeChatAdmissionIntent, decodeChatAdmissionReceipt, decodeChatAdmissionStatus, freezeChatAdmissionIntent, chatAdmissionStorageKey, type ChatAdmissionIntent } from './operatorChatAdmissions';
 import type { ChatPlanStorage } from './operatorChatPlanFlow';
 import type { ChatPlanIntent, ChatPlanMetadata } from './operatorChatPlans';
@@ -114,6 +114,31 @@ describe('chat delivery admission flow', () => {
     expect(() => decodeChatAdmissionStatus({ ...status, actions: [status.actions[1], status.actions[0]] }, submitted, null)).toThrow();
     expect(() => decodeChatAdmissionStatus({ ...status, digest: 'd'.repeat(64) }, submitted, null)).toThrow();
     for (const ok of [{ state: 'pending', code: 'admitted' }, { state: 'running', code: 'started' }, { state: 'uncertain', code: 'deadline_elapsed' }, { state: 'rejected', code: 'connection_unavailable', failure: 'permanent' }, { state: 'rejected', code: 'rejected', failure: 'plan_limited' }]) expect(() => decodeChatAdmissionStatus({ ...status, actions: [{ ...action, failure: '', ...ok }, status.actions[1]] }, submitted, null)).not.toThrow();
+  });
+
+  it('cancels unclaimed replies once per click, then reads outcomes without queueing', async () => {
+    const { held, status } = await fixture();
+    const submitted = { ...held, phase: 'submitted' as const };
+    const m = memory(JSON.stringify(submitted));
+    const after = { ...status, actions: [status.actions[0], { ...status.actions[1], state: 'rejected', code: 'canceled', failure: '', retryAfter: 0 }] };
+    const ok = { sourceId: held.sourceId, canceledActionIds: [ids[1]], canceledAt: '2026-10-30T12:00:03Z', state: 'canceled_unclaimed', text: 'PRIVATE' };
+    const s = server({ 'cancel-chat-admission': () => ok, 'lookup-chat-admission': () => after }, m.read);
+    const result = await cancelChatAdmission({ scope, intent: submitted, storage: m.storage, request: s.request, signal, active: live }, null);
+    expect(s.calls.map(c => c.operation)).toEqual(['cancel-chat-admission', 'lookup-chat-admission']);
+    expect(s.calls[0].body).toEqual({ requestId: plan.source.requestId, digest: held.digest });
+    expect(result.canceled).toEqual({ sourceId: held.sourceId, canceledActionIds: [ids[1]], canceledAt: '2026-10-30T12:00:03Z', state: 'canceled_unclaimed' });
+    expect(result.status.actions[1].code).toBe('canceled');
+    expect(JSON.stringify(result)).not.toContain('PRIVATE');
+    await expect(cancelChatAdmission({ scope, intent: held, storage: m.storage, request: s.request, signal, active: live }, null)).rejects.toThrow('nothing to cancel');
+    for (const bad of [{ sourceId: 'd'.repeat(64) }, { state: 'canceled' }, { canceledActionIds: [ids[1], ids[1]] }, { canceledActionIds: ['bad'] }, { canceledActionIds: [ids[0], ids[1], '3'.repeat(64)] }, { canceledAt: 'never' }]) {
+      const b = server({ 'cancel-chat-admission': () => ({ ...ok, ...bad }), 'lookup-chat-admission': () => after }, m.read);
+      await expect(cancelChatAdmission({ scope, intent: submitted, storage: m.storage, request: b.request, signal, active: live }, null)).rejects.toThrow();
+    }
+    // A reported cancellation must match the outcome read back.
+    const contradict = server({ 'cancel-chat-admission': () => ({ ...ok, canceledActionIds: [ids[0]] }), 'lookup-chat-admission': () => after }, m.read);
+    await expect(cancelChatAdmission({ scope, intent: submitted, storage: m.storage, request: contradict.request, signal, active: live }, null)).rejects.toThrow('contradicts');
+    expect(() => decodeChatAdmissionStatus({ ...after, actions: [status.actions[0], { ...after.actions[1], failure: 'permanent' }] }, submitted, null)).toThrow();
+    expect(phase(m.read())).toBe('submitted');
   });
 
   it('reports corrupt or unavailable storage without inventing a handle', () => {

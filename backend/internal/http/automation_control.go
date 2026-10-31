@@ -76,7 +76,7 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 	// Metadata writers participate in the existing managed owner; this check
 	// opens no execution pool and grants no provider/effect permission.
 	switch parts[4] {
-	case "publish", "select", "admit", "save-trace", "prepare-chat-plan":
+	case "publish", "select", "admit", "save-trace", "prepare-chat-plan", "cancel-chat-admission":
 		if e := a.checkChatController(ctx); e != nil {
 			if ctx.Err() != nil && a.ctx.Err() == nil {
 				automationControlError(w, ctx.Err())
@@ -275,6 +275,22 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 			w.WriteHeader(http.StatusAccepted)
 		}
 		writeJSON(w, map[string]any{"sourceId": result.SourceID, "actionIds": result.ActionIDs, "deadline": result.Deadline, "admittedAt": result.AdmittedAt, "created": result.Created, "state": "admitted_queued"})
+	case "cancel-chat-admission":
+		var body struct {
+			RequestID string `json:"requestId"`
+			Digest    string `json:"digest"`
+		}
+		if !decodeControl(w, r, &body) {
+			return
+		}
+		// Cancels only unclaimed replies of the original admission. Claimed
+		// replies are never recalled; read every outcome with the lookup.
+		result, e := store.CancelOperatorChatAdmission(ctx, actor, body.RequestID, body.Digest)
+		if e != nil {
+			automationControlError(w, e)
+			return
+		}
+		writeJSON(w, map[string]any{"sourceId": result.SourceID, "canceledActionIds": result.Canceled, "canceledAt": result.CanceledAt, "state": "canceled_unclaimed"})
 	case "lookup-chat-admission":
 		var body struct {
 			RequestID string `json:"requestId"`

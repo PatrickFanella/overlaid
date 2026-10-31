@@ -8,6 +8,7 @@ export type ChatAdmissionIntent = { format: 1; phase: 'prepared' | 'submitted'; 
 export type ChatAdmissionReceipt = { sourceId: string; actionIds: string[]; deadline: string; admittedAt: string; created: boolean; state: 'admitted_queued' };
 export type ChatActionFailure = '' | 'retryable' | 'unauthorized' | 'unsupported' | 'quota_limited' | 'plan_limited' | 'permanent';
 export type ChatActionOutcome = { actionId: string; sequence: number; state: 'pending' | 'running' | 'delivered' | 'uncertain' | 'rejected'; code: string; failure: ChatActionFailure; retryAfterNs: number; notBefore: string; deadline: string; delayed: boolean };
+export type ChatCancelReceipt = { sourceId: string; canceledActionIds: string[]; canceledAt: string; state: 'canceled_unclaimed' };
 export type ChatAdmissionStatus = { sourceId: string; runId: string; digest: string; deadline: string; admittedAt: string; actions: ChatActionOutcome[] };
 
 const fail = (): never => { throw new Error('Invalid chat delivery metadata. Keep the original intent and check delivery by its original request.'); };
@@ -85,6 +86,7 @@ function outcome(raw: unknown, intent: ChatAdmissionIntent): ChatActionOutcome {
     (state === 'delivered' && code === 'delivered' && failure === '' && zero) ||
     (state === 'uncertain' && (code === 'uncertain' || code === 'deadline_elapsed') && failure === '' && zero) ||
     (state === 'rejected' && (code === 'expired' || code === 'connection_unavailable') && failure === 'permanent' && zero) ||
+    (state === 'rejected' && code === 'canceled' && failure === '' && zero) ||
     (state === 'rejected' && code === 'rejected' && (failure === 'plan_limited' ? zero : ['retryable', 'unauthorized', 'unsupported', 'quota_limited', 'permanent'].includes(failure)));
   if (!valid || typeof r.state !== 'string' || typeof r.code !== 'string' || typeof r.failure !== 'string') return fail();
   return { actionId: hash(r.actionId), sequence: Number(r.sequence), state: state as ChatActionOutcome['state'], code, failure: failure as ChatActionFailure, retryAfterNs: Number(retry), ...window(r, intent) };
@@ -100,4 +102,13 @@ export function decodeChatAdmissionStatus(value: unknown, intent: ChatAdmissionI
   const admittedAt = admittedWithin(r.admittedAt, intent);
   if (receipt && (receipt.actionIds.join() !== ids.join() || !sameOperatorInstant(receipt.admittedAt, admittedAt))) return fail();
   return { sourceId: intent.sourceId, runId: intent.runId, digest: intent.digest, deadline: intent.deadline, admittedAt, actions };
+}
+
+// Lists only replies this call canceled; the rest need the outcome lookup.
+export function decodeChatCancelReceipt(value: unknown, intent: ChatAdmissionIntent): ChatCancelReceipt {
+  const r = record(value);
+  if (r.sourceId !== intent.sourceId || r.state !== 'canceled_unclaimed' || !Array.isArray(r.canceledActionIds) || r.canceledActionIds.length > intent.effectCount) return fail();
+  const ids = r.canceledActionIds.map(hash);
+  if (new Set(ids).size !== ids.length) return fail();
+  return { sourceId: intent.sourceId, canceledActionIds: ids, canceledAt: operatorTimestamp(r.canceledAt), state: 'canceled_unclaimed' };
 }

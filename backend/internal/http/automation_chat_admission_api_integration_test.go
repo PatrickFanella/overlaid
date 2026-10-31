@@ -98,6 +98,21 @@ func TestOperatorChatAdmissionAccountTransport(t *testing.T) {
 		t.Fatal("stale runtime fallback", w.Code)
 	}
 	automationControlObject(t, automationControlPost(t, app, a, a.tenant, "lookup-chat-admission", body), 200)
+	// Cancellation needs configure membership and the live owner, touches only
+	// unclaimed replies of the original admission and is safe to repeat.
+	if w := automationControlPost(t, app, b, a.tenant, "cancel-chat-admission", body); w.Code != 403 {
+		t.Fatal("foreign cancel", w.Code)
+	}
+	canceled := automationControlObject(t, automationControlPost(t, app, a, a.tenant, "cancel-chat-admission", body), 200)
+	ids, _ := canceled["canceledActionIds"].([]any)
+	if canceled["state"] != "canceled_unclaimed" || canceled["sourceId"] != p.ID || len(ids) > 1 || canceled["canceledAt"] == "" {
+		t.Fatal(canceled)
+	}
+	repeat := automationControlObject(t, automationControlPost(t, app, a, a.tenant, "cancel-chat-admission", body), 200)
+	if again, _ := repeat["canceledActionIds"].([]any); again == nil || len(again) != 0 {
+		t.Fatal("repeat cancel", repeat)
+	}
+	automationControlObject(t, automationControlPost(t, app, a, a.tenant, "lookup-chat-admission", body), 200)
 	var count int
 	if err = f.Admin.QueryRow(`SELECT count(*) FROM platform_outbound_actions`).Scan(&count); err != nil || count != 1 {
 		t.Fatal("duplicate actions", count, err)

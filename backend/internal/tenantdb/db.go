@@ -99,7 +99,7 @@ func Open(databaseURL, tenantID string) (*DB, error) {
 		err = raw.QueryRowContext(ctx, `SELECT count(*)=2 AND bool_and(convalidated) FROM pg_constraint WHERE conrelid='platform_outbound_actions'::regclass AND ((conname='platform_outbound_source_v2' AND pg_get_expr(conbin,conrelid)='(num_nonnulls(event_id, manual_source_id, engine_source_id) = 1)') OR conname='platform_outbound_manual_source')`).Scan(&migrated)
 	}
 	if err == nil && migrated {
-		err = raw.QueryRowContext(ctx, `SELECT count(*)=3 AND bool_and(convalidated AND NOT condeferrable) FROM pg_constraint WHERE conrelid='platform_outbound_actions'::regclass AND ((conname='platform_outbound_engine_source_v2' AND pg_get_constraintdef(oid)=$1) OR (conname='platform_outbound_engine_text' AND pg_get_constraintdef(oid)=$2) OR (conname='platform_outbound_not_before' AND pg_get_constraintdef(oid)=$3))`, operatorChatEngineSource, operatorChatEngineText, operatorChatNotBefore).Scan(&migrated)
+		err = raw.QueryRowContext(ctx, `SELECT count(*)=4 AND bool_and(convalidated AND NOT condeferrable) FROM pg_constraint WHERE conrelid='platform_outbound_actions'::regclass AND ((conname='platform_outbound_engine_source_v2' AND pg_get_constraintdef(oid)=$1) OR (conname='platform_outbound_engine_text' AND pg_get_constraintdef(oid)=$2) OR (conname='platform_outbound_not_before' AND pg_get_constraintdef(oid)=$3) OR (conname='platform_outbound_engine_cancel' AND pg_get_constraintdef(oid)=$4))`, operatorChatEngineSource, operatorChatEngineText, operatorChatNotBefore, operatorChatCancel).Scan(&migrated)
 	}
 	if err == nil && migrated {
 		err = raw.QueryRowContext(ctx, `SELECT count(*)=2 AND bool_and(convalidated) FROM pg_constraint WHERE conrelid='platform_moderation_actions'::regclass AND ((conname='platform_moderation_source_kind' AND contype='c' AND pg_get_expr(conbin,conrelid)='((event_id IS NULL) <> (manual_source_id IS NULL))') OR (conname='platform_moderation_manual_source' AND contype='f' AND confrelid='platform_moderation_sources'::regclass))`).Scan(&migrated)
@@ -293,5 +293,7 @@ func (d *DB) String() string { return fmt.Sprintf("tenant database (%s)", d.tena
 const (
 	operatorChatEngineSource = "FOREIGN KEY (tenant_id, engine_source_id, connection_id) REFERENCES engine_operator_chat_plans(tenant_id, id, connection_id) ON DELETE CASCADE"
 	operatorChatEngineText   = "CHECK (((engine_source_id IS NULL) OR ((capability = 'chat.send'::text) AND (reply_to_id = ''::text) AND (id = action_key))))"
-	operatorChatNotBefore    = "CHECK ((((engine_source_id IS NULL) AND (not_before IS NULL)) OR ((engine_source_id IS NOT NULL) AND (not_before IS NOT NULL) AND isfinite(not_before) AND (not_before < deadline))))"
+	// Migration 0046: canceled is a terminal, never-started engine-only code.
+	operatorChatCancel    = "CHECK (((code <> 'canceled'::text) OR ((engine_source_id IS NOT NULL) AND (state = 'rejected'::text) AND (failure = ''::text) AND (retry_after_ns = 0) AND (started_at IS NULL) AND (finished_at IS NOT NULL))))"
+	operatorChatNotBefore = "CHECK ((((engine_source_id IS NULL) AND (not_before IS NULL)) OR ((engine_source_id IS NOT NULL) AND (not_before IS NOT NULL) AND isfinite(not_before) AND (not_before < deadline))))"
 )

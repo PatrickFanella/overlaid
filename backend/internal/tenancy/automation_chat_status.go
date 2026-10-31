@@ -156,6 +156,9 @@ func validOperatorChatOutcome(r OperatorChatActionStatus, provider, started, fin
 		if provider || !finished || claimed {
 			return false
 		}
+		if r.Code == "canceled" {
+			return !started && r.Failure == "" && r.RetryAfter == 0
+		}
 		if r.Code == "expired" || r.Code == "connection_unavailable" {
 			return !started && r.Failure == platform.Permanent && r.RetryAfter == 0
 		}
