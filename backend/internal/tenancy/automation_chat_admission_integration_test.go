@@ -176,7 +176,7 @@ func TestOperatorChatAdmissionRefusalsAndAtomicRollback(t *testing.T) {
 			case "schema":
 				exec(`ALTER TABLE engine_operator_chat_admissions NO FORCE ROW LEVEL SECURITY`)
 			case "cascade":
-				exec(`ALTER TABLE platform_outbound_actions DROP CONSTRAINT platform_outbound_engine_source`)
+				exec(`ALTER TABLE platform_outbound_actions DROP CONSTRAINT platform_outbound_engine_source_v2`)
 			}
 			got, err := store.AdmitOperatorChatPlan(ctx, owner, request, p.Digest)
 			if err == nil || got.SourceID != "" || len(got.ActionIDs) != 0 {

@@ -22,6 +22,8 @@ var (
 	ErrInvalid  = errors.New("invalid or unbound outbound action")
 	ErrConflict = errors.New("outbound action payload conflict")
 	ErrFence    = errors.New("outbound completion fence rejected")
+	// ErrNotYet refuses a claim before a delayed action's fixed not-before time.
+	ErrNotYet = errors.New("outbound action not yet due")
 )
 
 type Store struct{ db *tenantdb.DB }
@@ -239,8 +241,8 @@ func (s *Store) Start(ctx context.Context, id string) (Claim, bool, error) {
 	}
 	var c Claim
 	var state, channel, connection string
-	var expired bool
-	err = tx.QueryRowContext(ctx, `SELECT state,channel_id,connection_id,message,reply_to_id,capability,deadline,deadline<=now() FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1 FOR UPDATE`, id).Scan(&state, &channel, &connection, &c.Message.Text, &c.Message.ReplyToID, &c.Capability, &c.Deadline, &expired)
+	var expired, early bool
+	err = tx.QueryRowContext(ctx, `SELECT state,channel_id,connection_id,message,reply_to_id,capability,deadline,deadline<=now(),coalesce(not_before>now(),false) FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1 FOR UPDATE`, id).Scan(&state, &channel, &connection, &c.Message.Text, &c.Message.ReplyToID, &c.Capability, &c.Deadline, &expired, &early)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Claim{}, false, ErrInvalid
 	}
@@ -249,6 +251,11 @@ func (s *Store) Start(ctx context.Context, id string) (Claim, bool, error) {
 	}
 	if state != "pending" {
 		return Claim{}, false, tx.Commit()
+	}
+	// A delayed effect is never claimed before its fixed not-before time. This
+	// refusal changes nothing, so the caller may defer before any claim exists.
+	if early && !expired {
+		return Claim{}, false, ErrNotYet
 	}
 	var bound bool
 	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM platform_connections WHERE /*tenant:platform_connections*/ AND provider='twitch' AND provider_user_id=$1 AND revoked_at IS NULL)`, channel).Scan(&bound)

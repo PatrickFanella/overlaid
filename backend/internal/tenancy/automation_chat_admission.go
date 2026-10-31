@@ -74,7 +74,8 @@ func (s *AutomationStore) AdmitOperatorChatPlan(ctx context.Context, actor, requ
 		// work, or recreate a deleted action/job under the surviving marker.
 		for _, e := range p.Effects {
 			var valid bool
-			err = tx.QueryRowContext(ctx, `SELECT engine_source_id=$2 AND connection_id=$3 AND channel_id=$4 AND action_key=$1 AND message=$5 AND reply_to_id='' AND capability='chat.send' AND payload_hash=$6 AND deadline=$7 FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1`, e.ID, p.ID, p.ConnectionID, p.ChannelID, e.Text, operatorChatPayloadHash(e.Text), p.Deadline).Scan(&valid)
+			notBefore, deadline := p.window(e)
+			err = tx.QueryRowContext(ctx, `SELECT engine_source_id=$2 AND connection_id=$3 AND channel_id=$4 AND action_key=$1 AND message=$5 AND reply_to_id='' AND capability='chat.send' AND payload_hash=$6 AND deadline=$7 AND not_before IS NOT DISTINCT FROM $8 FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1`, e.ID, p.ID, p.ConnectionID, p.ChannelID, e.Text, operatorChatPayloadHash(e.Text), deadline, notBefore).Scan(&valid)
 			if errors.Is(err, sql.ErrNoRows) {
 				return out, ErrAutomationPurged
 			}
@@ -131,7 +132,10 @@ func (s *AutomationStore) AdmitOperatorChatPlan(ctx context.Context, actor, requ
 		return out, err
 	}
 	for _, e := range p.Effects {
-		_, err = tx.ExecContext(ctx, `INSERT INTO platform_outbound_actions(id,engine_source_id,connection_id,action_key,channel_id,message,reply_to_id,capability,payload_hash,deadline) VALUES($1,$2,$3,$1,$4,$5,'','chat.send',$6,$7)`, e.ID, p.ID, p.ConnectionID, p.ChannelID, e.Text, operatorChatPayloadHash(e.Text), p.Deadline)
+		// Each effect keeps its own fixed window; queueing schedules it for
+		// not_before and the executor refuses to claim earlier.
+		notBefore, deadline := p.window(e)
+		_, err = tx.ExecContext(ctx, `INSERT INTO platform_outbound_actions(id,engine_source_id,connection_id,action_key,channel_id,message,reply_to_id,capability,payload_hash,deadline,not_before) VALUES($1,$2,$3,$1,$4,$5,'','chat.send',$6,$7,$8)`, e.ID, p.ID, p.ConnectionID, p.ChannelID, e.Text, operatorChatPayloadHash(e.Text), deadline, notBefore)
 		if err != nil {
 			return out, err
 		}
@@ -194,6 +198,8 @@ var operatorChatAdmissionConstraints = map[string]struct{ table, definition stri
 	"engine_chat_admission_source":         {"engine_operator_chat_admissions", "FOREIGN KEY (tenant_id, id) REFERENCES engine_operator_chat_plan_markers(tenant_id, id) ON DELETE CASCADE"},
 	"engine_chat_admission_time":           {"engine_operator_chat_admissions", "CHECK (isfinite(admitted_at))"},
 	"platform_outbound_source_v2":          {"platform_outbound_actions", "CHECK ((num_nonnulls(event_id, manual_source_id, engine_source_id) = 1))"},
-	"platform_outbound_engine_source":      {"platform_outbound_actions", "FOREIGN KEY (tenant_id, engine_source_id, connection_id, deadline) REFERENCES engine_operator_chat_plans(tenant_id, id, connection_id, deadline) ON DELETE CASCADE"},
+	"platform_outbound_engine_source_v2":   {"platform_outbound_actions", "FOREIGN KEY (tenant_id, engine_source_id, connection_id) REFERENCES engine_operator_chat_plans(tenant_id, id, connection_id) ON DELETE CASCADE"},
+	"platform_outbound_not_before":         {"platform_outbound_actions", "CHECK ((((engine_source_id IS NULL) AND (not_before IS NULL)) OR ((engine_source_id IS NOT NULL) AND (not_before IS NOT NULL) AND isfinite(not_before) AND (not_before < deadline))))"},
+	"engine_chat_plan_effect_binding":      {"engine_operator_chat_plans", "UNIQUE (tenant_id, id, connection_id)"},
 	"platform_outbound_engine_text":        {"platform_outbound_actions", "CHECK (((engine_source_id IS NULL) OR ((capability = 'chat.send'::text) AND (reply_to_id = ''::text) AND (id = action_key))))"},
 }

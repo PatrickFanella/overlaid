@@ -619,38 +619,93 @@ func TestOperatorChatPlansExpiryAndCapacityBounds(t *testing.T) {
 	}
 }
 
-func TestOperatorChatPlansRefuseDelayedReplies(t *testing.T) {
-	s, a, _, owner, _, _ := tenantPair(t)
-	store, _ := automationStore(t, s, a.ID)
+func TestOperatorChatPlansGiveDelayedRepliesOwnWindows(t *testing.T) {
+	s, a, _, owner, _, f := tenantPair(t)
+	store, scope := automationStore(t, s, a.ID)
 	ctx := t.Context()
 	if err := s.SaveConnection(ctx, botKeys(t), a.ID, owner, "twitch", "channel", "channel", nil, json.RawMessage(`{}`)); err != nil {
 		t.Fatal(err)
 	}
-	// A reply after a delay has no continuation deadline yet and is refused; a
-	// delay that shifts no reply leaves the plan immediate.
-	for i, test := range []struct {
-		nodes []engine.Node
-		want  error
-	}{
-		{[]engine.Node{{ID: "root", Kind: "sequential", Children: []string{"send", "wait"}}, {ID: "send", Kind: "action", Capability: "chat.send", Arguments: []engine.Argument{{Name: "text", Value: "now"}}}, {ID: "wait", Kind: "delay", DelayMS: 1000, Children: []string{"later"}}, {ID: "later", Kind: "action", Capability: "chat.send", Arguments: []engine.Argument{{Name: "text", Value: "later"}}}}, ErrAutomationPolicy},
-		{[]engine.Node{{ID: "root", Kind: "sequential", Children: []string{"send", "wait"}}, {ID: "send", Kind: "action", Capability: "chat.send", Arguments: []engine.Argument{{Name: "text", Value: "now"}}}, {ID: "wait", Kind: "delay", DelayMS: 1000, Children: []string{"mark"}}, {ID: "mark", Kind: "set_output", Arguments: []engine.Argument{{Name: "out", Value: "x"}}}}, nil},
-	} {
-		d := chatPlanVersion(t, a.ID, 865+i, 8650+i, "x", 1).Document()
-		d.Nodes = test.nodes
-		v, err := engine.Validate(d)
+	// A delay that shifts no reply leaves the plan immediate.
+	quiet := chatPlanVersion(t, a.ID, 866, 8660, "x", 1).Document()
+	quiet.Nodes = []engine.Node{{ID: "root", Kind: "sequential", Children: []string{"send", "wait"}}, {ID: "send", Kind: "action", Capability: "chat.send", Arguments: []engine.Argument{{Name: "text", Value: "now"}}}, {ID: "wait", Kind: "delay", DelayMS: 1000, Children: []string{"mark"}}, {ID: "mark", Kind: "set_output", Arguments: []engine.Argument{{Name: "out", Value: "x"}}}}
+	d := chatPlanVersion(t, a.ID, 865, 8650, "x", 1).Document()
+	d.Nodes = []engine.Node{{ID: "root", Kind: "sequential", Children: []string{"send", "wait"}}, {ID: "send", Kind: "action", Capability: "chat.send", Arguments: []engine.Argument{{Name: "text", Value: "now"}}}, {ID: "wait", Kind: "delay", DelayMS: 1500, Children: []string{"later"}}, {ID: "later", Kind: "action", Capability: "chat.send", Arguments: []engine.Argument{{Name: "text", Value: "later"}}}}
+	plans := []OperatorChatPlanMetadata{}
+	for i, doc := range []engine.Document{quiet, d} {
+		v, err := engine.Validate(doc)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err = store.Publish(ctx, owner, v, ""); err != nil {
 			t.Fatal(err)
 		}
-		r := operatorRequest(865 + i)
-		if _, err = store.AdmitOperator(ctx, owner, r, d.AutomationID, d.VersionID); err != nil {
+		r := operatorRequest(866 - i)
+		if _, err = store.AdmitOperator(ctx, owner, r, doc.AutomationID, doc.VersionID); err != nil {
 			t.Fatal(err)
 		}
-		got, e := store.PrepareOperatorChatPlan(ctx, owner, r, d.VersionID, 2)
-		if !errors.Is(e, test.want) || test.want != nil && !reflect.DeepEqual(got, OperatorChatPlanMetadata{}) || test.want == nil && got.EffectCount != 1 {
-			t.Fatal("delay preparation", i, got, e)
+		got, err := store.PrepareOperatorChatPlan(ctx, owner, r, doc.VersionID, 2)
+		if err != nil || got.EffectCount != i+1 {
+			t.Fatal("delay preparation", i, got, err)
+		}
+		plans = append(plans, got)
+	}
+	// Zero offsets stay out of the canonical body; the delayed reply records its own.
+	var quietBody, body string
+	if err := f.Admin.QueryRow(`SELECT document FROM engine_operator_chat_plans WHERE tenant_id=$1 AND id=$2`, a.ID, plans[0].ID).Scan(&quietBody); err != nil || strings.Contains(quietBody, "delayMs") {
+		t.Fatal("immediate plan body", quietBody, err)
+	}
+	if err := f.Admin.QueryRow(`SELECT document FROM engine_operator_chat_plans WHERE tenant_id=$1 AND id=$2`, a.ID, plans[1].ID).Scan(&body); err != nil || strings.Count(body, `"delayMs":1500`) != 1 || strings.Count(body, "delayMs") != 1 {
+		t.Fatal("delayed plan body", body, err)
+	}
+	p := plans[1]
+	request := operatorRequest(865)
+	admitted, err := store.AdmitOperatorChatPlan(ctx, owner, request, p.Digest)
+	if err != nil || !admitted.Created || len(admitted.ActionIDs) != 2 || !admitted.Deadline.Equal(p.Deadline) {
+		t.Fatal("delayed admission", admitted, err)
+	}
+	var created, deadline time.Time
+	if err = f.Admin.QueryRow(`SELECT source_created_at,deadline FROM engine_operator_chat_plans WHERE tenant_id=$1 AND id=$2`, a.ID, p.ID).Scan(&created, &deadline); err != nil {
+		t.Fatal(err)
+	}
+	for i, id := range admitted.ActionIDs {
+		offset := time.Duration(i) * 1500 * time.Millisecond
+		var notBefore, end, scheduled time.Time
+		var state string
+		if err = scope.QueryRowContext(ctx, `SELECT a.not_before,a.deadline,j.scheduled_at,j.state FROM platform_outbound_actions a JOIN river_job j ON j.overlaid_action_id=a.id WHERE a.id=$1`, id).Scan(&notBefore, &end, &scheduled, &state); err != nil {
+			t.Fatal(err)
+		}
+		if !notBefore.Equal(created.Add(offset)) || !end.Equal(deadline.Add(offset)) {
+			t.Fatal("effect window", i, notBefore, end, created, deadline)
+		}
+		if i == 1 && (!scheduled.Equal(notBefore) || state != "scheduled") {
+			t.Fatal("delayed job schedule", scheduled, notBefore, state)
+		}
+		if i == 0 && state != "available" {
+			t.Fatal("immediate job state", state)
+		}
+	}
+	status, err := store.LookupOperatorChatAdmission(ctx, owner, request, p.Digest)
+	if err != nil || len(status.Actions) != 2 || !status.Actions[1].NotBefore.Equal(created.Add(1500*time.Millisecond)) || !status.Actions[1].Deadline.Equal(deadline.Add(1500*time.Millisecond)) || !status.Actions[0].Deadline.Equal(deadline) {
+		t.Fatal("delayed status", status, err)
+	}
+	if again, err := store.AdmitOperatorChatPlan(ctx, owner, request, p.Digest); err != nil || again.Created {
+		t.Fatal("duplicate delayed admission", again, err)
+	}
+	// A changed window is a conflict, never a repair.
+	if _, err = f.Admin.Exec(`UPDATE platform_outbound_actions SET not_before=not_before+interval '1 millisecond' WHERE tenant_id=$1 AND id=$2`, a.ID, admitted.ActionIDs[1]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.AdmitOperatorChatPlan(ctx, owner, request, p.Digest); !errors.Is(err, ErrAutomationConflict) {
+		t.Fatal("drifted window admission", err)
+	}
+	if _, err = store.LookupOperatorChatAdmission(ctx, owner, request, p.Digest); !errors.Is(err, ErrAutomationConflict) {
+		t.Fatal("drifted window lookup", err)
+	}
+	// The schema refuses engine actions without a window or with an inverted one.
+	for _, bad := range []string{`not_before=NULL`, `not_before=deadline`} {
+		if _, err = f.Admin.Exec(`UPDATE platform_outbound_actions SET `+bad+` WHERE tenant_id=$1 AND id=$2`, a.ID, admitted.ActionIDs[0]); err == nil {
+			t.Fatal("accepted invalid window", bad)
 		}
 	}
 }

@@ -206,11 +206,13 @@ func (e *Executor) expirePendingJob(ctx context.Context, args platform.ChatSendA
 	return nil
 }
 
-func (s *Store) target(ctx context.Context, id string) (Target, string, error) {
+func (s *Store) target(ctx context.Context, id string) (Target, string, time.Time, error) {
 	t := Target{TenantID: s.db.TenantID(), ActionID: id}
 	var state string
-	err := s.db.QueryRowContext(ctx, `SELECT connection_id,channel_id,capability,deadline,state FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1`, id).Scan(&t.ConnectionID, &t.ChannelID, &t.Capability, &t.Deadline, &state)
-	return t, state, err
+	var due sql.NullTime
+	// Report the fixed not-before time only while DB time has not reached it.
+	err := s.db.QueryRowContext(ctx, `SELECT connection_id,channel_id,capability,deadline,state,CASE WHEN not_before>clock_timestamp() THEN not_before END FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1`, id).Scan(&t.ConnectionID, &t.ChannelID, &t.Capability, &t.Deadline, &state, &due)
+	return t, state, due.Time, err
 }
 
 // Execute defers only before a durable claim. After Start, every exit is fenced:
@@ -226,7 +228,7 @@ func (e *Executor) Execute(ctx context.Context, args platform.ChatSendArgs) (res
 		return result, ErrInvalid
 	}
 	store, _ := New(db)
-	t, state, err := store.target(ctx, args.ActionID)
+	t, state, notBefore, err := store.target(ctx, args.ActionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Execution{Done: true}, nil
 	}
@@ -250,6 +252,11 @@ func (e *Executor) Execute(ctx context.Context, args platform.ChatSendArgs) (res
 	}
 	if !t.Deadline.After(time.Now()) {
 		return reject(ctx, store, t, platform.Permanent)
+	}
+	// Defer a delayed effect until its fixed not-before time, before pacing,
+	// authorization or any claim. The worker bounds the snooze by the deadline.
+	if !notBefore.IsZero() {
+		return Execution{RetryAt: notBefore}, nil
 	}
 	if retry, hintErr := e.pacingHint(ctx, t); hintErr != nil {
 		if errors.Is(hintErr, ErrPlanLimit) {
@@ -323,6 +330,10 @@ func (e *Executor) Execute(ctx context.Context, args platform.ChatSendArgs) (res
 		defer release()
 	}
 	claim, started, startErr := store.Start(attemptCtx, t.ActionID)
+	if errors.Is(startErr, ErrNotYet) {
+		// No claim exists; retry shortly and recheck the fixed window then.
+		return Execution{RetryAt: time.Now().Add(time.Second)}, nil
+	}
 	if startErr != nil {
 		return result, errExecutionStore
 	}

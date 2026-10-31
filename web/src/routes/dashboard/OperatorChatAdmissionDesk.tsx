@@ -84,7 +84,7 @@ export function ChatAdmissionStatusSummary({ status }: { status: ChatAdmissionSt
   return <section aria-label="Verified delivery outcomes" className="grid min-w-0 gap-3">
     <Notice role="status">Outcome snapshot from {status.actions.length} retained {status.actions.length === 1 ? 'action' : 'actions'}. A queued action can remain queued after the deadline; this read does not change it.</Notice>
     <div className="break-all"><KeyValues items={[['Source', status.sourceId], ['Original run', status.runId], ['Queued at', status.admittedAt], ['Original deadline', status.deadline]]} /></div>
-    <ol className="grid gap-2">{status.actions.map(a => <li className="desk-sub min-w-0 break-all text-sm" key={a.actionId}>Reply {a.sequence} · {stateLabels[a.state]} · {a.code}{a.failure ? ` · ${a.failure}` : ''}{a.retryAfterNs ? ` · retry hint ${Math.ceil(a.retryAfterNs / 1e9)}s (informational)` : ''}<br />{a.actionId}</li>)}</ol>
+    <ol className="grid gap-2">{status.actions.map(a => <li className="desk-sub min-w-0 break-all text-sm" key={a.actionId}>Reply {a.sequence} · {stateLabels[a.state]} · {a.code}{a.failure ? ` · ${a.failure}` : ''}{a.retryAfterNs ? ` · retry hint ${Math.ceil(a.retryAfterNs / 1e9)}s (informational)` : ''}{a.delayed ? ` · delayed: not before ${a.notBefore}, deadline ${a.deadline}` : ''}<br />{a.actionId}</li>)}</ol>
     <p className="text-sm">Uncertain outcomes are never retried automatically. Retry hints describe the retained outcome and grant no new attempt.</p>
   </section>;
 }
