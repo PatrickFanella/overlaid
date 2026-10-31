@@ -41,6 +41,16 @@ type operatorChatEffect struct {
 	VersionID    string `json:"versionId"`
 	NodeID       string `json:"nodeId"`
 	Text         string `json:"text"`
+	// DelayMS is the fixed offset from the original occurrence clock. Zero is
+	// omitted so plans prepared before delays keep their canonical bodies.
+	DelayMS int64 `json:"delayMs,omitempty"`
+}
+
+// window derives an effect's fixed not-before time and deadline once from the
+// original occurrence clock and run deadline. Nothing renews either bound.
+func (p operatorChatPlan) window(e operatorChatEffect) (notBefore, deadline time.Time) {
+	offset := time.Duration(e.DelayMS) * time.Millisecond
+	return p.Clock.Add(offset), p.Deadline.Add(offset)
 }
 
 // Private canonical input. Never export the body or use a rehearsal ID as an
@@ -103,10 +113,8 @@ func (s *AutomationStore) makeOperatorChatPlan(ctx context.Context, tx *tenantdb
 	if len(text.Proposals) < 1 || len(text.Proposals) > MaxOperatorChatEffects {
 		return operatorChatPlan{}, "", ErrAutomationPolicy
 	}
-	// Delayed replies need their own fixed continuation deadlines; until those
-	// exist, never prepare one as an immediate send.
 	for _, proposal := range text.Proposals {
-		if proposal.DelayMS != 0 {
+		if proposal.DelayMS < 0 || proposal.DelayMS > engine.MaxDelayMS {
 			return operatorChatPlan{}, "", ErrAutomationPolicy
 		}
 	}
@@ -114,7 +122,7 @@ func (s *AutomationStore) makeOperatorChatPlan(ctx context.Context, tx *tenantdb
 	p := operatorChatPlan{FormatVersion: 1, SyntaxVersion: variables.SyntaxVersion, CaptureVersion: 1, TenantID: s.db.TenantID(), ID: id, RunID: run.ID, OccurrenceID: run.OccurrenceID, AutomationID: run.AutomationID, VersionID: run.VersionID, GraphDigest: run.GraphDigest, ConnectionID: connection, ChannelID: channel, Clock: run.CreatedAt.UTC(), Deadline: run.Deadline.UTC(), VariableFingerprint: text.VariableFingerprint, EffectCount: len(text.Proposals), Effects: []operatorChatEffect{}}
 	for _, proposal := range text.Proposals {
 		effect := operatorChatIdentity("overlaid.engine.operator-chat-effect.v1", p.TenantID, p.RunID, strconv.Itoa(proposal.Sequence), proposal.AutomationID, proposal.VersionID, proposal.NodeID)
-		p.Effects = append(p.Effects, operatorChatEffect{ID: effect, Sequence: proposal.Sequence, AutomationID: proposal.AutomationID, VersionID: proposal.VersionID, NodeID: proposal.NodeID, Text: proposal.Text})
+		p.Effects = append(p.Effects, operatorChatEffect{ID: effect, Sequence: proposal.Sequence, AutomationID: proposal.AutomationID, VersionID: proposal.VersionID, NodeID: proposal.NodeID, Text: proposal.Text, DelayMS: proposal.DelayMS})
 	}
 	raw, err := json.Marshal(p)
 	if err != nil || len(raw) > MaxOperatorChatPlanBytes {

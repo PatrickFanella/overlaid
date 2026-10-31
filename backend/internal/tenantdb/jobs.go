@@ -2,6 +2,7 @@ package tenantdb
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"git.subcult.tv/PatrickFanella/over-laid/internal/platform"
 	"regexp"
@@ -46,8 +47,15 @@ func (t *Tx) EnqueueChatSend(ctx context.Context, actionID string) (int64, error
 		return 0, errors.New("scoped outbound action identity required")
 	}
 	var deadline time.Time
-	if err := t.QueryRowContext(ctx, `SELECT deadline FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1 AND state='pending' AND deadline>now()`, actionID).Scan(&deadline); err != nil {
+	var notBefore sql.NullTime
+	if err := t.QueryRowContext(ctx, `SELECT deadline,CASE WHEN not_before>clock_timestamp() THEN not_before END FROM platform_outbound_actions WHERE /*tenant:platform_outbound_actions*/ AND id=$1 AND state='pending' AND deadline>now()`, actionID).Scan(&deadline, &notBefore); err != nil {
 		return 0, err
+	}
+	// Delayed engine effects are leased no earlier than their fixed not-before
+	// time. The executor still refuses a claim before it, so this is scheduling only.
+	opts := &river.InsertOpts{Queue: "chat_outbound", MaxAttempts: 3, Priority: 4}
+	if notBefore.Valid {
+		opts.ScheduledAt = notBefore.Time
 	}
 	var schema string
 	if err := t.raw.QueryRowContext(ctx, `SELECT current_schema()`).Scan(&schema); err != nil {
@@ -57,7 +65,7 @@ func (t *Tx) EnqueueChatSend(ctx context.Context, actionID string) (int64, error
 	if err != nil {
 		return 0, err
 	}
-	result, err := client.InsertTx(ctx, t.raw, platform.ChatSendArgs{TenantID: t.db.tenant, ActionID: actionID, Deadline: deadline.UTC().Unix()}, &river.InsertOpts{Queue: "chat_outbound", MaxAttempts: 3, Priority: 4})
+	result, err := client.InsertTx(ctx, t.raw, platform.ChatSendArgs{TenantID: t.db.tenant, ActionID: actionID, Deadline: deadline.UTC().Unix()}, opts)
 	if err != nil {
 		return 0, err
 	}

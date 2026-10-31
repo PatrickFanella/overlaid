@@ -17,11 +17,13 @@ type OperatorChatStatus struct {
 }
 
 type OperatorChatActionStatus struct {
-	ActionID    string
-	Sequence    int
-	State, Code string
-	Failure     platform.FailureKind
-	RetryAfter  time.Duration
+	ActionID string
+	Sequence int
+	// NotBefore and Deadline are the effect's fixed original window.
+	NotBefore, Deadline time.Time
+	State, Code         string
+	Failure             platform.FailureKind
+	RetryAfter          time.Duration
 }
 
 // LookupOperatorChatAdmission reads an existing original admission and all its
@@ -76,20 +78,23 @@ func (s *AutomationStore) LookupOperatorChatAdmission(ctx context.Context, actor
 	// Bind private payloads in SQL and project only fixed metadata. One statement
 	// snapshots all mutable outcomes without taking an execution/claim row lock.
 	type expectation struct {
-		ID   string `json:"id"`
-		Text string `json:"text"`
-		Hash string `json:"payload_hash"`
+		ID        string    `json:"id"`
+		Text      string    `json:"text"`
+		Hash      string    `json:"payload_hash"`
+		NotBefore time.Time `json:"not_before"`
+		Deadline  time.Time `json:"deadline"`
 	}
 	expected := []expectation{}
-	sequences := map[string]int{}
+	effects := map[string]operatorChatEffect{}
 	for _, e := range p.Effects {
-		expected = append(expected, expectation{e.ID, e.Text, operatorChatPayloadHash(e.Text)})
-		sequences[e.ID] = e.Sequence
+		notBefore, deadline := p.window(e)
+		expected = append(expected, expectation{e.ID, e.Text, operatorChatPayloadHash(e.Text), notBefore, deadline})
+		effects[e.ID] = e
 	}
 	raw, _ := json.Marshal(expected)
-	rows, err := tx.QueryContext(ctx, `SELECT a.id,coalesce(a.engine_source_id=$1 AND a.event_id IS NULL AND a.manual_source_id IS NULL AND a.connection_id=$3 AND a.channel_id=$4 AND a.deadline=$5 AND a.action_key=a.id AND a.capability='chat.send' AND a.reply_to_id='' AND a.message=e.text AND a.payload_hash=e.payload_hash,false),a.state,a.code,a.failure,a.retry_after_ns,a.provider_message_id<>'',a.started_at IS NOT NULL,a.finished_at IS NOT NULL,a.claim_hash IS NOT NULL
- FROM platform_outbound_actions a LEFT JOIN jsonb_to_recordset($2::jsonb) AS e(id text,text text,payload_hash text) ON e.id=a.id
- WHERE a.tenant_id=current_setting('app.tenant_id')::uuid AND (a.engine_source_id=$1 OR e.id IS NOT NULL) ORDER BY a.id LIMIT 17`, p.ID, string(raw), p.ConnectionID, p.ChannelID, p.Deadline)
+	rows, err := tx.QueryContext(ctx, `SELECT a.id,coalesce(a.engine_source_id=$1 AND a.event_id IS NULL AND a.manual_source_id IS NULL AND a.connection_id=$3 AND a.channel_id=$4 AND a.deadline=e.deadline AND a.not_before=e.not_before AND a.action_key=a.id AND a.capability='chat.send' AND a.reply_to_id='' AND a.message=e.text AND a.payload_hash=e.payload_hash,false),a.state,a.code,a.failure,a.retry_after_ns,a.provider_message_id<>'',a.started_at IS NOT NULL,a.finished_at IS NOT NULL,a.claim_hash IS NOT NULL
+ FROM platform_outbound_actions a LEFT JOIN jsonb_to_recordset($2::jsonb) AS e(id text,text text,payload_hash text,not_before timestamptz,deadline timestamptz) ON e.id=a.id
+ WHERE a.tenant_id=current_setting('app.tenant_id')::uuid AND (a.engine_source_id=$1 OR e.id IS NOT NULL) ORDER BY a.id LIMIT 17`, p.ID, string(raw), p.ConnectionID, p.ChannelID)
 	if err != nil {
 		return out, err
 	}
@@ -101,7 +106,7 @@ func (s *AutomationStore) LookupOperatorChatAdmission(ctx context.Context, actor
 		if err = rows.Scan(&r.ActionID, &bound, &r.State, &r.Code, &r.Failure, &r.RetryAfter, &provider, &started, &finished, &claimed); err != nil {
 			return out, err
 		}
-		sequence, ok := sequences[r.ActionID]
+		effect, ok := effects[r.ActionID]
 		if !bound || !ok || len(found) >= MaxOperatorChatEffects {
 			return out, ErrAutomationConflict
 		}
@@ -111,7 +116,8 @@ func (s *AutomationStore) LookupOperatorChatAdmission(ctx context.Context, actor
 		if !validOperatorChatOutcome(r, provider, started, finished, claimed) {
 			return out, ErrAutomationInvalid
 		}
-		r.Sequence = sequence
+		r.Sequence = effect.Sequence
+		r.NotBefore, r.Deadline = p.window(effect)
 		found[r.ActionID] = r
 	}
 	if err = rows.Err(); err != nil {

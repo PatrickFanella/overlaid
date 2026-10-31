@@ -651,3 +651,7 @@ Adds the account `preview-template-conversion` operation and the Automations [co
 ### Phase 3 E4a: delay offsets in flow rehearsal
 
 Flow rehearsal now records each proposal's fixed offset from the occurrence clock: sequential children accumulate, a delay shifts its subtree, parallel branches share a start and loops repeat in order, with a 24-hour total cap. Chat text carries the offsets and the rehearsal and chat-text control responses include `delayMs`. Plan preparation still refuses any delayed reply. E4b (per-effect not-before times and deadlines fixed at preparation, with a migration and scheduled queueing) and E4c (cancelling delayed replies before they start) remain open.
+
+### Phase 3 E4b: per-reply delay windows
+
+Migration 0045 lets an operator chat plan include delayed replies. Preparation stores each reply's `delayMs` in the plan body, omitted at zero so earlier plans keep their digests. Admission gives each reply a fixed `not_before` (occurrence clock plus offset) and deadline (plan deadline plus offset). The engine-source key no longer includes the deadline, and engine rows must have a `not_before` before their deadline. Queueing schedules delayed jobs at `not_before`. The executor and `Start` refuse to claim earlier, without changing state. `lookup-chat-admission` and the delivery desk show each reply's window. Older runtimes refuse the migrated schema. E4c (cancelling delayed replies before they start) remains open.

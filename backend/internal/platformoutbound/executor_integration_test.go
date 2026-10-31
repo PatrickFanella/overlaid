@@ -406,3 +406,45 @@ func TestExecutorFairPermitPreClaimStorageRetry(t *testing.T) {
 		t.Fatal("postclaim replay", sends, err)
 	}
 }
+
+// Engine effects carry a fixed not-before time. This fixture drops only the
+// engine-source CHECK in its disposable schema so the executor's own deferral
+// and claim refusal are exercised directly.
+func TestExecutorDefersBeforeNotBefore(t *testing.T) {
+	f, db, pacer, args := executorFixture(t)
+	if _, err := f.Admin.Exec(`ALTER TABLE platform_outbound_actions DROP CONSTRAINT platform_outbound_not_before`); err != nil {
+		t.Fatal(err)
+	}
+	var due time.Time
+	if err := f.Admin.QueryRow(`UPDATE platform_outbound_actions SET not_before=clock_timestamp()+interval '1500 milliseconds' WHERE id=$1 RETURNING not_before`, args.ActionID).Scan(&due); err != nil {
+		t.Fatal(err)
+	}
+	var sends, authorizations atomic.Int32
+	authorize := func(context.Context, Target) (Authorization, error) {
+		authorizations.Add(1)
+		return Authorization{SenderID: "123", Capabilities: fullCapabilities(), Send: func(_ context.Context, m platform.OutboundMessage) (platform.Receipt, error) {
+			sends.Add(1)
+			return platform.Receipt{ActionID: m.ActionID, Status: platform.Delivered, ProviderMessageID: "late-id"}, nil
+		}}, nil
+	}
+	e, err := NewExecutor(t.Context(), db, pacer, authorize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	early, err := e.Execute(t.Context(), args)
+	if err != nil || early.Done || !early.RetryAt.Equal(due) || authorizations.Load() != 0 || sends.Load() != 0 || receiptFor(t, db).State != "pending" {
+		t.Fatal("executed before not_before", early, err, authorizations.Load(), sends.Load())
+	}
+	store, _ := New(db)
+	if _, ok, err := store.Start(t.Context(), args.ActionID); ok || !errors.Is(err, ErrNotYet) || receiptFor(t, db).State != "pending" {
+		t.Fatal("claimed before not_before", ok, err)
+	}
+	time.Sleep(time.Until(due) + 100*time.Millisecond)
+	late, err := e.Execute(t.Context(), args)
+	if err != nil || !late.Done || sends.Load() != 1 {
+		t.Fatal("due action not sent", late, err, sends.Load())
+	}
+	if r := receiptFor(t, db); r.State != "delivered" || r.ProviderMessageID != "late-id" {
+		t.Fatal(r)
+	}
+}

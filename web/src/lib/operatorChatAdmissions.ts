@@ -7,7 +7,7 @@ import { operatorTimestamp, sameOperatorInstant } from './operatorRehearsal';
 export type ChatAdmissionIntent = { format: 1; phase: 'prepared' | 'submitted'; plan: ChatPlanIntent; sourceId: string; runId: string; digest: string; effectCount: number; preparedAt: string; deadline: string };
 export type ChatAdmissionReceipt = { sourceId: string; actionIds: string[]; deadline: string; admittedAt: string; created: boolean; state: 'admitted_queued' };
 export type ChatActionFailure = '' | 'retryable' | 'unauthorized' | 'unsupported' | 'quota_limited' | 'plan_limited' | 'permanent';
-export type ChatActionOutcome = { actionId: string; sequence: number; state: 'pending' | 'running' | 'delivered' | 'uncertain' | 'rejected'; code: string; failure: ChatActionFailure; retryAfterNs: number };
+export type ChatActionOutcome = { actionId: string; sequence: number; state: 'pending' | 'running' | 'delivered' | 'uncertain' | 'rejected'; code: string; failure: ChatActionFailure; retryAfterNs: number; notBefore: string; deadline: string; delayed: boolean };
 export type ChatAdmissionStatus = { sourceId: string; runId: string; digest: string; deadline: string; admittedAt: string; actions: ChatActionOutcome[] };
 
 const fail = (): never => { throw new Error('Invalid chat delivery metadata. Keep the original intent and check delivery by its original request.'); };
@@ -63,8 +63,18 @@ export function decodeChatAdmissionReceipt(value: unknown, intent: ChatAdmission
   return { sourceId: intent.sourceId, actionIds: actionIDs(r.actionIds, intent.effectCount), deadline: intent.deadline, admittedAt: admittedWithin(r.admittedAt, intent), created: r.created, state: 'admitted_queued' };
 }
 
+// Each reply keeps its own fixed window from the original occurrence: it never
+// ends before the plan deadline and is offset by at most 24 hours.
+const maxDelayNs = 24n * 3600n * 1000000000n;
+function window(r: Record<string, unknown>, intent: ChatAdmissionIntent): { notBefore: string; deadline: string; delayed: boolean } {
+  const notBefore = operatorTimestamp(r.notBefore); const deadline = operatorTimestamp(r.deadline);
+  const offset = instant(deadline) - instant(intent.deadline);
+  if (instant(notBefore) >= instant(deadline) || offset < 0n || offset > maxDelayNs) return fail();
+  return { notBefore, deadline, delayed: offset > 0n };
+}
+
 // Mirrors the server's validOperatorChatOutcome combinations.
-function outcome(raw: unknown): ChatActionOutcome {
+function outcome(raw: unknown, intent: ChatAdmissionIntent): ChatActionOutcome {
   const r = record(raw);
   const retry = r.retryAfter;
   if (!Number.isSafeInteger(retry) || Number(retry) < 0 || !Number.isSafeInteger(r.sequence) || Number(r.sequence) < 1) return fail();
@@ -77,13 +87,13 @@ function outcome(raw: unknown): ChatActionOutcome {
     (state === 'rejected' && (code === 'expired' || code === 'connection_unavailable') && failure === 'permanent' && zero) ||
     (state === 'rejected' && code === 'rejected' && (failure === 'plan_limited' ? zero : ['retryable', 'unauthorized', 'unsupported', 'quota_limited', 'permanent'].includes(failure)));
   if (!valid || typeof r.state !== 'string' || typeof r.code !== 'string' || typeof r.failure !== 'string') return fail();
-  return { actionId: hash(r.actionId), sequence: Number(r.sequence), state: state as ChatActionOutcome['state'], code, failure: failure as ChatActionFailure, retryAfterNs: Number(retry) };
+  return { actionId: hash(r.actionId), sequence: Number(r.sequence), state: state as ChatActionOutcome['state'], code, failure: failure as ChatActionFailure, retryAfterNs: Number(retry), ...window(r, intent) };
 }
 
 export function decodeChatAdmissionStatus(value: unknown, intent: ChatAdmissionIntent, receipt: ChatAdmissionReceipt | null): ChatAdmissionStatus {
   const r = record(value);
   if (r.sourceId !== intent.sourceId || r.runId !== intent.runId || r.digest !== intent.digest || !sameOperatorInstant(operatorTimestamp(r.deadline), intent.deadline) || !Array.isArray(r.actions)) return fail();
-  const actions = r.actions.map(outcome);
+  const actions = r.actions.map(a => outcome(a, intent));
   const ids = actionIDs(actions.map(a => a.actionId), intent.effectCount);
   // Original traversal order: sequences strictly increase.
   if (actions.some((a, i) => i > 0 && a.sequence <= actions[i - 1].sequence)) return fail();

@@ -17,7 +17,7 @@ async function fixture() {
   const metadata: ChatPlanMetadata = { sourceId: await operatorIdentity(['overlaid.engine.operator-chat-source.v1', scope.tenantId, run.runId]), runId: run.runId, automationId: run.automationId, versionId: run.versionId, graphDigest: run.graphDigest, connectionId: 'twitch:123', channelId: '123', digest: 'c'.repeat(64), effectCount: 2, preparedAt: '2026-10-30T12:00:01.000000001Z', deadline: run.deadline, unchanged: true, state: 'prepared_metadata' };
   const held = freezeChatAdmissionIntent(plan, metadata)!;
   const receipt = { sourceId: metadata.sourceId, actionIds: ids, deadline: run.deadline, admittedAt: '2026-10-30T12:00:02Z', created: true, state: 'admitted_queued' };
-  const status = { sourceId: metadata.sourceId, runId: run.runId, digest: metadata.digest, deadline: run.deadline, admittedAt: receipt.admittedAt, actions: [{ actionId: ids[0], sequence: 2, state: 'delivered', code: 'delivered', failure: '', retryAfter: 0 }, { actionId: ids[1], sequence: 5, state: 'rejected', code: 'rejected', failure: 'quota_limited', retryAfter: 30000000000 }] };
+  const status = { sourceId: metadata.sourceId, runId: run.runId, digest: metadata.digest, deadline: run.deadline, admittedAt: receipt.admittedAt, actions: [{ actionId: ids[0], sequence: 2, state: 'delivered', code: 'delivered', failure: '', retryAfter: 0, notBefore: run.createdAt, deadline: run.deadline }, { actionId: ids[1], sequence: 5, state: 'rejected', code: 'rejected', failure: 'quota_limited', retryAfter: 30000000000, notBefore: '2026-10-30T12:00:05.123456789Z', deadline: '2026-10-30T12:02:05.123456789Z' }] };
   return { run, metadata, held, receipt, status };
 }
 function memory(initial: string | null = null, failWrites = false) {
@@ -84,7 +84,7 @@ describe('chat delivery admission flow', () => {
     expect(lost.calls.filter(c => c.operation === 'admit-chat-plan')).toHaveLength(1);
     const read = server({ 'lookup-chat-admission': () => status }, m.read);
     const result = await recoverChatAdmission({ scope, intent: reloaded, storage: m.storage, request: read.request, signal, active: live }, null);
-    expect(result.actions.map(a => [a.state, a.failure, a.retryAfterNs])).toEqual([['delivered', '', 0], ['rejected', 'quota_limited', 30000000000]]);
+    expect(result.actions.map(a => [a.state, a.failure, a.retryAfterNs, a.delayed])).toEqual([['delivered', '', 0, false], ['rejected', 'quota_limited', 30000000000, true]]);
     expect(read.calls).toEqual([{ operation: 'lookup-chat-admission', body: { requestId: plan.source.requestId, digest: metadata.digest }, stored: m.read() }]);
     const missing = server({ 'lookup-chat-admission': () => { throw new Error('automation_not_found'); } }, m.read);
     await expect(recoverChatAdmission({ scope, intent: reloaded, storage: m.storage, request: missing.request, signal, active: live }, null)).rejects.toThrow('automation_not_found');
@@ -110,7 +110,7 @@ describe('chat delivery admission flow', () => {
     expect(() => decodeChatAdmissionStatus(status, submitted, { ...good, actionIds: [ids[1], ids[0]] })).toThrow();
     expect(() => decodeChatAdmissionStatus({ ...status, admittedAt: '2026-10-30T12:00:03Z' }, submitted, good)).toThrow();
     const action = status.actions[0];
-    for (const bad of [{ state: 'pending', code: 'delivered' }, { state: 'delivered', code: 'delivered', failure: 'permanent' }, { state: 'rejected', code: 'expired', failure: 'retryable' }, { state: 'rejected', code: 'rejected', failure: 'plan_limited', retryAfter: 5 }, { state: 'rejected', code: 'rejected', failure: 'private_error' }, { state: 'uncertain', code: 'uncertain', retryAfter: 1 }, { retryAfter: -1 }, { retryAfter: 1.5 }, { sequence: 0 }, { state: 'sent', code: 'sent' }]) expect(() => decodeChatAdmissionStatus({ ...status, actions: [{ ...action, ...bad }, status.actions[1]] }, submitted, null)).toThrow();
+    for (const bad of [{ state: 'pending', code: 'delivered' }, { state: 'delivered', code: 'delivered', failure: 'permanent' }, { state: 'rejected', code: 'expired', failure: 'retryable' }, { state: 'rejected', code: 'rejected', failure: 'plan_limited', retryAfter: 5 }, { state: 'rejected', code: 'rejected', failure: 'private_error' }, { state: 'uncertain', code: 'uncertain', retryAfter: 1 }, { retryAfter: -1 }, { retryAfter: 1.5 }, { sequence: 0 }, { state: 'sent', code: 'sent' }, { notBefore: undefined }, { deadline: '2026-10-30T12:02:00.123456788Z' }, { notBefore: '2026-10-30T12:02:00.123456789Z' }, { deadline: '2026-10-31T12:02:00.123456790Z', notBefore: '2026-10-31T12:00:00.123456790Z' }]) expect(() => decodeChatAdmissionStatus({ ...status, actions: [{ ...action, ...bad }, status.actions[1]] }, submitted, null)).toThrow();
     expect(() => decodeChatAdmissionStatus({ ...status, actions: [status.actions[1], status.actions[0]] }, submitted, null)).toThrow();
     expect(() => decodeChatAdmissionStatus({ ...status, digest: 'd'.repeat(64) }, submitted, null)).toThrow();
     for (const ok of [{ state: 'pending', code: 'admitted' }, { state: 'running', code: 'started' }, { state: 'uncertain', code: 'deadline_elapsed' }, { state: 'rejected', code: 'connection_unavailable', failure: 'permanent' }, { state: 'rejected', code: 'rejected', failure: 'plan_limited' }]) expect(() => decodeChatAdmissionStatus({ ...status, actions: [{ ...action, failure: '', ...ok }, status.actions[1]] }, submitted, null)).not.toThrow();
@@ -125,6 +125,6 @@ describe('chat delivery admission flow', () => {
     const { held, status } = await fixture();
     const decoded = decodeChatAdmissionStatus(status, { ...held, phase: 'submitted' }, null);
     const html = renderToStaticMarkup(<ChatAdmissionStatusSummary status={{ ...decoded, runId: '<b>x</b>' }} />);
-    expect(html).toContain('Delivered'); expect(html).toContain('retry hint 30s (informational)'); expect(html).not.toContain('<button'); expect(html).not.toContain('<b>x</b>');
+    expect(html).toContain('Delivered'); expect(html).toContain('retry hint 30s (informational)'); expect(html).toContain('delayed: not before 2026-10-30T12:00:05.123456789Z'); expect(html.match(/delayed:/g)).toHaveLength(1); expect(html).not.toContain('<button'); expect(html).not.toContain('<b>x</b>');
   });
 });

@@ -144,7 +144,7 @@ func TestOperatorChatStatusRefusalsNeverReturnPartial(t *testing.T) {
 			case "missing":
 				exec(`DELETE FROM platform_outbound_actions WHERE tenant_id=$1 AND id=$2`, a.ID, admitted.ActionIDs[1])
 			case "extra":
-				exec(`INSERT INTO platform_outbound_actions(tenant_id,id,engine_source_id,connection_id,action_key,channel_id,message,reply_to_id,capability,payload_hash,deadline) VALUES($1,repeat('c',64),$2,'twitch:channel_a',repeat('c',64),'channel_a','PRIVATE extra','','chat.send',repeat('d',64),$3)`, a.ID, p.ID, p.Deadline)
+				exec(`INSERT INTO platform_outbound_actions(tenant_id,id,engine_source_id,connection_id,action_key,channel_id,message,reply_to_id,capability,payload_hash,deadline,not_before) VALUES($1,repeat('c',64),$2,'twitch:channel_a',repeat('c',64),'channel_a','PRIVATE extra','','chat.send',repeat('d',64),$3,$3::timestamptz-interval '1 minute')`, a.ID, p.ID, p.Deadline)
 			case "admission_time":
 				exec(`UPDATE engine_operator_chat_admissions SET admitted_at=admitted_at+interval '1 day' WHERE tenant_id=$1`, a.ID)
 			case "schema":
