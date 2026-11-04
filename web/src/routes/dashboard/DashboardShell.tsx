@@ -36,7 +36,7 @@ function DeskFrame({ activePath, children }: DashboardShellProps) {
   useRouteShortcuts();
 
   useEffect(() => {
-    document.title = `${title} · over-laid`;
+    document.title = `${title} · Overlaid`;
   }, [title]);
 
   return (
