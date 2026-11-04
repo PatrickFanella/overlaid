@@ -1,5 +1,7 @@
 # Over-Laid
 
+![Overlaid: a tally lamp mark, a rounded overlay card offset over a second card with a lit red circle in its top corner, beside the name Overlaid](web/public/brand/overlaid/readme-lockup.png)
+
 An OBS operator desk with Twitch chat automation, broadcast overlays, and a Newsroom for preparing and running reaction streams.
 
 Over-Laid brings stream controls, bot commands, editorial preparation, and show notes into one dashboard. It runs as a self-hosted application; the same codebase includes account-owned workspaces for managed installations.

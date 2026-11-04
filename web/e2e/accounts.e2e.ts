@@ -22,7 +22,7 @@ test('credential rotation requires consent and sends tenant and CSRF context', a
   return route.fulfill({json:{purpose:'overlay',token:'fixture-new-key'}});
  });
  await page.goto('/dashboard/account');
- await expect(page).toHaveTitle('Account and workspace · over-laid');
+ await expect(page).toHaveTitle('Account and workspace · Overlaid');
  const rotate=page.getByRole('button',{name:'Rotate overlay credential',exact:true});
  await expect(rotate).toBeDisabled();expect(rotations).toBe(0);
  await page.getByRole('checkbox',{name:'Confirm credential rotation; old source URLs will stop working'}).check();
