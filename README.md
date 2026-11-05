@@ -132,3 +132,7 @@ The fixture defaults to a bounded 2 GiB tmpfs with a 256 MiB WAL checkpoint targ
 Keep `.env`, tokens, vault keys, add/share URLs, and backups private. Use placeholders when sharing configuration. Report vulnerabilities through the private process in [SECURITY.md](SECURITY.md).
 
 Over-Laid is **GPL-3.0-only**; see [LICENSE](LICENSE). It was created from `subculture-collective/project-template`. Vendored/rebuilt components retain their own notices in [Newsroom provenance](docs/vendor/newsroom/PROVENANCE.md) and [River provenance](docs/vendor/river/). Copied overlay brand assets have a separate [provenance record](web/public/brand/subcult/PROVENANCE.md).
+
+[Automatic frontend delivery](docs/automatic-frontend-deployment.md) connects
+verified main CI to the existing NUC web service. Backend and managed-runtime
+release/qualification gates retain their separate procedures.
