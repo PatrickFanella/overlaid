@@ -102,6 +102,8 @@ An explicit [retained chat-effect source store](docs/runbooks/operator-chat-effe
 
 **Prepare → Automations** provides an advanced JSON version desk with scoped drafts, validation, publication, current-version selection, bounded saved-root and draft-to-current comparison and unresolved-write recovery. Its operator rehearsal panel prepares stable retained requests, admits metadata explicitly and inspects original/current effect-free flow. The separate trace controls save fixed metadata and recover an uncertain save through reads of its original identity. An explicit source-bound history view lists earlier saved selections and opens their verified metadata without changing recovery handles. The graphical flow editor, trusted stream limits, effect execution and source migration remain open under Phase #25.
 
+The [saved-command migration preview](docs/runbooks/variable-template-conversion.md#saved-command-migration-preview) reads the canonical Chat registry and compares selected ticker/alert responses with syntax 2 using supplied sample values. It preserves saved aliases and policy metadata, refuses stale selections and identifies Newsroom actions as separate editorial work. Preview does not change command execution or select an engine version.
+
 The backend uses Go 1.26 (`go 1.26.0` in the module); the frontend uses React 19, TypeScript, Vite 7, and Tailwind 4. The web build image uses Node 24; `web/package.json` selects pnpm 10.33.0. PostgreSQL 17 and Docker Compose provide the container setup. See [stack and configuration](docs/reference/stack.md).
 
 ```bash

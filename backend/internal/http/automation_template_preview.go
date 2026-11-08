@@ -42,28 +42,40 @@ func automationTemplatePreview(ctx context.Context, w http.ResponseWriter, r *ht
 	if !decodeControl(w, r, &body) {
 		return
 	}
-	if body.Source == nil || body.Values == nil || len(body.Values.Counts) > templatePreviewMaxEntries || len(body.Values.APIVariables) > templatePreviewMaxEntries {
+	if body.Source == nil || !validTemplatePreviewValues(body.Values) {
 		http.Error(w, "invalid request body", 400)
 		return
 	}
-	for name := range body.Values.Counts {
-		if len(name) > templatePreviewMaxName {
-			http.Error(w, "invalid request body", 400)
-			return
-		}
-	}
-	for name := range body.Values.APIVariables {
-		if len(name) > templatePreviewMaxName {
-			http.Error(w, "invalid request body", 400)
-			return
-		}
-	}
-	v := body.Values
-	result, err := templatepreview.Preview(ctx, *body.Source, bot.TemplateContext{User: v.User, DisplayName: v.DisplayName, Channel: v.Channel, Args: v.Args, Command: v.Command, NowPlayingTitle: v.NowPlayingTitle, NowPlayingArtist: v.NowPlayingArtist, QuoteRandom: v.QuoteRandom, Counts: v.Counts, APIVariables: v.APIVariables})
+	result, err := templatepreview.Preview(ctx, *body.Source, suppliedTemplateContext(body.Values))
 	if err != nil {
 		templatePreviewError(w, err)
 		return
 	}
+	writeJSON(w, templatePreviewProjection(result))
+}
+
+func validTemplatePreviewValues(values *templatePreviewValues) bool {
+	if values == nil || len(values.Counts) > templatePreviewMaxEntries || len(values.APIVariables) > templatePreviewMaxEntries {
+		return false
+	}
+	for name := range values.Counts {
+		if len(name) > templatePreviewMaxName {
+			return false
+		}
+	}
+	for name := range values.APIVariables {
+		if len(name) > templatePreviewMaxName {
+			return false
+		}
+	}
+	return true
+}
+
+func suppliedTemplateContext(v *templatePreviewValues) bot.TemplateContext {
+	return bot.TemplateContext{User: v.User, DisplayName: v.DisplayName, Channel: v.Channel, Args: v.Args, Command: v.Command, NowPlayingTitle: v.NowPlayingTitle, NowPlayingArtist: v.NowPlayingArtist, QuoteRandom: v.QuoteRandom, Counts: v.Counts, APIVariables: v.APIVariables}
+}
+
+func templatePreviewProjection(result templatepreview.Result) map[string]any {
 	c := result.Conversion
 	warnings := make([]map[string]any, 0, len(c.Warnings))
 	for _, item := range c.Warnings {
@@ -73,7 +85,7 @@ func automationTemplatePreview(ctx context.Context, w http.ResponseWriter, r *ht
 	for _, item := range result.Diagnostics {
 		diagnostics = append(diagnostics, map[string]any{"code": item.Code, "start": item.Span.Start, "end": item.Span.End})
 	}
-	writeJSON(w, map[string]any{"state": "preview_only", "originalSyntax": c.OriginalSyntax, "proposedSyntax": c.ProposedSyntax, "originalSource": c.OriginalSource, "proposedSource": c.ProposedSource, "warnings": warnings, "legacyOutput": result.LegacyOutput, "proposedOutput": result.ProposedOutput, "different": result.Different, "diagnostics": diagnostics})
+	return map[string]any{"state": "preview_only", "originalSyntax": c.OriginalSyntax, "proposedSyntax": c.ProposedSyntax, "originalSource": c.OriginalSource, "proposedSource": c.ProposedSource, "warnings": warnings, "legacyOutput": result.LegacyOutput, "proposedOutput": result.ProposedOutput, "different": result.Different, "diagnostics": diagnostics}
 }
 
 func templatePreviewError(w http.ResponseWriter, err error) {

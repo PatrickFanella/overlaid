@@ -104,6 +104,8 @@ func (a *Application) automationControl(w http.ResponseWriter, r *http.Request) 
 	}
 	actor := session.AccountID
 	switch parts[4] {
+	case "list-command-migration", "preview-command-migration":
+		automationCommandMigration(ctx, w, r, store, actor, parts[4])
 	case "list":
 		var body struct{}
 		if !decodeControl(w, r, &body) {

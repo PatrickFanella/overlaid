@@ -1,6 +1,6 @@
 # Legacy variable conversion preview
 
-Phase 3 V2b is tracked by [#274](https://git.subcult.tv/subculture-collective/overlaid/issues/274). The explicit `templatepreview` package compares original syntax-1 text with proposed syntax-2 text. The account preview route and dashboard panel below are its only callers; no editor, importer, save path or dispatcher calls it. It does not publish or select a version.
+Phase 3 V2b is tracked by [#274](https://git.subcult.tv/subculture-collective/overlaid/issues/274). The explicit `templatepreview` package compares original syntax-1 text with proposed syntax-2 text. The account preview routes and dashboard panels below call it with supplied sample values. It does not publish or select a version.
 
 `Convert(source)` preserves original text and syntax version 1 alongside proposed text and version 2. It scans brace tokens using the actual legacy character grammar, preserving half-open original byte spans for warnings. It maps recognized names case-insensitively:
 
@@ -35,3 +35,26 @@ The body is exactly `{"source": "...", "values": {...}}`. `values` accepts `user
 The no-store response is `state: "preview_only"`, both syntax versions, original and proposed sources, `warnings` and `diagnostics` as `{code, start, end}` byte spans, both outputs and `different`. Warning spans refer to the original source; diagnostic spans refer to the proposed source.
 
 The Automations page **Template conversion preview** panel sends typed values only. It requires the response to echo the exact submitted source, syntax 1→2, an `output_policy` warning, known codes, in-range spans and a `different` flag that matches the two outputs. Editing any input aborts an in-flight request and clears the shown result. Source, values and outputs stay in component memory; there is no save, select or migration control.
+
+## Saved command migration preview
+
+[Issue #354](https://git.subcult.tv/subculture-collective/overlaid/issues/354) connects the comparison to canonical saved commands as the first M1 inventory/preview step for managed PostgreSQL workspaces. In **Automations → Saved command migration preview**, choose **Load saved commands**, then a command. The selection shows its saved ID, name, enabled state, action, response mode, required role, cooldown and snapshot fingerprint. Separate saved aliases stay separate entries. Built-in parser commands outside the saved registry remain part of the later M1 behavior inventory.
+
+For a ticker or alert command, enter sample values and choose **Preview conversion**. The server reads the saved response and compares its actual legacy rendering with the proposed syntax-2 text. For example, the saved response `Hello {user}` with display name `Viewer` proposes `Hello $(user)` and renders `Hello Viewer` in both formats. API values, counters, now-playing fields and quotes still come only from the supplied samples. The comparison neither calls providers nor reads their present values.
+
+Newsroom submit, capture, current, question and raffle actions are labelled as editorial work. Their response field is not a substitute for the Newsroom document, revisions, synchronous editorial behavior or receipts, so it is not converted. A matching ticker/alert sample also leaves effect mapping, aliases, permission/cooldown enforcement and one-dispatcher source selection to later M1 work. Overlay and both response modes retain their separate effect requirements.
+
+The two account operations share the existing configure/session/Origin/CSRF boundary and bootstrap refusal:
+
+| Operation | Exact request | Result |
+| --- | --- | --- |
+| `list-command-migration` | Empty object | `state: command_catalogue_only` and the complete `commands` metadata list |
+| `preview-command-migration` | `commandId`, expected `snapshot`, and `values` in the supplied-value format above | `state: command_preview_only`, the selected `command` metadata, `status: template_review` and a nested `template` comparison; editorial commands return `status: editorial_contract_required` and a null template |
+
+The catalogue excludes response text, permits at most 1,000 entries and sorts names/IDs by PostgreSQL `C` collation. Overflow or any malformed row refuses the whole list. Preview requires the exact tenant-scoped saved ID and `bot.CommandSnapshotFingerprint`, including the original command timestamps and configuration. An edited source returns 409; a deleted or foreign saved ID returns 404. The browser cannot submit a replacement source. This fingerprint identifies a read snapshot; it is not an atomic database revision or effect permission.
+
+These no-store reads use the existing immutable tenant scope and fresh configure checks. They require the current automation schema but no active controller, runtime, pool or sender. They perform no first-use Newsroom import and change no commands, counters, cooldowns, engine state or jobs. Saved responses retain the command manager's 500-byte bound; the existing conversion/rendering bounds still apply.
+
+Refresh clears the selection. Sample edits cancel the current comparison and clear its result; account/workspace/API/CSRF departure unmounts the private desk and fences late responses. Source text, samples and reports remain in memory and disappear on reload. If the command changed, load the catalogue again and explicitly review its new snapshot. No publication, live selection or automatic migration follows a preview.
+
+Disposable PostgreSQL races cover all actions, modes, roles/cooldowns, aliases, edits/deletion, tenant and membership boundaries, cancellation, whole-list limits and unchanged persisted state. Browser fixtures cover escaped text, stale/malformed responses, sample edits, workspace departure, keyboard access and narrow layout. Run `make verify`, the disposable PostgreSQL gate and browser tests before merge. These fixtures do not establish live provider acceptance or complete M1/Phase #25.
