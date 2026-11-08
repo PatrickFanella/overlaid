@@ -116,7 +116,9 @@ For the complete database/race gate with an owned disposable PostgreSQL containe
 GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh
 ```
 
-The gate runs at most two Go packages concurrently against its shared fixture; operation, package and hosted-job deadlines stay unchanged. The fixture defaults to a bounded 2 GiB tmpfs with a 256 MiB WAL checkpoint target; select `OVERLAID_CI_POSTGRES_STORAGE=volume` for a disk-backed comparison. It cleans up its own container/volumes. These checks do not qualify power-loss durability. [Contributing](CONTRIBUTING.md) describes native development and verification.
+The gate runs at most two Go packages concurrently against its shared fixture. Hosted CI runs three required phases: `application` runs `make verify` except six large HTTP qualification fixtures, `race` runs the remaining uncached application races and River spike races, and `qualification` runs those six fixtures normally and with the race detector. The phases run serially with separate disposable databases; all must pass before the `verify` check or frontend delivery can succeed. Run a phase locally by passing its name to the script; no argument runs the complete unpartitioned gate. Each package invocation keeps its 15-minute watchdog, each hosted job keeps its 35-minute bound, and operation deadlines stay unchanged.
+
+The fixture defaults to a bounded 2 GiB tmpfs with a 256 MiB WAL checkpoint target; select `OVERLAID_CI_POSTGRES_STORAGE=volume` for a disk-backed comparison. It cleans up its own container/volumes. These checks do not qualify power-loss durability. [Contributing](CONTRIBUTING.md) describes native development and verification.
 
 ## Operations and documentation
 

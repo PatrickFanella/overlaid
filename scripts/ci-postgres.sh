@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 # Own one disposable database for the entire verification run; never use app data.
 set -euo pipefail
+phase=${1:-all}
+if (($# > 1)); then
+  echo "Usage: ci-postgres.sh [all|application|race|qualification]" >&2
+  exit 2
+fi
+case "$phase" in
+  all|application|race|qualification) ;;
+  *) echo "Unknown verification phase: $phase" >&2; exit 2 ;;
+esac
+# These expensive HTTP workloads retain their assertions and operation deadlines.
+# CI isolates them from the remaining package pass; `all` still runs everything.
+qualification='^TestRetained(RealRuntimeLimitsAndRestart|GlobalRuntimeResumeAndRetention|SenderMixedCooldownAndOriginalDeadline|SharedSender(CooldownAcrossTenantsAndRestart|NaturalRecoveryAndSaturation|SustainedUnevenArrivals))$'
 # CI checks transaction/role/worker behavior, not power-loss durability. Avoid
 # coupling their bounded deadlines to the shared runner's block-device latency.
 # Keep a disk-backed option for storage-sensitive qualification.
@@ -49,9 +61,27 @@ export OVERLAID_TEST_DATABASE_URL="postgres://postgres:$fixture_password@$fixtur
 # The fixture is shared by packages. Bound concurrent schema/worker suites on
 # busy hosts; preserve each suite's own workload and operation deadlines.
 export GOFLAGS="${GOFLAGS:+$GOFLAGS }-p=2"
-make verify
-# The HTTP package owns many independent schema fixtures. Its complete race
-# pass can exceed Go's default 10m package budget on a shared runner; individual
-# operation deadlines remain unchanged. Keep the package watchdog bounded.
-(cd backend && go test -timeout=15m -race -count=1 ./...)
-(cd backend/spikes/river && go test -race -count=1 ./...)
+case "$phase" in
+  all)
+    make verify
+    (cd backend && go test -timeout=15m -race -count=1 ./...)
+    (cd backend/spikes/river && go test -race -count=1 ./...)
+    ;;
+  application)
+    make verify GO_TEST_SKIP="$qualification"
+    ;;
+  race)
+    (cd backend && go test -timeout=15m -race -count=1 -skip "$qualification" ./...)
+    (cd backend/spikes/river && go test -race -count=1 ./...)
+    ;;
+  qualification)
+    # Refuse an accidentally empty or incomplete selection before claiming a pass.
+    selected=$(cd backend && go test -list "$qualification" ./internal/http)
+    if [[ $(printf '%s\n' "$selected" | sed -n '/^Test/p' | wc -l) -ne 6 ]]; then
+      echo "HTTP qualification selection must contain all six fixtures" >&2
+      exit 1
+    fi
+    (cd backend && go test -timeout=15m -count=1 -run "$qualification" ./internal/http)
+    (cd backend && go test -timeout=15m -race -count=1 -run "$qualification" ./internal/http)
+    ;;
+esac
