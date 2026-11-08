@@ -5,6 +5,7 @@ import { compareDraftRoot, compareRootVersions, type DraftVersionDiff, type Root
 import { AutomationVersionComparison } from './AutomationVersionComparison';
 import { OperatorRehearsalDesk } from './OperatorRehearsalDesk';
 import { TemplateConversionDesk } from './TemplateConversionDesk';
+import { CommandMigrationDesk } from './CommandMigrationDesk';
 import { DashboardShell } from './DashboardShell';
 import { useAccount } from './accountSession';
 import { Empty, Field, KeyValues, Notice, PageHead, Panel, Tag } from './ui';
@@ -168,6 +169,7 @@ export function AutomationVersionDesk({ scope, workspaceName }: { scope: Version
     </Panel> : <Tag>No local draft</Tag>}
     {draftComparison ? <AutomationVersionComparison report={draftComparison} /> : null}
     <OperatorRehearsalDesk scope={scope} admissionBlocked={busy || !!local.pending || !!storageError} candidate={rehearsalCandidate} />
+    <CommandMigrationDesk scope={scope} />
     <TemplateConversionDesk scope={scope} />
   </div>;
 }

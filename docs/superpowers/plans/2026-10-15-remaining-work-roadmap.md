@@ -663,3 +663,7 @@ Account POST `cancel-chat-admission` and the delivery desk's **Cancel unsent rep
 ### Phase 3 E5a: captured seed and weighted random
 
 Migration 0047 gives each new operator occurrence a seed, drawn once at admission and reused for every rehearsal, chat-text render, plan and trace of that occurrence (capture 2). Weighted random nodes now walk one child chosen from that seed (`seeded_choice`), and random variables render from it. Occurrences admitted earlier keep seed 0 (capture 1), where random stays unsupported. Older runtimes refuse the migrated schema. No-repeat, preset arguments and priority/pause remain open in E5.
+
+### Phase 3 M1a: saved command inventory and preview
+
+[Issue #354](https://git.subcult.tv/subculture-collective/overlaid/issues/354) adds [canonical saved-command discovery and comparison](../../runbooks/variable-template-conversion.md#saved-command-migration-preview) to Automations. Configure members inspect all saved actions, modes, roles/cooldowns and alias identities, then compare a selected ticker/alert response using supplied sample values. Exact ID/snapshot checks refuse edits or deletion; Newsroom actions retain their separate editorial contract. These reads create no runtime, import, version, reservation or job and select no dispatcher. Full effect/policy migration, one-executor cutover, remaining E5 contracts and Phase #25 acceptance remain open.
