@@ -19,7 +19,7 @@ const fail = (): never => { throw new Error('Invalid conversion preview response
 
 // Parses "name=value" lines. Blank lines are ignored; malformed lines refuse.
 export function parsePairs(text: string, numeric: boolean): Record<string, number> | Record<string, string> {
-  const out: Record<string, number | string> = {};
+  const out = Object.create(null) as Record<string, number | string>;
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) continue;

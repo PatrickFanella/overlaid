@@ -34,6 +34,16 @@ describe('template conversion preview codec', () => {
     expect(() => parsePairs(Array.from({ length: 65 }, (_, i) => `k${i}=1`).join('\n'), true)).toThrow('64');
   });
 
+  it('retains prototype-named sample keys through JSON and counts them toward limits', () => {
+    for (const numeric of [false, true]) {
+      const pairs = parsePairs('__proto__=3\nconstructor=4\ntoString=5', numeric);
+      expect(Object.hasOwn(pairs, '__proto__')).toBe(true);
+      expect(JSON.parse(JSON.stringify(pairs))).toEqual(JSON.parse(numeric ? '{"__proto__":3,"constructor":4,"toString":5}' : '{"__proto__":"3","constructor":"4","toString":"5"}'));
+      expect(() => parsePairs('__proto__=1\n__proto__=2', numeric)).toThrow('unique');
+      expect(() => parsePairs(['__proto__=1', ...Array.from({ length: 64 }, (_, i) => `k${i}=1`)].join('\n'), numeric)).toThrow('64');
+    }
+  });
+
   it('renders outputs as escaped text without save controls', () => {
     const r = decodeTemplatePreview({ ...ok(), proposedOutput: '<b>x</b>', different: true }, source);
     const html = renderToStaticMarkup(<TemplatePreviewSummary result={r} />);

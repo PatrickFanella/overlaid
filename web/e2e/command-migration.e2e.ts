@@ -52,7 +52,12 @@ test('compares the canonical saved template and keeps editorial actions separate
   await expect(selected).toContainText('37');
   await expect(selected.getByRole('textbox', { name: /Legacy template/ })).toHaveCount(0);
   await selected.getByRole('textbox', { name: 'Display name', exact: true }).fill('Viewer');
+  await selected.getByRole('textbox', { name: /^Counters / }).fill('__proto__=3');
+  await selected.getByRole('textbox', { name: /^API values / }).fill('__proto__=supplied-weather');
   await selected.getByRole('button', { name: 'Preview conversion', exact: true }).click();
+  const values = state.operations.find(x => x.operation === 'preview-command-migration')!.body.values as Record<string, unknown>;
+  expect(values.counts).toEqual(JSON.parse('{"__proto__":3}'));
+  expect(values.apiVariables).toEqual(JSON.parse('{"__proto__":"supplied-weather"}'));
   const report = selected.getByRole('region', { name: 'Conversion preview result' });
   await expect(report).toContainText('Hi Viewer <img src=x onerror=alert(1)>');
   await expect(report).toContainText('Original legacy template');
