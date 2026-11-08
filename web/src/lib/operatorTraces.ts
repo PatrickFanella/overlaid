@@ -2,7 +2,7 @@ import { versionID, versionStorageKey, type VersionScope } from './automationVer
 import { decodeFlowMetadata, decodeRehearsalIntent, operatorIdentities, operatorIdentity, operatorTimestamp, sameOperatorInstant, validCaptureSeed, type OperatorRun, type RehearsalIntent, type RehearsalMode } from './operatorRehearsal';
 
 export type TraceReference = { format: 1; source: RehearsalIntent; traceId: string; mode: RehearsalMode; versionId: string; graphDigest: string; captureDigest: string };
-export type SavedOperatorTrace = ReturnType<typeof decodeFlowMetadata> & { id: string; runId: string; versionId: string; mode: RehearsalMode; originalGraphDigest: string; graphDigest: string; captureDigest: string; clock: string; digest: string; createdAt: string; unchanged: boolean };
+export type SavedOperatorTrace = ReturnType<typeof decodeFlowMetadata> & { id: string; runId: string; versionId: string; mode: RehearsalMode; originalGraphDigest: string; graphDigest: string; captureDigest: string; captureVersion: number; clock: string; digest: string; createdAt: string; unchanged: boolean };
 const fail = (): never => { throw new Error('Invalid saved trace metadata. Keep the original trace intent and check its saved identity.'); };
 function record(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(); return value as Record<string, unknown>; }
 function hash(value: unknown): string { return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : fail(); }
@@ -37,5 +37,5 @@ export async function decodeSavedOperatorTrace(value: unknown, scope: VersionSco
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`overlaid.engine.operator-trace.v1\0${raw}`));
   const digest = [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
   if (hash(top.digest) !== digest) return fail();
-  return { ...metadata, id: ref.traceId, runId: ids.runId, versionId: ref.versionId, mode: ref.mode, originalGraphDigest: ref.source.graphDigest, graphDigest: ref.graphDigest, captureDigest: ref.captureDigest, clock, digest, createdAt: operatorTimestamp(top.createdAt), unchanged: top.unchanged };
+  return { ...metadata, id: ref.traceId, runId: ids.runId, versionId: ref.versionId, mode: ref.mode, originalGraphDigest: ref.source.graphDigest, graphDigest: ref.graphDigest, captureDigest: ref.captureDigest, captureVersion: Number(d.captureVersion), clock, digest, createdAt: operatorTimestamp(top.createdAt), unchanged: top.unchanged };
 }
