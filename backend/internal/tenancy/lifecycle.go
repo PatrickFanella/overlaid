@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"git.subcult.tv/PatrickFanella/over-laid/internal/tenantdb"
 	"strings"
 	"time"
 )
 
-var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_stream_dispatch_receipts", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources", "engine_automations", "engine_automation_versions", "engine_automation_presets", "engine_operator_occurrences", "engine_operator_runs", "engine_run_budgets", "engine_operator_rehearsals", "engine_operator_chat_plans", "engine_operator_chat_plan_markers", "engine_operator_chat_admissions"}
+var ProductTables = []string{"app_metadata", "stream_events", "twitch_interaction_rules", "dashboard_configs", "stream_sessions", "stream_session_readiness_snapshots", "bot_audit_events", "bot_commands", "bot_timers", "bot_counters", "bot_quotes", "bot_moderation_rules", "bot_api_variables", "overlay_state", "newsroom_documents", "normalized_chat_events", "normalized_stream_events", "platform_stream_dispatch_receipts", "platform_dispatch_receipts", "bot_accounts", "shared_bot_delegations", "platform_outbound_actions", "platform_moderation_actions", "platform_manual_sources", "platform_moderation_sources", "engine_automations", "engine_automation_versions", "engine_automation_presets", "engine_operator_occurrences", "engine_operator_runs", "engine_run_budgets", "engine_operator_rehearsals", "engine_operator_chat_plans", "engine_operator_chat_plan_markers", "engine_operator_chat_admissions", "obs_fallback_rules", "obs_fallback_proposals"}
 
 func (s *Store) SetRetention(ctx context.Context, actor, tenant string, days int) error {
 	if days < 1 || days > 365 {
@@ -116,6 +117,9 @@ func (s *Store) Expire(ctx context.Context) error {
 		if err = tx.Commit(); err != nil {
 			return err
 		}
+		if err = expireOBSFallback(ctx, db, id); err != nil {
+			return err
+		}
 	}
 	_, err = s.db.ExecContext(ctx, `DELETE FROM account_sessions WHERE expires_at<=now(); DELETE FROM account_oauth_states WHERE expires_at<=now(); DELETE FROM tenant_change_audit WHERE created_at<now()-interval '90 days'`)
 	return err
@@ -138,6 +142,12 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 	bytes := 0
 	for _, table := range ProductTables {
 		query := `SELECT to_jsonb(row) FROM (SELECT * FROM ` + table + ` WHERE /*tenant:` + table + `*/ LIMIT 250001) row`
+		if table == "obs_fallback_rules" {
+			query = `SELECT jsonb_build_object('automationId',automation_id,'versionId',version_id,'enabled',enabled,'revision',revision,'updatedAt',updated_at) FROM obs_fallback_rules WHERE /*tenant:obs_fallback_rules*/ LIMIT 2`
+		}
+		if table == "obs_fallback_proposals" {
+			query = `SELECT jsonb_build_object('proposalId',id,'automationId',automation_id,'versionId',version_id,'observedAt',observed_at,'deadline',deadline,'state',state,'failure',failure,'startedAt',started_at,'finishedAt',finished_at) FROM obs_fallback_proposals WHERE /*tenant:obs_fallback_proposals*/ LIMIT 1001`
+		}
 		if table == "engine_operator_chat_admissions" {
 			query = `SELECT jsonb_build_object('sourceId',id,'admittedAt',admitted_at) FROM engine_operator_chat_admissions WHERE /*tenant:engine_operator_chat_admissions*/ LIMIT 10001`
 		}
@@ -298,6 +308,28 @@ func (s *Store) DeleteTenant(ctx context.Context, actor, tenant string) error {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM tenants WHERE id=$1 AND owner_account_id=$2`, tenant, actor); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func expireOBSFallback(ctx context.Context, db *tenantdb.DB, tenant string) error {
+	if _, err := NewOBSFallbackStore(ctx, db); err != nil {
+		return err
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var id string
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM tenants WHERE id=$1 FOR UPDATE`, tenant).Scan(&id); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM obs_fallback_proposals WHERE /*tenant:obs_fallback_proposals*/ AND observed_at<clock_timestamp()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1)`, tenant); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE obs_fallback_rules SET latest_observation='' WHERE /*tenant:obs_fallback_rules*/ AND (CASE WHEN latest_observation='' THEN NULL ELSE (latest_observation::jsonb->>'ObservedAt')::timestamptz END)<clock_timestamp()-(SELECT retention_days*interval '1 day' FROM tenants WHERE id=$1)`, tenant); err != nil {
 		return err
 	}
 	return tx.Commit()

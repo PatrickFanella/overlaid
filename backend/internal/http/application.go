@@ -40,6 +40,7 @@ type tenantRuntime struct {
 	cancel context.CancelFunc
 }
 type Application struct {
+	obsEffects        *obsEffectOwner
 	sendGates         map[string]*tenantSendGate
 	outbound          *outboundChat
 	moderation        *moderationConsumer
@@ -163,6 +164,9 @@ func NewApplication(cfg config.Config) (*Application, error) {
 		a.Close()
 		return nil, err
 	}
+	if cfg.DeploymentMode == "selfhost" && strings.TrimSpace(cfg.OBSWebSocketURL) != "" {
+		a.obsEffects = newOBSEffectOwner(a)
+	}
 	return a, nil
 }
 func (a *Application) Close() error {
@@ -185,6 +189,11 @@ func (a *Application) closeWithContext(stopCtx context.Context) error {
 	}
 	if a.outbound != nil {
 		a.outbound.ready.Store(false)
+	}
+	if a.obsEffects != nil {
+		if err := a.obsEffects.close(stopCtx); err != nil {
+			return err
+		}
 	}
 	if stream != nil {
 		if err := stream.close(stopCtx); err != nil {
@@ -372,6 +381,12 @@ func (a *Application) runtime(ctx context.Context, id string) (*Server, error) {
 	}
 	a.runtimes[id] = tenantRuntime{server: s, cancel: cancel}
 	a.runtimeCapacityBlocked = false
+	if a.obsEffects != nil {
+		s.obsMutation = func(ctx context.Context, effect func(context.Context) error) error {
+			return a.obsEffects.run(ctx, s, effect)
+		}
+		a.obsEffects.observe(s, scope)
+	}
 	s.StartBackground(child)
 	return s, nil
 }
@@ -701,6 +716,12 @@ func controlError(w http.ResponseWriter, err error) {
 }
 func (a *Application) accountStatus(w http.ResponseWriter, r *http.Request) {
 	actor, active, _, err := a.actor(r)
+	// Account UI state follows the genuine browser session when self-host
+	// operator headers are also configured. Typed controls bind that session.
+	session, _, sessionErr := a.session(r)
+	if sessionErr == nil {
+		actor, active, err = session.AccountID, session.ActiveTenantID, nil
+	}
 	response := map[string]any{"authenticated": err == nil, "deploymentMode": a.config.DeploymentMode, "productName": a.config.ProductName, "supportContact": a.config.SupportContact, "loginUrl": "/api/account/login/twitch"}
 	if err == nil {
 		tenants, err := a.store.Tenants(r.Context(), actor)
@@ -712,7 +733,7 @@ func (a *Application) accountStatus(w http.ResponseWriter, r *http.Request) {
 		response["activeTenantId"] = active
 		response["tenants"] = tenants
 	}
-	if session, _, err := a.session(r); err == nil {
+	if sessionErr == nil {
 		if csrf, err := r.Cookie(csrfCookie); err == nil && tenancy.Hash(csrf.Value) == session.CSRFHash {
 			response["csrfToken"] = csrf.Value
 		}
