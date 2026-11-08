@@ -46,6 +46,9 @@ else: raise SystemExit('Disposable PostgreSQL is unreachable from this runner')
 PY
 )
 export OVERLAID_TEST_DATABASE_URL="postgres://postgres:$fixture_password@$fixture_endpoint/overlaid_ci?sslmode=disable"
+# The fixture is shared by packages. Bound concurrent schema/worker suites on
+# busy hosts; preserve each suite's own workload and operation deadlines.
+export GOFLAGS="${GOFLAGS:+$GOFLAGS }-p=2"
 make verify
 # The HTTP package owns many independent schema fixtures. Its complete race
 # pass can exceed Go's default 10m package budget on a shared runner; individual
