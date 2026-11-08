@@ -558,24 +558,31 @@ func (s *OBSFallbackStore) readProposal(ctx context.Context, tx *tenantdb.Tx, id
 	return out, nil
 }
 
-func obsFallbackCapacity(ctx context.Context, tx *tenantdb.Tx) error {
+func obsFallbackPlanLimit(ctx context.Context, tx *tenantdb.Tx) (int64, error) {
 	var raw []byte
 	if err := tx.QueryRowContext(ctx, `SELECT p.limits FROM tenants t JOIN plans p ON p.id=t.plan_id WHERE t.id=current_setting('app.tenant_id')::uuid FOR SHARE OF p`).Scan(&raw); err != nil {
-		return err
+		return 0, err
 	}
 	limits := map[string]int64{}
 	if json.Unmarshal(raw, &limits) != nil {
-		return ErrLimit
+		return 0, ErrLimit
 	}
 	limit, ok := limits["storedEvents"]
 	if !ok || limit < -1 {
-		return ErrLimit
+		return 0, ErrLimit
 	}
 	if limit == -1 || limit > obsProposalLimit {
 		limit = obsProposalLimit
 	}
+	return limit, nil
+}
+func obsFallbackCapacity(ctx context.Context, tx *tenantdb.Tx) error {
+	limit, err := obsFallbackPlanLimit(ctx, tx)
+	if err != nil {
+		return err
+	}
 	var n int64
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM obs_fallback_proposals WHERE /*tenant:obs_fallback_proposals*/`).Scan(&n); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM obs_fallback_proposals WHERE /*tenant:obs_fallback_proposals*/`).Scan(&n); err != nil {
 		return err
 	}
 	if n >= limit {
