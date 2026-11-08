@@ -11,6 +11,8 @@ BACKUP_DIR ?= backups
 PROBE_URL ?= http://127.0.0.1:$(API_PORT)/readyz
 PROBE_CHECKS ?=
 PROBE_TIMEOUT ?= 5s
+# CI runs the large HTTP qualification fixtures in their own required job.
+GO_TEST_SKIP ?=
 
 .PHONY: help verify deps fmt lint test config-contract-check build build-probe probe compose-config open-pilot-check dev up down restart ps logs docker-build wait-api smoke smoke-browser smoke-alert db-shell db-migrate db-tables db-reset-postgres db-reset api-data-volume-check api-data-backup postgres-backup
 
@@ -35,7 +37,7 @@ config-contract-check: ## Check deployment/docs defaults without Go's test cache
 	cd backend && go test -count=1 ./internal/config -run '^TestTwitchScopeDefaultsMatchDeployment$$'
 
 test: config-contract-check ## Run backend and frontend tests
-	cd backend && go test -timeout=15m ./...
+	cd backend && go test -timeout=15m $(if $(GO_TEST_SKIP),-skip '$(GO_TEST_SKIP)') ./...
 	cd backend/spikes/river && go test ./...
 	pnpm --dir web run test
 

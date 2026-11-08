@@ -14,10 +14,15 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
+  checks:
     runs-on: ubuntu-latest
-    # Standard tests and uncached races each have a bounded 15m package budget.
+    # Isolate large qualification workloads without extending any watchdog.
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        phase: [application, race, qualification]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -31,10 +36,23 @@ jobs:
           node-version: '24'
       - name: Install declared pnpm version
         run: npm install --global pnpm@10.33.0
-      - name: Verify application
+      - name: Verify selected phase
+        env:
+          VERIFY_PHASE: ${{ matrix.phase }}
         run: |
-          bash scripts/ci-postgres.sh
+          bash scripts/ci-postgres.sh "$VERIFY_PHASE"
           git diff --exit-code
+
+  verify:
+    needs: checks
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Require all verification phases
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+        run: test "$CHECKS_RESULT" = success
 
   frontend:
     name: Build frontend and deploy NUC
