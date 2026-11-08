@@ -1240,7 +1240,7 @@ test('copies authenticated overlay source URLs while demo previews stay offline'
   await page.goto('/dashboard/overlays');
   await expect(page.getByRole('button', { name: 'Copy URL' }).first()).toBeEnabled();
   const urls = await page.locator('code.desk-url').allTextContents();
-  expect(urls.length).toBe(10);
+  expect(urls.length).toBe(11);
   for (const value of urls) expect(new URL(value).searchParams.get('key')).toBe('overlay+fixture');
   for (const src of await page.locator('iframe').evaluateAll(frames => frames.map(frame => frame.getAttribute('src')))) {
     expect(src).toContain('demo=1'); expect(src).not.toContain('key=');
