@@ -11,7 +11,7 @@ function record(value: unknown): Record<string, unknown> { if (!value || typeof 
 
 export function decodeCommandMigrationItem(value: unknown): CommandMigrationItem {
   const r = record(value);
-  if (typeof r.id !== 'string' || !r.id || bytes(r.id) > 128 || r.id.trim() !== r.id || [...r.id].some(c => { const code = c.charCodeAt(0); return code < 32 || code >= 127 && code <= 159; }) || typeof r.name !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,31}$/.test(r.name)) return fail();
+  if (typeof r.id !== 'string' || !r.id || bytes(r.id) > 128 || /^\p{White_Space}|\p{White_Space}$/u.test(r.id) || [...r.id].some(c => { const code = c.charCodeAt(0); return code < 32 || code >= 127 && code <= 159; }) || typeof r.name !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,31}$/.test(r.name)) return fail();
   if (typeof r.enabled !== 'boolean' || typeof r.action !== 'string' || !actions.has(r.action) || typeof r.responseMode !== 'string' || !['overlay', 'chat', 'both'].includes(r.responseMode) || typeof r.roleRequired !== 'string' || !roles.has(r.roleRequired) || !Number.isSafeInteger(r.cooldownSeconds) || Number(r.cooldownSeconds) < 0 || Number(r.cooldownSeconds) > 3600 || typeof r.snapshot !== 'string' || !/^[a-f0-9]{64}$/.test(r.snapshot)) return fail();
   const kind = r.action.startsWith('newsroom_') ? 'editorial' : 'template';
   if (r.kind !== kind || kind === 'editorial' && r.responseMode !== 'chat') return fail();

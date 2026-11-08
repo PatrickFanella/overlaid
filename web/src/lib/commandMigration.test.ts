@@ -17,6 +17,16 @@ describe('saved command migration reads', () => {
     expect(decodeCommandMigrationCatalogue({ state: 'command_catalogue_only', commands: [] })).toEqual([]);
   });
 
+  it('matches Go whitespace rules for opaque saved IDs', () => {
+    // U+FEFF is a format character, not Go Unicode whitespace. JavaScript trim
+    // removes it, but a canonical saved ID can retain it at either end.
+    const id = '\uFEFFlegacy-command\uFEFF';
+    expect(decodeCommandMigrationItem({ ...command, id }).id).toBe(id);
+    for (const id of [' legacy-command', 'legacy-command\u00a0', '\u3000legacy-command']) {
+      expect(() => decodeCommandMigrationItem({ ...command, id })).toThrow();
+    }
+  });
+
   it('refuses partial, unordered, duplicate, malformed or contradictory catalogues', () => {
     const other = { ...command, id: 'other-command', name: 'another' };
     for (const commands of [[command, command], [command, other], [{ ...command, name: '<img>' }], [{ ...command, id: 'bad\nidentity' }], [{ ...command, id: 'é'.repeat(65) }], [{ ...command, enabled: 1 }], [{ ...command, cooldownSeconds: 3601 }], [{ ...command, snapshot: 'A'.repeat(64) }], [{ ...command, action: 'unknown' }], [{ ...command, kind: 'editorial' }], [{ ...command, action: 'newsroom_current', kind: 'editorial', responseMode: 'both' }], Array.from({ length: 1001 }, () => command)]) {
