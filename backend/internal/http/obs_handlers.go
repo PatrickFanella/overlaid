@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -81,7 +82,7 @@ func (s *Server) obsSetScene(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	if err := s.obs.SetCurrentProgramScene(r.Context(), request.SceneName); err != nil {
+	if err := s.runOBSMutation(r.Context(), func(ctx context.Context) error { return s.obs.SetCurrentProgramScene(ctx, request.SceneName) }); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -93,7 +94,7 @@ func (s *Server) obsSetInputMute(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	if err := s.obs.SetInputMute(r.Context(), request.InputName, request.Muted); err != nil {
+	if err := s.runOBSMutation(r.Context(), func(ctx context.Context) error { return s.obs.SetInputMute(ctx, request.InputName, request.Muted) }); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -105,7 +106,9 @@ func (s *Server) obsSetSceneItemEnabled(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	if err := s.obs.SetSceneItemEnabled(r.Context(), request.SceneName, request.SceneItemID, request.Enabled); err != nil {
+	if err := s.runOBSMutation(r.Context(), func(ctx context.Context) error {
+		return s.obs.SetSceneItemEnabled(ctx, request.SceneName, request.SceneItemID, request.Enabled)
+	}); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -117,11 +120,18 @@ func (s *Server) obsRefreshSource(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	if err := s.obs.RefreshBrowserSource(r.Context(), request.InputName); err != nil {
+	if err := s.runOBSMutation(r.Context(), func(ctx context.Context) error { return s.obs.RefreshBrowserSource(ctx, request.InputName) }); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *Server) runOBSMutation(ctx context.Context, effect func(context.Context) error) error {
+	if s.obsMutation != nil {
+		return s.obsMutation(ctx, effect)
+	}
+	return effect(ctx)
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {

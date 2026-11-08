@@ -9,6 +9,7 @@ Use [getting started](getting-started.md) for a fresh installation. Read [curren
 - [Newsroom](newsroom.md): editorial workflow, provider setup, public episodes and exports.
 - [Bot operations](bot-ops.md), [Twitch commands](twitch-chat-commands.md), and [interaction/reward rules](twitch-interaction-rules.md).
 - [OBS sequences](obs-automation-sequences.md), [stream sessions](stream-sessions.md), and [event history](event-history.md).
+- [Missing-input fallback approval](obs-fallback.md): versioned managed self-host rules, original evidence/replay, one-use scene approvals, disable/recovery and safe test-collection qualification linked to #40.
 
 ## Install, secure and recover
 

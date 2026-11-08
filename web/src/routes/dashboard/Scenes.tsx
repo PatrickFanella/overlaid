@@ -14,6 +14,7 @@ import { DashboardShell } from './DashboardShell';
 import { useDeskStatus } from './deskStatus';
 import { Disclosure, PageHead } from './ui';
 import { useOperatorActions } from './useOperatorActions';
+import { OBSFallbackAccountDesk } from './OBSFallbackDesk';
 
 export function DashboardScenesPage() {
   return (
@@ -40,8 +41,11 @@ function Scenes() {
   return (
     <>
       <PageHead title="Scenes and actions" lede="Drive OBS directly, edit the quick-action presets that On air uses, and run smoke tests against the overlays." actions={<ActiveProfileTag profile={profile} />} />
-      <MissingSecretNotice operatorSecret={operatorSecret} />
       <ProfileWarnings warnings={warnings} />
+
+      <OBSFallbackAccountDesk />
+
+      <MissingSecretNotice operatorSecret={operatorSecret} />
 
       <Disclosure summary="Arrange modules">
         <ControlLayoutEditor config={config} onChange={updateConfig} />

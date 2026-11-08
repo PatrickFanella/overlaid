@@ -27,6 +27,10 @@ func decodeControl(w http.ResponseWriter, r *http.Request, out any) bool {
 	return true
 }
 func (a *Application) control(w http.ResponseWriter, r *http.Request) {
+	if obsFallbackControlPath(r.URL.Path) {
+		a.obsFallbackControl(w, r)
+		return
+	}
 	if automationControlPath(r.URL.Path) {
 		a.automationControl(w, r)
 		return

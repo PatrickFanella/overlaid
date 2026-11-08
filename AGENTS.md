@@ -83,6 +83,10 @@ Manual Newsroom HTTP requests use server-projected previews, authenticated scope
 
 ## Operations conventions
 
+- Managed self-host OBS fallback rules use migration 0049, immutable engine versions and the account/CSRF/configure boundary. Typed OBS controls may use a genuine configure-member session on the bootstrap workspace; an operator header alone cannot approve. Account status must report that browser session when it coexists with operator headers. Hosted/file mode do not activate this retained path.
+- Preserve original ten-second proposal deadlines, thirty-second proposal/claim spacing, fixed bounded receipts, private hashed one-use claims, metadata-only exports and lifecycle cascades. Missing means absent from complete input inventory; mute/hidden/disconnected/unknown evidence must not become absence. Unknown/disconnected observations cannot clear an acknowledged episode. No retry or restart may replay a claimed attempt.
+- The configured OBS application owner shares its mutation gate with direct controls, checks the actual managed controller lock and exact runtime, and drains observations/attempts/detached receipts before dependency release. Final provider/local checks run after a committed claim. Preserve independent disable and read-only original recovery, scoped browser intent persisted before one approval POST, no automatic replacement key and effect-free replay/synthetic rehearsal. Qualification uses a disposable test collection, never an active stream.
+
 - Overlay SSE and display settings use `OVERLAY_TOKEN` through `?key=`. History and dashboard token retrieval use operator headers; never put the operator secret in overlay URLs. Empty credentials are allowed only in local exposure mode; protected reads fail closed in LAN/public modes.
 
 - Keep `/healthz` as cheap process liveness for Compose. Monitoring must parse `/readyz` JSON, using `cmd/probe` or equivalent, because HTTP 200 can contain degraded readiness.

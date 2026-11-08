@@ -15,6 +15,7 @@ func Registry() []CapabilityDefinition {
 		{"chat.read", true}, {"chat.send", false}, {"chat.reply", false}, {"chat.announce", false}, {"chat.whisper", false}, {"chat.clear", false},
 		{"message.delete", false}, {"user.timeout", false}, {"user.ban", false}, {"user.unban", false}, {"user.warn", false},
 		{"role.moderator.manage", false}, {"role.vip.manage", false}, {"chat.modes.manage", false}, {"shield.manage", false},
+		{"obs.scene.set", false},
 		{"stream.read", true}, {"stream.update", false}, {"stream.marker.create", false}, {"clip.create", false}, {"raid.start", false}, {"shoutout.send", false},
 		{"reward.read", true}, {"reward.manage", false}, {"redemption.read", true}, {"redemption.resolve", false},
 		{"poll.read", true}, {"poll.create", false}, {"prediction.read", true}, {"prediction.create", false},

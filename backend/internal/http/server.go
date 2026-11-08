@@ -29,6 +29,7 @@ import (
 )
 
 type Server struct {
+	obsMutation               func(context.Context, func(context.Context) error) error
 	streamObservations        func(context.Context) (platformingest.StreamObservations, error)
 	streamStarted             <-chan struct{}
 	streamReadiness           func(context.Context) error

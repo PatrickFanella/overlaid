@@ -111,6 +111,20 @@ func (s *AutomationStore) Publish(ctx context.Context, actor string, v engine.Va
 		return AutomationPublication{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	result, err := s.publishTx(ctx, tx, actor, v, expected)
+	if err != nil {
+		return out, err
+	}
+	if err = tx.Commit(); err != nil {
+		return out, err
+	}
+	return result, nil
+}
+
+// publishTx is shared with typed rule writers that commit their own versioned
+// metadata in the same already-authorized tenant transaction.
+func (s *AutomationStore) publishTx(ctx context.Context, tx *tenantdb.Tx, actor string, v engine.Validated, expected string) (AutomationPublication, error) {
+	d := v.Document()
 	current, err := currentAutomation(ctx, tx, d.AutomationID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return AutomationPublication{}, err
@@ -126,9 +140,6 @@ func (s *AutomationStore) Publish(ctx context.Context, actor string, v engine.Va
 			return AutomationPublication{}, err
 		}
 		result := publication(old, graph, at, true)
-		if err = tx.Commit(); err != nil {
-			return AutomationPublication{}, err
-		}
 		return result, nil
 	}
 	if !errors.Is(lookup, sql.ErrNoRows) {
@@ -184,9 +195,6 @@ func (s *AutomationStore) Publish(ctx context.Context, actor string, v engine.Va
 		return AutomationPublication{}, err
 	}
 	result := publication(v, graph, at, false)
-	if err = tx.Commit(); err != nil {
-		return AutomationPublication{}, err
-	}
 	return result, nil
 }
 
