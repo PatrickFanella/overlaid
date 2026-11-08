@@ -45,7 +45,7 @@ func (r Rule) Graph() engine.PinnedGraph { return r.graph }
 // NewRule builds the bounded engine graph used by the fallback rule. It opens no
 // connection and does not publish a version or register an executor.
 func NewRule(s Spec) (Rule, error) {
-	if !hash.MatchString(s.ConnectionID) || !validText(s.Collection) || !validText(s.Input) || !validText(s.Scene) {
+	if !hash.MatchString(s.ConnectionID) || !ValidName(s.Collection) || !ValidName(s.Input) || !ValidName(s.Scene) {
 		return Rule{}, ErrInvalid
 	}
 	d := engine.Document{SchemaVersion: engine.AdmissionSchemaVersion, TenantID: s.TenantID, AutomationID: s.AutomationID, VersionID: s.VersionID,
@@ -178,7 +178,9 @@ func Rehearse(ctx context.Context, r Rule, o Observation, now time.Time) (out Re
 	}
 	return out, nil
 }
-func validText(v string) bool {
+
+// ValidName bounds exact OBS collection, input and scene names as private text.
+func ValidName(v string) bool {
 	return len(v) > 0 && len(v) <= 255 && utf8.ValidString(v) && !strings.ContainsRune(v, 0)
 }
 func validTime(t time.Time) bool { return !t.IsZero() && t.Year() >= 1 && t.Year() <= 9999 }

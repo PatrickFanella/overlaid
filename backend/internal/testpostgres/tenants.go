@@ -535,6 +535,10 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rawOBSFallback, err := os.ReadFile(filepath.Join(root, "0049_obs_fallback.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	migrateAutomations := func() {
 		t.Helper()
 		if _, err := owner.Exec(strings.ReplaceAll(string(rawAutomation), "overlaid_runtime", role)); err != nil {
@@ -566,6 +570,10 @@ func NewTenantFixture(t *testing.T, legacySQL string) TenantFixture {
 		}
 
 		if _, err := owner.Exec(strings.ReplaceAll(string(rawNoRepeat), "overlaid_runtime", role)); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := owner.Exec(strings.ReplaceAll(string(rawOBSFallback), "overlaid_runtime", role)); err != nil {
 			t.Fatal(err)
 		}
 	}

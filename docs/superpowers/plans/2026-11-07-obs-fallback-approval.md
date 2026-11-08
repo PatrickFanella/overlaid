@@ -17,3 +17,10 @@ This feature targets managed self-host installations with an explicitly configur
 ## Completion criteria
 
 Every checkbox in #47 must have a passing named test or explicit live-qualification limitation. A pure proposal, saved rule or successful provider read does not authorize an effect. The feature PR remains incomplete until the configured rule, explanation, approval controls, durable at-most-once scene attempt and recovery receipt work together. #25 and #40 remain open for their wider engine and live-device acceptance.
+
+## Checkpoints
+
+- Pure rule/observation rehearsal is committed as `01b0dea`; race tests pass with 92.1% package coverage and lint reports zero issues.
+- The storage draft uses migration 0049, immutable engine publication in the same tenant transaction, independent disable revision, an original ten-second observation deadline, thirty-second proposal spacing, and min(storedEvents,1000) retained proposals. A claimed/dismissed episode will remain latched until confirmed present/muted/hidden input; disconnected/unknown evidence cannot clear it. Claims and transport are not implemented yet.
+- Focused PostgreSQL races pass for the migration contract, atomic publication/rollback, disable/re-enable conflict, original-source lookup, bounded proposal episodes, role/tenant isolation, metadata exports, storedEvents refusal and repeated schema/grant checks. The existing publication race/audit regression also passes. Full application verification remains required after integration.
+- Full verification of the separate #350 tree encountered an unrelated app-vault test timeout on disk-backed storage. Its earlier browser run passed 70 tests with #351 included. No local full-gate success is claimed.
