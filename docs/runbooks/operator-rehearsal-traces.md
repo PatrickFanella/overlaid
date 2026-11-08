@@ -46,4 +46,4 @@ Discovery reads no trace bodies and does not validate their canonical contents; 
 
 ## Captured seed
 
-Loading a trace requires its capture version and seed to match the run's occurrence: capture 1 with seed 0, or capture 2 with the admitted seed. A mismatch is refused, never repaired. Seeded random steps use kind `random`, outcome `visited` and reason `seeded_choice`. Older binaries refuse to load traces containing that reason or capture 2; the stored rows stay unchanged.
+Loading a trace requires its capture version and seed to match the run's occurrence: capture 1 with seed 0, or capture 2/3 with the admitted seed. The capture digest must also match the reconstructed clock/facts/seed and optional pre-run memory. A mismatch is refused, never repaired. Seeded random steps use kind `random`, outcome `visited` and reason `seeded_choice`. Capture 3 additionally supports `no_repeat_choice` with the same kind/outcome. Older binaries refuse unknown reasons or capture versions; the stored rows stay unchanged.

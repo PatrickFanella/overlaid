@@ -30,6 +30,7 @@ export async function decodeSavedOperatorTrace(value: unknown, scope: VersionSco
   if (metadata.steps[0].kind !== 'admission' || metadata.steps[0].automationId !== ref.source.automationId || metadata.steps[0].versionId !== ref.versionId) return fail();
   // Match the stored format-1 Go struct order and capitalized FlowStep codec.
   // All allowed values are ASCII metadata; Go's HTML escaping changes none.
+  if (d.captureVersion !== 3 && metadata.steps.some(s => s.reason === 'no_repeat_choice')) return fail();
   const canonical = { formatVersion: 1, tenantId: scope.tenantId, id: ref.traceId, runId: ids.runId, automationId: ref.source.automationId, versionId: ref.versionId, mode: ref.mode, captureVersion: d.captureVersion, originalGraphDigest: ref.source.graphDigest, graphDigest: ref.graphDigest, captureDigest: ref.captureDigest, clock, seed: d.seed, status: metadata.status, reason: metadata.reason, steps: metadata.steps.map(s => ({ Sequence: s.sequence, Parent: s.parent, AutomationID: s.automationId, VersionID: s.versionId, NodeID: s.nodeId, Kind: s.kind, Outcome: s.outcome, Reason: s.reason })), droppedSteps: metadata.droppedSteps };
   const raw = JSON.stringify(canonical);
   if (JSON.stringify(d) !== raw || new TextEncoder().encode(raw).length > 65536) return fail();

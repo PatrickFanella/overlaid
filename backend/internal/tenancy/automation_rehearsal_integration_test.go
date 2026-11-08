@@ -53,7 +53,7 @@ func TestAutomationRetainedRehearsalPinnedAndCurrentCapture(t *testing.T) {
 	}
 	before := snapshot()
 	pinned, err := store.RehearseOperator(ctx, owner, operatorRequest(80), engine.ModeReproduce)
-	if err != nil || pinned.CaptureVersion != 2 || run.Seed == 0 || pinned.Flow.Seed != run.Seed || !pinned.Flow.Clock.Equal(run.CreatedAt) || pinned.Flow.GraphDigest != run.GraphDigest || pinned.Run.ID != run.ID || !pinned.Run.Unchanged || len(pinned.Flow.Proposals) != 1 {
+	if err != nil || pinned.CaptureVersion != 3 || run.Seed == 0 || pinned.Flow.Seed != run.Seed || !pinned.Flow.Clock.Equal(run.CreatedAt) || pinned.Flow.GraphDigest != run.GraphDigest || pinned.Run.ID != run.ID || !pinned.Run.Unchanged || len(pinned.Flow.Proposals) != 1 {
 		t.Fatal("original capture", pinned, err)
 	}
 	current, err := store.RehearseOperator(ctx, owner, operatorRequest(80), engine.ModeCurrentConfig)

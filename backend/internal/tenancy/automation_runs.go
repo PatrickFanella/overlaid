@@ -30,15 +30,19 @@ type OperatorRun struct {
 	CreatedAt, Deadline                                    time.Time
 	// Seed is the occurrence's captured randomness, chosen once at admission.
 	// Zero marks a capture-1 occurrence admitted before seeds existed.
-	Seed      uint64 `json:"-"`
+	Seed      uint64            `json:"-"`
+	Recent    map[string]string `json:"-"`
 	Unchanged bool
 }
 
 // MaxOperatorSeed keeps seeds exact as JavaScript numbers in browser codecs.
 const MaxOperatorSeed = 1<<53 - 1
 
-// CaptureVersion is 2 for occurrences with a captured seed and 1 otherwise.
+// CaptureVersion is 3 with captured memory, 2 with a seed only and 1 otherwise.
 func (r OperatorRun) CaptureVersion() int {
+	if r.Recent != nil {
+		return 3
+	}
 	if r.Seed > 0 {
 		return 2
 	}
@@ -149,7 +153,8 @@ func (s *AutomationStore) AdmitOperator(ctx context.Context, actor, request, aut
 	// independent of version changes, including zero-cooldown replacement versions.
 	var now time.Time
 	var until time.Time
-	err = tx.QueryRowContext(ctx, `SELECT cooldown_until FROM engine_run_budgets WHERE /*tenant:engine_run_budgets*/ AND automation_id=$1 FOR UPDATE`, automation).Scan(&until)
+	var rawRecent []byte
+	err = tx.QueryRowContext(ctx, `SELECT cooldown_until,recent FROM engine_run_budgets WHERE /*tenant:engine_run_budgets*/ AND automation_id=$1 FOR UPDATE`, automation).Scan(&until, &rawRecent)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, err
 	}
@@ -168,7 +173,30 @@ func (s *AutomationStore) AdmitOperator(ctx context.Context, actor, request, aut
 	if err != nil {
 		return out, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO engine_operator_occurrences(id,automation_id,version_id,graph_digest,run_id,created_at,deadline,seed) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, occurrence, automation, expected, graph.Digest(), id, now, deadline, int64(seed))
+	priorRecent := map[string]string{}
+	if len(rawRecent) > 0 {
+		priorRecent, err = operatorRecent(rawRecent)
+		if err != nil || priorRecent == nil {
+			return out, ErrAutomationInvalid
+		}
+	}
+	recent, err := engine.CaptureRecentChoices(graph, priorRecent)
+	if err != nil {
+		return out, ErrAutomationInvalid
+	}
+	flow, err := engine.RehearseFlow(ctx, graph, engine.RehearsalInput{OccurrenceID: occurrence, OriginalGraphDigest: graph.Digest(), Mode: engine.ModeReproduce, Clock: now, Seed: seed, Recent: recent, Facts: facts, TraceLimit: engine.MaxSteps})
+	if err != nil {
+		return out, err
+	}
+	capturedRecent, err := json.Marshal(recent)
+	if err != nil {
+		return out, err
+	}
+	finalRecent, err := json.Marshal(flow.Recent)
+	if err != nil {
+		return out, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO engine_operator_occurrences(id,automation_id,version_id,graph_digest,run_id,created_at,deadline,seed,recent) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, occurrence, automation, expected, graph.Digest(), id, now, deadline, int64(seed), string(capturedRecent))
 	if err != nil {
 		return out, err
 	}
@@ -176,14 +204,14 @@ func (s *AutomationStore) AdmitOperator(ctx context.Context, actor, request, aut
 	if err != nil {
 		return out, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO engine_run_budgets(automation_id,charged_at,cooldown_until) VALUES($1,$2,$3) ON CONFLICT(tenant_id,automation_id) DO UPDATE SET charged_at=excluded.charged_at,cooldown_until=excluded.cooldown_until`, automation, now, now.Add(time.Duration(d.Admission.CooldownMS)*time.Millisecond))
+	_, err = tx.ExecContext(ctx, `INSERT INTO engine_run_budgets(automation_id,charged_at,cooldown_until,recent) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,automation_id) DO UPDATE SET charged_at=excluded.charged_at,cooldown_until=excluded.cooldown_until,recent=excluded.recent`, automation, now, now.Add(time.Duration(d.Admission.CooldownMS)*time.Millisecond), string(finalRecent))
 	if err != nil {
 		return out, err
 	}
 	if err = tx.Commit(); err != nil {
 		return out, err
 	}
-	return OperatorRun{ID: id, OccurrenceID: occurrence, AutomationID: automation, VersionID: expected, GraphDigest: graph.Digest(), CreatedAt: now, Deadline: deadline, Seed: seed}, nil
+	return OperatorRun{ID: id, OccurrenceID: occurrence, AutomationID: automation, VersionID: expected, GraphDigest: graph.Digest(), CreatedAt: now, Deadline: deadline, Seed: seed, Recent: recent}, nil
 }
 
 func operatorRunCapacity(ctx context.Context, tx *tenantdb.Tx) error {
@@ -216,8 +244,16 @@ func operatorRunCapacity(ctx context.Context, tx *tenantdb.Tx) error {
 func lookupOperatorRun(ctx context.Context, tx *tenantdb.Tx, occurrence, actor string) (OperatorRun, error) {
 	var out OperatorRun
 	var seed int64
-	err := tx.QueryRowContext(ctx, `SELECT r.id,r.occurrence_id,r.automation_id,r.version_id,r.graph_digest,o.created_at,o.deadline,o.seed FROM engine_operator_runs r JOIN engine_operator_occurrences o ON o.tenant_id=r.tenant_id AND o.id=r.occurrence_id WHERE r.tenant_id=current_setting('app.tenant_id')::uuid AND r.occurrence_id=$1 AND r.actor_account_id=$2`, occurrence, actor).Scan(&out.ID, &out.OccurrenceID, &out.AutomationID, &out.VersionID, &out.GraphDigest, &out.CreatedAt, &out.Deadline, &seed)
-	if err == nil && (seed < 0 || seed > MaxOperatorSeed) {
+	var rawRecent []byte
+	err := tx.QueryRowContext(ctx, `SELECT r.id,r.occurrence_id,r.automation_id,r.version_id,r.graph_digest,o.created_at,o.deadline,o.seed,o.recent FROM engine_operator_runs r JOIN engine_operator_occurrences o ON o.tenant_id=r.tenant_id AND o.id=r.occurrence_id WHERE r.tenant_id=current_setting('app.tenant_id')::uuid AND r.occurrence_id=$1 AND r.actor_account_id=$2`, occurrence, actor).Scan(&out.ID, &out.OccurrenceID, &out.AutomationID, &out.VersionID, &out.GraphDigest, &out.CreatedAt, &out.Deadline, &seed, &rawRecent)
+	if err == nil {
+		var e error
+		out.Recent, e = operatorRecent(rawRecent)
+		if e != nil {
+			return OperatorRun{}, e
+		}
+	}
+	if err == nil && (seed < 0 || seed > MaxOperatorSeed || out.Recent != nil && seed == 0) {
 		return OperatorRun{}, ErrAutomationInvalid
 	}
 	out.Seed = uint64(seed)
@@ -264,4 +300,27 @@ func automationRunError(ctx context.Context, err error) error {
 		}
 	}
 	return automationError(ctx, err)
+}
+
+// operatorRecent refuses JSON null values inside objects; they are not empty
+// child IDs. A top-level null alone identifies a legacy capture.
+func operatorRecent(raw []byte) (map[string]string, error) {
+	var values map[string]*string
+	if len(raw) > 300000 || json.Unmarshal(raw, &values) != nil {
+		return nil, ErrAutomationInvalid
+	}
+	if values == nil {
+		return nil, nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		if value == nil {
+			return nil, ErrAutomationInvalid
+		}
+		out[key] = *value
+	}
+	if !engine.ValidRecentChoices(out) {
+		return nil, ErrAutomationInvalid
+	}
+	return out, nil
 }

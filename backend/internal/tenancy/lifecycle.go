@@ -153,6 +153,9 @@ func (s *Store) Export(ctx context.Context, actor, tenant string) (map[string]an
 		if table == "engine_operator_runs" {
 			query = `SELECT jsonb_build_object('runId',id,'automationId',automation_id,'versionId',version_id,'graphDigest',graph_digest) FROM engine_operator_runs WHERE /*tenant:engine_operator_runs*/ LIMIT 10001`
 		}
+		if table == "engine_run_budgets" {
+			query = `SELECT jsonb_build_object('automationId',automation_id,'chargedAt',charged_at,'cooldownUntil',cooldown_until) FROM engine_run_budgets WHERE /*tenant:engine_run_budgets*/ LIMIT 101`
+		}
 		if table == "engine_operator_occurrences" {
 			query = `SELECT jsonb_build_object('automationId',automation_id,'versionId',version_id,'createdAt',created_at,'deadline',deadline) FROM engine_operator_occurrences WHERE /*tenant:engine_operator_occurrences*/ LIMIT 10001`
 		}
