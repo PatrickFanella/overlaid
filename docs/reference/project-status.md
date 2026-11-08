@@ -1,10 +1,12 @@
 # Current capabilities and limits
 
-Reviewed against main through PR #201 and the #202 application-owned stream-handler work on October 20, 2026. This page is a capability snapshot for readers evaluating Over-Laid. The [remaining-work roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) defines delivery order and acceptance gates; dated QA reports record observations from their named environments.
+The core snapshot was reviewed through PR #201 and the #202 stream-handler work on October 20, 2026. The OBS fallback paragraph was updated on November 8, 2026; its live qualification remains separate. This page is a capability snapshot for readers evaluating Over-Laid. The [remaining-work roadmap](../superpowers/plans/2026-10-15-remaining-work-roadmap.md) defines delivery order and acceptance gates; dated QA reports record observations from their named environments.
 
 ## Implemented product workflows
 
 The operator desk provides OBS scene/input/item controls, quick actions and sequences, readiness/recovery views, session reports, event history, overlay configuration and browser-source previews. Eleven overlay routes include Newsroom, with offline demo rendering. Twitch EventSub supplies chat and supported alert/reward events through the existing event pipeline.
+
+The [missing-input fallback desk](../runbooks/obs-fallback.md) now connects an immutable one-rule OBS graph, original observation/proposal, explicit override/approval, one-use scene claim and retained receipt for configured managed self-host installations. It requires migration 0049 and a genuine configure-member session, including on the self-host workspace. Hosted/file mode keep this path disabled. Rehearsal and saved replay are effect-free; real OBS test-collection qualification remains under #40.
 
 The general Chat command manager owns custom commands and Newsroom actions. PostgreSQL-backed bot features include timers, counters, quotes, API variables, audit evidence, moderation rules/nuke workflows and reward management. File mode retains the shared command registry and selected file-backed product state; it is not equivalent to the managed database feature set.
 

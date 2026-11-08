@@ -17,6 +17,10 @@ function at(value: unknown): string {
   if (typeof value !== 'string' || value.length > 64 || !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,9})?Z$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(`${value.slice(0, 10)}T00:00:00Z`).toISOString().slice(0, 10) !== value.slice(0, 10)) return invalid();
   return value;
 }
+function instant(value: string): bigint {
+  const fraction = (value.match(/\.(\d+)/)?.[1] || '').padEnd(9, '0');
+  return BigInt(Date.parse(value)) * 1000000n + BigInt(fraction.slice(3));
+}
 export function obsName(value: unknown): value is string { return typeof value === 'string' && new TextEncoder().encode(value).length > 0 && new TextEncoder().encode(value).length <= 255 && !value.includes('\0'); }
 function name(value: unknown): string { return obsName(value) ? value : invalid(); }
 function condition(value: unknown): OBSCondition { return typeof value === 'string' && ['missing', 'present', 'muted', 'hidden', 'disconnected', 'unknown'].includes(value) ? value as OBSCondition : invalid(); }
@@ -33,7 +37,7 @@ export function decodeOBSProposal(value: unknown): OBSProposal {
   if (r.condition !== 'missing' || r.reason !== 'input_missing' || typeof r.failure !== 'string' || !['pending', 'running', 'succeeded', 'refused', 'uncertain', 'dismissed', 'expired'].includes(String(r.state))) return invalid();
   const observedAt = at(r.observedAt); const deadline = at(r.deadline);
   const startedAt = r.startedAt === null ? null : at(r.startedAt); const finishedAt = r.finishedAt === null ? null : at(r.finishedAt);
-  if (Date.parse(deadline) - Date.parse(observedAt) !== 10000 || startedAt && (Date.parse(startedAt) < Date.parse(observedAt) || Date.parse(startedAt) >= Date.parse(deadline)) || finishedAt && Date.parse(finishedAt) < Date.parse(startedAt || observedAt)) return invalid();
+  if (instant(deadline) - instant(observedAt) !== 10000000000n || startedAt && (instant(startedAt) < instant(observedAt) || instant(startedAt) >= instant(deadline)) || finishedAt && instant(finishedAt) < instant(startedAt || observedAt)) return invalid();
   const state = r.state as OBSProposal['state'];
   if (startedAt) {
     id(r.requestId); name(r.approvedScene);

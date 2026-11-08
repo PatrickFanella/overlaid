@@ -3,7 +3,7 @@ import type { VersionScope } from '../../lib/automationVersions';
 import { getOverlayApiBaseUrl } from '../../lib/eventStream';
 import { decodeOBSCurrent, decodeOBSIntent, decodeOBSProposal, obsFallbackRequest, obsIntentKey, obsName, recoverOBSApproval, submitOBSApproval, type OBSApprovalIntent, type OBSCondition, type OBSProposal, type OBSRule, type OBSStorage } from '../../lib/obsFallback';
 import { useAccount } from './accountSession';
-import { Check, Empty, Field, KeyValues, Notice, Panel, Tag } from './ui';
+import { Check, Disclosure, Empty, Field, KeyValues, Notice, Panel, Tag } from './ui';
 
 export function OBSFallbackAccountDesk() {
   const { account, loading } = useAccount();
@@ -47,7 +47,7 @@ export function OBSFallbackDesk({ scope, workspaceName }: { scope: VersionScope;
     const timer = window.setTimeout(() => controller.abort(), 15000);
     const active = () => { if (!mounted.current || controller.signal.aborted || task.current !== current) throw new Error('Workspace request changed. Check the original approval.'); };
     try { await job(controller.signal, active); }
-    catch (e) { if (mounted.current && task.current === current) setError(e instanceof Error ? e.message : 'OBS operation failed. Check saved state.'); }
+    catch (e) { if (mounted.current && task.current === current) setError(controller.signal.aborted ? 'Request canceled or timed out. Check the saved rule or original approval outcome.' : e instanceof Error ? e.message : 'OBS operation failed. Check saved state.'); }
     finally { window.clearTimeout(timer); if (task.current === current) { task.current = null; if (mounted.current) { setBusy(false); syncIntent(); } } }
   }
   async function refresh(signal: AbortSignal, active: () => void) {
@@ -63,7 +63,7 @@ export function OBSFallbackDesk({ scope, workspaceName }: { scope: VersionScope;
     mounted.current = true;
     void perform(refresh, true);
     const poll = window.setInterval(() => { if (!revocation.current) void perform(refresh, true); }, 3000);
-    return () => { mounted.current = false; window.clearInterval(poll); task.current?.controller.abort(); revocation.current?.abort(); };
+    return () => { mounted.current = false; window.clearInterval(poll); const oldTask = task.current; task.current = null; oldTask?.controller.abort(); const oldRevocation = revocation.current; revocation.current = null; oldRevocation?.abort(); };
   }, [scope, storage]);
   async function save(signal: AbortSignal, active: () => void) {
     if (!loaded || !available || intent || !obsName(collection) || !obsName(input) || !obsName(scene)) return;
@@ -98,12 +98,28 @@ export function OBSFallbackDesk({ scope, workspaceName }: { scope: VersionScope;
     if (!report || report.synthetic !== true || report.condition !== sample || !obsName(report.scene) || typeof report.reason !== 'string' || !/^(input_(missing|present|muted|hidden|disconnected|unknown)|connection_lost)$/.test(report.reason)) throw new Error('Rehearsal response is incomplete.');
     setRehearsal(`${report.reason === 'input_missing' ? `Proposed scene: ${report.scene}` : conditionLabel[sample]}. Synthetic observation; no OBS read or scene change.`);
   }
+  async function replay(signal: AbortSignal, active: () => void) {
+    const source = proposal || intent?.proposal;
+    if (!source) return;
+    const result = await call('replay', { proposalId: source.id }, signal); active();
+    const report = (result as { rehearsal?: { proposalId?: unknown; versionId?: unknown; graphDigest?: unknown; reason?: unknown; scene?: unknown; synthetic?: unknown } }).rehearsal;
+    if (!report || report.proposalId !== source.id || report.versionId !== source.versionId || report.graphDigest !== source.graphDigest || report.reason !== source.reason || report.scene !== source.scene || report.synthetic !== false) throw new Error('Saved replay does not match the original observation.');
+    setRehearsal(`Original observation from ${source.observedAt}: input missing; proposed scene: ${source.scene}. Replayed rule ${source.versionId}; no OBS read or scene change.`);
+  }
   function clear() {
     if (busy || !window.confirm('Acknowledge and clear this tab’s approval? This changes local bookkeeping only. It does not cancel a scene attempt or resolve an unknown outcome.')) return;
     try { storage.remove(); setIntent(null); setStorageError(''); setProposal(null); } catch { setStorageError('Approval storage is unavailable.'); }
   }
   const shown = proposal || intent?.proposal;
   const fresh = shown?.state === 'pending' && Date.parse(shown.deadline) > Date.now();
+  const configuration = <div className="grid gap-3">
+    <div className="grid gap-3 md:grid-cols-3">
+      <Field label="OBS scene collection"><input className="desk-input" value={collection} onChange={e => setCollection(e.target.value)} disabled={busy || !!intent} /></Field>
+      <Field label="Watched OBS input"><input className="desk-input" value={input} onChange={e => setInput(e.target.value)} disabled={busy || !!intent} /></Field>
+      <Field label="Fallback scene"><input className="desk-input" value={scene} onChange={e => setScene(e.target.value)} disabled={busy || !!intent} /></Field>
+    </div>
+    <div className="flex flex-wrap items-center gap-3"><Check label="Observe after saving" checked={enabled} onChange={setEnabled} /><button className="desk-btn" disabled={busy || !!intent || !!storageError || !loaded || !available || !obsName(collection) || !obsName(input) || !obsName(scene)} onClick={() => void perform(save)}>Save new rule version</button></div>
+  </div>;
   return <Panel title="Missing-input fallback" description="Watch for one input disappearing from the configured OBS collection. Review the observation before approving a fallback scene." actions={<button className="desk-btn desk-btn--danger" disabled={!rule?.enabled || disabling} onClick={() => void disable()}>{disabling ? 'Disabling…' : 'Disable rule'}</button>}>
     <div className="grid min-w-0 gap-4">
       <p className="text-sm">Workspace: <strong>{workspaceName}</strong>. Detection uses the OBS input list. Camera black frames, silence and media-file failures need separate diagnostics.</p>
@@ -111,18 +127,15 @@ export function OBSFallbackDesk({ scope, workspaceName }: { scope: VersionScope;
       {message ? <Notice role="status">{message}</Notice> : null}
       {storageError ? <Notice tone="bad" role="alert">{storageError}<button className="desk-btn" disabled={busy} onClick={clear}>Acknowledge unreadable approval</button></Notice> : null}
       {!loaded ? <p role="status">Loading saved rule…</p> : !available ? <Notice>Live fallback observation requires managed self-host storage and a configured OBS connection. Saved receipts and disable remain available.</Notice> : null}
-      <div className="grid gap-3 md:grid-cols-3">
-        <Field label="OBS scene collection"><input className="desk-input" value={collection} onChange={e => setCollection(e.target.value)} disabled={busy || !!intent} /></Field>
-        <Field label="Watched OBS input"><input className="desk-input" value={input} onChange={e => setInput(e.target.value)} disabled={busy || !!intent} /></Field>
-        <Field label="Fallback scene"><input className="desk-input" value={scene} onChange={e => setScene(e.target.value)} disabled={busy || !!intent} /></Field>
-      </div>
-      <div className="flex flex-wrap items-center gap-3"><Check label="Observe after saving" checked={enabled} onChange={setEnabled} /><button className="desk-btn" disabled={busy || !!intent || !loaded || !available || !obsName(collection) || !obsName(input) || !obsName(scene)} onClick={() => void perform(save)}>Save new rule version</button><button className="desk-btn" disabled={busy} onClick={() => void perform(refresh)}>Refresh saved state</button></div>
-      {rule ? <div className="grid min-w-0 gap-3 border-t border-white/10 pt-3"><Tag>{rule.enabled ? 'Observing' : 'Disabled'}{rule.latched ? ' · episode acknowledged' : ''}</Tag><div className="break-all"><KeyValues items={[
+      {rule ? <Disclosure summary="Edit fallback rule">{configuration}</Disclosure> : configuration}
+      <button className="desk-btn w-fit" disabled={busy} onClick={() => void perform(refresh)}>Refresh saved state</button>
+      {rule ? <div className="grid min-w-0 gap-3 border-t border-white/10 pt-3"><Tag>{rule.enabled ? 'Observing' : 'Disabled'}{rule.latched ? ' (episode acknowledged)' : ''}</Tag><p className="text-sm break-words">Watching <strong>{rule.input}</strong> in <strong>{rule.collection}</strong>.</p><div className="break-all"><KeyValues items={[
         ['Rule version', rule.versionId], ['Latest condition', rule.latest ? conditionLabel[rule.latest.condition] : 'No observation yet'], ['Observed at', rule.latest?.observedAt || '—'],
       ]} /></div></div> : loaded ? <Empty>No fallback rule is saved for this workspace.</Empty> : null}
       {shown ? <section aria-label="Fallback proposal" className="grid min-w-0 gap-3 border-t border-white/10 pt-3">
-        <h3 className="desk-sub__title">Missing input · proposed scene: {shown.scene}</h3>
+        <h3 className="desk-sub__title">Missing input. Proposed scene: {shown.scene}</h3>
         <div className="break-all"><KeyValues items={[[ 'Observation', shown.observedAt ], ['Original deadline', shown.deadline], ['Rule version', shown.versionId], ['Original proposal', shown.id], ['Receipt', receiptLabel[shown.state]], ['Failure', shown.failure || '—']]} /></div>
+        <button className="desk-btn w-fit" disabled={busy} onClick={() => void perform(replay)}>Replay original observation</button>
         {!intent ? <><Field label="Override scene (optional)"><input className="desk-input" value={override} onChange={e => setOverride(e.target.value)} disabled={busy} /></Field><div className="flex flex-wrap gap-2"><button className="desk-btn desk-btn--primary" disabled={busy || !available || !rule?.enabled || !fresh || !!storageError || !obsName(override || shown.scene)} onClick={() => void perform(approve)}>Approve scene change</button><button className="desk-btn" disabled={busy || shown.state !== 'pending'} onClick={() => void perform(dismiss)}>Dismiss proposal</button></div>{shown.state === 'pending' && !fresh ? <Notice>This original proposal is stale. Refresh to inspect later observations.</Notice> : null}</> : <><Notice>Original approval: {intent.requestId}. Selected scene: {intent.scene}. The request is held in this tab and will not be submitted again.</Notice><div className="flex flex-wrap gap-2"><button className="desk-btn" disabled={busy} onClick={() => void perform(check)}>Check approval outcome</button><button className="desk-btn" disabled={busy} onClick={clear}>Acknowledge and clear approval</button></div></>}
         {shown.state === 'uncertain' || shown.state === 'running' ? <Notice tone="warn">The scene outcome is unresolved. Inspect OBS before taking another action.</Notice> : null}
       </section> : null}

@@ -2,7 +2,7 @@
 
 ## Existing boundaries
 
-The engine validates immutable schema-2 graphs and produces reproducible supplied-input traces. Retained execution currently admits chat text only. OBS routes in `backend/internal/http/obs_handlers.go` call the configured `obsws.Client` directly. Managed runtimes clear OBS configuration in hosted mode. Automation control requires account sessions, configure permission, CSRF, tenant scope and the actual application controller for writers. These boundaries remain in place.
+The engine validates immutable schema-2 graphs and produces reproducible supplied-input traces. The bounded OBS consumer now uses retained typed proposals and the configured application mutation owner. Existing OBS routes in `backend/internal/http/obs_handlers.go` share that mutation gate. Managed runtimes clear OBS configuration in hosted mode. Automation control requires account sessions, configure permission, CSRF, tenant scope and the actual application controller for writers. These boundaries remain in place.
 
 This feature targets managed self-host installations with an explicitly configured OBS connection and an authenticated workspace. Hosted installations retain disabled OBS transport. File-mode engine activation needs its own persistence/ownership design under the accepted Phase 3 plan; it is not inferred from a global operator secret.
 
@@ -18,17 +18,25 @@ This feature targets managed self-host installations with an explicitly configur
 
 Every checkbox in #47 must have a passing named test or explicit live-qualification limitation. A pure proposal, saved rule or successful provider read does not authorize an effect. The feature PR remains incomplete until the configured rule, explanation, approval controls, durable at-most-once scene attempt and recovery receipt work together. #25 and #40 remain open for their wider engine and live-device acceptance.
 
-## Checkpoints
+## Requirement evidence
 
-- Pure rule/observation rehearsal is committed as `01b0dea`; race tests pass with 92.1% package coverage and lint reports zero issues.
-- The storage draft uses migration 0049, immutable engine publication in the same tenant transaction, independent disable revision, an original ten-second observation deadline, thirty-second proposal spacing, and min(storedEvents,1000) retained proposals. A claimed/dismissed episode remains latched until confirmed present/muted/hidden input; disconnected/unknown evidence cannot clear it.
-- Focused PostgreSQL races pass for the migration contract, atomic publication/rollback, disable/re-enable conflict, original-source lookup, bounded proposal episodes, role/tenant isolation, metadata exports, storedEvents refusal and repeated schema/grant checks. The existing publication race/audit regression also passes. Full application verification remains required after integration.
-- Full verification of the separate #350 tree encountered an unrelated app-vault test timeout on disk-backed storage. Its earlier browser run passed 70 tests with #351 included. No local full-gate success is claimed.
-- The claim/completion checkpoint passes focused PostgreSQL races (14.948s), vet and lint. Tests cover concurrent duplicate approvals, changed request/override refusal, reconstructed-store recovery, exact completion tokens, detached cancellation bookkeeping, fixed receipts, explicit override, dismissal and original-deadline expiry while waiting for the tenant lock. A committed claim grants no provider permission. Observation, effect execution, HTTP and dashboard integration remain unfinished.
-- The unregistered OBS adapter reads one connection with a three-second total bound, complete bounded input/scene lists, repeated input/collection reads, strict response correlation and event refusal. Its scene method repeats the evidence reads, invokes a trusted final guard, and issues one scene request without retry. Fake-WebSocket race tests pass (1.597s); vet and lint pass. These methods are not wired to application startup or HTTP yet.
-- The application/HTTP checkpoint now owns observation and scene attempts for explicitly configured managed self-host OBS. Its shared mutation gate covers existing direct controls and fallback approval. Shutdown drains observers, attempts and detached receipts before releasing product/controller dependencies; a timed-out close retains them for retry. Approval rechecks browser scope, runtime/controller, rule, membership, plan, original deadline and provider evidence around the one-use claim. Lookup/replay and independent disable require no live provider. Focused SQL races pass for tenancy (17.074s), HTTP (9.078s) and the OBS adapter (1.080s).
-- Typed OBS controls accept a genuine configured account on the self-host workspace, including its bootstrap tenant. Operator headers alone fail authentication. Account status now prefers a genuine browser session when operator headers coexist, so the desk uses the initiating account rather than the bootstrap operator identity. This does not activate the general JSON automation desk for bootstrap or file mode.
-- The Scenes page now has versioned rule fields, observation/proposal explanations, explicit override/approval/dismissal, immediate independent disable, pure supplied-evidence rehearsal and original-receipt recovery. Approval intent is scoped to backend/account/workspace, persisted before its one POST, and retained through errors, malformed replies and reload. It never automatically submits again. Seven new frontend tests cover these transitions and bounded receipt validation; all 243 frontend tests, typechecking and lint pass. Browser interaction checks and full application/PostgreSQL verification are still required before opening the feature PR.
+| #47 requirement | Named evidence |
+| --- | --- |
+| Versioned scoped rule, disable and restart | `TestOBSFallbackAtomicRuleVersionsAndDisable`, `TestOBSFallbackControlExplainsApprovesAndRecovers` |
+| Fresh missing condition; suppressed/lost/unknown distinctions | `TestRehearseConditionsAndFreshness`, `TestFallbackSnapshotClassifiesReadOnlyEvidence`, `TestFallbackSnapshotRejectsIncompleteOrChangingEvidence` |
+| Approval/override and fresh refusal with no scene request | `TestOBSFallbackClaimFreshGuards`, `TestOBSFallbackPostClaimRevocation`, `TestOBSFallbackControlFreshRefusalsAndDisable`, `TestFallbackSceneAttemptRechecksAndSendsOnce` |
+| One use, original deadline, cooldown and owned cleanup | `TestOBSFallbackClaimRaceAndDetachedReceipt`, `TestOBSFallbackClaimRechecksOriginalDeadlineAfterLock`, `TestOBSFallbackOwnerCloseRetainsDependencies` |
+| Replay/rehearsal and fixed private receipts | `TestReplayBindingAndSyntheticIsolation`, `TestOBSFallbackObservationEpisodesRecoveryAndPrivacy`, the no-RPC replay assertion in the HTTP workflow, `obsFallback.test.ts` |
+| Browser recovery, scope, stale state and narrow controls | Six tests in `web/e2e/obs-fallback.e2e.ts`, including lost/malformed response recovery without another approval POST |
+| Safe real OBS qualification | [The runbook](../../runbooks/obs-fallback.md#controlled-obs-qualification-for-40), linked to #40; actual provider qualification remains separate |
+
+## Verification
+
+- Full `scripts/ci-postgres.sh` passed on backend checkpoint `7880327`: `make verify`, the uncached PostgreSQL application race suite and the isolated River race suite. Normal HTTP: 606.503s; race HTTP: 721.087s. Subsequent edits changed frontend/rehearsal controls and documentation, with no backend change.
+- Final `make verify` passed after those UI fixes. All 244 frontend unit tests pass, including eight approval/receipt tests with precise sub-millisecond deadline boundaries. Focused Go vet and lint reported zero findings.
+- The complete Chromium suite passed 76 tests; the six fallback tests were rerun after the compact layout and timestamp fixes and passed. Shared-browser inspection found and fixed stale development-remount abort notices. Desktop/narrow layouts fit without horizontal overflow; the UI scanner reports no findings on the two changed route files.
+- Android 15 Chrome loaded the fixture desk, scrolled its controls and replayed original saved evidence. This is a fixture/device check, not a real OBS qualification. No test used a live Twitch or OBS transport.
+- Exact PR-head hosted CI and merge remain required. A local pass alone does not close #47 or qualify a live release.
 
 ## OBS protocol evidence
 

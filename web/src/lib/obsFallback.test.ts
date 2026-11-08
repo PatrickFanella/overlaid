@@ -51,6 +51,13 @@ describe('OBS original approval flow', () => {
 });
 
 describe('OBS bounded metadata validation', () => {
+  it('preserves sub-millisecond database deadlines and completion ordering', () => {
+    const edge = { ...completed(frozen()), startedAt: '2026-11-08T00:00:10.000000Z', finishedAt: '2026-11-08T00:00:10.000002Z' };
+    expect(decodeOBSProposal({ receipt: edge }).state).toBe('succeeded');
+    expect(() => decodeOBSProposal({ receipt: { ...edge, startedAt: proposal.deadline } })).toThrow();
+    expect(() => decodeOBSProposal({ receipt: { ...proposal, deadline: '2026-11-08T00:00:10.000000Z' } })).toThrow();
+    expect(() => decodeOBSProposal({ receipt: { ...proposal, state: 'dismissed', failure: 'dismissed', finishedAt: '2026-11-08T00:00:00.000000Z' } })).toThrow();
+  });
   it('refuses changed original identity, selected scene and contradictory completion fields', () => {
     const good = completed(frozen());
     expect(matchOBSOutcome({ receipt: good }, frozen()).state).toBe('succeeded');
