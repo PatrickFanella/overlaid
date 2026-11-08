@@ -781,6 +781,7 @@ test('capture 3 no-repeat report and saved trace survive narrow-layout recovery 
   await rehearseForTrace(page);
   const report = page.getByRole('region', { name: 'Retained rehearsal report' });
   await expect(report).toContainText('no_repeat_choice');
+  await expect(report.locator('dt').filter({ hasText: /^Capture format$/ }).locator('..')).toHaveText('Capture format3');
   await page.getByRole('button', { name: 'Save rehearsal metadata trace' }).click();
   const saved = page.getByRole('region', { name: 'Verified saved trace' });
   await expect(saved).toContainText('no_repeat_choice');
@@ -790,6 +791,8 @@ test('capture 3 no-repeat report and saved trace survive narrow-layout recovery 
   const before = state.operations.length;
   await page.getByRole('button', { name: 'Check original saved trace' }).click();
   await expect(saved).toContainText('no_repeat_choice');
+  await expect(saved.locator('dt').filter({ hasText: /^Capture format$/ }).locator('..')).toHaveText('Capture format3');
+  await expect(saved).not.toContainText('seed zero');
   expect(state.operations.slice(before).map(x => x.operation).filter(operation => operation !== 'list')).toEqual(['lookup', 'load-trace']);
   expect(state.operations.filter(x => x.operation === 'admit')).toHaveLength(1);
   expect(state.operations.filter(x => x.operation === 'save-trace')).toHaveLength(1);

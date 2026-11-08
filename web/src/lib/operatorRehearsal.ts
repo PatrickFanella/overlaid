@@ -5,7 +5,7 @@ export type OperatorRun = { runId: string; occurrenceId: string; automationId: s
 export type RehearsalMode = 'reproduce' | 'current_config';
 export type RehearsalStep = { sequence: number; parent: number; automationId: string; versionId: string; nodeId: string; kind: string; outcome: string; reason: string };
 export type OpaqueProposal = { sequence: number; automationId: string; versionId: string; nodeId: string; declaredCapability: string; opaqueArguments: { name: string; value: string }[] };
-export type OperatorRehearsal = { id: string; mode: RehearsalMode; selectedVersionId: string; run: OperatorRun; graphDigest: string; captureDigest: string; clock: string; status: string; reason: string; steps: RehearsalStep[]; droppedSteps: number; proposals: OpaqueProposal[] };
+export type OperatorRehearsal = { id: string; mode: RehearsalMode; selectedVersionId: string; run: OperatorRun; graphDigest: string; captureDigest: string; captureVersion: number; clock: string; status: string; reason: string; steps: RehearsalStep[]; droppedSteps: number; proposals: OpaqueProposal[] };
 const fail = (): never => { throw new Error('Invalid retained rehearsal metadata. Keep the original request and check its saved occurrence.'); };
 function record(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(); return value as Record<string, unknown>; }
 function id(value: unknown): string { return versionID(value) ? value : fail(); }
@@ -115,5 +115,5 @@ export async function decodeOperatorRehearsal(value: unknown, scope: VersionScop
     return proposal;
   });
   if (steps.some(step => step.outcome === 'proposed' && !seen.has(step.sequence))) return fail();
-  return { id: reportId, mode, selectedVersionId, run, graphDigest, captureDigest, clock, status, reason, steps, droppedSteps, proposals };
+  return { id: reportId, mode, selectedVersionId, run, graphDigest, captureDigest, captureVersion: Number(top.captureVersion), clock, status, reason, steps, droppedSteps, proposals };
 }
