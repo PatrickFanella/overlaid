@@ -25,7 +25,7 @@ func TestOperatorSeededRandomCaptureAndLegacyOccurrences(t *testing.T) {
 	}
 	request := operatorRequest(875)
 	run, err := store.AdmitOperator(ctx, owner, request, d.AutomationID, d.VersionID)
-	if err != nil || run.Seed == 0 || run.Seed > MaxOperatorSeed || run.CaptureVersion() != 2 {
+	if err != nil || run.Seed == 0 || run.Seed > MaxOperatorSeed || run.CaptureVersion() != 3 {
 		t.Fatal("admitted seed", run, err)
 	}
 	// A duplicate admission returns the original seed, never a fresh draw.
@@ -33,7 +33,7 @@ func TestOperatorSeededRandomCaptureAndLegacyOccurrences(t *testing.T) {
 		t.Fatal("duplicate seed", again, err)
 	}
 	first, err := store.RehearseOperator(ctx, owner, request, engine.ModeReproduce)
-	if err != nil || first.CaptureVersion != 2 || first.Flow.Seed != run.Seed || first.Flow.Status != "proposed" || len(first.Flow.Proposals) != 1 {
+	if err != nil || first.CaptureVersion != 3 || first.Flow.Seed != run.Seed || first.Flow.Status != "proposed" || len(first.Flow.Proposals) != 1 {
 		t.Fatal("seeded rehearsal", first, err)
 	}
 	second, err := store.RehearseOperator(ctx, owner, request, engine.ModeReproduce)
@@ -41,7 +41,7 @@ func TestOperatorSeededRandomCaptureAndLegacyOccurrences(t *testing.T) {
 		t.Fatal("seeded rehearsal not reproducible", second, err)
 	}
 	saved, err := store.SaveOperatorTrace(ctx, owner, request, engine.ModeReproduce, d.VersionID)
-	if err != nil || saved.Trace.CaptureVersion != 2 || saved.Trace.Seed != run.Seed {
+	if err != nil || saved.Trace.CaptureVersion != 3 || saved.Trace.Seed != run.Seed {
 		t.Fatal("seeded trace", saved, err)
 	}
 	if loaded, err := store.LoadOperatorTrace(ctx, owner, request, saved.Trace.ID); err != nil || loaded.Digest != saved.Digest {
@@ -56,7 +56,7 @@ func TestOperatorSeededRandomCaptureAndLegacyOccurrences(t *testing.T) {
 	}
 	// Occurrences admitted before seeds existed keep capture 1: random stays
 	// unsupported and the zero seed is never treated as captured randomness.
-	if _, err = f.Admin.Exec(`UPDATE engine_operator_occurrences SET seed=0 WHERE tenant_id=$1 AND id=$2`, a.ID, run.OccurrenceID); err != nil {
+	if _, err = f.Admin.Exec(`UPDATE engine_operator_occurrences SET seed=0,recent='null'::jsonb WHERE tenant_id=$1 AND id=$2`, a.ID, run.OccurrenceID); err != nil {
 		t.Fatal(err)
 	}
 	legacy, err := store.RehearseOperator(ctx, owner, request, engine.ModeReproduce)

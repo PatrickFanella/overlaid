@@ -36,3 +36,16 @@ func TestOperatorTraceFixedMetadataValidation(t *testing.T) {
 		t.Fatal("unbound body digest")
 	}
 }
+
+func TestOperatorRecentRejectsMalformedMemory(t *testing.T) {
+	for _, raw := range []string{`{"bad":"child"}`, `{"11111111-1111-4111-8111-111111111111/root":null}`, `[]`, `{"11111111-1111-4111-8111-111111111111/root":1}`} {
+		if _, err := operatorRecent([]byte(raw)); err == nil {
+			t.Fatal("accepted malformed memory", raw)
+		}
+	}
+	for _, raw := range []string{`null`, `{}`, `{"11111111-1111-4111-8111-111111111111/root":""}`} {
+		if _, err := operatorRecent([]byte(raw)); err != nil {
+			t.Fatal("valid memory", err)
+		}
+	}
+}

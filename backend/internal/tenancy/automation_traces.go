@@ -210,6 +210,14 @@ func loadOperatorTrace(ctx context.Context, tx *tenantdb.Tx, run OperatorRun, id
 	if err != nil || string(canonical) != raw || !validOperatorTrace(trace) || trace.ID != id || trace.RunID != run.ID || trace.TenantID != tenant || trace.AutomationID != automation || automation != run.AutomationID || trace.VersionID != version || string(trace.Mode) != mode || trace.OriginalGraphDigest != run.GraphDigest || !trace.Clock.Equal(run.CreatedAt) || trace.Seed != run.Seed || trace.CaptureVersion != run.CaptureVersion() {
 		return OperatorTraceRecord{}, ErrAutomationInvalid
 	}
+	facts, err := engine.NewFacts(tenant, nil)
+	if err != nil {
+		return OperatorTraceRecord{}, ErrAutomationInvalid
+	}
+	captureDigest, err := (engine.RehearsalInput{Clock: run.CreatedAt, Seed: run.Seed, Recent: run.Recent, Facts: facts}).CaptureDigest()
+	if err != nil || trace.CaptureDigest != captureDigest {
+		return OperatorTraceRecord{}, ErrAutomationInvalid
+	}
 	return OperatorTraceRecord{Trace: trace, Digest: digest, CreatedAt: created}, nil
 }
 func operatorTraceCapacity(ctx context.Context, tx *tenantdb.Tx, run string) error {
@@ -242,7 +250,8 @@ var traceHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var traceName = regexp.MustCompile(`^[a-z][a-z0-9_.:-]{0,63}$`)
 
 func validOperatorTrace(t OperatorTrace) bool {
-	if t.FormatVersion != 1 || !(t.CaptureVersion == 1 && t.Seed == 0 || t.CaptureVersion == 2 && t.Seed > 0 && t.Seed <= MaxOperatorSeed) || !automationID(t.TenantID) || !automationID(t.AutomationID) || !automationID(t.VersionID) || !traceHash.MatchString(t.ID) || !traceHash.MatchString(t.RunID) || !traceHash.MatchString(t.OriginalGraphDigest) || !traceHash.MatchString(t.GraphDigest) || !traceHash.MatchString(t.CaptureDigest) || t.Clock.IsZero() || t.Clock.Year() < 1 || t.Clock.Year() > 9999 || len(t.Steps) == 0 || len(t.Steps) > engine.MaxSteps || t.DroppedSteps < 0 || t.DroppedSteps > 10101 || (t.Mode != engine.ModeReproduce && t.Mode != engine.ModeCurrentConfig) {
+	validCapture := t.CaptureVersion == 1 && t.Seed == 0 || (t.CaptureVersion == 2 || t.CaptureVersion == 3) && t.Seed > 0 && t.Seed <= MaxOperatorSeed
+	if t.FormatVersion != 1 || !validCapture || !automationID(t.TenantID) || !automationID(t.AutomationID) || !automationID(t.VersionID) || !traceHash.MatchString(t.ID) || !traceHash.MatchString(t.RunID) || !traceHash.MatchString(t.OriginalGraphDigest) || !traceHash.MatchString(t.GraphDigest) || !traceHash.MatchString(t.CaptureDigest) || t.Clock.IsZero() || t.Clock.Year() < 1 || t.Clock.Year() > 9999 || len(t.Steps) == 0 || len(t.Steps) > engine.MaxSteps || t.DroppedSteps < 0 || t.DroppedSteps > 10101 || (t.Mode != engine.ModeReproduce && t.Mode != engine.ModeCurrentConfig) {
 		return false
 	}
 	if t.Mode == engine.ModeReproduce && t.GraphDigest != t.OriginalGraphDigest {
@@ -273,7 +282,10 @@ func validOperatorTrace(t OperatorTrace) bool {
 	}
 	prior := 0
 	for _, step := range t.Steps {
-		if step.Sequence != prior+1 || step.Parent < 0 || step.Parent >= step.Sequence || !automationID(step.AutomationID) || !automationID(step.VersionID) || !traceName.MatchString(step.NodeID) || !traceOneOf(step.Kind, "admission", "sequential", "all", "loop", "condition", "switch", "condition_group", "preset", "stop", "action", "random", "delay", "set_output") || !traceOneOf(step.Outcome, "checked", "visited", "proposed", "stopped", "unsupported") || !traceOneOf(step.Reason, "matched", "not_matched", "unavailable", "supported", "opaque_arguments", "explicit_stop", "unsupported_node", "seeded_choice", "simulated_delay", "parallel_branches", "output_declared", "policy_missing", "filters_rejected", "filters_unavailable", "group_rejected", "group_unavailable") {
+		if step.Reason == "no_repeat_choice" && t.CaptureVersion != 3 {
+			return false
+		}
+		if step.Sequence != prior+1 || step.Parent < 0 || step.Parent >= step.Sequence || !automationID(step.AutomationID) || !automationID(step.VersionID) || !traceName.MatchString(step.NodeID) || !traceOneOf(step.Kind, "admission", "sequential", "all", "loop", "condition", "switch", "condition_group", "preset", "stop", "action", "random", "delay", "set_output") || !traceOneOf(step.Outcome, "checked", "visited", "proposed", "stopped", "unsupported") || !traceOneOf(step.Reason, "matched", "not_matched", "unavailable", "supported", "opaque_arguments", "explicit_stop", "unsupported_node", "seeded_choice", "no_repeat_choice", "simulated_delay", "parallel_branches", "output_declared", "policy_missing", "filters_rejected", "filters_unavailable", "group_rejected", "group_unavailable") {
 			return false
 		}
 		prior = step.Sequence

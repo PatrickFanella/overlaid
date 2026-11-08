@@ -92,7 +92,7 @@ Local tests, hosted CI, deployment, and live Twitch/OBS/provider acceptance are 
 
 ## Development
 
-The versioned engine is under development and has no active dispatcher. Its managed foundations include immutable versions, captured predicate/variable evaluation, [effect-free retained operator rehearsal](docs/runbooks/retained-operator-rehearsal.md), [immutable metadata traces](docs/runbooks/operator-rehearsal-traces.md) and [explicit operator run/cooldown admission](docs/runbooks/operator-automation-admission.md). Managed installations expose the [session-bound workspace metadata API](docs/runbooks/automation-control-api.md) for these operations, including bounded automation/version discovery and saved-trace metadata discovery for an original operator occurrence.
+The versioned engine is under development and has no active dispatcher. Its managed foundations include immutable versions, captured predicate/variable evaluation, reproducible weighted/no-repeat random flow, [effect-free retained operator rehearsal](docs/runbooks/retained-operator-rehearsal.md), [immutable metadata traces](docs/runbooks/operator-rehearsal-traces.md) and [explicit operator run/cooldown admission](docs/runbooks/operator-automation-admission.md). Managed installations expose the [session-bound workspace metadata API](docs/runbooks/automation-control-api.md) for these operations, including bounded automation/version discovery and saved-trace metadata discovery for an original operator occurrence.
 
 An explicit [captured chat-text rehearsal](docs/runbooks/engine-chat-text-rehearsal.md) now composes pure flow traversal with syntax-2 rendering and strict chat text/batch bounds. The [managed operator API](docs/runbooks/automation-control-api.md#rehearse-chat-text-from-the-original-operator-clock) exposes a separate read using the original retained database clock, explicit syntax 2 and an exact expected version. Missing user/provider values and randomness refuse completely. Existing dashboard flow and saved traces retain opaque arguments; this API sends no messages.
 
@@ -113,6 +113,8 @@ For the complete database/race gate with an owned disposable PostgreSQL containe
 ```bash
 GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh
 ```
+
+The gate runs at most two Go packages concurrently against its shared fixture. Hosted CI runs three required phases: `application` runs `make verify` except six large HTTP qualification fixtures, `race` runs the remaining uncached application races and River spike races, and `qualification` runs those six fixtures normally and with the race detector. The phases run serially with separate disposable databases; all must pass before the `verify` check or frontend delivery can succeed. Run a phase locally by passing its name to the script; no argument runs the complete unpartitioned gate. Each package invocation keeps its 15-minute watchdog, each hosted job keeps its 35-minute bound, and operation deadlines stay unchanged.
 
 The fixture defaults to a bounded 2 GiB tmpfs with a 256 MiB WAL checkpoint target; select `OVERLAID_CI_POSTGRES_STORAGE=volume` for a disk-backed comparison. It cleans up its own container/volumes. These checks do not qualify power-loss durability. [Contributing](CONTRIBUTING.md) describes native development and verification.
 

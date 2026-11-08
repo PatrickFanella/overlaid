@@ -30,6 +30,8 @@ describe('saved metadata trace contract', () => {
   it('accepts a capture 2 trace with its admitted seed in canonical order', async () => {
     const { ref, run, raw } = await fixture();
     const document = { ...raw.document, captureVersion: 2, seed: 4171631309051035 };
+    const memory = { ...document, captureVersion: 3, steps: [document.steps[0], { ...document.steps[1], Kind: 'random', Outcome: 'visited', Reason: 'no_repeat_choice' }] };
+    await expect(decodeSavedOperatorTrace({ ...raw, document: memory, digest: await digest(memory) }, scope, ref, run)).resolves.toMatchObject({ digest: await digest(memory) });
     await expect(decodeSavedOperatorTrace({ ...raw, document, digest: await digest(document) }, scope, ref, run)).resolves.toMatchObject({ digest: await digest(document) });
     for (const seed of [0, 9007199254740992, 2.5]) {
       const bad = { ...document, seed };

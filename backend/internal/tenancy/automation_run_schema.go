@@ -24,14 +24,14 @@ func (s *AutomationStore) validateRuns(ctx context.Context) error {
 		if err != nil || !valid {
 			return automationSchemaError(ctx)
 		}
-		err = s.db.QueryRowContext(ctx, `SELECT has_table_privilege(current_user,$1,'SELECT') AND has_table_privilege(current_user,$1,'INSERT') AND ($1<>'engine_operator_runs' OR has_table_privilege(current_user,$1,'DELETE')) AND ($1<>'engine_run_budgets' OR (has_column_privilege(current_user,$1,'charged_at','UPDATE') AND has_column_privilege(current_user,$1,'cooldown_until','UPDATE')))`, table).Scan(&valid)
+		err = s.db.QueryRowContext(ctx, `SELECT has_table_privilege(current_user,$1,'SELECT') AND has_table_privilege(current_user,$1,'INSERT') AND ($1<>'engine_operator_runs' OR has_table_privilege(current_user,$1,'DELETE')) AND ($1<>'engine_run_budgets' OR (has_column_privilege(current_user,$1,'charged_at','UPDATE') AND has_column_privilege(current_user,$1,'cooldown_until','UPDATE') AND has_column_privilege(current_user,$1,'recent','UPDATE')))`, table).Scan(&valid)
 		if err != nil || !valid {
 			return automationSchemaError(ctx)
 		}
 		err = s.db.QueryRowContext(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolname IN(current_user,session_user) OR pg_has_role(current_user,r.oid,'MEMBER') OR pg_has_role(session_user,r.oid,'MEMBER')) AND
    (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR has_schema_privilege(r.oid,current_schema(),'CREATE') OR EXISTS(SELECT 1 FROM pg_class c WHERE c.oid=to_regclass($1) AND c.relowner=r.oid) OR has_table_privilege(r.oid,$1,'TRUNCATE,REFERENCES,TRIGGER') OR ($1<>'engine_operator_runs' AND has_table_privilege(r.oid,$1,'DELETE')) OR
    EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid=to_regclass($1) AND a.attnum>0 AND NOT a.attisdropped AND
-    (has_column_privilege(r.oid,a.attrelid,a.attnum,'REFERENCES') OR (($1<>'engine_run_budgets' OR a.attname NOT IN('charged_at','cooldown_until')) AND has_column_privilege(r.oid,a.attrelid,a.attnum,'UPDATE'))))))`, table).Scan(&valid)
+    (has_column_privilege(r.oid,a.attrelid,a.attnum,'REFERENCES') OR (($1<>'engine_run_budgets' OR a.attname NOT IN('charged_at','cooldown_until','recent')) AND has_column_privilege(r.oid,a.attrelid,a.attnum,'UPDATE'))))))`, table).Scan(&valid)
 		if err != nil || !valid {
 			return automationSchemaError(ctx)
 		}
@@ -47,6 +47,8 @@ func (s *AutomationStore) validateRuns(ctx context.Context) error {
 }
 
 var automationRunConstraints = map[string]struct{ table, definition string }{
+	"engine_occurrence_recent":                         {"engine_operator_occurrences", "CHECK (((recent = 'null'::jsonb) OR ((jsonb_typeof(recent) = 'object'::text) AND (octet_length((recent)::text) <= 300000) AND (seed > 0))))"},
+	"engine_budget_recent":                             {"engine_run_budgets", "CHECK (((jsonb_typeof(recent) = 'object'::text) AND (octet_length((recent)::text) <= 300000)))"},
 	"engine_operator_occurrences_pkey":                 {"engine_operator_occurrences", "PRIMARY KEY (tenant_id, id)"},
 	"engine_occurrence_id":                             {"engine_operator_occurrences", `CHECK ((id ~ '^[0-9a-f]{64}$'::text))`},
 	"engine_occurrence_graph":                          {"engine_operator_occurrences", `CHECK ((graph_digest ~ '^[0-9a-f]{64}$'::text))`},
@@ -66,7 +68,7 @@ var automationRunConstraints = map[string]struct{ table, definition string }{
 }
 
 var automationRunColumns = map[string]map[string]string{
-	"engine_operator_occurrences": {"tenant_id": "uuid", "id": "text", "automation_id": "uuid", "version_id": "uuid", "graph_digest": "text", "run_id": "text", "created_at": "timestamp with time zone", "deadline": "timestamp with time zone", "seed": "bigint"},
+	"engine_operator_occurrences": {"tenant_id": "uuid", "id": "text", "automation_id": "uuid", "version_id": "uuid", "graph_digest": "text", "run_id": "text", "created_at": "timestamp with time zone", "deadline": "timestamp with time zone", "seed": "bigint", "recent": "jsonb"},
 	"engine_operator_runs":        {"tenant_id": "uuid", "occurrence_id": "text", "automation_id": "uuid", "version_id": "uuid", "graph_digest": "text", "id": "text", "actor_account_id": "uuid"},
-	"engine_run_budgets":          {"tenant_id": "uuid", "automation_id": "uuid", "charged_at": "timestamp with time zone", "cooldown_until": "timestamp with time zone"},
+	"engine_run_budgets":          {"tenant_id": "uuid", "automation_id": "uuid", "charged_at": "timestamp with time zone", "cooldown_until": "timestamp with time zone", "recent": "jsonb"},
 }

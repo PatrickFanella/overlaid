@@ -80,7 +80,7 @@ export function OperatorRehearsalDesk({ scope, candidate, admissionBlocked }: { 
     </div>}
     {run ? <div className="mt-4 grid gap-3"><Tag>Retained metadata accepted · no execution</Tag><div className="break-all"><KeyValues items={[
       ['Original run', run.runId], ['Original occurrence', run.occurrenceId], ['Captured database clock', run.createdAt], ['Original deadline', run.deadline],
-    ]} /></div><p className="text-sm">Capture format 1 contains empty facts and seed zero as a format placeholder. It records no provider facts, random choice or rendered variables. The original deadline does not forbid a retained effect-free read.</p><div className="flex flex-wrap gap-2"><button className="desk-btn" disabled={busy} onClick={() => void perform(signal => rehearse('reproduce', signal))}>Reproduce original capture</button><button className="desk-btn" disabled={busy} onClick={() => void perform(signal => rehearse('current_config', signal))}>Rehearse current configuration</button></div></div> : null}
+    ]} /></div><p className="text-sm">Reproduction uses the original retained clock and captured input. Rehearse to inspect its capture format. The original deadline does not forbid a retained effect-free read.</p><div className="flex flex-wrap gap-2"><button className="desk-btn" disabled={busy} onClick={() => void perform(signal => rehearse('reproduce', signal))}>Reproduce original capture</button><button className="desk-btn" disabled={busy} onClick={() => void perform(signal => rehearse('current_config', signal))}>Rehearse current configuration</button></div></div> : null}
     {report ? <RehearsalReport report={report} /> : null}
     <OperatorTraceDesk scope={scope} source={intent} run={run} report={report} blocked={busy || admissionBlocked || !!storageError} />
     <OperatorChatPlanDesk scope={scope} source={intent} run={run} blocked={busy || admissionBlocked || !!storageError} />
@@ -91,7 +91,7 @@ export function RehearsalReport({ report }: { report: OperatorRehearsal }) {
   return <section aria-label="Retained rehearsal report" className="mt-5 grid min-w-0 gap-3">
     <Notice role="status">Rehearsal: {report.status} · {report.reason}. This report is not execution permission or a delivery receipt.</Notice>
     <div className="break-all"><KeyValues items={[
-      ['Mode', report.mode], ['Selected version', report.selectedVersionId], ['Report ID', report.id], ['Original graph', report.run.graphDigest], ['Rehearsed graph', report.graphDigest], ['Capture digest', report.captureDigest], ['Original clock', report.clock],
+      ['Mode', report.mode], ['Selected version', report.selectedVersionId], ['Report ID', report.id], ['Original graph', report.run.graphDigest], ['Rehearsed graph', report.graphDigest], ['Capture digest', report.captureDigest], ['Capture format', String(report.captureVersion)], ['Original clock', report.clock],
     ]} /></div>
     <MetadataTraceSteps steps={report.steps} droppedSteps={report.droppedSteps} />
     <h3 className="desk-sub__title">Opaque action proposals</h3><p className="text-sm">Arguments are authored text, not rendered variables or transport payloads. Diagnostic proposals in blocked or unsupported reports cannot be executed.</p>

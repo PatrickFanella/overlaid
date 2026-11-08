@@ -12,7 +12,7 @@ function document(id = version) { return { schemaVersion: 2, tenantId: tenant, a
 const identity = (parts: string[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 
 async function fixture(page: Page) {
-  const state = { role: 'owner', mode: 'ok', workspace: tenant, operations: [] as { operation: string; body: Record<string, unknown> }[], empty: false, chooseCurrent: (id: string) => current.set(automation, id) };
+  const state = { role: 'owner', mode: 'ok', workspace: tenant, noRepeat: false, operations: [] as { operation: string; body: Record<string, unknown> }[], empty: false, chooseCurrent: (id: string) => current.set(automation, id) };
   const docs = new Map<string, Record<string, unknown>>([[version, document()], [older, document(older)]]);
   const current = new Map([[automation, version]]);
   const runs = new Map<string, { runId: string; occurrenceId: string; automationId: string; versionId: string; graphDigest: string; createdAt: string; deadline: string; unchanged: boolean; state: string }>();
@@ -59,13 +59,16 @@ async function fixture(page: Page) {
       const changed = selected !== run.versionId;
       const graphDigest = changed ? 'c'.repeat(64) : hash; const captureDigest = 'b'.repeat(64);
       const steps = [{ sequence: 1, parent: 0, automationId: run.automationId, versionId: selected, nodeId: 'button', kind: 'admission', outcome: 'checked', reason: changed ? 'filters_unavailable' : 'matched' }];
-      if (!changed) steps.push({ sequence: 2, parent: 0, automationId: run.automationId, versionId: selected, nodeId: 'root', kind: 'action', outcome: 'proposed', reason: 'opaque_arguments' });
-      const proposals = changed ? [] : [{ sequence: 2, automationId: run.automationId, versionId: selected, nodeId: 'root', declaredCapability: 'chat.send', opaqueArguments: document(selected).nodes[0].arguments }];
-      const report = { captureVersion: 1, selectedVersionId: selected, run: { ...run, unchanged: true }, rehearsal: { id: identity(['overlaid.engine.rehearsal.v1', graphDigest, run.graphDigest, run.occurrenceId, mode, captureDigest, '100']), mode, originalGraphDigest: run.graphDigest, graphDigest, captureDigest, clock: run.createdAt, seed: 0, status: changed ? 'blocked' : 'proposed', reason: changed ? 'filters_unavailable' : 'supported_flow', steps, droppedSteps: 0, proposals } };
+      if (!changed && state.noRepeat) steps.push({ sequence: 2, parent: 0, automationId: run.automationId, versionId: selected, nodeId: 'pick', kind: 'random', outcome: 'visited', reason: 'no_repeat_choice' });
+      const actionSequence = state.noRepeat ? 3 : 2;
+      if (!changed) steps.push({ sequence: actionSequence, parent: state.noRepeat ? 2 : 0, automationId: run.automationId, versionId: selected, nodeId: 'root', kind: 'action', outcome: 'proposed', reason: 'opaque_arguments' });
+      const proposals = changed ? [] : [{ sequence: actionSequence, automationId: run.automationId, versionId: selected, nodeId: 'root', declaredCapability: 'chat.send', opaqueArguments: document(selected).nodes[0].arguments }];
+      const captureVersion = state.noRepeat ? 3 : 1; const seed = state.noRepeat ? 42 : 0;
+      const report = { captureVersion, selectedVersionId: selected, run: { ...run, unchanged: true }, rehearsal: { id: identity(['overlaid.engine.rehearsal.v1', graphDigest, run.graphDigest, run.occurrenceId, mode, captureDigest, '100']), mode, originalGraphDigest: run.graphDigest, graphDigest, captureDigest, clock: run.createdAt, seed, status: changed ? 'blocked' : 'proposed', reason: changed ? 'filters_unavailable' : 'supported_flow', steps, droppedSteps: 0, proposals } };
       if (operation === 'save-trace') {
         if (state.mode === 'trace-error' || body.expectedVersionId !== selected) return route.fulfill({ status: 409, body: 'PRIVATE TRACE CONFLICT' });
         const r = report.rehearsal;
-        const document = { formatVersion: 1, tenantId: state.workspace, id: r.id, runId: run.runId, automationId: run.automationId, versionId: selected, mode, captureVersion: 1, originalGraphDigest: run.graphDigest, graphDigest, captureDigest, clock: run.createdAt, seed: 0, status: r.status, reason: r.reason, steps: steps.map(s => ({ Sequence: s.sequence, Parent: s.parent, AutomationID: s.automationId, VersionID: s.versionId, NodeID: s.nodeId, Kind: s.kind, Outcome: s.outcome, Reason: s.reason })), droppedSteps: 0 };
+        const document = { formatVersion: 1, tenantId: state.workspace, id: r.id, runId: run.runId, automationId: run.automationId, versionId: selected, mode, captureVersion, originalGraphDigest: run.graphDigest, graphDigest, captureDigest, clock: run.createdAt, seed, status: r.status, reason: r.reason, steps: steps.map(s => ({ Sequence: s.sequence, Parent: s.parent, AutomationID: s.automationId, VersionID: s.versionId, NodeID: s.nodeId, Kind: s.kind, Outcome: s.outcome, Reason: s.reason })), droppedSteps: 0 };
         const saved = { document, digest: createHash('sha256').update('overlaid.engine.operator-trace.v1\0' + JSON.stringify(document)).digest('hex'), createdAt: at, unchanged: false };
         traces.set(r.id, saved);
         if (state.mode === 'lost-trace') return route.abort();
@@ -769,4 +772,28 @@ test('storage-error acknowledgment cannot change the source during draft compari
   release();
   await expect(page.getByRole('region', { name: 'Draft version comparison', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Clear unreadable local state', exact: true })).toBeEnabled();
+});
+
+
+test('capture 3 no-repeat report and saved trace survive narrow-layout recovery without writes', async ({ page }) => {
+  const state = await fixture(page);
+  state.noRepeat = true;
+  await rehearseForTrace(page);
+  const report = page.getByRole('region', { name: 'Retained rehearsal report' });
+  await expect(report).toContainText('no_repeat_choice');
+  await expect(report.locator('dt').filter({ hasText: /^Capture format$/ }).locator('..')).toHaveText('Capture format3');
+  await page.getByRole('button', { name: 'Save rehearsal metadata trace' }).click();
+  const saved = page.getByRole('region', { name: 'Verified saved trace' });
+  await expect(saved).toContainText('no_repeat_choice');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.reload();
+  const before = state.operations.length;
+  await page.getByRole('button', { name: 'Check original saved trace' }).click();
+  await expect(saved).toContainText('no_repeat_choice');
+  await expect(saved.locator('dt').filter({ hasText: /^Capture format$/ }).locator('..')).toHaveText('Capture format3');
+  await expect(saved).not.toContainText('seed zero');
+  expect(state.operations.slice(before).map(x => x.operation).filter(operation => operation !== 'list')).toEqual(['lookup', 'load-trace']);
+  expect(state.operations.filter(x => x.operation === 'admit')).toHaveLength(1);
+  expect(state.operations.filter(x => x.operation === 'save-trace')).toHaveLength(1);
 });

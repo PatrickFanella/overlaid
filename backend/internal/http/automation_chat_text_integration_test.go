@@ -22,7 +22,7 @@ func TestAutomationChatTextControlSourceAndNoEffects(t *testing.T) {
 		return automationControlObject(t, automationControlPost(t, app, a, a.tenant, "rehearse-chat-text", body), 200)
 	}
 	result := read()
-	if result["captureVersion"] != float64(2) || result["syntaxVersion"] != float64(2) || result["selectedVersionId"] != d.VersionID || !reflect.DeepEqual(result["availableInputs"], []any{"time", "seed"}) {
+	if result["captureVersion"] != float64(3) || result["syntaxVersion"] != float64(2) || result["selectedVersionId"] != d.VersionID || !reflect.DeepEqual(result["availableInputs"], []any{"time", "seed"}) {
 		t.Fatal("capture projection", result)
 	}
 	clock, err := time.Parse(time.RFC3339Nano, run["createdAt"].(string))

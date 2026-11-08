@@ -2,7 +2,7 @@ import { versionID, versionStorageKey, type VersionScope } from './automationVer
 import { decodeFlowMetadata, decodeRehearsalIntent, operatorIdentities, operatorIdentity, operatorTimestamp, sameOperatorInstant, validCaptureSeed, type OperatorRun, type RehearsalIntent, type RehearsalMode } from './operatorRehearsal';
 
 export type TraceReference = { format: 1; source: RehearsalIntent; traceId: string; mode: RehearsalMode; versionId: string; graphDigest: string; captureDigest: string };
-export type SavedOperatorTrace = ReturnType<typeof decodeFlowMetadata> & { id: string; runId: string; versionId: string; mode: RehearsalMode; originalGraphDigest: string; graphDigest: string; captureDigest: string; clock: string; digest: string; createdAt: string; unchanged: boolean };
+export type SavedOperatorTrace = ReturnType<typeof decodeFlowMetadata> & { id: string; runId: string; versionId: string; mode: RehearsalMode; originalGraphDigest: string; graphDigest: string; captureDigest: string; captureVersion: number; clock: string; digest: string; createdAt: string; unchanged: boolean };
 const fail = (): never => { throw new Error('Invalid saved trace metadata. Keep the original trace intent and check its saved identity.'); };
 function record(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(); return value as Record<string, unknown>; }
 function hash(value: unknown): string { return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : fail(); }
@@ -30,11 +30,12 @@ export async function decodeSavedOperatorTrace(value: unknown, scope: VersionSco
   if (metadata.steps[0].kind !== 'admission' || metadata.steps[0].automationId !== ref.source.automationId || metadata.steps[0].versionId !== ref.versionId) return fail();
   // Match the stored format-1 Go struct order and capitalized FlowStep codec.
   // All allowed values are ASCII metadata; Go's HTML escaping changes none.
+  if (d.captureVersion !== 3 && metadata.steps.some(s => s.reason === 'no_repeat_choice')) return fail();
   const canonical = { formatVersion: 1, tenantId: scope.tenantId, id: ref.traceId, runId: ids.runId, automationId: ref.source.automationId, versionId: ref.versionId, mode: ref.mode, captureVersion: d.captureVersion, originalGraphDigest: ref.source.graphDigest, graphDigest: ref.graphDigest, captureDigest: ref.captureDigest, clock, seed: d.seed, status: metadata.status, reason: metadata.reason, steps: metadata.steps.map(s => ({ Sequence: s.sequence, Parent: s.parent, AutomationID: s.automationId, VersionID: s.versionId, NodeID: s.nodeId, Kind: s.kind, Outcome: s.outcome, Reason: s.reason })), droppedSteps: metadata.droppedSteps };
   const raw = JSON.stringify(canonical);
   if (JSON.stringify(d) !== raw || new TextEncoder().encode(raw).length > 65536) return fail();
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`overlaid.engine.operator-trace.v1\0${raw}`));
   const digest = [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
   if (hash(top.digest) !== digest) return fail();
-  return { ...metadata, id: ref.traceId, runId: ids.runId, versionId: ref.versionId, mode: ref.mode, originalGraphDigest: ref.source.graphDigest, graphDigest: ref.graphDigest, captureDigest: ref.captureDigest, clock, digest, createdAt: operatorTimestamp(top.createdAt), unchanged: top.unchanged };
+  return { ...metadata, id: ref.traceId, runId: ids.runId, versionId: ref.versionId, mode: ref.mode, originalGraphDigest: ref.source.graphDigest, graphDigest: ref.graphDigest, captureDigest: ref.captureDigest, captureVersion: Number(d.captureVersion), clock, digest, createdAt: operatorTimestamp(top.createdAt), unchanged: top.unchanged };
 }

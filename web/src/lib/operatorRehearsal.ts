@@ -5,7 +5,7 @@ export type OperatorRun = { runId: string; occurrenceId: string; automationId: s
 export type RehearsalMode = 'reproduce' | 'current_config';
 export type RehearsalStep = { sequence: number; parent: number; automationId: string; versionId: string; nodeId: string; kind: string; outcome: string; reason: string };
 export type OpaqueProposal = { sequence: number; automationId: string; versionId: string; nodeId: string; declaredCapability: string; opaqueArguments: { name: string; value: string }[] };
-export type OperatorRehearsal = { id: string; mode: RehearsalMode; selectedVersionId: string; run: OperatorRun; graphDigest: string; captureDigest: string; clock: string; status: string; reason: string; steps: RehearsalStep[]; droppedSteps: number; proposals: OpaqueProposal[] };
+export type OperatorRehearsal = { id: string; mode: RehearsalMode; selectedVersionId: string; run: OperatorRun; graphDigest: string; captureDigest: string; captureVersion: number; clock: string; status: string; reason: string; steps: RehearsalStep[]; droppedSteps: number; proposals: OpaqueProposal[] };
 const fail = (): never => { throw new Error('Invalid retained rehearsal metadata. Keep the original request and check its saved occurrence.'); };
 function record(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(); return value as Record<string, unknown>; }
 function id(value: unknown): string { return versionID(value) ? value : fail(); }
@@ -20,7 +20,7 @@ function sameInstant(a: string, b: string): boolean { return Date.parse(a) === D
 // Capture 1 has no seed (zero placeholder); capture 2 carries the seed chosen
 // once at admission, bounded so it stays an exact JavaScript integer.
 export function validCaptureSeed(version: unknown, seed: unknown): boolean {
-  return (version === 1 && seed === 0) || (version === 2 && Number.isSafeInteger(seed) && Number(seed) >= 1);
+  return (version === 1 && seed === 0) || ((version === 2 || version === 3) && Number.isSafeInteger(seed) && Number(seed) >= 1);
 }
 const admissionReasons = ['matched', 'policy_missing', 'filters_rejected', 'filters_unavailable', 'group_rejected', 'group_unavailable'];
 function validStep(s: RehearsalStep): boolean {
@@ -28,7 +28,7 @@ function validStep(s: RehearsalStep): boolean {
   if (s.kind === 'condition_group') return s.outcome === 'checked' && ['matched', 'not_matched', 'unavailable'].includes(s.reason);
   if (s.kind === 'action') return s.outcome === 'proposed' && s.reason === 'opaque_arguments';
   if (s.kind === 'stop') return s.outcome === 'stopped' && s.reason === 'explicit_stop';
-  if (s.kind === 'random' && s.reason === 'seeded_choice') return s.outcome === 'visited';
+  if (s.kind === 'random' && ['seeded_choice', 'no_repeat_choice'].includes(s.reason)) return s.outcome === 'visited';
   if (s.outcome === 'unsupported') return ['random', 'delay', 'set_output', 'all', 'preset'].includes(s.kind) && s.reason === 'unsupported_node';
   // Simulated without waiting or rendering. Older traces may still record these
   // kinds as unsupported above.
@@ -91,6 +91,7 @@ export async function decodeOperatorRehearsal(value: unknown, scope: VersionScop
   const reportId = await identity(['overlaid.engine.rehearsal.v1', graphDigest, intent.graphDigest, run.occurrenceId, mode, captureDigest, '100']);
   if (r.id !== reportId || !Array.isArray(r.proposals) || r.proposals.length > 100) return fail();
   const { status, reason, steps, droppedSteps } = decodeFlowMetadata(r); const total = steps.length + droppedSteps;
+  if (top.captureVersion !== 3 && steps.some(s => s.reason === 'no_repeat_choice')) return fail();
   if (steps[0].kind !== 'admission' || steps[0].automationId !== intent.automationId || steps[0].versionId !== selectedVersionId) return fail();
   const seen = new Set<number>(); let bytes = 0; let previous = 0;
   const proposals = r.proposals.map(raw => {
@@ -114,5 +115,5 @@ export async function decodeOperatorRehearsal(value: unknown, scope: VersionScop
     return proposal;
   });
   if (steps.some(step => step.outcome === 'proposed' && !seen.has(step.sequence))) return fail();
-  return { id: reportId, mode, selectedVersionId, run, graphDigest, captureDigest, clock, status, reason, steps, droppedSteps, proposals };
+  return { id: reportId, mode, selectedVersionId, run, graphDigest, captureDigest, captureVersion: Number(top.captureVersion), clock, status, reason, steps, droppedSteps, proposals };
 }

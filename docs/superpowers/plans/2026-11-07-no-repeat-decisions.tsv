@@ -1,0 +1,4 @@
+ts	phase	decision	reason	evidence	result
+2026-11-07	design	Capture pre-run memory and persist final picks atomically	Replay must survive later admissions	2026-11-07-no-repeat-memory.md	Implemented; full SQL gate running
+2026-11-07	verification	Preserve newer plan header when rerunning migration 0047	Populated capture-3 plans failed the older header	../../../migrations/0047_operator_random_seed.sql	Fix under full gate
+2026-11-07	verification	Exclude prior child only when a different child remains	Duplicate child references are valid and must not create zero total weight	../../../backend/internal/engine/recent_test.go	Engine race tests pass

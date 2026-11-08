@@ -478,7 +478,7 @@ func automationControlError(w http.ResponseWriter, err error) {
 // chatTextInputs lists the captured inputs available to the renderer: the
 // original clock always, and the admitted seed for capture-2 occurrences.
 func chatTextInputs(capture int) []string {
-	if capture == 2 {
+	if capture == 2 || capture == 3 {
 		return []string{"time", "seed"}
 	}
 	return []string{"time"}

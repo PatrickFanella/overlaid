@@ -64,7 +64,10 @@ describe('operator admission/rehearsal receipt projection', () => {
     const seeded = { ...raw, captureVersion: 2, rehearsal: { ...raw.rehearsal, seed: 9007199254740991, steps: [raw.rehearsal.steps[0], { ...raw.rehearsal.steps[1], sequence: 2, kind: 'random', outcome: 'visited', reason: 'seeded_choice' }, { ...raw.rehearsal.steps[1], sequence: 3, parent: 2 }], proposals: [{ ...raw.rehearsal.proposals[0], sequence: 3 }] } };
     await expect(decodeOperatorRehearsal(seeded, scope, intent, run, 'reproduce')).resolves.toMatchObject({ steps: [{ kind: 'admission' }, { kind: 'random', reason: 'seeded_choice' }, { kind: 'action' }] });
     for (const seed of [0, -1, 1.5, 9007199254740992, '7']) await expect(decodeOperatorRehearsal({ ...seeded, rehearsal: { ...seeded.rehearsal, seed } }, scope, intent, run, 'reproduce')).rejects.toThrow();
-    await expect(decodeOperatorRehearsal({ ...seeded, captureVersion: 3 }, scope, intent, run, 'reproduce')).rejects.toThrow();
+    await expect(decodeOperatorRehearsal({ ...seeded, captureVersion: 4 }, scope, intent, run, 'reproduce')).rejects.toThrow();
+    const memory = { ...seeded, captureVersion: 3, rehearsal: { ...seeded.rehearsal, steps: seeded.rehearsal.steps.map(s => s.kind === 'random' ? { ...s, reason: 'no_repeat_choice' } : s) } };
+    await expect(decodeOperatorRehearsal(memory, scope, intent, run, 'reproduce')).resolves.toMatchObject({ steps: [{ kind: 'admission' }, { reason: 'no_repeat_choice' }, { kind: 'action' }] });
+    await expect(decodeOperatorRehearsal({ ...memory, captureVersion: 2 }, scope, intent, run, 'reproduce')).rejects.toThrow();
     const badStep = { ...seeded, rehearsal: { ...seeded.rehearsal, steps: [seeded.rehearsal.steps[0], { ...seeded.rehearsal.steps[1], outcome: 'proposed' }, seeded.rehearsal.steps[2]] } };
     await expect(decodeOperatorRehearsal(badStep, scope, intent, run, 'reproduce')).rejects.toThrow();
   });
