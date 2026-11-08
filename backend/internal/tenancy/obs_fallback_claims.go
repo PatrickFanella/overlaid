@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"fmt"
 	"time"
 
@@ -197,6 +198,65 @@ func (s *OBSFallbackStore) Finish(ctx context.Context, a OBSFallbackAttempt, sta
 		return out, err
 	}
 	return out, nil
+}
+
+// CheckAttempt rechecks local permission, exact bindings, enabled rule, plan and
+// original deadline after the committed claim. It creates no new attempt and
+// cannot replace the provider/controller checks immediately before transport.
+func (s *OBSFallbackStore) CheckAttempt(ctx context.Context, a OBSFallbackAttempt) (failure error) {
+	callerCtx := ctx
+	defer func() {
+		if failure != nil {
+			failure = obsFallbackError(callerCtx, failure)
+		}
+	}()
+	if ctx == nil || s == nil || a.store != s || !a.IsNew() {
+		return ErrAutomationInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	tx, err := s.begin(ctx, a.actor, true)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	source, err := s.readProposal(ctx, tx, a.id)
+	if err != nil {
+		return err
+	}
+	if source.State != "running" || source.actor != a.actor || source.RequestID != a.request || source.ApprovedScene != a.scene || !source.ObservedAt.Equal(a.observedAt) || !source.Deadline.Equal(a.deadline) || subtle.ConstantTimeCompare(source.claim, obsClaimHash(a.token)) != 1 {
+		return ErrDenied
+	}
+	rule, err := s.readRule(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if !rule.Enabled || !rule.Latched || rule.ActiveProposal != a.id || rule.Rule.Spec().VersionID != source.observation.RuleVersionID || rule.Rule.Spec().ConnectionID != source.observation.ConnectionID {
+		return ErrAutomationConflict
+	}
+	var role string
+	if err = tx.QueryRowContext(ctx, `SELECT role FROM tenant_memberships WHERE tenant_id=current_setting('app.tenant_id')::uuid AND account_id=$1`, rule.ConfiguredBy).Scan(&role); err != nil || !Allowed(role, "configure") {
+		return ErrDenied
+	}
+	current, err := currentAutomation(ctx, tx, rule.Rule.Spec().AutomationID)
+	if err != nil || current != rule.Rule.Spec().VersionID {
+		return ErrAutomationConflict
+	}
+	limit, err := obsFallbackPlanLimit(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if limit < 1 {
+		return ErrLimit
+	}
+	var now time.Time
+	if err = tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return err
+	}
+	if now.Before(a.observedAt) || !now.Before(a.deadline) {
+		return ErrOBSFallbackStale
+	}
+	return tx.Commit()
 }
 
 // Dismiss settles only the original pending proposal. It cannot recall running

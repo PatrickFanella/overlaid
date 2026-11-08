@@ -59,6 +59,9 @@ func TestOBSFallbackClaimRaceAndDetachedReceipt(t *testing.T) {
 	if newClaims != 1 {
 		t.Fatal("multiple effect permissions", newClaims)
 	}
+	if err = store.CheckAttempt(ctx, attempt); err != nil {
+		t.Fatal("fresh post-claim guard", err)
+	}
 	raw, err := json.Marshal(attempt)
 	if err != nil || string(raw) != "{}" || strings.Contains(fmt.Sprintf("%+v", attempt), "PRIVATE_") {
 		t.Fatal("private claim serialization", err)
@@ -102,6 +105,9 @@ func TestOBSFallbackClaimRaceAndDetachedReceipt(t *testing.T) {
 	if _, err = store.Finish(ctx, attempt, "succeeded", ""); !errors.Is(err, ErrAutomationConflict) {
 		t.Fatal("overwritten receipt", err)
 	}
+	if err = store.CheckAttempt(ctx, attempt); !errors.Is(err, ErrDenied) {
+		t.Fatal("terminal attempt reauthorized", err)
+	}
 	unknown := obsEvidence(t, scope, r, 101, obsfallback.Disconnected)
 	if _, err = store.Observe(ctx, owner, unknown); err != nil {
 		t.Fatal(err)
@@ -109,6 +115,56 @@ func TestOBSFallbackClaimRaceAndDetachedReceipt(t *testing.T) {
 	current, err := store.Current(ctx, owner)
 	if err != nil || !current.Latched {
 		t.Fatal("disconnect cleared episode", err)
+	}
+}
+
+func TestOBSFallbackPostClaimRevocation(t *testing.T) {
+	for _, guard := range []string{"rule", "permission", "plan"} {
+		t.Run(guard, func(t *testing.T) {
+			s, a, _, owner, _, f := tenantPair(t)
+			ctx := t.Context()
+			scope, _ := s.Product.Scoped(a.ID)
+			store, err := NewOBSFallbackStore(ctx, scope)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := obsRule(t, a.ID, 960)
+			if _, err = store.Save(ctx, owner, r, "", 0, true); err != nil {
+				t.Fatal(err)
+			}
+			o := obsEvidence(t, scope, r, 107, obsfallback.Missing)
+			id, err := store.Observe(ctx, owner, o)
+			if err != nil || id == "" {
+				t.Fatal(err)
+			}
+			attempt, _, err := store.Claim(ctx, owner, id, operatorRequest(961), r.Spec().Scene, OBSFallbackAuthorization{Observation: o, Scene: r.Spec().Scene, SceneAvailable: true})
+			if err != nil || !attempt.IsNew() {
+				t.Fatal("claim", err)
+			}
+			var want error
+			switch guard {
+			case "rule":
+				_, err = store.Disable(ctx, owner, r.Spec().VersionID, 1)
+				want = ErrAutomationConflict
+			case "permission":
+				_, err = f.Admin.Exec(`UPDATE tenant_memberships SET role='moderator' WHERE tenant_id=$1 AND account_id=$2`, a.ID, owner)
+				want = ErrDenied
+			case "plan":
+				_, err = f.Admin.Exec(`UPDATE plans SET limits=jsonb_set(limits,'{storedEvents}','0') WHERE id='free'`)
+				want = ErrLimit
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = store.CheckAttempt(ctx, attempt); !errors.Is(err, want) {
+				t.Fatal("post-claim permission", err)
+			}
+			// Exact detached bookkeeping still works after revocation. It cannot
+			// authorize transport or reset the one-use claim.
+			if receipt, err := store.Finish(ctx, attempt, "refused", "guard_refused"); err != nil || receipt.State != "refused" {
+				t.Fatal("revoked completion", err)
+			}
+		})
 	}
 }
 

@@ -236,7 +236,7 @@ func TestFallbackSnapshotCancellation(t *testing.T) {
 	if _, err := (Client{URL: wsURL(server.URL)}).InspectFallback(ctx, "Collection", "Input", "Fallback"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal("bounded read", err)
 	}
-	if _, err := (Client{}).InspectFallback(t.Context(), "Collection", "Input", "Fallback"); !errors.Is(err, ErrFallbackEvidence) {
+	if _, err := (Client{}).InspectFallback(t.Context(), "Collection", "Input", "Fallback"); !errors.Is(err, ErrFallbackConnection) {
 		t.Fatal("disconnected", err)
 	}
 }

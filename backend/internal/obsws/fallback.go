@@ -14,6 +14,9 @@ import (
 // ErrFallbackEvidence exposes no provider comment, URL, credentials or names.
 var ErrFallbackEvidence = errors.New("obs_fallback_evidence_unavailable")
 
+// ErrFallbackConnection distinguishes a failed connection from unknown evidence.
+var ErrFallbackConnection = errors.New("obs_fallback_connection_unavailable")
+
 // FallbackSnapshot contains bounded read-only evidence from one connection.
 // Missing means absent from a complete input list, never missing video/silence.
 // Presence and intentional suppression cannot qualify the fallback condition.
@@ -35,14 +38,14 @@ func (c Client) InspectFallback(ctx context.Context, collection, input, scene st
 			out = FallbackSnapshot{}
 			if ctx.Err() != nil {
 				failure = ctx.Err()
-			} else {
+			} else if !errors.Is(failure, ErrFallbackConnection) {
 				failure = ErrFallbackEvidence
 			}
 		}
 	}()
 	conn, _, err := c.connect(ctx)
 	if err != nil {
-		return out, err
+		return out, ErrFallbackConnection
 	}
 	// Closing the socket cannot change the already correlated read result.
 	defer func() { _ = conn.Close() }()
