@@ -1,0 +1,74 @@
+name: PR CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Verify ${{ matrix.phase }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [application, race, qualification]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: |
+            backend/go.sum
+            backend/spikes/river/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install declared pnpm version
+        run: npm install --global pnpm@10.33.0
+      - name: Verify selected phase
+        env:
+          VERIFY_PHASE: ${{ matrix.phase }}
+        run: |
+          bash scripts/ci-postgres.sh "$VERIFY_PHASE"
+          git diff --exit-code
+
+  web-image:
+    name: Build web image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the web image and check its nginx configuration
+        run: |
+          set -euo pipefail
+          image="overlaid-web-ci:${{ github.sha }}"
+          docker build --build-arg VITE_API_BASE_URL=https://overlaid.subcult.tv -f web/Dockerfile -t "$image" web
+          docker run --rm --network none --entrypoint nginx "$image" -t
+
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs: [checks, web-image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every verification job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          expected = {'checks', 'web-image'}
+          assert set(results) == expected, results
+          for name, result in results.items():
+              assert result["result"] == "success", name + " did not pass"
+          PY
