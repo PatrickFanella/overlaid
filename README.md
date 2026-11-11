@@ -1,144 +1,202 @@
-# Over-Laid
+# Overlaid
 
 ![Overlaid: a tally lamp mark, a rounded overlay card offset over a second card with a lit red circle in its top corner, beside the name Overlaid](web/public/brand/overlaid/readme-lockup.png)
 
-An OBS operator desk with Twitch chat automation, broadcast overlays, and a Newsroom for preparing and running reaction streams.
+Overlaid is a stream desk for one person doing every job. It runs beside OBS on
+your own machine and puts the overlays, the Twitch chat bot, the scene controls
+and the health check on one screen. A Newsroom section helps you prepare and
+run reaction shows.
 
-Over-Laid brings stream controls, bot commands, editorial preparation, and show notes into one dashboard. It runs as a self-hosted application; the same codebase includes account-owned workspaces for managed installations.
+It is in development. There is no public instance and no named release yet.
+Twitch is the only supported platform.
 
-**Development status — October 19, 2026:** the operator desk, Newsroom rebuild, and account/tenant foundations are implemented. Durable Twitch chat dispatch and sending are available through explicit configuration. Retained moderation is available through an explicit configuration opt-in, with saved operator/nuke requests, automatic-rule integration and persisted downgrade guards. The broader multi-platform service and first named self-hosted release remain unfinished. See [current capabilities and limits](docs/reference/project-status.md) for the distinction between implementation, activation, and live acceptance.
+## Features
 
-[Getting started](docs/runbooks/getting-started.md) · [Documentation](docs/README.md) · [Newsroom guide](docs/runbooks/newsroom.md) · [Roadmap](docs/superpowers/plans/2026-10-15-remaining-work-roadmap.md) · [Contributing](CONTRIBUTING.md)
+- **Overlays.** OBS browser sources for alerts, chat, goals, now playing,
+  ticker, camera frame, starting, BRB and ending screens, a Newsroom card and a
+  debug inspector. Each one has an offline `?demo=1` preview. The Overlays page
+  copies each source URL with a read-only key.
+- **OBS control.** Switch scenes, toggle inputs and scene items, run quick
+  actions and sequences, rehearse a session, and manage the BRB screen from the
+  desk through OBS WebSocket v5. An optional missing-input fallback rule
+  proposes a backup scene and waits for you to approve it.
+- **Twitch events.** EventSub feeds chat, alerts and channel-point rewards into
+  the overlays after you connect your account with OAuth.
+- **Chat bot.** Custom commands and replies, timers, counters, quotes, API
+  variables, moderation rules, nuke previews and channel-point reward queues.
+- **Newsroom.** Collect audience links and questions, triage them in a
+  moderator queue, build the reaction deck and segments, keep shelves for later,
+  and save play notes. Export notes and chapters as Markdown, send them to a
+  Discord webhook, or publish a revocable public episode page or shared shelf.
+  A [browser extension](extension/) adds links. Optional providers add link
+  metadata, YouTube playlist imports, AI analysis and related coverage.
+- **Health and sessions.** A readiness page with Twitch and EventSub
+  diagnostics and build information, plus session reports, exports and event
+  history.
+- **Accounts and workspaces.** With PostgreSQL: account sessions, member roles,
+  encrypted provider credentials, retention, exports and deletion.
 
-## What you can do
+Twitch and OBS features need their connections and permissions. AI analysis
+and new Newsroom chat entries start turned off. [Current capabilities and
+limits](docs/reference/project-status.md) describes which features are on by
+default and which need explicit configuration.
 
-- **Operate a stream:** check readiness, switch OBS scenes, control inputs and scene items, run quick actions/sequences, and manage BRB screens from the desk.
-- **Review an OBS fallback:** configure a [missing-input rule](docs/runbooks/obs-fallback.md), replay its evidence, explicitly approve a scene or override, and recover its original receipt in a managed self-host workspace.
-- **Use OBS browser sources:** alerts, chat, goals, ticker, now-playing, camera frame, starting/BRB/ending screens, Newsroom cards, and a setup inspector. Every overlay has an offline `?demo=1` preview.
-- **Manage Twitch chat:** custom commands and replies, timers, counters, quotes, API variables, moderation rules, nuke planning, and channel-point reward workflows.
-- **Prepare and run a reaction show:** collect audience links and questions, triage a moderator queue, arrange the reaction deck and segments, keep shelves for later, coordinate reviews, and save play-note snapshots.
-- **Publish show material deliberately:** export notes and chapters, preview confirmed Discord deliveries, and publish independently revocable public episode pages or shared shelves.
-- **Keep workspace data scoped:** account sessions, member roles, encrypted provider credentials, retention, exports, and deletion controls for PostgreSQL-backed installations.
+## Quick start
 
-Twitch and OBS controls need their respective connections and permissions. Newsroom enrichment, related coverage, playlist metadata, and Discord delivery require optional providers described in the [Newsroom guide](docs/runbooks/newsroom.md). AI analysis and fresh Newsroom chat entries start disabled.
-
-## Newsroom is part of the app
-
-Open `/dashboard/newsroom` for the editorial desk and `/overlay/newsroom` for its broadcast card. Newsroom uses Over-Laid's existing accounts, workspace storage, Twitch connection, and overlay credentials. Its chat actions are editable entries in **Chat → Bot commands**; there is one shared command registry and dispatcher.
-
-The workflow includes named shows and recordings, review claims and conflict drafts, story bundles, preparation templates, archived-show search, carry-forward shelves, audience questions, raffles, and saved show exports. The optional [browser extension](extension/) adds links using a separate revocable add token. [Pinned upstream provenance](docs/vendor/newsroom/PROVENANCE.md) records the source and MIT attribution.
-
-## Try it locally
-
-For the container path, install Git, Docker, and Docker Compose. The images build the application, so a host Go/Node toolchain is only needed for native development and verification.
+You need Git, Docker and Docker Compose. The images build the app, so Go and
+Node are only needed for native development.
 
 ```bash
-git clone https://git.subcult.tv/subculture-collective/overlaid.git
+git clone https://github.com/subculture-collective/overlaid.git
 cd overlaid
 cp .env.example .env
 ```
 
-Edit the private `.env` before starting:
+Edit `.env` before starting:
 
-1. Set different `POSTGRES_PASSWORD` and `OVERLAID_DATABASE_PASSWORD` values. Use URL-safe values, and update the password embedded in `DATABASE_URL` to match the runtime password. Keep the `overlaid_app` runtime user in that URL.
-2. Leave `DEPLOYMENT_MODE=selfhost`, `EXPOSURE_MODE=local`, and both `TWITCH_CHAT_*_MODE` settings at `legacy` for a first local evaluation.
-3. Before connecting Twitch or saving provider keys, generate a private vault key with `openssl rand -base64 32`, set `VAULT_ACTIVE_KEY=v1`, and set `VAULT_KEYS=v1:<generated-key>`. Keep the key with your private backups.
+1. Set different values for `POSTGRES_PASSWORD` and
+   `OVERLAID_DATABASE_PASSWORD`. Use URL-safe values, and put the runtime
+   password in `DATABASE_URL` too. Keep the `overlaid_app` user in that URL.
+2. For a first local run, leave `DEPLOYMENT_MODE=selfhost`,
+   `EXPOSURE_MODE=local` and both `TWITCH_CHAT_*_MODE` settings at `legacy`.
+3. Before connecting Twitch or saving provider keys, generate a vault key with
+   `openssl rand -base64 32` and set `VAULT_ACTIVE_KEY=v1` and
+   `VAULT_KEYS=v1:<generated-key>`. Keep the key with your backups.
 
-Then start the stack:
+Start the stack:
 
 ```bash
 docker compose up --build -d
 docker compose ps
 ```
 
-Open [the dashboard](http://localhost:5173/dashboard), [Newsroom demo](http://localhost:5173/dashboard/newsroom?demo=1), or [an overlay demo](http://localhost:5173/overlay/alerts?demo=1). The default API port is `8080`; PostgreSQL is published on `55432`. Repository access is required if your Git host restricts this repository.
+Then open the [dashboard](http://localhost:5173/dashboard), the
+[Newsroom demo](http://localhost:5173/dashboard/newsroom?demo=1) or an
+[overlay demo](http://localhost:5173/overlay/alerts?demo=1). The API listens on
+port 8080 and PostgreSQL on 55432.
 
-Fresh PostgreSQL volumes apply all checked-in migrations and create a separate non-owner runtime login. Existing volumes require the [migration and recovery procedure](docs/runbooks/tenancy-and-recovery.md); rebuilding an image does not migrate an existing database.
+A fresh PostgreSQL volume applies every migration and creates a separate
+non-owner runtime login. Rebuilding an image does not migrate an existing
+database; use `make db-migrate` and read
+[tenancy and recovery](docs/runbooks/tenancy-and-recovery.md) first.
 
-Compose publishes host ports, so use local evaluation settings only on a trusted machine/network. Before LAN or public use, follow the [getting-started guide](docs/runbooks/getting-started.md#before-sharing-a-running-instance) for credentials, HTTPS, and origin configuration. Sharing the repository does not require exposing a running instance or distributing credentials.
+Compose publishes host ports, so keep the local settings to a trusted machine
+or network. [Getting started](docs/runbooks/getting-started.md) covers
+connecting Twitch and OBS, native development, and what to set before sharing
+a running instance.
 
-## Find your way around
+## Dashboard pages
 
 | Page | Purpose |
 | --- | --- |
-| `/dashboard` | On-air controls, session tally, preflight, and recent events |
-| `/dashboard/scenes` | OBS scenes, inputs/items, approved missing-input fallbacks, quick actions, sequences, and rehearsals |
-| `/dashboard/chat` | General bot commands, timers, counters, quotes, moderation, and rewards |
-| `/dashboard/newsroom` | Editorial queue, reaction deck, shelves, shows, and notes |
-| `/dashboard/overlays` | Previews, browser-source URLs, display settings, and setup |
-| `/dashboard/health` | Readiness, recovery tools, EventSub diagnostics, and build information |
-| `/dashboard/settings` | Shared configuration, automation profiles, and integration settings |
-| `/dashboard/sessions` | Stream/rehearsal sessions, reports, exports, and history |
-| `/dashboard/account` | Workspace access, membership, credentials, retention, exports, and deletion |
+| `/dashboard` | On-air controls, session tally, preflight and recent events |
+| `/dashboard/scenes` | OBS scenes, inputs and items, fallbacks, quick actions, sequences and rehearsals |
+| `/dashboard/chat` | Bot commands, timers, counters, quotes, moderation and rewards |
+| `/dashboard/newsroom` | Editorial queue, reaction deck, shelves, shows and notes |
+| `/dashboard/overlays` | Previews, browser-source URLs, display settings and setup |
+| `/dashboard/health` | Readiness, recovery tools, EventSub diagnostics and build information |
+| `/dashboard/settings` | Shared configuration, automation profiles and integrations |
+| `/dashboard/sessions` | Stream and rehearsal sessions, reports, exports and history |
+| `/dashboard/account` | Workspace access, membership, credentials, retention, exports and deletion |
 
-Public application routes include `/privacy`, `/terms`, and `/status`. Shared shelves and episodes use their own revocable capability URLs. `/version` is an API route exposing non-secret build metadata.
+Overlay routes live under `/overlay/` (`alerts`, `chat`, `goals`,
+`now-playing`, `ticker`, `camera`, `starting`, `brb`, `ending`, `newsroom`,
+`debug`). The [overlay reference](docs/runbooks/overlays.md) lists sizes and
+parameters. Never put the operator secret in an OBS URL.
 
-Overlay routes are `/overlay/alerts`, `/overlay/chat`, `/overlay/goals`, `/overlay/now-playing`, `/overlay/ticker`, `/overlay/camera`, `/overlay/starting`, `/overlay/brb`, `/overlay/ending`, `/overlay/newsroom`, and `/overlay/debug`. See the [overlay reference](docs/runbooks/overlays.md) for sizes and parameters. Use the Overlays page to copy a live source URL with its read-only credential; never put the operator secret in an OBS URL.
+## Configuration
 
-## Deployment and integration status
+Settings are environment variables; [`.env.example`](.env.example) lists them
+with comments.
 
-| Area | Current boundary |
-| --- | --- |
-| Self-hosting | One bootstrap workspace, operator-header authentication, optional PostgreSQL. Without PostgreSQL, only the file-backed subset is available. |
-| Managed accounts | PostgreSQL, forced row-level security, vault keyring, sessions, membership, plans, and lifecycle controls are implemented. Hosted requests require account authorization; the global operator secret does not grant access. |
-| OBS fallback | Managed self-host PostgreSQL, configured OBS, migration 0049 and a real configure-member session enable a versioned missing-input rule with explicit one-use scene approval. Hosted/file mode keep this execution path disabled. [Operation and safe qualification](docs/runbooks/obs-fallback.md) distinguish fixtures from real OBS acceptance. |
-| Twitch chat | Legacy dispatch/sending remain the defaults. Retained dispatch and sending require explicit modes and separate restricted worker/pacing connections. See [retained sender setup](docs/runbooks/retained-chat-sender.md). Managed shutdown drains accepted audits before releasing product/controller ownership; see [runtime cleanup](docs/runbooks/runtime-capacity.md#accepted-audit-shutdown-and-failure-diagnostics). |
-| Bot identities | Broadcaster, tenant-owned, and explicitly delegated shared-identity custody/authorization are implemented. Shared execution uses a separate restricted pool; live identity/badge acceptance remains separate. |
-| Conduit foundation | An explicit [read-only inspector](docs/runbooks/conduit-inspection.md) validates app identity and reports one selected conduit’s shard metadata with bounded reads and fixed private-data exclusions. The [explicit acquisition adapter](docs/runbooks/app-token-acquisition.md) supplies validated ephemeral app credentials with one-attempt uncertainty; a separate [administrative custody store](docs/runbooks/service-app-custody.md) retains encrypted service credentials with revision checks and metadata-only receipts; the native `overlaid-app-admin` CLI lists metadata/receipts and revokes an exact revision. A separately restricted [custodied inspector](docs/runbooks/custodied-conduit-inspection.md) reads a selected conduit using an exact stored app revision, without client-secret access; the native [overlaid-conduit-inspect CLI](docs/runbooks/conduit-inspection-cli.md) reports that observation for an explicit stored binding. Its explicit [subscription mode](docs/runbooks/conduit-subscription-inspection.md) observes selected-conduit subscription metadata through restricted custody while excluding private conditions and granting no route ownership. An explicit [durable issuance API](docs/runbooks/service-app-issuance.md) records one-use provider attempts and atomically installs successful results; unresolved attempts retain ownership and cannot replay. The native `overlaid-app-admin issuance --request UUID` command reads original status metadata without provider access. The separate [overlaid-app-issue CLI](docs/runbooks/native-app-issuance.md) explicitly prepares and executes original requests using private configuration. A separate [conduit creation transport](docs/runbooks/conduit-creation.md) validates app identity around one non-replayable POST and returns fixed uncertainty or acknowledgement metadata; its standalone transport owns no durable state. The [durable creation ledger](docs/runbooks/conduit-ownership.md) adds separate metadata-only ownership, fixed original deadlines and one-use claims, with retained uncertainty. The explicit [custody-bound creation API](docs/runbooks/custodied-conduit-creation.md) composes separate pools with fresh credential checks and the original committed claim; it has no application startup caller. The separate [overlaid-conduit-create CLI](docs/runbooks/native-conduit-creation.md) explicitly prepares, reads status and executes original requests using dedicated private configuration. The inspector’s [read-only inventory mode](docs/runbooks/conduit-inventory.md) reports complete app-wide IDs/counts without selecting a conduit or changing uncertain ownership. A separate [WebSocket shard assignment adapter](docs/runbooks/conduit-shard-assignment.md) validates one bounded non-replayable PATCH acknowledgement; the separate [assignment ledger](docs/runbooks/conduit-assignment-ledger.md) now retains original metadata and one-use claims without credentials or provider calls. The explicit [custody-bound assignment API](docs/runbooks/custodied-conduit-assignment.md) composes all three stores behind a required session guard, with fresh current credential and historical owner checks. The explicit [initial session owner](docs/runbooks/owned-conduit-session.md) owns one socket and supplies that scoped guard with an original welcome deadline and bounded private notification sink. The explicit [retained stream bridge](docs/runbooks/conduit-stream-ingress.md) admits the three reviewed stream kinds atomically across up to sixteen configured workspace scopes per subscription, binding input to its original active socket callback and holding every required local owner lease through commit. Application lease composition, chat ingress, reconnect handoff, persistent subscription mapping and runtime activation remain incomplete. Unresolved-issuance resolution, durable recovery, shard/subscription reconciliation and runtime activation remain separate. |
-| Retained stream observations | An authenticated [read API](docs/runbooks/stream-observations.md) exposes the latest retained lifecycle occurrence and channel metadata with original timestamps, current connection/entitlement/retention checks and no provider fetch or write. These are historical observations; [Channel-update subscriptions](docs/runbooks/channel-update-subscriptions.md) share the retained lifecycle socket and automation opt-in; Newsroom → Shows and recordings displays these saved observations with original times, scoped refresh and a labeled demo. Engine/variable consumption remains separate. |
-| Retained stream lifecycle | Optional `TWITCH_STREAM_DISPATCH_MODE=retained` routes the existing Twitch online/offline callback through durable source/job admission and the fenced Newsroom worker. It requires retained chat ingestion, migration 0033 and a separate stream worker login. Default `legacy` keeps direct lifecycle handling. The [cutover runbook](docs/runbooks/stream-routing.md) covers controller ownership, readiness, persisted writer fences and stop/preserve rollback; live provider and load qualification remain. |
-| Retained moderation | Source-bound admission, pacing, typed execution, automatic-rule binding, ownership handoff, and shutdown are implemented for explicit construction. The operator/batch store, single-action HTTP/UI status and retained nuke HTTP preview/admission/status are implemented, including sealed snapshots and atomic radiation with zero-target occurrences that create no jobs. The Chat page saves exact nuke previews and unresolved request keys through tab reload, uses lookup-only status checks and reports mixed outcomes or radiation-only configuration separately. Explicit `TWITCH_MODERATION_MODE=retained` coordinates startup, readiness and persisted downgrade fences through the existing controller; legacy remains the default. Live/provider and broader load qualification remain. |
-| Other platforms and product phases | Kick, Discord bot operation, YouTube Live, the versioned automation engine, expanded media/loyalty, and billing remain roadmap work. Newsroom's Discord webhook export is a separate implemented integration. |
+- Deployment: `DEPLOYMENT_MODE` (`selfhost` or `hosted`), `EXPOSURE_MODE`
+  (`local`, `lan` or `public`), `PUBLIC_WEB_URL`, `CORS_ALLOWED_ORIGIN`,
+  `API_PORT`, `WEB_PORT`.
+- Database: `POSTGRES_*`, `OVERLAID_DATABASE_PASSWORD`, `DATABASE_URL`. Without
+  PostgreSQL, self-host mode runs a smaller file-backed feature set.
+- Secrets: `OPERATOR_SECRET` for the dashboard, `OVERLAY_TOKEN` for read-only
+  overlay URLs, `WEBHOOK_SECRET`, and the `VAULT_ACTIVE_KEY` / `VAULT_KEYS`
+  keyring for stored provider credentials.
+- OBS: `OBS_WEBSOCKET_URL`, `OBS_WEBSOCKET_PASSWORD`.
+- Twitch: `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_CHANNEL`,
+  `TWITCH_REDIRECT_URL`, `TWITCH_SCOPES`, `TWITCH_EVENTSUB_ENABLED`.
+- Durable chat and moderation (optional, off by default):
+  `TWITCH_CHAT_DISPATCH_MODE`, `TWITCH_CHAT_SEND_MODE`,
+  `TWITCH_MODERATION_MODE`, `TWITCH_STREAM_DISPATCH_MODE` and the separate
+  worker database URLs. See [retained chat sender](docs/runbooks/retained-chat-sender.md).
+- Now playing on Linux: `MPRIS_ENABLED`, `MPRIS_PLAYER`.
+- Newsroom providers (optional): `YOUTUBE_API_KEY`, `BRAVE_SEARCH_API_KEY`,
+  `ANTHROPIC_API_KEY`, `NEWSROOM_AI_MODEL`, `NEWSROOM_DISCORD_WEBHOOK`. The
+  [Newsroom guide](docs/runbooks/newsroom.md) explains what each one enables.
 
-Local tests, hosted CI, deployment, and live Twitch/OBS/provider acceptance are separate evidence. Finite simulated workloads do not establish full thousand-channel delivery capacity or a production release. Follow the [current roadmap](docs/superpowers/plans/2026-10-15-remaining-work-roadmap.md) and [architecture decisions](docs/adr/README.md) for the remaining scope.
+[Stack and configuration](docs/reference/stack.md) has more detail.
+
+## Deploy
+
+Overlaid ships as a Docker Compose stack: PostgreSQL 17, the Go API and the web
+app served by nginx. To run it for others:
+
+1. Set `EXPOSURE_MODE` to `lan` or `public`, set `OPERATOR_SECRET`,
+   `OVERLAY_TOKEN` and the vault keys, and set `PUBLIC_WEB_URL` and
+   `CORS_ALLOWED_ORIGIN` to your HTTPS origin. Readiness reports degraded when
+   these secrets are missing in a non-local mode.
+2. Put a reverse proxy with TLS in front of the web and API services.
+3. Back up with `make postgres-backup` and `make api-data-backup`.
+4. Monitor `/healthz` (process liveness) and `/readyz`. Check the JSON body of
+   `/readyz`: HTTP 200 can still report degraded readiness. `make build`
+   includes the `over-laid-probe` readiness checker.
+
+[Production packaging](docs/runbooks/production-packaging.md) covers build
+metadata (`/version`), backups and restores, and
+[uptime monitoring](docs/runbooks/uptime-monitoring.md) covers probes.
 
 ## Development
 
-The versioned engine is under development. Its managed foundations include immutable versions, captured predicate/variable evaluation, reproducible weighted/no-repeat random flow, [effect-free retained operator rehearsal](docs/runbooks/retained-operator-rehearsal.md), [immutable metadata traces](docs/runbooks/operator-rehearsal-traces.md) and [explicit operator run/cooldown admission](docs/runbooks/operator-automation-admission.md). Managed installations expose the [session-bound workspace metadata API](docs/runbooks/automation-control-api.md) for these operations, including bounded automation/version discovery and saved-trace metadata discovery for an original operator occurrence. The [OBS missing-input consumer](docs/runbooks/obs-fallback.md) owns its narrow versioned rule, approval and shared OBS mutation path; general graph execution remains under development.
-
-An explicit [captured chat-text rehearsal](docs/runbooks/engine-chat-text-rehearsal.md) now composes pure flow traversal with syntax-2 rendering and strict chat text/batch bounds. The [managed operator API](docs/runbooks/automation-control-api.md#rehearse-chat-text-from-the-original-operator-clock) exposes a separate read using the original retained database clock, explicit syntax 2 and an exact expected version. Missing user/provider values and randomness refuse completely. Existing dashboard flow and saved traces retain opaque arguments; this API sends no messages.
-
-An explicit [retained chat-effect source store](docs/runbooks/operator-chat-effect-sources.md) prepares one immutable run-bound plan with original deadline and stable step IDs. Its private text follows member/run/connection/retention deletion; hash-only markers prevent recreation after deletion. An explicit [atomic admission store](docs/runbooks/operator-chat-admission.md) can now commit all prepared effects to the existing outbound ledger and jobs, preserving original deadlines and no-recreation markers. A read-only original-request lookup returns bounded delivery metadata without retrying or repairing work; authenticated clients can use the `lookup-chat-admission` automation endpoint. An explicit application admission operation now binds new work to the existing retained controller and live tenant runtime. The authenticated `admit-chat-plan` endpoint can submit an already prepared plan through that owner; preparation and read-only plan lookup are available through the account API; the dashboard rehearsal panel can prepare a plan and recover it by original request. The same panel can queue a reviewed plan for delivery and check its outcomes by original request.
-
-**Prepare → Automations** provides an advanced JSON version desk with scoped drafts, validation, publication, current-version selection, bounded saved-root and draft-to-current comparison and unresolved-write recovery. Its operator rehearsal panel prepares stable retained requests, admits metadata explicitly and inspects original/current effect-free flow. The separate trace controls save fixed metadata and recover an uncertain save through reads of its original identity. An explicit source-bound history view lists earlier saved selections and opens their verified metadata without changing recovery handles. The graphical flow editor, trusted stream limits, effect execution and source migration remain open under Phase #25.
-
-The [saved-command migration preview](docs/runbooks/variable-template-conversion.md#saved-command-migration-preview) reads the canonical Chat registry and compares selected ticker/alert responses with syntax 2 using supplied sample values. It preserves saved aliases and policy metadata, refuses stale selections and identifies Newsroom actions as separate editorial work. Preview does not change command execution or select an engine version.
-
-The backend uses Go 1.26 (`go 1.26.0` in the module); the frontend uses React 19, TypeScript, Vite 7, and Tailwind 4. The web build image uses Node 24; `web/package.json` selects pnpm 10.33.0. PostgreSQL 17 and Docker Compose provide the container setup. See [stack and configuration](docs/reference/stack.md).
+The backend uses Go 1.26; the frontend uses React 19, TypeScript, Vite 7 and
+Tailwind 4, built with Node 24 and pnpm 10.33.0.
 
 ```bash
 make verify
 ```
 
-This installs locked frontend dependencies, checks formatting/types, vets Go, runs backend/frontend tests, builds binaries/assets, validates Compose, and checks the preserved Open Pilot template. PostgreSQL integration tests skip unless `OVERLAID_TEST_DATABASE_URL` points to a disposable database.
-
-For the complete database/race gate with an owned disposable PostgreSQL container:
+`make verify` installs the locked frontend dependencies, checks formatting,
+vets Go, runs the backend and frontend tests, builds the binaries and assets,
+and validates the Compose file. PostgreSQL integration tests skip unless
+`OVERLAID_TEST_DATABASE_URL` points to a disposable database. For the full
+database and race-detector run with its own throwaway PostgreSQL container:
 
 ```bash
 GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh
 ```
 
-The gate runs at most two Go packages concurrently against its shared fixture. Hosted CI runs three required phases: `application` runs `make verify` except six large HTTP qualification fixtures, `race` runs the remaining uncached application races and River spike races, and `qualification` runs those six fixtures normally and with the race detector. The phases run serially with separate disposable databases; all must pass before the `verify` check or frontend delivery can succeed. Run a phase locally by passing its name to the script; no argument runs the complete unpartitioned gate. Each package invocation keeps its 15-minute watchdog, each hosted job keeps its 35-minute bound, and operation deadlines stay unchanged.
+Narrower commands: `(cd backend && go test ./...)`, `pnpm --dir web run test`,
+`make dev` (Vite only). Run `make help` for every target.
 
-The fixture defaults to a bounded 2 GiB tmpfs with a 256 MiB WAL checkpoint target; select `OVERLAID_CI_POSTGRES_STORAGE=volume` for a disk-backed comparison. It cleans up its own container/volumes. These checks do not qualify power-loss durability. [Contributing](CONTRIBUTING.md) describes native development and verification.
+| Path | Contents |
+| --- | --- |
+| `backend/` | Go API (`cmd/app`), admin and probe commands, internal packages |
+| `web/` | React dashboard and overlays, with Playwright tests |
+| `migrations/` | PostgreSQL migrations |
+| `extension/` | Browser extension for adding Newsroom links |
+| `docs/` | Runbooks, reference and architecture decisions |
 
-## Operations and documentation
+## Contributing
 
-- [Getting started](docs/runbooks/getting-started.md): fresh local setup, native development, Twitch/OBS connection, and first checks.
-- [Newsroom](docs/runbooks/newsroom.md): editorial operation, providers, sharing, and recovery.
-- [Runbook index](docs/runbooks/README.md): bot/overlay operation, retention, delivery, and recovery procedures.
-- [Tenancy and recovery](docs/runbooks/tenancy-and-recovery.md): migrations, credentials, lifecycle, and restore boundaries.
-- [Production packaging](docs/runbooks/production-packaging.md) and [monitoring](docs/runbooks/uptime-monitoring.md): build identity, backups, readiness, and probes.
-- [Project status](docs/reference/project-status.md) and [remaining-work roadmap](docs/superpowers/plans/2026-10-15-remaining-work-roadmap.md): current capabilities and delivery order.
+Report bugs and request features in
+[GitHub issues](https://github.com/subculture-collective/overlaid/issues). Ask
+questions and share ideas in
+[GitHub Discussions](https://github.com/subculture-collective/overlaid/discussions).
 
-`/healthz` is cheap process liveness. `/readyz` must be checked by its JSON result: HTTP 200 can still report degraded readiness. `make build` includes `over-laid-probe`; [monitoring guidance](docs/runbooks/uptime-monitoring.md) explains selecting required checks.
+Send code as a pull request on GitHub against `main`. CI runs `make verify`
+and the database, race and qualification test phases against disposable
+PostgreSQL, and builds the web image; all must pass before merge. See
+[CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately as
+described in [SECURITY.md](SECURITY.md), and keep `.env`, tokens, vault keys,
+share URLs and backups out of issues.
 
-## Security and license
+## License
 
-Keep `.env`, tokens, vault keys, add/share URLs, and backups private. Use placeholders when sharing configuration. Report vulnerabilities through the private process in [SECURITY.md](SECURITY.md).
-
-Over-Laid is **GPL-3.0-only**; see [LICENSE](LICENSE). It was created from `subculture-collective/project-template`. Vendored/rebuilt components retain their own notices in [Newsroom provenance](docs/vendor/newsroom/PROVENANCE.md) and [River provenance](docs/vendor/river/). Copied overlay brand assets have a separate [provenance record](web/public/brand/subcult/PROVENANCE.md).
-
-[Automatic frontend delivery](docs/automatic-frontend-deployment.md) connects
-verified main CI to the existing NUC web service. Backend and managed-runtime
-release/qualification gates retain their separate procedures.
+[GPL-3.0-only](LICENSE). Vendored and rebuilt components keep their own
+notices: see [Newsroom provenance](docs/vendor/newsroom/PROVENANCE.md),
+[River provenance](docs/vendor/river/) and the
+[brand asset provenance](web/public/brand/subcult/PROVENANCE.md).
