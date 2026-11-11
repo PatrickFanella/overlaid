@@ -155,6 +155,21 @@ func observedOBSFallbackFixture(t *testing.T, app *Application, account accountF
 	return automationControlObject(t, obsControlPost(t, app, account, "lookup", map[string]any{"proposalId": id}), 200)["receipt"].(map[string]any)
 }
 
+// withoutOBSReads reports whether at least one of three runs of an idempotent
+// step left the fake's read count unchanged. The runtime's own observer polls
+// OBS every two seconds and can land inside any single run; a step that reads
+// OBS itself changes the count on every run.
+func withoutOBSReads(fake *obsFallbackFake, step func()) bool {
+	for range 3 {
+		reads := fake.reads.Load()
+		step()
+		if fake.reads.Load() == reads {
+			return true
+		}
+	}
+	return false
+}
+
 func TestOBSFallbackControlExplainsApprovesAndRecovers(t *testing.T) {
 	app, account, _, fake := obsFallbackApplication(t)
 	rule := saveOBSFallbackFixture(t, app, account)
@@ -162,14 +177,14 @@ func TestOBSFallbackControlExplainsApprovesAndRecovers(t *testing.T) {
 	if proposal["condition"] != "missing" || proposal["reason"] != "input_missing" || proposal["scene"] != "Fallback" || proposal["versionId"] != rule["versionId"] || fake.effects.Load() != 0 {
 		t.Fatal("proposal explanation", proposal)
 	}
-	reads := fake.reads.Load()
-	for range 2 {
-		replay := automationControlObject(t, obsControlPost(t, app, account, "replay", map[string]any{"proposalId": proposal["id"]}), 200)
-		if replay["rehearsal"].(map[string]any)["reason"] != "input_missing" {
-			t.Fatal("replay changed")
+	if !withoutOBSReads(fake, func() {
+		for range 2 {
+			replay := automationControlObject(t, obsControlPost(t, app, account, "replay", map[string]any{"proposalId": proposal["id"]}), 200)
+			if replay["rehearsal"].(map[string]any)["reason"] != "input_missing" {
+				t.Fatal("replay changed")
+			}
 		}
-	}
-	if fake.reads.Load() != reads || fake.effects.Load() != 0 {
+	}) || fake.effects.Load() != 0 {
 		t.Fatal("replay touched OBS")
 	}
 	// Explicit override remains frozen even when the original target vanishes.
@@ -182,10 +197,13 @@ func TestOBSFallbackControlExplainsApprovesAndRecovers(t *testing.T) {
 	if raw, _ := json.Marshal(approved); strings.Contains(string(raw), "claim") || strings.Contains(string(raw), "ws://") {
 		t.Fatal("private completion material")
 	}
-	reads = fake.reads.Load()
-	again := automationControlObject(t, obsControlPost(t, app, account, "approve", body), 200)["receipt"].(map[string]any)
-	if again["state"] != "succeeded" || again["unchanged"] != true || fake.effects.Load() != 1 || fake.reads.Load() != reads {
-		t.Fatal("approval replay")
+	if !withoutOBSReads(fake, func() {
+		again := automationControlObject(t, obsControlPost(t, app, account, "approve", body), 200)["receipt"].(map[string]any)
+		if again["state"] != "succeeded" || again["unchanged"] != true || fake.effects.Load() != 1 {
+			t.Fatal("approval replay", again, fake.effects.Load())
+		}
+	}) {
+		t.Fatal("approval replay read OBS")
 	}
 	cfg := app.config
 	if err := app.Close(); err != nil {

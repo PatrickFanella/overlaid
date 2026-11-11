@@ -19,7 +19,7 @@ func TestAutomationControlTraceCatalogue(t *testing.T) {
 	}
 	saved := automationControlObject(t, automationControlPost(t, app, a, a.tenant, "save-trace", map[string]any{"requestId": request, "mode": "reproduce", "expectedVersionId": d.VersionID}), 200)
 	// The read remains available after actual controller ownership loss.
-	unlockChatController(t, app)
+	loseChatControllerForReads(t, app)
 	response := automationControlPost(t, app, a, a.tenant, "list-traces", source)
 	listed := automationControlObject(t, response, 200)
 	rows := listed["traces"].([]any)

@@ -239,7 +239,10 @@ func TestRetainedGlobalRuntimeResumeAndRetention(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		app.StartBackground(ctx)
 		resumed := time.Since(start)
-		deadline := time.Now().Add(60 * time.Second)
+		// The sweep visits every tenant serially while 1,000 runtimes resume.
+		// Under -race on a 4-vCPU hosted runner it can exceed one minute; this
+		// bound only catches a sweep that never finishes.
+		deadline := time.Now().Add(3 * time.Minute)
 		for {
 			app.mu.Lock()
 			ran, failed := app.sweepRan, app.sweepError

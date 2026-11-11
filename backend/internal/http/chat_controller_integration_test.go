@@ -55,6 +55,17 @@ func unlockChatController(t *testing.T, app *Application) {
 	}
 }
 
+// loseChatControllerForReads records ownership loss before releasing the lock,
+// so the one-second ownership monitor stops without cancelling the
+// application. Tests of controller-independent reads use it: with
+// unlockChatController alone, the monitor shuts the application down within a
+// second and later requests fail with a canceled context on slow runners.
+func loseChatControllerForReads(t *testing.T, app *Application) {
+	t.Helper()
+	app.chatControl.live.Store(false)
+	unlockChatController(t, app)
+}
+
 func controllerToken(t *testing.T, app *Application, account accountFixture, staleValidation ...bool) {
 	t.Helper()
 	token := twitchTokenInfo{AccessToken: "fixture-access", UserID: "123", Login: "fixture", Scope: []string{"user:read:chat", "user:write:chat"}, ValidatedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}

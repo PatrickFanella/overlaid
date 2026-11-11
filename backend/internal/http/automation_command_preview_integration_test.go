@@ -60,7 +60,7 @@ func TestAutomationCommandMigrationCanonicalPreviewAndNoEffects(t *testing.T) {
 		}
 	}
 	// Reads survive controller loss without creating runtimes or doing first-use imports.
-	unlockChatController(t, app)
+	loseChatControllerForReads(t, app)
 	automationControlObject(t, automationControlPost(t, app, a, a.tenant, "list-command-migration", map[string]any{}), 200)
 	automationControlObject(t, automationControlPost(t, app, a, a.tenant, "preview-command-migration", body), 200)
 	if providers.Load() != 0 || len(app.runtimes) != runtimes || app.outbound != nil || app.moderation != nil {

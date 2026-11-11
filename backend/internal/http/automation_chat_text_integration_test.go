@@ -38,7 +38,7 @@ func TestAutomationChatTextControlSourceAndNoEffects(t *testing.T) {
 		t.Fatal("non-deterministic read")
 	}
 	// This private read remains available without the metadata writer owner.
-	unlockChatController(t, app)
+	loseChatControllerForReads(t, app)
 	if again := read(); !reflect.DeepEqual(result, again) {
 		t.Fatal("controller required for read")
 	}

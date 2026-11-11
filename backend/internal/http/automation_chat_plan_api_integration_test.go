@@ -78,7 +78,7 @@ func TestOperatorChatPlanAccountTransport(t *testing.T) {
 		t.Fatal(again)
 	}
 	// Actual ownership loss blocks writes but leaves original-source recovery available.
-	unlockChatController(t, app)
+	loseChatControllerForReads(t, app)
 	found := automationControlObject(t, automationControlPost(t, app, a, a.tenant, "lookup-chat-plan", read), 200)
 	if found["sourceId"] != first["sourceId"] || found["digest"] != first["digest"] || found["preparedAt"] != first["preparedAt"] {
 		t.Fatal(found)

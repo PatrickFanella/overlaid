@@ -32,7 +32,7 @@ func TestAutomationTemplatePreviewSuppliedOnlyAndNoState(t *testing.T) {
 		}
 	}
 	// Pure preview: no controller, no jobs, no runtime, no automation rows.
-	unlockChatController(t, app)
+	loseChatControllerForReads(t, app)
 	automationControlObject(t, automationControlPost(t, app, a, a.tenant, "preview-template-conversion", body), 200)
 	for _, table := range []string{"river_job", "engine_automations", "engine_automation_versions"} {
 		var count int

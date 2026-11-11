@@ -21,7 +21,7 @@ func TestAutomationControlCatalogue(t *testing.T) {
 	automationControlObject(t, automationControlPost(t, app, a, a.tenant, "select", map[string]any{"automationId": d.AutomationID, "versionId": d.VersionID, "expectedCurrentVersionId": newer.VersionID}), 200)
 	// Discovery requires no effect/writer owner. Saved metadata remains readable
 	// after controller loss; no additional owner or worker is installed.
-	unlockChatController(t, app)
+	loseChatControllerForReads(t, app)
 	listedW := automationControlPost(t, app, a, a.tenant, "list", map[string]any{})
 	listed := automationControlObject(t, listedW, 200)
 	items := listed["automations"].([]any)

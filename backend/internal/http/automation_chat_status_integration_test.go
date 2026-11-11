@@ -37,7 +37,7 @@ func TestAutomationChatAdmissionLookupControl(t *testing.T) {
 	if _, err = store.AdmitOperatorChatPlan(t.Context(), a.id, request, plan.Digest); err != nil {
 		t.Fatal(err)
 	}
-	unlockChatController(t, app)
+	loseChatControllerForReads(t, app)
 	result := automationControlObject(t, automationControlPost(t, app, a, a.tenant, "lookup-chat-admission", body), 200)
 	if result["sourceId"] != plan.ID || result["digest"] != plan.Digest || len(result["actions"].([]any)) != 1 {
 		t.Fatal(result)
