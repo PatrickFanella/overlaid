@@ -34,7 +34,7 @@ For rollback, stop all writers and prove worker/admission shutdown before releas
 
 ## Verification boundary
 
-Run `make verify` and `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh`. Focused disposable PostgreSQL races run from `backend/` with `go test -race -count=1 ./internal/http -run '^TestOwnedStream'`.
+Run `make verify` and `GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh`. Focused disposable PostgreSQL races run from `backend/` with `go test -race -count=1 ./internal/http -run '^TestOwnedStream'`.
 
 Fixtures exercise canonical native admission/processing, duplicate/conflict/restart handling, exact direct-to-retained draining, prepared/stopped refusal, invalid startup roles/databases, metadata writer fencing, trigger drift and connection/plan/runtime/input refusal. Blocked admission fixtures verify runtime, consumer and application cancellation. Migration replay preserves populated source/job/receipt rows. Provider interactions use synthetic inputs; no real Twitch/Discord effects or production migration are performed.
 

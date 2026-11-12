@@ -46,7 +46,7 @@ Run the focused qualification against a disposable database:
 
 ```bash
 cd backend
-GOTOOLCHAIN=go1.26.0 go test -race -count=5 -run '^TestConduitNewsroom' ./internal/http
+GOTOOLCHAIN=go1.26.11 go test -race -count=5 -run '^TestConduitNewsroom' ./internal/http
 ```
 
 `OVERLAID_TEST_DATABASE_URL` must point to that disposable database. An unset variable skips the SQL fixtures and does not qualify the path. Run `make verify` and the complete `scripts/ci-postgres.sh` gate before merge.

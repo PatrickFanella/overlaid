@@ -21,14 +21,14 @@ jobs:
       matrix:
         phase: [application, race, qualification]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: |
             backend/go.sum
             backend/spikes/river/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
       - name: Install declared pnpm version
@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build the web image and check its nginx configuration
         run: |
           set -euo pipefail

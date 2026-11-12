@@ -64,12 +64,12 @@ pnpm --dir web run test
 docker compose config --quiet
 ```
 
-Go uses the module's 1.26 toolchain (`go 1.26.0`); the frontend build image uses Node 24 and `web/package.json` selects pnpm 10.33.0. [Getting started](docs/runbooks/getting-started.md#native-development) explains running the API, database and Vite separately. `make dev` starts only Vite.
+Go uses the module's 1.26 toolchain (`go 1.26.11`); the frontend build image uses Node 24 and `web/package.json` selects pnpm 10.33.0. [Getting started](docs/runbooks/getting-started.md#native-development) explains running the API, database and Vite separately. `make dev` starts only Vite.
 
 PostgreSQL integration tests skip unless `OVERLAID_TEST_DATABASE_URL` points to a disposable database. For the complete database/race gate, run:
 
 ```bash
-GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh
+GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh
 ```
 
 The script owns a disposable PostgreSQL container, runs `make verify` and the uncached application/isolated River race suites, then cleans up its own resources. Never point fixtures at an application database. Report local checks, hosted CI and live provider acceptance separately.

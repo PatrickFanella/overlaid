@@ -44,7 +44,7 @@ The panel changes no editorial fields or saved show boundaries. It adds no polli
 
 ## Verification and next activation step
 
-Run `make verify`, `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` and focused disposable PostgreSQL races from `backend/`:
+Run `make verify`, `GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh` and focused disposable PostgreSQL races from `backend/`:
 
 ```bash
 go test -race -count=1 ./internal/http -run '^TestStreamObservations'

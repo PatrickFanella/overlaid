@@ -35,7 +35,7 @@ One uncached Go 1.26.0 race run on Kvant, October 16, 2026, using the owned disp
 
 The sampled goroutine count returned to its baseline of five after each close/reacquisition sequence. These are observations, not machine-independent performance thresholds or peak resource measurements. Go heap excludes process RSS, race-detector overhead and PostgreSQL memory. The session sample covers the product-role pools, not all queue/pacing/admin connections. Startup includes application construction and the selected runtime loop; command timing includes ingestion and dispatch completion. The overflow/retry phase is separate from the timing columns.
 
-Run `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` for the full disposable verification gate. A focused uncached race run with `-v -run TestRetainedRealRuntimeLimitsAndRestart` records fresh timing/resource samples for its own environment.
+Run `GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh` for the full disposable verification gate. A focused uncached race run with `-v -run TestRetainedRealRuntimeLimitsAndRestart` records fresh timing/resource samples for its own environment.
 
 The separate global-resumption race run on the same host and date restored 1000 runtimes in 4.02 s initially and 3.69 s after populated restart. In each generation, the initial sweep had completed by the end of runtime resumption. The 1000 retained commands and their terminal jobs settled in 25.35 s and 25.69 s respectively; shutdown took 0.011 s and 0.014 s. These timings are finite observations with no portable performance threshold. Run the focused race test with `-v -run TestRetainedGlobalRuntimeResumeAndRetention` to record another sample.
 

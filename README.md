@@ -166,7 +166,7 @@ and validates the Compose file. PostgreSQL integration tests skip unless
 database and race-detector run with its own throwaway PostgreSQL container:
 
 ```bash
-GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh
+GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh
 ```
 
 Narrower commands: `(cd backend && go test ./...)`, `pnpm --dir web run test`,

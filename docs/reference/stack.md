@@ -79,6 +79,6 @@ An empty player pin scans MPRIS names, preferring Playing over Paused over Stopp
 - `bin/overlaid-bot-admin`: explicit service-bot administration/OAuth flow.
 - `bin/overlaid-pacing-probe`: explicit read-only pacing inspection using a private restricted connection.
 
-The canonical check is `make verify`. `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` supplies disposable PostgreSQL and runs the complete application/River race gate. Build metadata uses `VERSION`, `BUILD_COMMIT`, `BUILD_DATE` for Make targets and `BUILD_VERSION`, `BUILD_COMMIT`, `BUILD_DATE` for container arguments. [Production packaging](../runbooks/production-packaging.md) explains identity, backups and restore.
+The canonical check is `make verify`. `GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh` supplies disposable PostgreSQL and runs the complete application/River race gate. Build metadata uses `VERSION`, `BUILD_COMMIT`, `BUILD_DATE` for Make targets and `BUILD_VERSION`, `BUILD_COMMIT`, `BUILD_DATE` for container arguments. [Production packaging](../runbooks/production-packaging.md) explains identity, backups and restore.
 
 `/healthz` is liveness. `/readyz` reports named JSON checks and may return HTTP 200 with degraded status. Required managed checks include process, tenant storage, retention, access policy and runtime capacity; configured consumers add their own checks. Probe selection is explicit: see [monitoring](../runbooks/uptime-monitoring.md).

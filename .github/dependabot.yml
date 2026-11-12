@@ -1,0 +1,67 @@
+version: 2
+
+# Green pull requests in this organization merge themselves and a merge to
+# main deploys, so every ecosystem checks monthly, opens at most one pull request, groups
+# minor and patch updates into it, and leaves major versions to a person.
+updates:
+  - package-ecosystem: gomod
+    directories:
+      - /backend
+      - /backend/spikes/river
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      go-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+      # River is pinned to the release its vendored migrations and fair-leasing
+      # adapter derive from; see docs/vendor/river/PROVENANCE.md.
+      - dependency-name: 'github.com/riverqueue/river*'
+      # pgx 5.11 stopped decoding "+" as a space in connection-URL query values,
+      # which breaks DSNs built with url.Values.Encode (the integration tests
+      # do this). Stay on 5.10 until that is handled.
+      - dependency-name: 'github.com/jackc/pgx/v5'
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /web
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      docker-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+      # The Go minor version follows backend/go.mod.
+      - dependency-name: golang
+        update-types: ['version-update:semver-minor']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']

@@ -20,7 +20,7 @@ Sources belong to tenant membership and connection through cascading composite r
 
 ## Verification and remaining work
 
-`TestManualModeration*` covers concurrent duplicates, immutable conflicts, terminal no-replay, a 50-action batch, reordered retries, whole-batch job rollback, permission changes, connection/plan refusal, old retained delete targets, metadata exports, lifecycle cascades, tenant/role isolation, shared action bounds, a real River worker with synthetic transport, and additive migration rollback/compatibility. The full disposable PostgreSQL gate is `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh`.
+`TestManualModeration*` covers concurrent duplicates, immutable conflicts, terminal no-replay, a 50-action batch, reordered retries, whole-batch job rollback, permission changes, connection/plan refusal, old retained delete targets, metadata exports, lifecycle cascades, tenant/role isolation, shared action bounds, a real River worker with synthetic transport, and additive migration rollback/compatibility. The full disposable PostgreSQL gate is `GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh`.
 
 The [source-bound chat admission bridge](moderation-admission.md) and [routing owner](moderation-routing.md) remain separate callers. The next unit must bind nuke planning and radiation mutations to stable batch occurrences. It must preserve ownership refusal, avoid direct fallback, and coordinate all effect paths before any configured moderation activation. These fixtures establish neither live Twitch effects nor broader fairness/scale acceptance.
 

@@ -26,7 +26,7 @@ The [private observation API](stream-observations.md) exposes eligible metadata 
 
 ## Verification and remaining work
 
-Run `make verify` and `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh`. Focused checks from `backend/` are:
+Run `make verify` and `GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh`. Focused checks from `backend/` are:
 
 ```bash
 go test -race -count=1 ./internal/twitch

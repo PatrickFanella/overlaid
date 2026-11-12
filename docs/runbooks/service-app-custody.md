@@ -32,7 +32,7 @@ The migration is additive and does not rewrite tenant data, select a transport o
 
 ## Verification
 
-The disposable PostgreSQL fixtures use synthetic credentials and HTTP transports. They check source-secret binding, field/revision/client/app/purpose encryption, key replacement, ciphertext clearing, metadata privacy, fixed receipt fields, concurrent revision conflicts, receipt rollback, eight-record capacity, 1,000-receipt retention, role isolation and schema/grant drift. A blocked administrative lock proves post-wait expiry and grant checks. Full qualification uses `make verify` and `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh`, including uncached application and River races. These checks do not prove production migration, durable storage after power loss, live provider permission or conduit activation.
+The disposable PostgreSQL fixtures use synthetic credentials and HTTP transports. They check source-secret binding, field/revision/client/app/purpose encryption, key replacement, ciphertext clearing, metadata privacy, fixed receipt fields, concurrent revision conflicts, receipt rollback, eight-record capacity, 1,000-receipt retention, role isolation and schema/grant drift. A blocked administrative lock proves post-wait expiry and grant checks. Full qualification uses `make verify` and `GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh`, including uncached application and River races. These checks do not prove production migration, durable storage after power loss, live provider permission or conduit activation.
 
 ## Native administrative CLI
 

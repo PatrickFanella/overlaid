@@ -22,7 +22,7 @@ The form distinguishes queued acceptance from delivery and exposes an explicit a
 
 `moderationIntent.test.ts` covers saved-before-submit behavior, response loss/reload, receipt-only retries, malformed/uncertain results, concurrent clicks, browser storage failures, scope isolation and direct ambiguity. The existing Chromium moderation regression checks draft preservation, receipt-only resolution and visible rejected status. An isolated rendered-page check also covers pending status through reload and terminal delivery. These browser fixtures intercept API responses; they do not establish live provider behavior.
 
-Run `GOTOOLCHAIN=go1.26.0 bash scripts/ci-postgres.sh` for the full local gate. Nuke previews now bind their exact target set and radiation mutation to a stable batch occurrence through the separate sealed-plan flow. Default startup still installs no moderation consumer; broader fairness/scale and controlled live-provider acceptance remain under #24.
+Run `GOTOOLCHAIN=go1.26.11 bash scripts/ci-postgres.sh` for the full local gate. Nuke previews now bind their exact target set and radiation mutation to a stable batch occurrence through the separate sealed-plan flow. Default startup still installs no moderation consumer; broader fairness/scale and controlled live-provider acceptance remain under #24.
 
 ## Direct receipt contract — #177
 
