@@ -1,10 +1,11 @@
 # Automatic frontend delivery
 
-Native Gitea CI retains `scripts/ci-postgres.sh`, full application verification,
-the uncached PostgreSQL race pass and the 35-minute verification bound. A frontend
-job directly depends on verification and builds/validates the image on PRs.
-Main pushes and manual main dispatch deploy the exact revision to the existing
-NUC `overlaid-web-1`, Compose service `web`.
+GitHub Actions runs both workflows. `.github/workflows/pr-ci.yml` retains
+`scripts/ci-postgres.sh`, full application verification, the uncached PostgreSQL
+race pass and the 35-minute verification bound, and a frontend job
+builds/validates the image on PRs. `.github/workflows/deploy.yml` runs on main
+pushes and manual main dispatch, joins the tailnet and deploys the exact revision
+to the existing NUC `overlaid-web-1`, Compose service `web`.
 
 The operator-owned frontend-only baseline retains host networking, the read-only
 production nginx bind, LAN listener `10.0.0.56:3083`, existing loopback API proxy
@@ -24,7 +25,7 @@ An app-specific restricted fleet-deploy key permits only this frontend and the
 current main revision. The receiver refuses runtime drift, checks image identity,
 static public HTML and runtime configuration, and restores the previous image on
 failed readiness. A retry reuses the accepted artifact. Main-only credentials are
-guarded at step level. Gitea stores `HOMELAB_DEPLOY_KEY` and pinned
+guarded at step level. GitHub stores `HOMELAB_DEPLOY_KEY` and pinned
 `HOMELAB_KNOWN_HOSTS`; the homelab operator owns the key, initially due for rotation
 February 3, 2027. Register/test the profile before merging. Private host receipts
 retain image IDs, diagnostics and rollback commands.

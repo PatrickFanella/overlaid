@@ -25,8 +25,8 @@ Start with the [project README](../README.md) for the product overview and [curr
 - [Phase 3 engine and variable plan](superpowers/plans/2026-10-21-phase-3-engine-and-variables.md): bounded units, compatibility and verification gates; current delivery is tracked in the roadmap.
 - [Architecture decisions](adr/README.md): accepted contracts and boundaries.
 - [Original multi-platform scope](superpowers/plans/2026-10-05-multiplatform-parity-roadmap.md): feature targets and research context.
-- [Gitea project](https://git.subcult.tv/subculture-collective/overlaid/projects/4): hosted work tracking; repository permissions apply.
+- [GitHub issues](https://github.com/subculture-collective/overlaid/issues): hosted work tracking. Issue links in older documents point to the former Gitea tracker, whose numbers differ.
 - [October 13 operational receipt](qa/2026-10-13-phase-1-homelab.md): historical deployment/restore evidence, separate from current implementation and live acceptance.
 - [Newsroom provenance](vendor/newsroom/PROVENANCE.md), [River provenance](vendor/river/), and [overlay brand provenance](../web/public/brand/subcult/PROVENANCE.md).
 
-`reference/` holds technical reference material; `runbooks/` holds procedures; `adr/` holds decisions; `research/` holds exploratory material; `superpowers/plans/` and `qa/` retain dated plans and evidence. Template-origin guidance such as `template-maintenance.md` and `stacks.md` describes repository ancestry rather than first-run application setup.
+`reference/` holds technical reference material; `runbooks/` holds procedures; `adr/` holds decisions; `research/` holds exploratory material; `superpowers/plans/` and `qa/` retain dated plans and evidence. Template-origin guidance such as `stacks.md` describes repository ancestry rather than first-run application setup.

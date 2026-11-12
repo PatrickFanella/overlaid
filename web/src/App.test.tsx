@@ -183,7 +183,7 @@ describe('App routing', () => {
     expect(html).toContain('no destructive browser actions');
     expect(html).toContain('Production recovery');
     expect(html).toContain(
-      'https://git.subcult.tv/PatrickFanella/over-laid/src/branch/main/docs/runbooks/production-recovery.md',
+      'https://github.com/subculture-collective/overlaid/blob/main/docs/runbooks/production-recovery.md',
     );
   });
 

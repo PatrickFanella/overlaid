@@ -1,6 +1,6 @@
 import { Panel, Tag } from '../ui';
 
-const runbookBaseUrl = 'https://git.subcult.tv/PatrickFanella/over-laid/src/branch/main/docs/runbooks';
+const runbookBaseUrl = 'https://github.com/subculture-collective/overlaid/blob/main/docs/runbooks';
 
 const recoverySteps = [
   { label: 'Readiness', text: 'Start with backend readiness. A degraded check names the failing part: OBS, Twitch, EventSub, retained state, event history, or interaction rules.' },

@@ -1,6 +1,6 @@
 # Agent Instructions
 
-This repository is `over-laid`, a Go full-stack app with Vite React TypeScript, Postgres, and Docker, derived from `subculture-collective/project-template`.
+This repository is `overlaid` (product name Over-Laid), a Go full-stack app with Vite React TypeScript, Postgres, and Docker, derived from `subculture-collective/project-template`.
 
 ## Priorities
 

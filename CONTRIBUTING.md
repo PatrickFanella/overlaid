@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is the `over-laid` application. Keep changes small, reviewable, and useful to this stack.
+This repository is the Over-Laid application (`overlaid`). Keep changes small, reviewable, and useful to this stack.
 
 ## Development flow
 

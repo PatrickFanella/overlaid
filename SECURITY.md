@@ -10,7 +10,7 @@ The project is under active development. A passing test suite or implemented con
 
 Do not publish sensitive vulnerabilities in public issues.
 
-Report privately to the repository owner or organization maintainer through the preferred private channel for the project. If no project-specific channel exists, contact the maintainer account for the Gitea organization.
+Report privately to the repository owner or organization maintainer through the preferred private channel for the project. If no project-specific channel exists, contact an owner of the `subculture-collective` organization on GitHub.
 
 Include:
 
