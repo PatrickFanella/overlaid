@@ -7,7 +7,7 @@ ARG BUILD_COMMIT=unknown
 ARG BUILD_DATE=unknown
 RUN go build -ldflags "-X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Version=${BUILD_VERSION} -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.Commit=${BUILD_COMMIT} -X git.subcult.tv/PatrickFanella/over-laid/internal/buildinfo.BuiltAt=${BUILD_DATE}" -o /out/api ./cmd/app
 
-FROM docker.io/library/alpine:3.22
+FROM docker.io/library/alpine:3.24
 WORKDIR /app
 RUN apk add --no-cache su-exec \
   && addgroup -S overlaid \
