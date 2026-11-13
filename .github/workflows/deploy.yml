@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TARGET: onnwee@100.93.201.83
+  TARGET: ${{ secrets.DEPLOY_TARGET }}
   DEPLOY_REVISION: ${{ github.sha }}
 
 jobs:
@@ -49,6 +49,7 @@ jobs:
           set -euo pipefail
           test -n "$DEPLOY_KEY"
           test -n "$DEPLOY_KNOWN_HOSTS"
+          test -n "$TARGET"
           umask 077
           mkdir -p "$RUNNER_TEMP/deploy"
           printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/deploy/key"
